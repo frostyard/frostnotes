@@ -4,13 +4,15 @@ package vaultgen
 
 import (
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 )
 
 // realism measures what the user's vault looks like at scale (plan 0003):
-// 666 notes in 97 folders, about 3.3 KB a note, prose that rarely repeats.
+// 666 notes in 97 folders, about 3.3 KB a note, prose that rarely repeats,
+// dates in frontmatter written unquoted.
 type realism struct {
 	folders           int     // distinct folders holding a file
 	meanBytes, maxLen int     // note sizes
@@ -18,7 +20,10 @@ type realism struct {
 	proseLines        float64 // per topic note
 	repeated          int     // topic notes holding the most common prose line
 	topic             int     // topic notes
+	created, quoted   int     // created: lines, and those not an unquoted YYYY-MM-DD
 }
+
+var unquotedDate = regexp.MustCompile(`^created: \d{4}-\d{2}-\d{2}$`)
 
 // topicNote is a note other than a daily note, a member's meeting, the
 // Inbox, an Overview or a Plan.
@@ -49,6 +54,16 @@ func measure(m Manifest, files map[string]string) realism {
 		note := files[p]
 		total += len(note)
 		r.maxLen = max(r.maxLen, len(note))
+		if front, _, ok := strings.Cut(strings.TrimPrefix(note, "---\n"), "\n---\n"); ok && strings.HasPrefix(note, "---\n") {
+			for line := range strings.Lines(front) {
+				if line = strings.TrimSuffix(line, "\n"); strings.HasPrefix(line, "created:") {
+					r.created++
+					if !unquotedDate.MatchString(line) {
+						r.quoted++
+					}
+				}
+			}
+		}
 		if !topicNote(p) {
 			continue
 		}
@@ -94,17 +109,23 @@ func TestVaultIsRealistic(t *testing.T) {
 	if r.repeated*50 > r.topic {
 		t.Errorf("a prose line appears in %d of %d topic notes, want at most 2%%", r.repeated, r.topic)
 	}
+	if r.created < 500 || r.quoted > 0 {
+		t.Errorf("%d created: lines, %d of them not an unquoted date like created: 2026-10-16; want 500 or more, none quoted", r.created, r.quoted)
+	}
 }
 
 func TestVaultScales(t *testing.T) {
 	for _, notes := range []int{20, 100, 3000} {
 		_, m, files := generate(t, 5, notes)
 		r := measure(m, files)
-		if lo, hi := max(5, notes/10), max(12, notes/5); r.folders < lo || r.folders > hi {
+		if lo, hi := max(5, notes/10), max(25, notes/5); r.folders < lo || r.folders > hi {
 			t.Errorf("%d notes: %d folders, want %d to %d", notes, r.folders, lo, hi)
 		}
 		if notes >= 100 && (r.meanBytes < 2000 || r.meanBytes > 5000) {
 			t.Errorf("%d notes: %d bytes on average, want 2,000 to 5,000", notes, r.meanBytes)
+		}
+		if want := 2 + notes/150; r.attachments < want {
+			t.Errorf("%d notes: %d attachments, want at least %d: they grow with the topic folders", notes, r.attachments, want)
 		}
 		if len(m.Notes) != notes {
 			t.Errorf("%d notes asked, %d written", notes, len(m.Notes))

@@ -16,9 +16,10 @@ acceptance: go test ./internal/vaultgen ./tools/vaultgen -count=1
 ## Goal
 
 T-0008's vaults pass every pattern test but are not realistic: at 666
-notes they hold 9 folders, notes of about 300 bytes that share one
-paragraph, and 2 attachments, where the user's vault has 97 folders and
-notes of about 3.3 KB (plan 0003, Phase 2 result). M1's timing, `kill -9`
+notes (and at 5,000) they hold 9 folders, notes of about 300 bytes that
+share one paragraph, 2 attachments, and quoted `created` dates, where the
+user's vault has 97 folders, notes of about 3.3 KB and unquoted dates
+(plan 0003, Phase 2 result). M1's timing, `kill -9`
 and search tests need vaults that look like the real one at scale. This
 card makes `internal/vaultgen` realistic and adds `tools/vaultgen`, a
 command that writes a vault and its manifest for manual runs.
@@ -63,7 +64,10 @@ manifest stay as T-0008 defines them. Add:
   co-op's growing records together." goes. Member meetings get 1 to 4
   paragraphs; some daily notes get a few after `## Log`. Daily notes keep
   their template exactly up to `## Log`.
-- **Attachments** stay sorted in the manifest, as T-0008 requires.
+- **Attachments** grow with the topic folders, as above, and stay sorted
+  in the manifest, as T-0008 requires.
+- **Dates** in frontmatter are written unquoted, as the user's vault
+  writes them: `created: 2026-10-16`. `title` stays quoted.
 
 With these, a 666-note vault has about 90 folders and notes of about
 3.4 KB on average.
@@ -101,8 +105,10 @@ output discarded so errors come back from `run`):
 - `internal/vaultgen/realism_test.go`: `TestVaultIsRealistic` (666 notes:
   80 to 120 folders, 2,500 to 4,500 bytes per note on average, a largest
   note of 8,000 to 65,536 bytes, at least 6 attachments, at least 4 prose
-  lines per topic note, no prose line in more than 2% of topic notes) and
-  `TestVaultScales` (20, 100 and 3,000 notes).
+  lines per topic note, no prose line in more than 2% of topic notes, at
+  least 500 `created:` lines, every one an unquoted date) and
+  `TestVaultScales` (20, 100 and 3,000 notes: folders, mean size, and at
+  least 2 + Notes/150 attachments).
 - `tools/vaultgen/main_test.go`: `TestRunWritesTheVaultAndManifest`,
   `TestRunDefaults`, `TestRunErrors`.
 - T-0008's `vaultgen_test.go` must keep passing.
@@ -119,8 +125,11 @@ output discarded so errors come back from `run`):
   over a map while generating.
 - A test generates 3,000 notes: build each note with one
   `strings.Builder`, and never scan every note for each link.
-- The test at 100 notes allows at most 20 folders: follow the folder
-  formula above.
+- The test at 100 notes allows at most 25 folders: follow the folder
+  formula above, since T-0008's fixed folders already make about 10.
+- `created: 2026-10-16` unquoted is still valid YAML that T-0008's test
+  parses; only `title` needs quotes, because a date-named note's title
+  would otherwise read as a date.
 
 ## Out of scope
 

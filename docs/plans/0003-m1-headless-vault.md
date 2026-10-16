@@ -239,7 +239,7 @@ are merged.
 
 | Card | Size | Package | What | Runs after |
 | --- | --- | --- | --- | --- |
-| T-0009 | M | `internal/vaultgen`, `tools/vaultgen` | realistic vaults (folders, note sizes, prose) and the command (`-out`, `-notes`, `-seed`, `-manifest`) | T-0008 |
+| T-0009 | M | `internal/vaultgen`, `tools/vaultgen` | realistic vaults (folders, note sizes, prose, attachments, unquoted dates) and the command (`-out`, `-notes`, `-seed`, `-manifest`) | T-0008 |
 | T-0010 | M | `internal/markdown` | frontmatter: props, property errors, aliases, tags, property links | |
 | T-0011 | M | `internal/markdown` | the goldmark extension: wikilinks, embeds, tags, math; comments; replaces `scan.go` | T-0010 |
 | T-0012 | M | `internal/markdown` | markdown links, headings, block IDs, tasks, words; every spec fixture | T-0011 |
