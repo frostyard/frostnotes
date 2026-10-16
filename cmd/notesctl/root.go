@@ -12,6 +12,7 @@ import (
 // rootOptions are the persistent flags every subcommand shares.
 type rootOptions struct {
 	socket string
+	vault  string
 }
 
 func newRootCmd() *cobra.Command {
@@ -23,9 +24,19 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.PersistentFlags().StringVar(&opts.socket, "socket", "", "notesd socket (default: $FROSTNOTES_SOCKET, else $XDG_RUNTIME_DIR/frostnotes/notesd.sock)")
+	root.PersistentFlags().StringVar(&opts.vault, "vault", "", "The vault, by name or ID (default: the only one)")
 	root.AddCommand(
 		newHelloCmd(opts),
 		newVaultCmd(opts),
+		newLsCmd(opts),
+		newCatCmd(opts),
+		newSearchCmd(opts),
+		newBacklinksCmd(opts),
+		newWriteCmd(opts),
+		newMvCmd(opts),
+		newRmCmd(opts),
+		newVersionsCmd(opts),
+		newRevertCmd(opts),
 	)
 	return root
 }

@@ -48,10 +48,12 @@ type noteSpec struct {
 }
 
 type generator struct {
-	rng   *rand.Rand
-	m     Manifest
-	names map[string]int
-	dirs  map[string]bool
+	rng    *rand.Rand
+	m      Manifest
+	names  map[string]int
+	dirs   map[string]bool
+	images map[string]string
+	words  []string
 }
 
 // Generate writes a vault of o.Notes notes into dir and returns its manifest.
@@ -71,8 +73,13 @@ func Generate(dir string, o Options) (Manifest, error) {
 			"Garden/media/img-1.png", "Orchard/media/img-2.png",
 		}},
 		names: make(map[string]int), dirs: make(map[string]bool),
+		images: make(map[string]string), words: strings.Fields(proseWords),
 	}
 	notes := g.layout(o.Notes)
+	slices.Sort(g.m.Attachments)
+	for _, attachment := range g.m.Attachments {
+		g.images[path.Dir(path.Dir(attachment))+"/Overview.md"] = attachment
+	}
 	for _, n := range notes {
 		g.m.Notes = append(g.m.Notes, n.name)
 		g.names[strings.ToLower(path.Base(n.name))]++
@@ -151,6 +158,8 @@ func (g *generator) layout(total int) []noteSpec {
 		notes = append(notes, noteSpec{name: name})
 	}
 	folders := []string{"Garden", "Orchard", "Orchard/North Block", "Orchard/North Block/Seed Beds", "Members"}
+	folders, overviews := g.topicFolders(folders, total)
+	notes = append(notes, overviews...)
 	words := []string{"Café ledger", "Quince harvest", "Apple baskets", "Pear grafts", "Plum nursery"}
 	for i := 0; len(notes) < total; i++ {
 		folder, word := folders[i%len(folders)], words[i%len(words)]
@@ -162,6 +171,86 @@ func (g *generator) layout(total int) []noteSpec {
 	return notes
 }
 
+func (g *generator) topicFolders(folders []string, total int) ([]string, []noteSpec) {
+	first := strings.Fields("Upper Lower Stone Mossy Sunny Shady Willow Hazel")
+	second := strings.Fields("Meadow Cellar Terrace Grove Clearing Field Shed Hollow")
+	// Only folders with room for a child are eligible parents.
+	parents := []string{"Garden", "Orchard", "Orchard/North Block"}
+	var overviews []noteSpec
+	pairs := len(first) * len(second)
+	for i := range max(4, total/9) - 4 {
+		folder := first[i/len(second)%len(first)] + " " + second[i%len(second)]
+		if i >= pairs {
+			folder += fmt.Sprintf(" %d", i/pairs+1)
+		}
+		if i%3 == 0 {
+			overviews = append(overviews, noteSpec{name: folder + "/Overview.md"})
+			if i%9 == 0 {
+				g.m.Attachments = append(g.m.Attachments, fmt.Sprintf("%s/media/img-%d.png", folder, len(g.m.Attachments)+1))
+			}
+		} else {
+			folder = parents[g.rng.IntN(len(parents))] + "/" + folder
+		}
+		folders = append(folders, folder)
+		if strings.Count(folder, "/") < 2 {
+			parents = append(parents, folder)
+		}
+	}
+	return folders, overviews
+}
+
+// Vocabulary is fictional orchard and co-op terminology, with no link syntax.
+const proseWords = `orchard apple pear quince plum cherry peach apricot fig berry
+harvest blossom branch trunk root leaf bud shoot seed seedling sapling graft
+rootstock scion pruning canopy trellis stake twine ladder basket crate barrel
+bucket shovel spade rake hoe fork trowel shears gloves boots apron wheelbarrow
+compost mulch humus loam clay sand soil bed furrow row terrace slope meadow
+pasture grove copse hedge hedgerow fence gate path track lane ditch drain pond
+stream well spring rain frost snow mist dew cloud breeze sunshine shade warmth
+season winter autumn summer thaw drought watering irrigation moisture runoff
+pollinator bee butterfly moth beetle worm bird robin wren finch lark nest hive
+nectar pollen petal flower clover vetch grass nettle comfrey fern moss willow
+hazel oak ash alder birch maple elder walnut chestnut acorn nut kernel shell
+fruit skin flesh stone pip juice cider press pulp pomace jam jelly preserve
+drying storage cellar pantry shelf rack jar lid label sack weighing sorting
+grading packing delivery cart stall market share member helper neighbor crew
+team steward grower gardener volunteer gathering meeting agenda minutes vote
+budget ledger receipt invoice dues fund grant cost price order stock surplus
+exchange donation kitchen table bench workshop repair tool handle blade hinge
+roof beam board nail screw oil canvas rope tarp shelter shed barn nursery
+greenhouse coldframe germination planting spacing thinning feeding tending
+inspection survey count sample trial record sketch map plan goal task rota
+schedule morning evening weekend fortnight month year early late fresh ripe
+green golden russet sweet tart crisp soft sturdy gentle quiet careful shared
+local common weekly annual useful ready steady abundant and the with beside
+through around beneath toward after before during from for in our we gather
+carry check tend note measure mend prepare store collect watch choose plant`
+
+func (g *generator) paragraphs(b *strings.Builder, count int) {
+	for range count {
+		for sentence := range 3 + g.rng.IntN(5) {
+			if sentence > 0 {
+				b.WriteByte(' ')
+			}
+			for word := range 8 + g.rng.IntN(13) {
+				text := g.words[g.rng.IntN(len(g.words))]
+				if word == 0 {
+					b.WriteString(strings.ToUpper(text[:1]))
+					b.WriteString(text[1:])
+				} else {
+					b.WriteByte(' ')
+					b.WriteString(text)
+				}
+			}
+			b.WriteByte('.')
+		}
+		if g.rng.IntN(4) == 0 {
+			b.WriteString(" #orchard/growing")
+		}
+		b.WriteString("\n\n")
+	}
+}
+
 func (g *generator) render(n noteSpec) string {
 	var b strings.Builder
 	title := strings.TrimSuffix(path.Base(n.name), ".md")
@@ -170,18 +259,26 @@ func (g *generator) render(n noteSpec) string {
 		if date == "" {
 			date = "2026-10-16"
 		}
-		fmt.Fprintf(&b, "---\ntitle: %q\ncreated: %q\ntags: [orchard, co-op]\n", title, date)
+		fmt.Fprintf(&b, "---\ntitle: %q\ncreated: %s\ntags: [orchard, co-op]\n", title, date)
 		if !n.daily && g.rng.IntN(4) == 0 {
 			fmt.Fprintf(&b, "aliases: [%q]\n", "Co-op "+title)
 		}
 		b.WriteString("---\n")
 	}
-	fmt.Fprintf(&b, "# %s\n\nThe orchard beds hold quince, pears and apple seedlings. #orchard/growing\n\n- [ ] Water the seedlings\n- [x] Sort the baskets\n\n", title)
+	fmt.Fprintf(&b, "# %s\n\n", title)
+	if n.daily || n.name == "Inbox.md" {
+		b.WriteString("The orchard beds hold quince, pears and apple seedlings. #orchard/growing\n\n")
+	} else if n.date != "" {
+		g.paragraphs(&b, 1+g.rng.IntN(4))
+	} else {
+		g.paragraphs(&b, 1)
+	}
+	b.WriteString("- [ ] Water the seedlings\n- [x] Sort the baskets\n\n")
 	switch {
 	case n.daily:
 		b.WriteString("## Log\n")
 		if g.rng.IntN(2) == 0 {
-			b.WriteString("Checked the fruit and shared the harvest.\n")
+			g.paragraphs(&b, 1+g.rng.IntN(3))
 		}
 	case n.name == "Inbox.md":
 		g.inbox(&b, n.name)
@@ -200,17 +297,20 @@ func (g *generator) render(n noteSpec) string {
 }
 
 func (g *generator) topic(b *strings.Builder, source string) {
-	b.WriteString("## Goals\n\nKeep the co-op's growing records together.\n\n")
+	b.WriteString("## Goals\n\n")
+	paragraphs := 3 + g.rng.IntN(10)
+	if g.rng.IntN(40) == 0 {
+		paragraphs = 30 + g.rng.IntN(10)
+	}
+	g.paragraphs(b, paragraphs)
 	for range g.rng.IntN(4) {
 		g.wiki(b, source, g.m.Notes[g.rng.IntN(len(g.m.Notes))], "")
 	}
 	if source == "Orchard/Overview.md" {
 		g.wiki(b, source, "Orchard/Plan.md", "")
 	}
-	for _, attachment := range g.m.Attachments {
-		if source == path.Dir(path.Dir(attachment))+"/Overview.md" {
-			g.markdown(b, source, "./media/"+path.Base(attachment), attachment, true)
-		}
+	if attachment, ok := g.images[source]; ok {
+		g.markdown(b, source, "./media/"+path.Base(attachment), attachment, true)
 	}
 	if g.rng.IntN(5) == 0 {
 		b.WriteString("\n> [!important] Harvest\n> Leave some fruit for the birds.\n\n")
