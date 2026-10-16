@@ -41,6 +41,15 @@ lint-version-check:
 test: ## Run the Go unit tests
 	go test -run '^Test[^I]' ./...
 
+# M1's check of link resolution against Obsidian's own answers for a real
+# vault (docs/plans/0003-m1-headless-vault.md, Phase 2). The dump and the
+# vault stay outside the repository; the vault is only walked for names.
+.PHONY: obsidian-links
+obsidian-links: ## Check links against Obsidian's dump (FROSTNOTES_OBSIDIAN_LINKS, FROSTNOTES_OBSIDIAN_VAULT)
+	@test -n "$$FROSTNOTES_OBSIDIAN_LINKS" -a -n "$$FROSTNOTES_OBSIDIAN_VAULT" || { \
+		echo "set FROSTNOTES_OBSIDIAN_LINKS to the dump and FROSTNOTES_OBSIDIAN_VAULT to the vault"; exit 2; }
+	go test -tags integration -run '^TestIObsidianLinkDump$$' -count=1 -v ./internal/markdown
+
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
 # detector.
