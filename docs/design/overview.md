@@ -84,8 +84,8 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `cmd/notesd`, `cmd/notesctl` | the daemon; the CLI (clix/cobra, one `newXxxCmd(opts)` per file) |
 | `schema/rpc/`, `api/` | the IDL; generated types, router and client plus the hand-written runtime |
 | `internal/store`, `internal/events` | SQLite (modernc): migrations, the single-writer `Tx`, the changes log; event fan-out |
-| `internal/rpcserver`, `internal/engine` | the socket server; the API domains over the store |
-| `internal/vault` | scanning, watching, ignore rules, atomic compare-and-swap writes |
+| `internal/rpcserver`, `internal/engine` | the socket server; the API domains over the store and the vaults |
+| `internal/vault` | one actor per vault: scanning, watching, the path guard, atomic compare-and-merge writes, versions, settings, daily notes |
 | `internal/markdown` | frontmatter, links, tags, headings, blocks and tasks from a note |
 | `internal/merge` | diff3 by line and word, frontmatter by key (planner-owned) |
 | `internal/blobs` | the content-addressed blob store |

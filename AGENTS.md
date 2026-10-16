@@ -50,9 +50,15 @@ file a step names before writing its frostnotes counterpart.
   [docs/specs/markdown.md](docs/specs/markdown.md). `internal/events`: fans
   committed events out and replays the log. `internal/rpcserver`: the
   socket server and `ServeConn` for authenticated WebSockets.
-  `internal/engine`: the API domains over the store. `internal/rpctest`: a
-  real server for tests. `internal/devgw`: the loopback WebSocket gateway
-  for UI work in a browser. `internal/config`: paths.
+  `internal/engine`: the API domains over the store and the vaults.
+  `internal/rpctest`: a real server for tests. `internal/devgw`: the
+  loopback WebSocket gateway for UI work in a browser. `internal/config`:
+  paths.
+- `internal/vault`: one actor per vault (`Manager`): `Walk`, the scan, the
+  fsnotify watcher, the path guard, atomic compare-and-merge writes,
+  moves, settings, daily notes and the daily prune. Every change to a
+  vault takes its lock (docs/design/vault.md#scan-and-watch).
+  `internal/blobs`: the content-addressed store of every version.
 - `internal/merge`: three-way merges (planner-owned; never a card's).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
   (SHA-pinned actions; no unit test named `TestI…`).
@@ -75,7 +81,9 @@ file a step names before writing its frostnotes counterpart.
   before claiming any Go change is complete. `make ui-check` (Biome, tsc,
   Vitest), `make app-build` and `make app-test` run in the nsl machine;
   `make ci` is verify plus those and the race detector. Never run pnpm,
-  node or cargo on the host.
+  node or cargo on the host. `make vault-it` (the `kill -9` harness) and
+  `make obsidian-links` (Obsidian's link dump, local only) are the
+  integration runs for changes to the scan, the write path or parsing.
 
 - Unit tests run with `-run '^Test[^I]'` (frostyard/core ADR-0022): never
   name a unit test `TestI…`; `internal/repocheck` fails if you do.
