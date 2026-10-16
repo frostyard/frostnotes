@@ -15,9 +15,9 @@ the canonical paths; keep content tool-agnostic.
 
 ## Status
 
-Designed, not built. ADRs 0003–0012 are accepted;
-[M0](docs/plans/0001-m0-foundations.md) is in progress. Frostnotes
-copies its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
+M0 (foundations) is in progress ([plan 0001](docs/plans/0001-m0-foundations.md));
+the roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
+its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
 file a step names before writing its frostnotes counterpart.
 
@@ -26,9 +26,44 @@ file a step names before writing its frostnotes counterpart.
 - **Planning and core work** (ADRs, designs, specs, schemas, the merge
   library, sync, security boundaries, reviews): follow this file and the
   docs ([ADR-0010](docs/adr/0010-claude-plans-and-codex-runs-task-cards.md)).
-- **Task cards** (`docs/tasks/`, from M0 Phase 6): follow the card and
-  `docs/tasks/EXECUTOR.md`. The card's `touch` list is the only set of
-  files you may change.
+- **Task cards** (`docs/tasks/`, run by `make task T=NNNN` with Codex):
+  follow [docs/tasks/EXECUTOR.md](docs/tasks/EXECUTOR.md) and the card. The
+  card's `touch` list is the only set of files you may change.
+  [docs/design/agent-workflow.md](docs/design/agent-workflow.md) explains
+  the loop.
+
+## Map
+
+- `cmd/notesd`: the daemon. `cmd/notesctl`: the CLI (clix/cobra; one
+  `newXxxCmd(opts)` per file).
+- `api/`: the RPC contract. `zz_generated.go` comes from `schema/rpc/*.yaml`
+  via `tools/rpcgen` (`make gen`); `api.go`, `client.go` and `conn.go` are
+  the hand-written runtime (Router, caller kinds, Client). Never edit
+  generated files (`api/zz_generated.go`, `app/src/rpc/gen/api.ts`,
+  `docs/specs/rpc-api.md`).
+- `internal/store`: SQLite (modernc, pure Go): migrations, the single-writer
+  `Tx`, the durable `changes` log, queries. `internal/events`: fans
+  committed events out and replays the log. `internal/rpcserver`: the
+  socket server and `ServeConn` for authenticated WebSockets.
+  `internal/engine`: the API domains over the store. `internal/rpctest`: a
+  real server for tests. `internal/devgw`: the loopback WebSocket gateway
+  for UI work in a browser. `internal/config`: paths.
+- `internal/merge`: three-way merges (planner-owned; never a card's).
+- `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
+  (SHA-pinned actions; no unit test named `TestI…`).
+- `dev/nsl/provision.sh`: the nsl machine for the app toolchain.
+  `tools/rpcgen`, `tools/taskrun`: the contract generator and the task-card
+  runner.
+
+## Gates
+
+- `make check` formats, then runs `make verify`: tidy, `gen-check`, vet,
+  gofmt, the pinned golangci-lint (`mise install`) and unit tests. Run it
+  before claiming any Go change is complete. `make ci` adds the race
+  detector.
+- Unit tests run with `-run '^Test[^I]'` (frostyard/core ADR-0022): never
+  name a unit test `TestI…`; `internal/repocheck` fails if you do.
+- Fix a lint finding rather than loosening `.golangci.yml`.
 
 ## Invariants (decided; binding from the first line of code)
 
@@ -59,15 +94,21 @@ them rather than improvising, whichever agent you are:
 
 ## Code conventions (live — the code exists)
 
-No code exists yet. Rules graduate here as M0 lands the code that enforces
-them, starting from frostmail's `AGENTS.md` conventions (Go: `ctx` first,
-lowercase wrapped errors, `slog`, `encoding/json/v2`, no mutable package
-state; every write through `store.DB.Tx` with its events emitted in the
-same transaction).
-
-- Run the project's full check (`make check`, from M0 Phase 1) before
-  calling any change done. CI runs the same recipe, so a local pass is a CI
-  pass.
+- Go: `ctx` first; errors are lowercase, wrapped with `%w`; `slog` for logs;
+  `encoding/json/v2`; no mutable package state; modern idioms
+  (`t.Context()`, `t.Chdir`, `wg.Go`, `omitzero`, `b.Loop`). Tests use temp
+  dirs and `rpctest`; no sleeps for synchronization.
+- Every write goes through `store.DB.Tx`; emit durable events with `Tx.Emit`
+  in the same transaction as the change (`internal/store/vault.go`).
+- API changes: edit `schema/rpc/*.yaml` (every domain lists its `callers`),
+  run `make gen`, implement. Changes within protocol 1 are additive only.
+  Quote doc strings inside inline YAML `{...}` mappings.
+- A method a caller kind may not use answers `methodNotFound`, exactly like
+  one that does not exist; the router enforces it from the domain's
+  `callers` (`api.Router.Dispatch`).
+- SQLite databases never live on a network file system or `/mnt/host`.
+- Downloads in scripts are version-pinned and checksum-verified
+  (frostyard/core ADR-0023).
 
 ## Repository boundary
 

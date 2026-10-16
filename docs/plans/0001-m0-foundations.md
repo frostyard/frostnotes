@@ -21,6 +21,10 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   (frostyard/core ADR-0021), running `make verify` and the app checks.
 - **Done when:** `make check` is green on an empty Go module, and CI is
   green on the first push.
+- **Result (2026-10-16): done.** CI's Verify and Race jobs passed on PR
+  frostyard/frostnotes#1. `internal/repocheck` fails any unit test named
+  `TestI…`, which the ADR-0022 filter would skip silently; it caught
+  frostmail's `TestImmutableReferences` and one of the new store tests.
 
 ## Phase 2 — Environment
 
@@ -29,6 +33,8 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   ([ADR-0009](../adr/0009-development-environment-and-gates.md)).
 - **Done when:** a fresh `nsl create frostnotes` plus the script builds the
   app shell.
+- **Result (2026-10-16):** the machine provisioned on the first run (Node
+  24.21.0, Go 1.27.1, Rust 1.99.0).
 
 ## Phase 3 — Contracts and runtime
 
@@ -42,6 +48,10 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 - `specs/rpc-protocol.md`.
 - **Done when:** `notesctl hello` and `notesctl vault add/list` work against
   a running notesd, and `make gen-check` passes.
+- **Result (2026-10-16):** `notesctl hello` works against a running notesd,
+  and `make gen-check` passes. `vault.add` resolves symlinks and refuses
+  vaults that contain or lie inside one another. The `notesctl vault`
+  commands became calibration card T-0003 rather than planner work.
 
 ## Phase 4 — App shell
 
@@ -74,6 +84,36 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 - **Done when:** each spike has a recorded result in this plan, and any
   no-go has an ADR that changes the design.
 
+Results (2026-10-16):
+
+2. **Merge library shape: go.** `internal/merge` has `Text`, `Note` and
+   `Create`; 30 golden cases and a 300-seed property test pass. Two
+   findings changed the design ([sync.md](../design/sync.md#merge)): pure
+   insertions at the same place must keep both sides, or two daily notes
+   from one template conflict; and the diff must be linear-space, since a
+   backtracking Myers diff of two unrelated 10,000-line files needs
+   gigabytes. With the middle-snake algorithm, scattered edits in 10,000
+   lines merge in about 2 ms; two unrelated 10,000-line files take 0.3 s
+   and 3 MB.
+3. **Watching the user's vault: go.** It is on an SMB 3 share (CIFS,
+   `statfs` magic `0xfe534d42`). Local writes, including temp-and-rename,
+   raise inotify events at once, and file and directory fsync succeed.
+   Edits from other machines raise none, so notesd rescans: a walk with
+   stat of 97 folders and 666 notes takes about 85 ms (reading every note:
+   7 ms cached, 674 ms cold). The network rescan interval is 10 seconds
+   ([vault.md](../design/vault.md#scan-and-watch)).
+4. **Obsidian link resolution: pattern inventory done; Obsidian's answers
+   pending.** In the vault, 125 file names are shared by two or more files
+   (one by 13), so ties matter: 70 of 272 wikilinks are ambiguous by name,
+   185 carry folder paths, 9 aliases, 5 heading links, and 150 name no
+   existing file. 35 markdown links point at local files; 22 notes use
+   callouts. Instead of 50 links checked by hand, the user runs a
+   read-only snippet in Obsidian's developer console that records
+   Obsidian's resolution of every link to a file outside the repository;
+   M1's resolver is tested against it locally (an integration test gated on
+   `FROSTNOTES_OBSIDIAN_LINKS`), and the patterns become `specs/markdown.md`
+   fixtures with made-up names.
+
 ## Phase 6 — Task tooling and calibration
 
 - `tools/taskrun` from frostmail, with the `make task`, `accept`,
@@ -83,6 +123,11 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   output formatting.
 - **Done when:** Codex passes at least two of the three cards without help,
   and the results are recorded here.
+- **Cards (2026-10-16):** T-0001 split frontmatter byte for byte, T-0002
+  scan wikilinks and tags outside code, T-0003 `notesctl vault` commands;
+  all size S. Writing them, the planner's own expected byte offsets were
+  wrong four times and the reference solutions right, which is the case
+  for checking given tests against a reference before a card ships.
 
 ## Done when
 
