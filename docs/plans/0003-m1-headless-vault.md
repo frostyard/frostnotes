@@ -9,8 +9,9 @@ from `notesctl` and from an agent through `notesctl mcp`. It follows
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the spec, the schema, scan and watch, the write path, merges
 and the MCP surface; the executor owns cards T-0004 onward.
-Status: **Phase 1 done** (2026-10-16): this plan,
-[specs/markdown.md](../specs/markdown.md) and cards T-0004 to T-0008.
+Status: **Phases 1 and 2 done** (2026-10-16): this plan,
+[specs/markdown.md](../specs/markdown.md), and cards T-0004 to T-0008
+merged.
 
 ## Decisions taken for M1
 
@@ -115,6 +116,26 @@ Status: **Phase 1 done** (2026-10-16): this plan,
   Neither file enters the repository.
 - **Done when:** the five cards are merged, `make check` is green, and
   `make obsidian-links` passes on the user's machine.
+- **Result (2026-10-16): done.** Codex passed all five cards on the first
+  attempt (the user ran T-0004; the planner ran the rest and reviewed each
+  before merging it into `m1/cards`). `make obsidian-links` passes: the
+  merged `Resolve` agrees with Obsidian on 179 of 179 links.
+
+  | Card | Attempts | Files | Review |
+  | --- | --- | --- | --- |
+  | T-0004 resolve | 1 | 1 | matches the spec rule for rule |
+  | T-0005 blobs | 1 | 1 | correct; atomic publish with the shard fsync |
+  | T-0006 walk | 1 | 2 | correct; its `**` matcher avoids the reference's backtracking |
+  | T-0007 moment | 1 | 1 | correct; longest match over four-byte prefixes |
+  | T-0008 vaultgen | 1 | 1 | links correct, but the vaults are not realistic: see below |
+
+  T-0008 met every given test, yet at 666 notes it writes 9 folders,
+  notes of about 300 bytes that all share one paragraph, and two
+  attachments, where the user's vault has 97 folders and notes of about
+  3.3 KB. The given tests checked that each pattern appears and each link
+  resolves, not scale or variety: a card's tests must pin every property
+  its goal needs. The `tools/vaultgen` card in batch 2 also makes vaults
+  realistic, with tests for folder count, note size and distinct text.
 
 ## Phase 3 — Index contracts (planner)
 
