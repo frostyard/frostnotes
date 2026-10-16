@@ -77,7 +77,9 @@ merge order is the log order.
 
 ### Merge
 
-`internal/merge` (planner-owned, golden tests per rule):
+`internal/merge` (planner-owned; 30 golden cases from the M0 spike in
+`merge_test.go`, which become M2's golden tests, and a seeded property test):
+
 
 - **Text files** (`.md` and other UTF-8 text such as `.base` and
   `.frostnotes/*.yaml`) merge. Other files do not: the later push wins and
@@ -86,9 +88,17 @@ merge order is the log order.
   so keys that only one side touched keep their bytes. A key both sides
   changed differently takes the head's value and makes the merge a
   conflict.
-- **Body:** diff3 by line; inside a conflicting hunk, diff3 again by word
-  (words and the whitespace between them); whatever still conflicts takes
-  the head's side.
+- **Body:** diff3 by line. Where both sides only inserted lines at the same
+  place, both insertions are kept, the head's first; this is what lets two
+  daily notes made offline from one template, or two tag lists each grown
+  by one tag, merge cleanly. A hunk both sides changed differently merges
+  again by word (words and the whitespace between them); insertions at the
+  same place conflict at that level, since interleaved words read worse
+  than a conflict revision. Whatever still conflicts takes the head's side.
+- **Diffs** use Myers' linear-space algorithm: a 10,000-line note with
+  scattered edits merges in about 2 ms; two 10,000-line files with nothing
+  in common take about 0.3 s and 3 MB (measured in M0).
+
 - The merge is deterministic: the same three inputs always give the same
   bytes.
 

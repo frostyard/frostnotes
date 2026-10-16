@@ -1,8 +1,8 @@
 # Frostnotes
 
 A notes app in the spirit of Obsidian, from Frostyard. Notes are plain
-markdown files with YAML frontmatter, in a folder you own. Pre-release:
-designed, not yet built ([roadmap](docs/plans/0002-roadmap.md)).
+markdown files with YAML frontmatter, in a folder you own
+([roadmap](docs/plans/0002-roadmap.md)).
 
 - **notesd** is a Go daemon that owns your vaults: it watches the files,
   keeps a SQLite index (full text, links, backlinks, tags, properties), and
@@ -18,8 +18,25 @@ designed, not yet built ([roadmap](docs/plans/0002-roadmap.md)).
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties.
 
-Architecture starts at [docs/design/overview.md](docs/design/overview.md);
-agents start at [AGENTS.md](AGENTS.md).
+Pre-release: M0 (foundations) is done; the vault engine (M1) is next.
+
+## Develop
+
+Requirements: Go 1.27 and `mise install` (golangci-lint) on the host;
+[nsl](https://github.com/frostyard/nsl) for the app toolchain.
+
+```sh
+nsl create frostnotes --distro debian:13
+nsl run -m frostnotes --root bash dev/nsl/provision.sh "$(id -un)"
+make check          # host: generated files, vet, lint, unit tests
+make ui-check       # nsl: Biome, typecheck and UI tests
+make app-run        # nsl: notesd plus the built app
+make ui-dev         # nsl: notesd and Vite; open http://127.0.0.1:5173
+```
+
+`make help` lists every target. Architecture starts at
+[docs/design/overview.md](docs/design/overview.md); agents start at
+[AGENTS.md](AGENTS.md).
 
 ## License
 

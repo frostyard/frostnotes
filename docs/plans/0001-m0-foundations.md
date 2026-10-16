@@ -4,7 +4,7 @@ Goal: everything later milestones stand on, proven before any notes
 feature is built. Most of it comes from frostmail, copied and then owned
 here ([ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md),
 [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)).
-Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
+Status: **done** (2026-10-16).
 
 ## Phase 1 — Repository
 
@@ -21,6 +21,10 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   (frostyard/core ADR-0021), running `make verify` and the app checks.
 - **Done when:** `make check` is green on an empty Go module, and CI is
   green on the first push.
+- **Result (2026-10-16): done.** CI's Verify and Race jobs passed on PR
+  frostyard/frostnotes#1. `internal/repocheck` fails any unit test named
+  `TestI…`, which the ADR-0022 filter would skip silently; it caught
+  frostmail's `TestImmutableReferences` and one of the new store tests.
 
 ## Phase 2 — Environment
 
@@ -29,6 +33,9 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   ([ADR-0009](../adr/0009-development-environment-and-gates.md)).
 - **Done when:** a fresh `nsl create frostnotes` plus the script builds the
   app shell.
+- **Result (2026-10-16): done.** The machine provisioned on the first run
+  (Node 24.21.0, Go 1.27.1, Rust 1.99.0) and builds the app shell
+  (`make app-build`).
 
 ## Phase 3 — Contracts and runtime
 
@@ -42,9 +49,17 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 - `specs/rpc-protocol.md`.
 - **Done when:** `notesctl hello` and `notesctl vault add/list` work against
   a running notesd, and `make gen-check` passes.
+- **Result (2026-10-16): done.** `notesctl hello` and, after T-0003,
+  `notesctl vault add/list/rm` work against a running notesd, and
+  `make gen-check` passes. `vault.add` resolves symlinks and refuses
+  vaults that contain or lie inside one another. The `notesctl vault`
+  commands became calibration card T-0003 rather than planner work.
 
 ## Phase 4 — App shell
 
+- The sibling notebook [application icon](../design/overview.md#application-icon)
+  ([ADR-0013](../adr/0013-use-a-sibling-frostyard-notebook-icon.md)), with an
+  editable SVG master and reproducible PNG exports.
 - `app/` from frostmail's shell, with the mail stripped out: `bridge.rs`,
   `transport.ts`, the mock transport, tokens, window chrome, Biome,
   Vitest, and `make ui-check`, `app-dev` and `app-build`.
@@ -52,6 +67,15 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   development mode, so the same shell runs in a browser.
 - **Done when:** the app shows `rpc.hello` from notesd in the Tauri window
   and in Firefox.
+- **Result (2026-10-16): done.** The built app showed notesd's hello and
+  its vaults in the Tauri window (WebKitGTK under Xvfb in nsl, driven by
+  WebKitWebDriver). In a browser, `make ui-dev` (notesd `-devgw` plus Vite)
+  showed the same, and a vault added with `notesctl vault add` appeared live
+  through `vault.added`. `make ui-check` (9 files, 36 tests) and
+  `make app-test` (7 Rust tests) pass. Deviations from frostmail: `ci`
+  builds before `app-test` (cargo test needs `app/dist`); pnpm overrides
+  hold `@lezer/css` 1.3.8 and `@lezer/lr` 1.4.10, since the newest were
+  under two weeks old.
 
 ## Phase 5 — Spikes (go or no-go)
 
@@ -74,6 +98,51 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 - **Done when:** each spike has a recorded result in this plan, and any
   no-go has an ADR that changes the design.
 
+Results (2026-10-16):
+
+1. **CodeMirror 6 in WebKitGTK: go.** `app/src/spike` runs a decoration-only
+   live preview (hidden marks and heading `#`s off the cursor's lines,
+   wikilinks with aliases, checkbox widgets) over a generated 10,000-line,
+   946,429-character note. Natively on the host GPU (`make spike-cm6`,
+   device pixel ratio 2): keystroke-to-paint median 7 ms, p95 9 ms, max
+   29 ms over 200 keystrokes; scrolling the whole note at 59.5 fps (frame
+   p95 18 ms, none over 33 ms); first paint 78 ms; a full parse 85 ms. In
+   nsl with software rendering: p95 11–12 ms and 54–55 fps. In every run
+   the text stayed byte-exact through typing and checkbox toggles. The user
+   checked IME input by hand on the host (`make spike-cm6 SPIKE=cm6:manual`):
+   composition and committed text were correct.
+2. **Merge library shape: go.** `internal/merge` has `Text`, `Note` and
+   `Create`; 30 golden cases and a 300-seed property test pass. Two
+   findings changed the design ([sync.md](../design/sync.md#merge)): pure
+   insertions at the same place must keep both sides, or two daily notes
+   from one template conflict; and the diff must be linear-space, since a
+   backtracking Myers diff of two unrelated 10,000-line files needs
+   gigabytes. With the middle-snake algorithm, scattered edits in 10,000
+   lines merge in about 2 ms; two unrelated 10,000-line files take 0.3 s
+   and 3 MB.
+3. **Watching the user's vault: go.** It is on an SMB 3 share (CIFS,
+   `statfs` magic `0xfe534d42`). Local writes, including temp-and-rename,
+   raise inotify events at once, and file and directory fsync succeed.
+   Edits from other machines raise none, so notesd rescans: a walk with
+   stat of 97 folders and 666 notes takes about 85 ms (reading every note:
+   7 ms cached, 674 ms cold). The network rescan interval is 10 seconds
+   ([vault.md](../design/vault.md#scan-and-watch)).
+4. **Obsidian link resolution: pattern inventory and Obsidian's answers
+   captured.** In the vault, 125 file names are shared by two or more files
+   (one by 13), so ties matter: 70 of 272 wikilinks are ambiguous by name,
+   185 carry folder paths, 9 aliases, 5 heading links, and 150 name no
+   existing file. 35 markdown links point at local files; 22 notes use
+   callouts. Instead of 50 links checked by hand, the user runs a
+   read-only snippet in Obsidian's developer console that records
+   Obsidian's resolution of every link to a file outside the repository;
+   M1's resolver is tested against it locally (an integration test gated on
+   `FROSTNOTES_OBSIDIAN_LINKS`), and the patterns become `specs/markdown.md`
+   fixtures with made-up names. The user ran it on 2026-10-16: 179 links from
+   43 notes, 88 resolved by Obsidian and 91 not (notes not yet created).
+   Obsidian counts 93 fewer links than the inventory's regex, and of the 29
+   bare-name links it resolved, 25 point into the linking note's own folder.
+   M1 pins both down.
+
 ## Phase 6 — Task tooling and calibration
 
 - `tools/taskrun` from frostmail, with the `make task`, `accept`,
@@ -83,12 +152,35 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   output formatting.
 - **Done when:** Codex passes at least two of the three cards without help,
   and the results are recorded here.
+- **Cards (2026-10-16):** T-0001 split frontmatter byte for byte, T-0002
+  scan wikilinks and tags outside code, T-0003 `notesctl vault` commands;
+  all size S. Writing them, the planner's own expected byte offsets were
+  wrong four times and the reference solutions right, which is the case
+  for checking given tests against a reference before a card ships.
+- **Result (2026-10-16): done, three of three on the first attempt.**
+  Codex (codex-cli 0.161, the user's default model) in the
+  `.worktrees/exec` worktree, each card on its own branch:
+
+  | Card | Attempts | Wall time | Files | Review |
+  | --- | --- | --- | --- | --- |
+  | T-0001 split frontmatter | 1 | 57 s | 1 | matches the contract, edge cases included |
+  | T-0002 wikilinks and tags | 1 | 100 s | 1 | correct; blanks code in a copy so offsets hold |
+  | T-0003 `notesctl vault` | 1 | 61 s | 2 | correct; better factored than the reference |
+
+  T-0002's first run stopped by design: its given test was named
+  `TestInlineTags`, which `internal/repocheck` rejects, and Codex refused to
+  edit a given test and said why. The card was fixed (`TestTagsInBody`) and
+  rerun. taskrun gained two fixes: it creates `doing/` and `done/` (git
+  tracks no empty directories), and it checks scope after `make check`,
+  because formatting can change files too. Size M cards are unlocked for
+  M1 ([agent workflow](../design/agent-workflow.md#sizing)).
 
 ## Done when
 
 `make check` is green on the host and `make ui-check` in nsl; the app shows
 data from notesd on the desktop and in a browser; the spikes are go; and
-Codex has passed its calibration cards. Next: the M1 plan and its cards.
+Codex has passed its calibration cards. All met on 2026-10-16. Next: the M1
+plan and its cards.
 
 ## Open questions
 

@@ -1,0 +1,21 @@
+domain: events
+callers: [local, session, device]
+doc: >-
+  Change notifications. After events.subscribe, the server sends JSON-RPC
+  notifications with method "event" on the same connection. Durable events
+  carry a sequence number and are kept in the changes log, so a client that
+  reconnects can resume from the last sequence number it saw.
+types:
+  - name: Subscription
+    doc: The state of a new subscription.
+    fields:
+      - {name: seq, type: int, doc: "The latest durable sequence number when the subscription started."}
+      - {name: resync, type: bool, doc: "True when sinceSeq is older than the retained log; the client must refetch all state."}
+methods:
+  - name: subscribe
+    doc: >-
+      Start receiving events on this connection. Durable events after sinceSeq
+      are replayed before live events.
+    params:
+      - {name: sinceSeq, type: int, optional: true, doc: "Replay durable events after this sequence number. Omit to receive live events only."}
+    result: Subscription

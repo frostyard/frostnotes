@@ -9,7 +9,10 @@ Docs are split by the question they answer (frostyard/core ADR-0025):
 | [specs/](specs/) | **What exactly** is the contract? | Precise, testable interface definitions |
 | [plans/](plans/) | **When/in what order** do we build? | Roadmaps and phase plans; updated as work lands |
 
-Task cards for the executor (`tasks/`) arrive in [M0](plans/0001-m0-foundations.md).
+Task cards for the executor live in [tasks/](tasks/), with their
+[template](tasks/TEMPLATE.md) and [executor rules](tasks/EXECUTOR.md)
+([agent workflow](design/agent-workflow.md)).
+
 Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 
 ## Index
@@ -28,16 +31,21 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0010 — Claude plans and verifies; Codex runs task cards](adr/0010-claude-plans-and-codex-runs-task-cards.md)
 - [0011 — Look like frostmail's sibling, with Obsidian's layout](adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - [0012 — Agents reach notes through MCP](adr/0012-agents-reach-notes-through-mcp.md)
+- [0013 — Use a sibling Frostyard notebook icon](adr/0013-use-a-sibling-frostyard-notebook-icon.md)
 
 ### Design
 
 - [Overview](design/overview.md) — notesd, its two roles, the clients, the planned layout
 - [Vault](design/vault.md) — scan, watch, parse, index, link resolution, writes, versions
 - [Sync](design/sync.md) — the hub's revision log, push and pull, merges, conflicts, the simulation
+- [Agent workflow](design/agent-workflow.md) — planner, executor and taskrun; a card's life; sizing
+
 
 ### Specs
 
-*(none yet — `rpc-protocol.md` in M0; `markdown.md` in M1; `sync-protocol.md` and `merge.md` in M2)*
+- [RPC protocol](specs/rpc-protocol.md) — transports, caller kinds, messages, connection setup, events
+- [RPC API](specs/rpc-api.md) — every method, type and event (generated from `schema/rpc`)
+
 
 ### Plans
 

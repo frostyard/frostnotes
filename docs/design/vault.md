@@ -41,9 +41,14 @@ in the vault except the settings in `.frostnotes/`.
   missing file and a new file with the same hash as a move.
 - **Watch:** fsnotify on every directory, debounced 100 ms per path. A
   periodic rescan catches what the watcher misses: every 5 minutes, or
-  every 30 seconds when the vault is on a network file system (detected
-  with `statfs`), where remote edits raise no events. If the inotify watch
-  limit is reached, notesd logs it and falls back to rescans.
+  every 10 seconds when the vault is on a network file system (detected
+  with `statfs`; SMB2 is `0xfe534d42`), where edits from other machines
+  raise no events. Edits made on this machine do raise events there. If the
+  inotify watch limit is reached, notesd logs it and falls back to rescans.
+  Measured in M0 on the user's vault over SMB 3 (97 folders, 666 notes,
+  2.2 MiB): a walk with stat takes about 85 ms, and reading every note 7 ms
+  cached or 674 ms cold, so a rescan that reads only changed files is cheap.
+
 - An outside change is indexed like any write: a version is kept and a
   durable `note.changed` event is emitted.
 

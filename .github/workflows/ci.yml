@@ -1,0 +1,125 @@
+# CI: the jobs of `make ci`, which runs the same gates on a developer's
+# machine. Actions are pinned to full commit SHAs and jobs get only the
+# permissions they need (frostyard/core ADR-0021, checked by
+# internal/workflowcheck); tools come from go.mod and mise.lock (ADR-0043).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  schedule:
+    - cron: "41 5 * * *" # nightly, so upstream drift surfaces within a day
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Verify (make verify)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # The locked golangci-lint, checksum-verified, as `mise install` does.
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          install: true
+          install_args: golangci-lint
+          cache: true
+      - name: Tidy, vet, format, lint and unit tests
+        run: make verify
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test -race -run '^Test[^I]' ./...
+
+  # The app's jobs (M0 Phase 4). The app targets normally run in the nsl
+  # machine; here IN_NSL runs them on the runner. The toolchain versions are
+  # the ones dev/nsl/provision.sh pins.
+  ui:
+    name: App UI (make ui-check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      NODE_VERSION: "24.21.0"
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # pnpm comes from corepack, pinned with its hash by app/package.json.
+      - run: corepack enable
+      - name: Biome, typecheck and Vitest
+        run: make ui-check IN_NSL='sh -c'
+
+  app:
+    name: App shell (make app-build, app-test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      NODE_VERSION: "24.21.0"
+      RUST_TOOLCHAIN: "1.99.0"
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      CARGO_TARGET_DIR: ${{ github.workspace }}/build/cargo-target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tauri's system libraries (as dev/nsl/provision.sh installs them)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - name: Rust ${{ env.RUST_TOOLCHAIN }}
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            build/cargo-target
+          key: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
+      - name: Release build of the app
+        run: make app-build IN_NSL='sh -c'
+      - name: The app shell's Rust tests
+        run: make app-test IN_NSL='sh -c'

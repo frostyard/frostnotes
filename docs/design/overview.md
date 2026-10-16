@@ -3,11 +3,13 @@
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
 [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md).
-Contracts: `specs/rpc-protocol.md` and `specs/rpc-api.md` (M0).
+Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md).
 
-**Status: designed, not built.** No code exists yet. This document describes
-the planned system and is rewritten as each milestone lands
-([roadmap](../plans/0002-roadmap.md)).
+**Status: M0 built** ([plan 0001](../plans/0001-m0-foundations.md)): notesd
+with the store, the socket and caller kinds; `notesctl hello` and `vault`;
+the app shell on the desktop and in a browser; `internal/merge` and
+`internal/markdown`'s first parsers. Everything else here is the planned
+system, rewritten as each milestone lands ([roadmap](../plans/0002-roadmap.md)).
 
 ## Overview
 
@@ -58,6 +60,22 @@ a thin client.
 - **MCP** tools are hand-written adapters over the engine, served over stdio
   by `notesctl mcp` and over HTTP by the hub
   ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)).
+
+### Application icon
+
+Frostnotes uses a snowflake-marked notebook with a faceted blue spine, ruled
+cover and ribbon bookmark. Its chamfered frame, palette and snow crystal
+match Frostmail's icon ([ADR-0013](../adr/0013-use-a-sibling-frostyard-notebook-icon.md)),
+extending the sibling identity in [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md).
+It belongs to the [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell).
+
+The editable master is `app/src-tauri/icons/icon.svg`. Its comments record
+the exact color tokens from core's `frostyard-design/tokens/colors.css`.
+Run `python3 scripts/render-icons.py` with PyGObject, GdkPixbuf and its
+librsvg SVG loader to regenerate the 32, 128 and 512 pixel RGBA PNGs used
+by Tauri. Commit the master and all three exports together; ordinary builds
+need only the PNGs. Check the two sibling icons at native size on light and
+dark backgrounds after editing. This artwork does not change the UI tokens.
 
 ### Planned layout
 

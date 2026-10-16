@@ -51,6 +51,6 @@ across 160 cards.
 
 ## References
 
-- Shapes: `docs/design/agent-workflow.md` and `docs/tasks/` (M0)
+- Shapes: [design/agent-workflow.md](../design/agent-workflow.md), [tasks/EXECUTOR.md](../tasks/EXECUTOR.md)
 - Builds on: frostmail ADR-0008 and ADR-0021
 - Built in: [M0 plan](../plans/0001-m0-foundations.md)

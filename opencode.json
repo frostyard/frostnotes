@@ -1,0 +1,33 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "docs/tasks/EXECUTOR.md"
+  ],
+  "permission": {
+    "edit": "allow",
+    "webfetch": "deny",
+    "external_directory": "deny",
+    "bash": {
+      "*": "deny",
+      "make accept *": "allow",
+      "make check": "allow",
+      "make fmt": "allow",
+      "make test": "allow",
+      "make ui-check": "allow",
+      "make ui-fmt": "allow",
+      "make ui-vitest *": "allow",
+      "go test *": "allow",
+      "go build *": "allow",
+      "go vet *": "allow",
+      "go doc *": "allow",
+      "go list *": "allow",
+      "go env *": "allow",
+      "gofmt *": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "ls *": "allow",
+      "cat *": "allow",
+      "grep *": "allow"
+    }
+  }
+}
