@@ -9,8 +9,9 @@ from `notesctl` and from an agent through `notesctl mcp`. It follows
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the spec, the schema, scan and watch, the write path, merges
 and the MCP surface; the executor owns cards T-0004 onward.
-Status: **Phase 1 done** (2026-10-16): this plan,
-[specs/markdown.md](../specs/markdown.md) and cards T-0004 to T-0008.
+Status: **Phases 1 to 3 done** (2026-10-16): this plan,
+[specs/markdown.md](../specs/markdown.md), cards T-0004 to T-0008, and the
+index contracts with cards T-0009 to T-0020.
 
 ## Decisions taken for M1
 
@@ -69,6 +70,30 @@ Status: **Phase 1 done** (2026-10-16): this plan,
   setting changes, so registering a vault still writes nothing to it
   ([vault.md](../design/vault.md#on-disk)). The user's vault has no
   `daily-notes.json`: Obsidian's defaults, the vault root and `YYYY-MM-DD`.
+- **Deleting a note unlinks it and keeps its versions.** `note.delete`
+  removes the file and records a deletion version; its earlier versions
+  stay in `blobs/` for 30 days, and `note.revert` brings it back, with its
+  file ID, at its last path. notesd never moves a note to `.trash/`: that
+  would put its own state in the vault
+  ([ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md)),
+  and `.trash/` stays ignored. A delete names its base like any write; a
+  note changed since is not deleted, because an edit beats a delete
+  ([ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
+  as the hub does in [sync.md](../design/sync.md#hub)). These follow from
+  ADR-0003, ADR-0005 and ADR-0006, so no new ADR records them.
+- **`notesctl write` reads stdin, or `--file`, and `--base` is required.**
+  A `--base` that defaulted to the indexed hash would make the write blind:
+  it would overwrite whatever changed since the person last read the note.
+  `notesctl cat --json` shows the hash; `--create` makes a new note.
+- **A write's version records who made it:** `source` (`editor` or
+  `agent`) and `author` are optional write parameters. The author defaults
+  to the client name the connection gave `rpc.hello`, which Phase 4 keeps
+  per connection (`api.Conn`); `notesctl mcp` passes the MCP client's name.
+- **A writer's losing side is kept.** When a merge's conflicting hunk
+  keeps the file's newer side, the content the writer sent is stored as a
+  conflict version (`versions.conflict`), so nothing typed is lost
+  ([ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)'s
+  conflict revision, locally).
 - **MCP** is `notesctl mcp`: a stdio server on the official Go SDK
   (`github.com/modelcontextprotocol/go-sdk`, a release at least two weeks
   old) that calls notesd over the socket like any client
@@ -137,6 +162,28 @@ Status: **Phase 1 done** (2026-10-16): this plan,
   each checked against a reference.
 - **Done when:** `make check` is green with every stub in place, and each
   batch-2 card has passed its reference.
+- **Result (2026-10-16): done.** `internal/markdown` has `Parse`, `Doc`,
+  goldmark v1.8.6 (GFM, footnotes, an empty Obsidian extension, and its
+  link parser wrapped to record where links end), and `fixtures_test.go`,
+  which reads the spec's 14 `F` fixtures and compares a `Doc` part by part.
+  T-0002's 35 cases moved into T-0011's given test, over `Parse`. The
+  migration has the index tables; `note.yaml` the 12 methods and 3
+  durable events; `vault.yaml` `status`, `reindex` and a `scan` event; the
+  engine answers each new method `unavailable` until Phase 4, and
+  `rpctest.Options.Note` lets client tests use a fake. Store signatures
+  are stubs in `files.go`, `index.go`, `search.go`, `queries.go` and
+  `versions.go`. The twelve cards were checked in order, each with its
+  given tests and a reference in place on top of the batch-1 cards, and
+  `make verify` green at every step; the references are deleted. Writing
+  references settled three spec rules: a tag may start a block's text
+  (`>#tag`, `|#tag|`), as goldmark reports it; a markdown link with an
+  empty destination is not a link; a multi-line setext heading's text is
+  its lines joined with a space. Checking caught, in the planner's given
+  tests, four test names starting with `TestI` (`repocheck` refused
+  them), a YAML comment taken for a tag, a link's end off by one, three
+  expected rows with an extra column, two setups that added links after
+  their targets, and a prune case that gave the kept file a newer
+  version. `go mod tidy -diff` caught goldmark required as indirect.
 
 ## Phase 4 — Engine (planner, alongside Phase 5)
 
@@ -147,9 +194,15 @@ Status: **Phase 1 done** (2026-10-16): this plan,
   path with merges and versions, link re-resolution when a file whose name
   could match is created, moved or deleted, settings and daily notes
   ([vault.md](../design/vault.md)).
-- The `note` domain in `internal/engine`; notesd opens every vault at
-  start, one actor per vault; the daily pass that prunes versions and
-  blobs older than 30 days.
+- The `note` domain in `internal/engine`, replacing the stubs that answer
+  `unavailable`, and `vault.status` and `vault.reindex`; notesd opens
+  every vault at start, one actor per vault; the daily pass that prunes
+  versions (`store.PruneVersions`) and the blobs it frees, older than 30
+  days. `api.Conn` gains the client name `rpc.hello` gave, the default
+  author of a write.
+- Daily notes expand their template with `internal/templates` (T-0013) and
+  the vault's date format from `.frostnotes/vault.yaml` or
+  `.obsidian/daily-notes.json`.
 - Tests: the writer pairs of ADR-0006 that exist locally (an agent or
   `notesctl` against an outside edit, two writers on one base); a `kill -9`
   harness that re-runs the test binary as a child notesd, kills it at
@@ -161,20 +214,29 @@ Status: **Phase 1 done** (2026-10-16): this plan,
 
 ## Phase 5 — Executor batch 2
 
-Planned cards, written in Phase 3:
+Cards written in Phase 3; each runs after the batch-1 cards it builds on
+are merged.
 
-- `tools/vaultgen`: the command over T-0008 (`-out`, `-notes`, `-seed`,
-  `-manifest`; S).
-- The parser: wikilinks, embeds and markdown links in the goldmark
-  extension; tags, aliases and property links from frontmatter; headings,
-  block IDs, tasks and words (three M cards against the spec's fixtures).
-- Template expansion: `{{title}}`, `{{date}}`, `{{time}}` and
-  `{{date:FORMAT}}` over T-0007 (S).
-- Store queries: index one parsed note; search with snippets; backlinks,
-  outgoing links and listing by folder, tag or property; versions (S and
-  M).
-- `notesctl ls`, `cat`, `search`, `backlinks`, `write`, `mv`, `versions`
-  and `revert` (two M cards).
+| Card | Size | Package | What | Runs after |
+| --- | --- | --- | --- | --- |
+| T-0009 | M | `internal/vaultgen`, `tools/vaultgen` | realistic vaults (folders, note sizes, prose) and the command (`-out`, `-notes`, `-seed`, `-manifest`) | T-0008 |
+| T-0010 | M | `internal/markdown` | frontmatter: props, property errors, aliases, tags, property links | |
+| T-0011 | M | `internal/markdown` | the goldmark extension: wikilinks, embeds, tags, math; comments; replaces `scan.go` | T-0010 |
+| T-0012 | M | `internal/markdown` | markdown links, headings, block IDs, tasks, words; every spec fixture | T-0011 |
+| T-0013 | S | `internal/templates` | `{{title}}`, `{{date}}`, `{{time}}`, formats and offsets | T-0007 |
+| T-0014 | M | `internal/store` | files, and re-resolving the links a file's arrival, move or deletion affects | T-0004 |
+| T-0015 | M | `internal/store` | `IndexNote`: one parsed note's rows | T-0014 |
+| T-0016 | S | `internal/store` | `SearchQuery` and `Search` with snippets | T-0015 |
+| T-0017 | M | `internal/store` | listing by folder, tag and property; note info; links and backlinks | T-0015 |
+| T-0018 | S | `internal/store` | versions: add, list, a deleted file's, prune | T-0014 |
+| T-0019 | M | `cmd/notesctl` | `--vault`, `ls`, `cat`, `search`, `backlinks` | |
+| T-0020 | M | `cmd/notesctl` | `write`, `mv`, `rm`, `versions`, `revert` | T-0019 |
+
+- Cards in one package run one after another, in the order above
+  ([agent workflow](../design/agent-workflow.md#batching-cards)). The
+  store cards' given tests build `markdown.Doc` values by hand, so they do
+  not wait for the parser cards; the notesctl cards test against a fake
+  note service, so they do not wait for Phase 4.
 - **Done when:** every card is merged and `make check` is green.
 
 ## Phase 6 — MCP
@@ -216,14 +278,11 @@ Planned cards, written in Phase 3:
   index `[[x]]` inside `%%…%%`, and which of several suffix matches does it
   pick? A one-note test vault in the user's Obsidian answers both, by
   Phase 4; until then the spec's choices stand.
-- **Deleting a note:** unlink it and keep its versions, or move it to
-  `.trash/` as Obsidian can. By Phase 3.
-- **`notesctl write` input:** stdin or `--file`, and whether `--base` may
-  default to the indexed hash for a human at a terminal. By Phase 5.
 
 ## References
 
-- Implements: [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md); [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
+- Implements: [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault`); [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
+- Cards: [T-0009 to T-0020](../tasks/todo/)
 - Evidence: [plan 0001, spikes 2–4](0001-m0-foundations.md#phase-5--spikes-go-or-no-go)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)

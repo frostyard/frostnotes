@@ -1,7 +1,9 @@
 # Design: vault
 
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
-[ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md).
+[ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), and
+[ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
+for deletes and conflict versions.
 Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated).
 
 **Status: being built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md)).
@@ -58,22 +60,30 @@ in the vault except the settings in `.frostnotes/`.
 
 `internal/markdown` parses a note with goldmark (CommonMark and GFM) and
 a Frostnotes extension for the Obsidian syntax, as
-[specs/markdown.md](../specs/markdown.md) pins it, into: frontmatter (YAML; invalid YAML is
-recorded as a property error and the body is still indexed), aliases,
-tags (frontmatter and inline, nested `#a/b`), links (wikilinks and
-markdown links to vault files: target, subpath `#heading` or `#^block`,
-alias, embed flag, position), headings, block IDs, tasks (status character
-and line), word count, and the plain text for full-text search. The title
-is the file name without `.md`, as in Obsidian.
+[specs/markdown.md](../specs/markdown.md) pins it. `markdown.Parse`
+returns a `Doc`: frontmatter (YAML; invalid YAML is recorded as a
+property error and the body is still indexed), aliases, tags (frontmatter
+and inline, nested `#a/b`), links (wikilinks, property links and markdown
+links to vault files: target, subpath `#heading` or `#^block`, alias,
+embed flag, position), headings, block IDs, tasks (status character and
+line) and word count. Comments are found after goldmark parses, so a
+comment may span blocks; what lies inside one is dropped. The title is the
+file name without `.md`, as in Obsidian.
 
 ### Index
 
-Planned tables (the M1 migration is the contract): `vaults`, `files` (path,
-kind, size, mtime, hash), `notes` (title, frontmatter as JSON, word count),
-`props` (key with text, number and date columns for queries), `tags`,
-`links` (raw target, resolved file or null, subpath, alias, embed, position),
-`headings`, `blocks`, `tasks`, `versions` (file, hash, time, source) and an
-FTS5 table over title, aliases and plain text.
+The tables are in `internal/store/migrations/0001_init.sql`, each column
+commented: `vaults`; `files` (path, lower-cased name for `Resolve`'s
+lookup, kind, size, mtime in nanoseconds, hash), keeping its ID across
+moves; `notes` (title, frontmatter as JSON, property error, aliases, word
+count); `props` (one row per scalar value or list item, with its
+lower-cased text and number, for listing by property); `tags`; `links`
+(as parsed, with the file each resolves to or null, and the lower-cased
+name of its target that decides when it must resolve again); `headings`,
+`blocks`, `tasks`; `versions`; and `notes_fts`, an FTS5 table with stored
+content over the title, aliases, the body as written and the frontmatter
+text, so search returns snippets. `internal/store` reads and writes them
+(`PutFile`, `IndexNote`, `Search`, `ListNotes`, `Backlinks`, …).
 
 ### Link resolution
 
@@ -106,9 +116,20 @@ returns it); M2 adds sync's revisions. A vault's writes run one at a time.
    `note.changed`.
 5. Return the new revision and, if a merge happened, the merged content.
 
+A write records its version's source (`editor` for a client, `agent` for
+MCP) and author (the client's name, or the MCP client's). When a merge
+leaves a conflicting hunk, the file's newer side stands and the content
+the writer sent is kept as a conflict version, so nothing typed is lost.
+
 Moves (`note.move`) rename the file and, when asked, rewrite links in every
 note that points at it (Obsidian's "update internal links"). Each rewrite is
 an ordinary write with a base.
+
+Deletes (`note.delete`) name their base too. A note changed since is not
+deleted (an edit beats a delete, as on the hub). Otherwise notesd removes
+the file, never moving it to `.trash/`, and records a deletion version;
+the file's versions stay, so `note.revert` brings it back with its ID at
+its last path.
 
 A crash after the rename and before the `Tx` loses only the attribution:
 the next scan indexes the new bytes as an outside version.
@@ -121,15 +142,18 @@ template, from `.frostnotes/vault.yaml` or else
 vault root, `YYYY-MM-DD`, no template). Today's note is the folder plus the
 date formatted with `internal/moment`; a format may contain `/` and so
 name subfolders. A missing daily note is created from the template, whose
-`{{title}}`, `{{date}}`, `{{time}}` and `{{date:FORMAT}}` are expanded as
-Obsidian's Templates plugin does. MCP's `append_to_daily_note` creates it
+`{{title}}`, `{{date}}`, `{{time}}`, `{{date:FORMAT}}` and offsets such as
+`{{date-1d:YYYY-MM-DD}}` are expanded as Obsidian does
+(`internal/templates`). MCP's `append_to_daily_note` creates it
 that way, then appends with a base like any write.
 
 ### Versions
 
 Every version notesd writes or scans is kept in `blobs/`, and listed in
-`versions` with its source (editor, outside, agent, sync), for 30 days by
-default. A daily pass prunes unreferenced blobs. `note.versions` and
+`versions` with its source (editor, outside, agent, sync) and author, for
+30 days by default; a deletion is a version too. A file's newest version
+is kept however old, as the base of its next merge. A daily pass prunes
+older versions and removes the blobs no version or file names. `note.versions` and
 `note.revert` expose them; on a synced vault, the hub's log holds the
 long-term history ([sync.md](sync.md)).
 
@@ -141,14 +165,14 @@ long-term history ([sync.md](sync.md)).
   newlines.
 - Symlinks are not followed out of the vault.
 - A note too large to index usefully (over 10 MB) is indexed by name only.
-- `notesctl index rebuild` drops the index tables and rescans; nothing is
-  lost. Deleting `notesd.db` itself also loses local versions and sync
+- `vault.reindex` reads every file again and rebuilds the index, keeping
+  file IDs and versions; nothing is lost. Deleting `notesd.db` itself also loses local versions and sync
   state: the vault re-syncs from its hub, and `blobs/` is pruned on the
   next pass.
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))
