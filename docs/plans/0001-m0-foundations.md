@@ -4,8 +4,7 @@ Goal: everything later milestones stand on, proven before any notes
 feature is built. Most of it comes from frostmail, copied and then owned
 here ([ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md),
 [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)).
-Status: **done** (2026-10-16), except two checks by hand that move to M1:
-IME input in the editor, and Obsidian's own link resolution (spike 4).
+Status: **done** (2026-10-16), except the IME check by hand in the editor.
 
 ## Phase 1 — Repository
 
@@ -127,8 +126,8 @@ Results (2026-10-16):
    stat of 97 folders and 666 notes takes about 85 ms (reading every note:
    7 ms cached, 674 ms cold). The network rescan interval is 10 seconds
    ([vault.md](../design/vault.md#scan-and-watch)).
-4. **Obsidian link resolution: pattern inventory done; Obsidian's answers
-   pending.** In the vault, 125 file names are shared by two or more files
+4. **Obsidian link resolution: pattern inventory and Obsidian's answers
+   captured.** In the vault, 125 file names are shared by two or more files
    (one by 13), so ties matter: 70 of 272 wikilinks are ambiguous by name,
    185 carry folder paths, 9 aliases, 5 heading links, and 150 name no
    existing file. 35 markdown links point at local files; 22 notes use
@@ -137,7 +136,11 @@ Results (2026-10-16):
    Obsidian's resolution of every link to a file outside the repository;
    M1's resolver is tested against it locally (an integration test gated on
    `FROSTNOTES_OBSIDIAN_LINKS`), and the patterns become `specs/markdown.md`
-   fixtures with made-up names.
+   fixtures with made-up names. The user ran it on 2026-10-16: 179 links from
+   43 notes, 88 resolved by Obsidian and 91 not (notes not yet created).
+   Obsidian counts 93 fewer links than the inventory's regex, and of the 29
+   bare-name links it resolved, 25 point into the linking note's own folder.
+   M1 pins both down.
 
 ## Phase 6 — Task tooling and calibration
 
