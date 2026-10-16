@@ -18,6 +18,9 @@ func New(db *store.DB) *Engine { return &Engine{db: db} }
 // Vaults implements the vault domain.
 func (e *Engine) Vaults() api.VaultService { return vaults{e.db} }
 
+// Notes implements the note domain.
+func (e *Engine) Notes() api.NoteService { return notes{e.db} }
+
 // apiError maps store errors to API errors.
 func apiError(err error, what string) error {
 	switch {

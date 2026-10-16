@@ -16,16 +16,6 @@ var (
 	tickRuns    = regexp.MustCompile("`+")
 )
 
-// Link is a wikilink or wiki embed in a note's body.
-type Link struct {
-	Target  string // the note or file named; empty for a heading of the same note
-	Subpath string // heading or block ID, including its leading '#'
-	Alias   string // the text after the first '|'
-	Embed   bool   // written ![[...]]
-	Start   int    // byte offset of '[[', or of '!' for an embed
-	End     int    // byte offset just after ']]'
-}
-
 // Wikilinks returns the body's wikilinks and embeds in order.
 func Wikilinks(body []byte) []Link {
 	return scanLinks(withoutCode(body))

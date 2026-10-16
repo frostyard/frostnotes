@@ -43,9 +43,10 @@ it fits: [design/vault.md](../design/vault.md#parse). Built in
   an optional BOM) and the next line that is exactly `---` or `...`, CRLF
   allowed. Without a closing line there is no frontmatter
   (`markdown.SplitFrontmatter`, T-0001).
-- It is a YAML 1.2 mapping. YAML that does not parse, or is not a mapping,
-  is a **property error**: the note has no properties, aliases or
-  frontmatter tags, and its body is still parsed.
+- It is a YAML 1.2 mapping. YAML that does not parse, is not a mapping, or
+  repeats a key is a **property error**: the note has no properties,
+  aliases, frontmatter tags or property links, and its body is still
+  parsed. An empty frontmatter is an empty mapping.
 - **`tags`**: a list of strings, or one string split at commas and white
   space (choice). A leading `#` is dropped. Each tag keeps its spelling;
   identity ignores case, as for inline tags. Tags from frontmatter carry the
@@ -76,13 +77,15 @@ boundary):
   bodies are inside code; the rest, with the local markdown links, are 177
   links to Obsidian's 179, and the one note that differs has escaped
   backticks, fixture [F03](#f03--escaped-backticks))
-- math: `$$…$$` blocks and `$…$` spans, where the opening `$` is not
-  followed by a space and the closing `$` is not preceded by one. (Obsidian
-  docs)
+- math: `$$…$$` blocks, and `$…$` or `$$…$$` spans within one line, where
+  a single `$` opens only before a character that is not a space and
+  closes only after one. A math block starts at a line beginning with
+  `$$` and ends at the next line holding `$$`. (Obsidian docs)
 - comments: `%%…%%`, within a line or across lines and blocks; an unclosed
-  `%%` runs to the end of the note. (choice: Obsidian hides comments; whether
-  it indexes links inside them is unconfirmed, and the user's vault has
-  none.)
+  `%%` runs to the end of the note. A `%%` in code, math or HTML opens no
+  comment; inside a comment, the next `%%` closes it wherever it is.
+  (choice: Obsidian hides comments; whether it indexes links inside them
+  is unconfirmed, and the user's vault has none.)
 - HTML blocks and inline HTML; link destinations, autolinks and bare URLs;
   link reference definitions.
 - a character escaped with a backslash: `\[[x]]` is not a link, `\#x` is
@@ -105,21 +108,25 @@ boundary):
 ### Markdown links to vault files
 
 - An inline link or image, or a reference link or image with a matching
-  definition, is a link of kind `markdown` when its destination has no URL
-  scheme (`^[A-Za-z][A-Za-z0-9+.-]*:`) and does not start with `//`. An
-  image is an embed. (dump: the 7 `./…png` images and the local `.md`
-  links Obsidian counted)
-- The destination, `<…>` brackets removed, splits at the first `#` into
+  definition, is a link of kind `markdown` when its destination is not
+  empty, has no URL scheme (`^[A-Za-z][A-Za-z0-9+.-]*:`) and does not
+  start with `//`. An image is an embed. (dump: the 7 `./…png` images and
+  the local `.md` links Obsidian counted)
+- The destination, `<…>` brackets removed and its backslash escapes and
+  entities resolved as CommonMark says, splits at the first `#` into
   `Target` and `Subpath`; both are percent-decoded (`%20` is a space). The
-  link text, or an image's alt text, is the `Alias`. (Obsidian docs)
+  link text, or an image's alt text, as plain text without its markup, is
+  the `Alias`. (Obsidian docs)
 - External links are not indexed. (choice)
 
 ### Tags
 
-- A `#` at the start of the body or right after white space, followed by
-  one or more Unicode letters, digits, `_`, `-` or `/`; the tag ends at the
-  first other character. All digits (`#123`) is not a tag; `#2026-10` is.
-  (Obsidian docs; T-0002)
+- A `#` right after white space or at the start of a block's text (a
+  paragraph, heading, list item, quote or table cell: `>#tag` and
+  `|#tag|` count), followed by one or more Unicode letters (with their
+  combining marks), digits, `_`, `-` or `/`; the tag ends at the first
+  other character. All digits (`#123`) is not a tag; `#2026-10` is.
+  (Obsidian docs; T-0002; the block's start is CommonMark's)
 - Tags count in headings, list items, quotes and table cells, never inside
   a link, code, math, a comment or a URL.
 - A note lists each tag once, compared ignoring case, with the spelling
@@ -129,22 +136,23 @@ boundary):
 
 ATX and setext headings, as CommonMark defines them: a paragraph line
 followed by `---` is a level-2 heading. `Text` is the heading's content as
-written, trimmed, with an ATX closing sequence removed; `Line` is its first
-line. (CommonMark)
+written, trimmed, with an ATX closing sequence removed; a setext heading's
+lines are joined with one space. `Line` is its first line. (CommonMark)
 
 ### Block IDs
 
 `^` followed by one or more ASCII letters, digits or `-`, either at the end
-of a paragraph's or list item's last line after a space, or alone on the
-first line after a list, quote or table (blank lines between allowed). The
-index records the ID and its line. (Obsidian docs)
+of a paragraph's or list item's text after white space (so a `^id` line
+that continues the paragraph counts), or as a paragraph of its own right
+after a list, quote or table (blank lines between allowed). The index
+records the ID and its line. (Obsidian docs)
 
 ### Tasks
 
 A list item whose first line of content starts with `[`, one character, `]`
 and a space. `Status` is the character: a space is open, `x` or `X` done;
 other characters (`/`, `-`, `>`) are recorded as written. `Text` is the
-rest of that line. Tasks nest like list items. (GFM, extended as Obsidian
+rest of that line, trimmed. Tasks nest like list items. (GFM, extended as Obsidian
 does; the user's vault uses only ` ` and `x`.)
 
 ### Callouts, highlights and footnotes
@@ -174,7 +182,7 @@ characters that contains a letter or digit. Markup counts as written:
 | `Blocks` | `ID` (without `^`), `Line` |
 | `Tasks` | `Status`, `Text`, `Line` |
 | `Aliases` | strings, in order |
-| `Props` | the whole frontmatter mapping as decoded, `tags` and `aliases` included |
+| `Props` | the whole frontmatter mapping as decoded, `tags` and `aliases` included, as JSON values: a scalar by its YAML type (null, bool, integer, float), other scalars, infinities and dates as the text written |
 | `PropError` | the YAML error, when there is one |
 | `Words` | an integer |
 

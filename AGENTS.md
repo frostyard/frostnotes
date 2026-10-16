@@ -43,7 +43,11 @@ file a step names before writing its frostnotes counterpart.
   generated files (`api/zz_generated.go`, `app/src/rpc/gen/api.ts`,
   `docs/specs/rpc-api.md`).
 - `internal/store`: SQLite (modernc, pure Go): migrations, the single-writer
-  `Tx`, the durable `changes` log, queries. `internal/events`: fans
+  `Tx`, the durable `changes` log, and the index (files, notes, links,
+  versions, `notes_fts`) and its queries.
+- `internal/markdown`: `Parse` (goldmark with an Obsidian extension) into
+  a `Doc`, `SplitFrontmatter`, `Resolve`; the dialect and its fixtures are
+  [docs/specs/markdown.md](docs/specs/markdown.md). `internal/events`: fans
   committed events out and replays the log. `internal/rpcserver`: the
   socket server and `ServeConn` for authenticated WebSockets.
   `internal/engine`: the API domains over the store. `internal/rpctest`: a

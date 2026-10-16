@@ -182,6 +182,575 @@ func (x EventsClient) Subscribe(ctx context.Context, p *EventsSubscribeParams) (
 	return &r, nil
 }
 
+// ---- note ----
+
+// LinkKind: Where a link is written (docs/specs/markdown.md).
+type LinkKind string
+
+const (
+	// A [[wikilink]] or ![[embed]] in the body.
+	LinkKindWiki LinkKind = "wiki"
+	// A markdown link or image to a vault file.
+	LinkKindMarkdown LinkKind = "markdown"
+	// A wikilink in a frontmatter value.
+	LinkKindProperty LinkKind = "property"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v LinkKind) Valid() bool {
+	switch v {
+	case LinkKindWiki, LinkKindMarkdown, LinkKindProperty:
+		return true
+	}
+	return false
+}
+
+// VersionSource: Who made a version.
+type VersionSource string
+
+const (
+	// A client: the app, the web app or notesctl.
+	VersionSourceEditor VersionSource = "editor"
+	// An agent, through MCP.
+	VersionSourceAgent VersionSource = "agent"
+	// Another program: notesd found the change on disk.
+	VersionSourceOutside VersionSource = "outside"
+	// Another device, through the hub.
+	VersionSourceSync VersionSource = "sync"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v VersionSource) Valid() bool {
+	switch v {
+	case VersionSourceEditor, VersionSourceAgent, VersionSourceOutside, VersionSourceSync:
+		return true
+	}
+	return false
+}
+
+// NoteEntry: A note in a listing.
+type NoteEntry struct {
+	Path string `json:"path"`
+	// The file name without .md.
+	Title string `json:"title"`
+	// The SHA-256 of the content, lowercase hex: the base for the next write.
+	Hash string `json:"hash"`
+	// In bytes.
+	Size int64 `json:"size"`
+	// The file's modification time.
+	ModifiedAt time.Time `json:"modifiedAt"`
+}
+
+// Note: A note's content and what the index found in it.
+type Note struct {
+	Path string `json:"path"`
+	// The file name without .md.
+	Title string `json:"title"`
+	// The SHA-256 of content, lowercase hex: the base for the next write.
+	Hash string `json:"hash"`
+	// The file's modification time.
+	ModifiedAt time.Time `json:"modifiedAt"`
+	// The file's text, byte for byte; invalid UTF-8 reads as U+FFFD.
+	Content string `json:"content"`
+	// The frontmatter as a JSON object; {} without one or when it is not a YAML
+	// mapping.
+	Props jsontext.Value `json:"props"`
+	// Why the frontmatter is not a YAML mapping.
+	PropError *string  `json:"propError,omitzero"`
+	Aliases   []string `json:"aliases"`
+	// Frontmatter and inline tags, each once, as first spelled, without '#'.
+	Tags []string `json:"tags"`
+}
+
+// Link: A link in a note (docs/specs/markdown.md#parse-output).
+type Link struct {
+	Kind LinkKind `json:"kind"`
+	// The file named, as written (percent-decoded in a markdown link); empty for
+	// the note itself.
+	Target string `json:"target"`
+	// A heading or block ID with its '#'; empty when none.
+	Subpath string `json:"subpath"`
+	// The display text; empty when none.
+	Alias string `json:"alias"`
+	Embed bool   `json:"embed"`
+	// The frontmatter key of a property link; empty otherwise.
+	Key string `json:"key"`
+	// 1-based line in the note; a property link's key's line.
+	Line int64 `json:"line"`
+	// The path of the file it resolves to; absent when unresolved.
+	Resolved *string `json:"resolved,omitzero"`
+}
+
+// Backlink: A link to a file from a note.
+type Backlink struct {
+	// The linking note's path.
+	Source string `json:"source"`
+	Link   Link   `json:"link"`
+}
+
+// SnippetPart: A piece of a search snippet.
+type SnippetPart struct {
+	Text string `json:"text"`
+	// This text matched the query.
+	Match bool `json:"match"`
+}
+
+// SearchHit: A note that matched a search.
+type SearchHit struct {
+	Path  string `json:"path"`
+	Title string `json:"title"`
+	// About 16 words around the best match, from the column that matched best;
+	// '…' marks cut text.
+	Snippet []SnippetPart `json:"snippet"`
+}
+
+// WriteResult: A note after a write.
+type WriteResult struct {
+	Path string `json:"path"`
+	// The new content's hash: the base for the next write.
+	Hash string `json:"hash"`
+	// The file had changed since the base, and notesd merged the write into it.
+	Merged bool `json:"merged"`
+	// What the file now holds, when merged is true.
+	Content *string `json:"content,omitzero"`
+	// Hunks both sides changed differently; the file's newer side of each stands,
+	// and the content sent is kept as a conflict version (ADR-0005).
+	Conflicts int64 `json:"conflicts"`
+}
+
+// MoveResult: A file after a move.
+type MoveResult struct {
+	// The new path.
+	Path string `json:"path"`
+	// The notes whose links to the file were rewritten, by path.
+	Rewritten []string `json:"rewritten"`
+}
+
+// Version: A version of a file, as notesd wrote or scanned it.
+type Version struct {
+	ID int64 `json:"id"`
+	// The file's path when this version was made.
+	Path string `json:"path"`
+	// The content's hash; empty for a deletion.
+	Hash   string        `json:"hash"`
+	Size   int64         `json:"size"`
+	At     time.Time     `json:"at"`
+	Source VersionSource `json:"source"`
+	// The writer's name; empty for an outside edit.
+	Author string `json:"author"`
+	// This version records the file's deletion.
+	Deleted bool `json:"deleted"`
+	// A writer's content that lost a conflicting hunk in a merge: kept so nothing
+	// is lost, but never the file's content.
+	Conflict bool `json:"conflict"`
+}
+
+// DailyNote: A day's daily note.
+type DailyNote struct {
+	Note Note `json:"note"`
+	// notesd created it from the vault's template for this call.
+	Created bool `json:"created"`
+}
+
+// NoteListParams holds the params of note.list.
+type NoteListParams struct {
+	VaultID int64 `json:"vaultId"`
+	// Only notes in this folder or below it.
+	Folder *string `json:"folder,omitzero"`
+	// Only notes with this tag or one nested under it (tag/…), ignoring case; a
+	// leading '#' is ignored.
+	Tag *string `json:"tag,omitzero"`
+	// Only notes whose frontmatter has this key.
+	Property *string `json:"property,omitzero"`
+	// With property: only notes where the key's value, or an item of its list,
+	// equals this, ignoring case.
+	Value *string `json:"value,omitzero"`
+}
+
+// NoteReadParams holds the params of note.read.
+type NoteReadParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+}
+
+// NoteSearchParams holds the params of note.search.
+type NoteSearchParams struct {
+	VaultID int64  `json:"vaultId"`
+	Query   string `json:"query"`
+	// At most this many; default 20, at most 100.
+	Limit *int64 `json:"limit,omitzero"`
+}
+
+// NoteBacklinksParams holds the params of note.backlinks.
+type NoteBacklinksParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+}
+
+// NoteLinksParams holds the params of note.links.
+type NoteLinksParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+}
+
+// NoteCreateParams holds the params of note.create.
+type NoteCreateParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	// editor (the default) or agent.
+	Source *VersionSource `json:"source,omitzero"`
+	// Who is writing, for the version list; defaults to the client name given to
+	// rpc.hello.
+	Author *string `json:"author,omitzero"`
+}
+
+// NoteWriteParams holds the params of note.write.
+type NoteWriteParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// The hash of the content this write started from.
+	Base    string `json:"base"`
+	Content string `json:"content"`
+	// editor (the default) or agent.
+	Source *VersionSource `json:"source,omitzero"`
+	// Who is writing, for the version list; defaults to the client name given to
+	// rpc.hello.
+	Author *string `json:"author,omitzero"`
+}
+
+// NoteMoveParams holds the params of note.move.
+type NoteMoveParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// The new path; it must not exist.
+	To string `json:"to"`
+	// Rewrite links to the file, as Obsidian's "Automatically update internal
+	// links" does.
+	UpdateLinks *bool `json:"updateLinks,omitzero"`
+}
+
+// NoteDeleteParams holds the params of note.delete.
+type NoteDeleteParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	Base    string `json:"base"`
+}
+
+// NoteVersionsParams holds the params of note.versions.
+type NoteVersionsParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// At most this many; default 50.
+	Limit *int64 `json:"limit,omitzero"`
+}
+
+// NoteRevertParams holds the params of note.revert.
+type NoteRevertParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// The version's id, from note.versions.
+	Version int64 `json:"version"`
+	// The file's current hash; empty when it is deleted.
+	Base string `json:"base"`
+}
+
+// NoteDailyParams holds the params of note.daily.
+type NoteDailyParams struct {
+	VaultID int64 `json:"vaultId"`
+	// YYYY-MM-DD; default today in notesd's time zone.
+	Date *string `json:"date,omitzero"`
+}
+
+// NoteService: The notes and attachments in a vault, and what notesd's index
+// knows of them (docs/design/vault.md). A path is vault-relative and
+// slash-separated, as on disk. Every write names the hash of the content it
+// started from, as note.read returns it (ADR-0006): when the file changed
+// since, notesd merges three ways, writes the result and returns it. Only a
+// create has no base.
+type NoteService interface {
+	// List implements note.list. The notes in a vault, by path. The filters
+	// combine: a note must match every one given.
+	List(ctx context.Context, p *NoteListParams) ([]NoteEntry, error)
+	// Read implements note.read. A note's content and what the index found in it.
+	Read(ctx context.Context, p *NoteReadParams) (*Note, error)
+	// Search implements note.search. Full-text search over titles, aliases,
+	// bodies and frontmatter, best match first. Each word matches as a prefix
+	// ("plan" finds "planting"), a phrase in double quotes matches as written,
+	// and every word or phrase must match. Case and diacritics are ignored.
+	Search(ctx context.Context, p *NoteSearchParams) ([]SearchHit, error)
+	// Backlinks implements note.backlinks. The links to a note or attachment from
+	// the notes of its vault, by source path, then line.
+	Backlinks(ctx context.Context, p *NoteBacklinksParams) ([]Backlink, error)
+	// Links implements note.links. A note's links in the order they are written,
+	// each with the file it resolves to.
+	Links(ctx context.Context, p *NoteLinksParams) ([]Link, error)
+	// Create implements note.create. Create a note or attachment, and any missing
+	// folders. Fails with conflict if the path exists.
+	Create(ctx context.Context, p *NoteCreateParams) (*WriteResult, error)
+	// Write implements note.write. Replace a file's content. base is the hash the
+	// writer started from. If the file changed since, notesd merges: frontmatter
+	// by key, then the body by line and word (ADR-0005). A base notesd has no
+	// version of (pruned after 30 days) is refused with conflict: read again.
+	Write(ctx context.Context, p *NoteWriteParams) (*WriteResult, error)
+	// Move implements note.move. Rename or move a note or attachment, creating
+	// missing folders. The file keeps its versions. With updateLinks, every link
+	// to it from another note is rewritten to the new path, each as a write.
+	Move(ctx context.Context, p *NoteMoveParams) (*MoveResult, error)
+	// Delete implements note.delete. Delete a note or attachment: notesd removes
+	// the file, and its versions stay for 30 days, so note.revert can bring it
+	// back. base must be its current hash: a file changed since base is not
+	// deleted (conflict), because an edit beats a delete (ADR-0005).
+	Delete(ctx context.Context, p *NoteDeleteParams) error
+	// Versions implements note.versions. A file's versions, newest first, its
+	// deletion included. For a deleted file, the versions of the last file at
+	// that path.
+	Versions(ctx context.Context, p *NoteVersionsParams) ([]Version, error)
+	// Revert implements note.revert. Make a file's content that of one of its
+	// versions, as a write with a base. A deleted file comes back at its last
+	// path.
+	Revert(ctx context.Context, p *NoteRevertParams) (*WriteResult, error)
+	// Daily implements note.daily. A day's daily note, created from the vault's
+	// daily-note template when missing (docs/design/vault.md#daily-notes).
+	Daily(ctx context.Context, p *NoteDailyParams) (*DailyNote, error)
+}
+
+func registerNote(r *Router, s NoteService) {
+	callers := []Caller{CallerLocal}
+	r.handle("note.list", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteListParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.List(ctx, &p)
+	})
+	r.handle("note.read", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteReadParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return s.Read(ctx, &p)
+	})
+	r.handle("note.search", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteSearchParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "query"}); err != nil {
+			return nil, err
+		}
+		return s.Search(ctx, &p)
+	})
+	r.handle("note.backlinks", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteBacklinksParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return s.Backlinks(ctx, &p)
+	})
+	r.handle("note.links", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteLinksParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return s.Links(ctx, &p)
+	})
+	r.handle("note.create", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteCreateParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "content"}); err != nil {
+			return nil, err
+		}
+		return s.Create(ctx, &p)
+	})
+	r.handle("note.write", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteWriteParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "base", "content"}); err != nil {
+			return nil, err
+		}
+		return s.Write(ctx, &p)
+	})
+	r.handle("note.move", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteMoveParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "to"}); err != nil {
+			return nil, err
+		}
+		return s.Move(ctx, &p)
+	})
+	r.handle("note.delete", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteDeleteParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "base"}); err != nil {
+			return nil, err
+		}
+		return nil, s.Delete(ctx, &p)
+	})
+	r.handle("note.versions", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteVersionsParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return s.Versions(ctx, &p)
+	})
+	r.handle("note.revert", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteRevertParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "version", "base"}); err != nil {
+			return nil, err
+		}
+		return s.Revert(ctx, &p)
+	})
+	r.handle("note.daily", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteDailyParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Daily(ctx, &p)
+	})
+}
+
+// NoteClient calls the note methods; it implements NoteService.
+type NoteClient struct{ c *Client }
+
+// Note returns the note methods.
+func (c *Client) Note() NoteClient { return NoteClient{c} }
+
+var _ NoteService = NoteClient{}
+
+// List calls note.list.
+func (x NoteClient) List(ctx context.Context, p *NoteListParams) ([]NoteEntry, error) {
+	var r []NoteEntry
+	err := x.c.Call(ctx, "note.list", p, &r)
+	return r, err
+}
+
+// Read calls note.read.
+func (x NoteClient) Read(ctx context.Context, p *NoteReadParams) (*Note, error) {
+	var r Note
+	err := x.c.Call(ctx, "note.read", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Search calls note.search.
+func (x NoteClient) Search(ctx context.Context, p *NoteSearchParams) ([]SearchHit, error) {
+	var r []SearchHit
+	err := x.c.Call(ctx, "note.search", p, &r)
+	return r, err
+}
+
+// Backlinks calls note.backlinks.
+func (x NoteClient) Backlinks(ctx context.Context, p *NoteBacklinksParams) ([]Backlink, error) {
+	var r []Backlink
+	err := x.c.Call(ctx, "note.backlinks", p, &r)
+	return r, err
+}
+
+// Links calls note.links.
+func (x NoteClient) Links(ctx context.Context, p *NoteLinksParams) ([]Link, error) {
+	var r []Link
+	err := x.c.Call(ctx, "note.links", p, &r)
+	return r, err
+}
+
+// Create calls note.create.
+func (x NoteClient) Create(ctx context.Context, p *NoteCreateParams) (*WriteResult, error) {
+	var r WriteResult
+	err := x.c.Call(ctx, "note.create", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Write calls note.write.
+func (x NoteClient) Write(ctx context.Context, p *NoteWriteParams) (*WriteResult, error) {
+	var r WriteResult
+	err := x.c.Call(ctx, "note.write", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Move calls note.move.
+func (x NoteClient) Move(ctx context.Context, p *NoteMoveParams) (*MoveResult, error) {
+	var r MoveResult
+	err := x.c.Call(ctx, "note.move", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Delete calls note.delete.
+func (x NoteClient) Delete(ctx context.Context, p *NoteDeleteParams) error {
+	return x.c.Call(ctx, "note.delete", p, nil)
+}
+
+// Versions calls note.versions.
+func (x NoteClient) Versions(ctx context.Context, p *NoteVersionsParams) ([]Version, error) {
+	var r []Version
+	err := x.c.Call(ctx, "note.versions", p, &r)
+	return r, err
+}
+
+// Revert calls note.revert.
+func (x NoteClient) Revert(ctx context.Context, p *NoteRevertParams) (*WriteResult, error) {
+	var r WriteResult
+	err := x.c.Call(ctx, "note.revert", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Daily calls note.daily.
+func (x NoteClient) Daily(ctx context.Context, p *NoteDailyParams) (*DailyNote, error) {
+	var r DailyNote
+	err := x.c.Call(ctx, "note.daily", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// NoteChanged: A file was created or its content changed, by a write or on
+// disk.
+type NoteChanged struct {
+	VaultID int64         `json:"vaultId"`
+	Path    string        `json:"path"`
+	Hash    string        `json:"hash"`
+	Source  VersionSource `json:"source"`
+}
+
+// EventName is the wire name of NoteChanged.
+func (NoteChanged) EventName() string { return "note.changed" }
+
+// Durable reports whether NoteChanged is kept in the changes log.
+func (NoteChanged) Durable() bool { return true }
+
+// NoteMoved: A file was renamed or moved.
+type NoteMoved struct {
+	VaultID int64  `json:"vaultId"`
+	From    string `json:"from"`
+	To      string `json:"to"`
+}
+
+// EventName is the wire name of NoteMoved.
+func (NoteMoved) EventName() string { return "note.moved" }
+
+// Durable reports whether NoteMoved is kept in the changes log.
+func (NoteMoved) Durable() bool { return true }
+
+// NoteRemoved: A file was deleted, by note.delete or on disk.
+type NoteRemoved struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+}
+
+// EventName is the wire name of NoteRemoved.
+func (NoteRemoved) EventName() string { return "note.removed" }
+
+// Durable reports whether NoteRemoved is kept in the changes log.
+func (NoteRemoved) Durable() bool { return true }
+
 // ---- rpc ----
 
 // Hello: Server identity and the negotiated protocol.
@@ -240,6 +809,49 @@ func (x RPCClient) Hello(ctx context.Context, p *RPCHelloParams) (*Hello, error)
 
 // ---- vault ----
 
+// ScanState: What a vault's scanner is doing.
+type ScanState string
+
+const (
+	// No scan is running; the index holds what the last scan and the watcher
+	// found.
+	ScanStateIdle ScanState = "idle"
+	// A scan is running.
+	ScanStateScanning ScanState = "scanning"
+	// The last scan failed and error says why; the index keeps what it held.
+	ScanStateFailed ScanState = "failed"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v ScanState) Valid() bool {
+	switch v {
+	case ScanStateIdle, ScanStateScanning, ScanStateFailed:
+		return true
+	}
+	return false
+}
+
+// ScanStatus: The state of a vault's index and its scans.
+type ScanStatus struct {
+	VaultID int64     `json:"vaultId"`
+	State   ScanState `json:"state"`
+	// Files the running scan has compared with the index; 0 when none runs.
+	Done int64 `json:"done"`
+	// Files the running scan found; 0 when none runs.
+	Total int64 `json:"total"`
+	// Notes in the index.
+	Notes int64 `json:"notes"`
+	// Attachments in the index.
+	Attachments int64 `json:"attachments"`
+	// When the last scan finished; absent until one has since notesd started.
+	ScannedAt *time.Time `json:"scannedAt,omitzero"`
+	// The vault is on a network file system, so notesd rescans it every 10
+	// seconds instead of every 5 minutes.
+	Network bool `json:"network"`
+	// Why the last scan failed.
+	Error *string `json:"error,omitzero"`
+}
+
 // Vault: A registered vault.
 type Vault struct {
 	// Stable local identifier.
@@ -267,6 +879,16 @@ type VaultRemoveParams struct {
 	ID int64 `json:"id"`
 }
 
+// VaultStatusParams holds the params of vault.status.
+type VaultStatusParams struct {
+	ID int64 `json:"id"`
+}
+
+// VaultReindexParams holds the params of vault.reindex.
+type VaultReindexParams struct {
+	ID int64 `json:"id"`
+}
+
 // VaultService: The vaults this notesd owns: directories of markdown notes
 // (ADR-0003). Registering a vault never writes to it.
 type VaultService interface {
@@ -279,6 +901,13 @@ type VaultService interface {
 	// Remove implements vault.remove. Forget a vault. Its directory and files are
 	// untouched.
 	Remove(ctx context.Context, p *VaultRemoveParams) error
+	// Status implements vault.status. The state of a vault's index and its scans.
+	Status(ctx context.Context, p *VaultStatusParams) (*ScanStatus, error)
+	// Reindex implements vault.reindex. Read every file of a vault again and
+	// rebuild its index, as if none matched it. File IDs and versions are kept,
+	// so nothing is lost. The scan runs in the background; vault.scan events
+	// report its progress.
+	Reindex(ctx context.Context, p *VaultReindexParams) (*ScanStatus, error)
 }
 
 func registerVault(r *Router, s VaultService) {
@@ -303,6 +932,20 @@ func registerVault(r *Router, s VaultService) {
 			return nil, err
 		}
 		return nil, s.Remove(ctx, &p)
+	})
+	r.handle("vault.status", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p VaultStatusParams
+		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
+			return nil, err
+		}
+		return s.Status(ctx, &p)
+	})
+	r.handle("vault.reindex", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p VaultReindexParams
+		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
+			return nil, err
+		}
+		return s.Reindex(ctx, &p)
 	})
 }
 
@@ -336,6 +979,38 @@ func (x VaultClient) Remove(ctx context.Context, p *VaultRemoveParams) error {
 	return x.c.Call(ctx, "vault.remove", p, nil)
 }
 
+// Status calls vault.status.
+func (x VaultClient) Status(ctx context.Context, p *VaultStatusParams) (*ScanStatus, error) {
+	var r ScanStatus
+	err := x.c.Call(ctx, "vault.status", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Reindex calls vault.reindex.
+func (x VaultClient) Reindex(ctx context.Context, p *VaultReindexParams) (*ScanStatus, error) {
+	var r ScanStatus
+	err := x.c.Call(ctx, "vault.reindex", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// VaultScan: A vault's scan started, made progress (at most every 250 ms) or
+// ended.
+type VaultScan struct {
+	Status ScanStatus `json:"status"`
+}
+
+// EventName is the wire name of VaultScan.
+func (VaultScan) EventName() string { return "vault.scan" }
+
+// Durable reports whether VaultScan is kept in the changes log.
+func (VaultScan) Durable() bool { return false }
+
 // VaultAdded: A vault was registered.
 type VaultAdded struct {
 	Vault Vault `json:"vault"`
@@ -361,6 +1036,7 @@ func (VaultRemoved) Durable() bool { return true }
 // Services is one implementation per domain, for NewRouter.
 type Services struct {
 	Events EventsService
+	Note   NoteService
 	RPC    RPCService
 	Vault  VaultService
 }
@@ -370,6 +1046,10 @@ func (s Services) register(r *Router) error {
 		return errors.New("api: Services.Events is nil")
 	}
 	registerEvents(r, s.Events)
+	if s.Note == nil {
+		return errors.New("api: Services.Note is nil")
+	}
+	registerNote(r, s.Note)
 	if s.RPC == nil {
 		return errors.New("api: Services.RPC is nil")
 	}
@@ -384,15 +1064,53 @@ func (s Services) register(r *Router) error {
 // Methods is every method's wire name, in schema order.
 var Methods = []string{
 	"events.subscribe",
+	"note.list",
+	"note.read",
+	"note.search",
+	"note.backlinks",
+	"note.links",
+	"note.create",
+	"note.write",
+	"note.move",
+	"note.delete",
+	"note.versions",
+	"note.revert",
+	"note.daily",
 	"rpc.hello",
 	"vault.list",
 	"vault.add",
 	"vault.remove",
+	"vault.status",
+	"vault.reindex",
 }
 
 // DecodeEvent decodes the data of the named event.
 func DecodeEvent(name string, data jsontext.Value) (Event, error) {
 	switch name {
+	case "note.changed":
+		var e NoteChanged
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
+	case "note.moved":
+		var e NoteMoved
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
+	case "note.removed":
+		var e NoteRemoved
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
+	case "vault.scan":
+		var e VaultScan
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
 	case "vault.added":
 		var e VaultAdded
 		if err := json.Unmarshal(data, &e); err != nil {

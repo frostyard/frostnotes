@@ -1,0 +1,249 @@
+domain: note
+callers: [local]
+doc: >-
+  The notes and attachments in a vault, and what notesd's index knows of
+  them (docs/design/vault.md). A path is vault-relative and slash-separated,
+  as on disk. Every write names the hash of the content it started from, as
+  note.read returns it (ADR-0006): when the file changed since, notesd
+  merges three ways, writes the result and returns it. Only a create has no
+  base.
+enums:
+  - name: LinkKind
+    doc: Where a link is written (docs/specs/markdown.md).
+    values:
+      - {name: wiki, doc: "A [[wikilink]] or ![[embed]] in the body."}
+      - {name: markdown, doc: "A markdown link or image to a vault file."}
+      - {name: property, doc: "A wikilink in a frontmatter value."}
+  - name: VersionSource
+    doc: Who made a version.
+    values:
+      - {name: editor, doc: "A client: the app, the web app or notesctl."}
+      - {name: agent, doc: "An agent, through MCP."}
+      - {name: outside, doc: "Another program: notesd found the change on disk."}
+      - {name: sync, doc: "Another device, through the hub."}
+types:
+  - name: NoteEntry
+    doc: A note in a listing.
+    fields:
+      - {name: path, type: string}
+      - {name: title, type: string, doc: "The file name without .md."}
+      - {name: hash, type: string, doc: "The SHA-256 of the content, lowercase hex: the base for the next write."}
+      - {name: size, type: int, doc: "In bytes."}
+      - {name: modifiedAt, type: time, doc: "The file's modification time."}
+  - name: Note
+    doc: A note's content and what the index found in it.
+    fields:
+      - {name: path, type: string}
+      - {name: title, type: string, doc: "The file name without .md."}
+      - {name: hash, type: string, doc: "The SHA-256 of content, lowercase hex: the base for the next write."}
+      - {name: modifiedAt, type: time, doc: "The file's modification time."}
+      - {name: content, type: string, doc: "The file's text, byte for byte; invalid UTF-8 reads as U+FFFD."}
+      - {name: props, type: json, doc: "The frontmatter as a JSON object; {} without one or when it is not a YAML mapping."}
+      - {name: propError, type: string, optional: true, doc: "Why the frontmatter is not a YAML mapping."}
+      - {name: aliases, type: "[]string"}
+      - {name: tags, type: "[]string", doc: "Frontmatter and inline tags, each once, as first spelled, without '#'."}
+  - name: Link
+    doc: A link in a note (docs/specs/markdown.md#parse-output).
+    fields:
+      - {name: kind, type: LinkKind}
+      - {name: target, type: string, doc: "The file named, as written (percent-decoded in a markdown link); empty for the note itself."}
+      - {name: subpath, type: string, doc: "A heading or block ID with its '#'; empty when none."}
+      - {name: alias, type: string, doc: "The display text; empty when none."}
+      - {name: embed, type: bool}
+      - {name: key, type: string, doc: "The frontmatter key of a property link; empty otherwise."}
+      - {name: line, type: int, doc: "1-based line in the note; a property link's key's line."}
+      - {name: resolved, type: string, optional: true, doc: "The path of the file it resolves to; absent when unresolved."}
+  - name: Backlink
+    doc: A link to a file from a note.
+    fields:
+      - {name: source, type: string, doc: "The linking note's path."}
+      - {name: link, type: Link}
+  - name: SnippetPart
+    doc: A piece of a search snippet.
+    fields:
+      - {name: text, type: string}
+      - {name: match, type: bool, doc: "This text matched the query."}
+  - name: SearchHit
+    doc: A note that matched a search.
+    fields:
+      - {name: path, type: string}
+      - {name: title, type: string}
+      - {name: snippet, type: "[]SnippetPart", doc: "About 16 words around the best match, from the column that matched best; '…' marks cut text."}
+  - name: WriteResult
+    doc: A note after a write.
+    fields:
+      - {name: path, type: string}
+      - {name: hash, type: string, doc: "The new content's hash: the base for the next write."}
+      - {name: merged, type: bool, doc: "The file had changed since the base, and notesd merged the write into it."}
+      - {name: content, type: string, optional: true, doc: "What the file now holds, when merged is true."}
+      - {name: conflicts, type: int, doc: "Hunks both sides changed differently; the file's newer side of each stands, and the content sent is kept as a conflict version (ADR-0005)."}
+  - name: MoveResult
+    doc: A file after a move.
+    fields:
+      - {name: path, type: string, doc: "The new path."}
+      - {name: rewritten, type: "[]string", doc: "The notes whose links to the file were rewritten, by path."}
+  - name: Version
+    doc: A version of a file, as notesd wrote or scanned it.
+    fields:
+      - {name: id, type: int}
+      - {name: path, type: string, doc: "The file's path when this version was made."}
+      - {name: hash, type: string, doc: "The content's hash; empty for a deletion."}
+      - {name: size, type: int}
+      - {name: at, type: time}
+      - {name: source, type: VersionSource}
+      - {name: author, type: string, doc: "The writer's name; empty for an outside edit."}
+      - {name: deleted, type: bool, doc: "This version records the file's deletion."}
+      - {name: conflict, type: bool, doc: "A writer's content that lost a conflicting hunk in a merge: kept so nothing is lost, but never the file's content."}
+  - name: DailyNote
+    doc: A day's daily note.
+    fields:
+      - {name: note, type: Note}
+      - {name: created, type: bool, doc: "notesd created it from the vault's template for this call."}
+methods:
+  - name: list
+    doc: >-
+      The notes in a vault, by path. The filters combine: a note must match
+      every one given.
+    params:
+      - {name: vaultId, type: int}
+      - {name: folder, type: string, optional: true, doc: "Only notes in this folder or below it."}
+      - {name: tag, type: string, optional: true, doc: "Only notes with this tag or one nested under it (tag/…), ignoring case; a leading '#' is ignored."}
+      - {name: property, type: string, optional: true, doc: "Only notes whose frontmatter has this key."}
+      - {name: value, type: string, optional: true, doc: "With property: only notes where the key's value, or an item of its list, equals this, ignoring case."}
+    result: "[]NoteEntry"
+    errors: [notFound, invalidParams]
+  - name: read
+    doc: A note's content and what the index found in it.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+    result: Note
+    errors: [notFound]
+  - name: search
+    doc: >-
+      Full-text search over titles, aliases, bodies and frontmatter, best
+      match first. Each word matches as a prefix ("plan" finds "planting"),
+      a phrase in double quotes matches as written, and every word or
+      phrase must match. Case and diacritics are ignored.
+    params:
+      - {name: vaultId, type: int}
+      - {name: query, type: string}
+      - {name: limit, type: int, optional: true, doc: "At most this many; default 20, at most 100."}
+    result: "[]SearchHit"
+    errors: [notFound, invalidParams]
+  - name: backlinks
+    doc: The links to a note or attachment from the notes of its vault, by source path, then line.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+    result: "[]Backlink"
+    errors: [notFound]
+  - name: links
+    doc: A note's links in the order they are written, each with the file it resolves to.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+    result: "[]Link"
+    errors: [notFound]
+  - name: create
+    doc: >-
+      Create a note or attachment, and any missing folders. Fails with
+      conflict if the path exists.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: content, type: string}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent."}
+      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello."}
+    result: WriteResult
+    errors: [notFound, conflict, invalidParams]
+  - name: write
+    doc: >-
+      Replace a file's content. base is the hash the writer started from.
+      If the file changed since, notesd merges: frontmatter by key, then the
+      body by line and word (ADR-0005). A base notesd has no version of
+      (pruned after 30 days) is refused with conflict: read again.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: base, type: string, doc: "The hash of the content this write started from."}
+      - {name: content, type: string}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent."}
+      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello."}
+    result: WriteResult
+    errors: [notFound, conflict, invalidParams]
+  - name: move
+    doc: >-
+      Rename or move a note or attachment, creating missing folders. The
+      file keeps its versions. With updateLinks, every link to it from
+      another note is rewritten to the new path, each as a write.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: to, type: string, doc: "The new path; it must not exist."}
+      - {name: updateLinks, type: bool, optional: true, doc: "Rewrite links to the file, as Obsidian's \"Automatically update internal links\" does."}
+    result: MoveResult
+    errors: [notFound, conflict, invalidParams]
+  - name: delete
+    doc: >-
+      Delete a note or attachment: notesd removes the file, and its
+      versions stay for 30 days, so note.revert can bring it back. base must
+      be its current hash: a file changed since base is not deleted
+      (conflict), because an edit beats a delete (ADR-0005).
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: base, type: string}
+    errors: [notFound, conflict]
+  - name: versions
+    doc: >-
+      A file's versions, newest first, its deletion included. For a deleted
+      file, the versions of the last file at that path.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: limit, type: int, optional: true, doc: "At most this many; default 50."}
+    result: "[]Version"
+    errors: [notFound]
+  - name: revert
+    doc: >-
+      Make a file's content that of one of its versions, as a write with a
+      base. A deleted file comes back at its last path.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: version, type: int, doc: "The version's id, from note.versions."}
+      - {name: base, type: string, doc: "The file's current hash; empty when it is deleted."}
+    result: WriteResult
+    errors: [notFound, conflict]
+  - name: daily
+    doc: >-
+      A day's daily note, created from the vault's daily-note template when
+      missing (docs/design/vault.md#daily-notes).
+    params:
+      - {name: vaultId, type: int}
+      - {name: date, type: string, optional: true, doc: "YYYY-MM-DD; default today in notesd's time zone."}
+    result: DailyNote
+    errors: [notFound, invalidParams]
+events:
+  - name: changed
+    doc: A file was created or its content changed, by a write or on disk.
+    durable: true
+    fields:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: hash, type: string}
+      - {name: source, type: VersionSource}
+  - name: moved
+    doc: A file was renamed or moved.
+    durable: true
+    fields:
+      - {name: vaultId, type: int}
+      - {name: from, type: string}
+      - {name: to, type: string}
+  - name: removed
+    doc: A file was deleted, by note.delete or on disk.
+    durable: true
+    fields:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
