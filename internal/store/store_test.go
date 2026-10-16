@@ -164,7 +164,7 @@ func TestSchemaCascades(t *testing.T) {
 		(1, 'A', '{}', '', '[]', 0), (2, 'B', '{}', '', '[]', 0)`)
 	exec(`INSERT INTO links (file_id, ord, kind, target, subpath, alias, embed, key, start, stop, line, name, dest_id)
 		VALUES (1, 0, 'wiki', 'B', '', '', 0, '', 0, 5, 1, 'b', 2)`)
-	exec(`INSERT INTO tags (file_id, folded, name, front, line) VALUES (1, 'x', 'X', 0, 1)`)
+	exec(`INSERT INTO tags (file_id, ord, folded, name, front, line) VALUES (1, 0, 'x', 'X', 0, 1)`)
 	exec(`INSERT INTO notes_fts (rowid, title, aliases, body, props) VALUES (1, 'A', '', 'apple', ''), (2, 'B', '', 'butter', '')`)
 	exec(`INSERT INTO versions (vault_id, file_id, path, hash, size, at, source, author) VALUES (1, 2, 'B.md', 'h2', 1, 'x', 'outside', '')`)
 

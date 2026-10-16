@@ -66,6 +66,7 @@ CREATE INDEX props_value ON props (key, folded);
 -- Each note's tags, once each (Doc.Tags).
 CREATE TABLE tags (
   file_id INTEGER NOT NULL REFERENCES notes (file_id) ON DELETE CASCADE,
+  ord     INTEGER NOT NULL, -- the tag's position in Doc.Tags
   folded  TEXT NOT NULL, -- the name lower-cased by Go's strings.ToLower: a tag's identity
   name    TEXT NOT NULL, -- as the note first spells it, without '#'
   front   INTEGER NOT NULL CHECK (front IN (0, 1)),
