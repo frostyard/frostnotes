@@ -1,0 +1,57 @@
+# Documentation
+
+Docs are split by the question they answer (frostyard/core ADR-0025):
+
+| Directory | Question | Contents |
+| --- | --- | --- |
+| [adr/](adr/) | **Why** did we choose this? | Architecture Decision Records — immutable once accepted; superseded, never edited |
+| [design/](design/) | **How** does it fit together? | Living documents describing the current architecture |
+| [specs/](specs/) | **What exactly** is the contract? | Precise, testable interface definitions |
+| [plans/](plans/) | **When/in what order** do we build? | Roadmaps and phase plans; updated as work lands |
+
+Task cards for the executor (`tasks/`) arrive in [M0](plans/0001-m0-foundations.md).
+Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
+
+## Index
+
+### Decisions (ADRs)
+
+- [0001 — Record architecture decisions](adr/0001-record-architecture-decisions.md)
+- [0002 — Agent-portable instruction surface](adr/0002-agent-portable-instruction-surface.md)
+- [0003 — Plain markdown files are the source of truth](adr/0003-plain-markdown-files-are-the-source-of-truth.md)
+- [0004 — A notes daemon with thin clients](adr/0004-a-notes-daemon-with-thin-clients.md)
+- [0005 — Sync through a hub with revisions and three-way merges](adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
+- [0006 — Every write names the version it changes](adr/0006-every-write-names-the-version-it-changes.md)
+- [0007 — Edit in CodeMirror 6 with live preview](adr/0007-edit-in-codemirror-6-with-live-preview.md)
+- [0008 — Generate the RPC contract from a YAML IDL](adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md)
+- [0009 — Development environment and gates](adr/0009-development-environment-and-gates.md)
+- [0010 — Claude plans and verifies; Codex runs task cards](adr/0010-claude-plans-and-codex-runs-task-cards.md)
+- [0011 — Look like frostmail's sibling, with Obsidian's layout](adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
+- [0012 — Agents reach notes through MCP](adr/0012-agents-reach-notes-through-mcp.md)
+
+### Design
+
+- [Overview](design/overview.md) — notesd, its two roles, the clients, the planned layout
+- [Vault](design/vault.md) — scan, watch, parse, index, link resolution, writes, versions
+- [Sync](design/sync.md) — the hub's revision log, push and pull, merges, conflicts, the simulation
+
+### Specs
+
+*(none yet — `rpc-protocol.md` in M0; `markdown.md` in M1; `sync-protocol.md` and `merge.md` in M2)*
+
+### Plans
+
+- [0001 — M0 foundations](plans/0001-m0-foundations.md)
+- [0002 — Roadmap to replacing Obsidian](plans/0002-roadmap.md)
+
+## Conventions
+
+- **New docs start from their category's `TEMPLATE.md`** (in each directory).
+- New decision → new ADR with the next number; if it reverses an old one, mark
+  the old one `Superseded by NNNN` rather than editing it.
+- Design docs are updated in place to always reflect reality.
+- Specs change only alongside the code that implements them.
+- Cross-links between categories are mandatory in both directions — see the
+  documentation rules in [AGENTS.md](../AGENTS.md) (CLAUDE.md/GEMINI.md are
+  symlinks to it, ADR-0002).
+- Adding a doc means adding it to the index above.

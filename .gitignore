@@ -1,0 +1,14 @@
+/build/
+/notesd
+/notesctl
+/dist/
+*.test
+/coverage.out
+/coverage.html
+/.worktrees/
+/.env
+/.envrc
+/.mcp.json
+/app/node_modules/
+/app/dist/
+/app/src-tauri/target/
