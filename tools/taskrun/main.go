@@ -120,6 +120,9 @@ func (r *runner) start(ctx context.Context, c *Card) error {
 		}
 	}
 	doing := filepath.Join("docs/tasks/doing", filepath.Base(c.Path))
+	if err := r.mkdir(doing); err != nil {
+		return err
+	}
 	if err := r.git(ctx, "mv", c.Path, doing); err != nil {
 		return err
 	}
@@ -325,6 +328,9 @@ func (r *runner) finish(ctx context.Context, c *Card) error {
 		return err
 	}
 	done := filepath.Join("docs/tasks/done", filepath.Base(c.Path))
+	if err := r.mkdir(done); err != nil {
+		return err
+	}
 	if err := r.git(ctx, "mv", c.Path, done); err != nil {
 		return err
 	}
@@ -345,6 +351,13 @@ func (r *runner) finish(ctx context.Context, c *Card) error {
 }
 
 func (r *runner) git(ctx context.Context, args ...string) error { return r.cmd(ctx, "git", args...) }
+
+// mkdir creates the directory a card moves into: git tracks no empty
+// directories, so doing/ and done/ exist only while they hold a card.
+func (r *runner) mkdir(card string) error {
+	return os.MkdirAll(filepath.Join(r.root, filepath.Dir(card)), 0o755)
+}
+
 
 // capture runs fn with the runner's output also copied into buf.
 func (r *runner) capture(buf *bytes.Buffer, fn func() error) error {
