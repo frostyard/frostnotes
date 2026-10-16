@@ -75,6 +75,6 @@ lives on a network home directory today.
 
 ## References
 
-- Shapes: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md)
+- Shapes: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md)
 - Builds on: [ADR-0001](0001-record-architecture-decisions.md)
-- Built in: [roadmap — M1](../plans/0002-roadmap.md)
+- Built in: [roadmap — M1](../plans/0002-roadmap.md), [plan 0003](../plans/0003-m1-headless-vault.md)

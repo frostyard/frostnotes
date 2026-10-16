@@ -2,9 +2,9 @@
 
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
 [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md).
-Contracts: `specs/markdown.md` (M1), `specs/rpc-api.md` (generated).
+Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated).
 
-**Status: designed, not built** (M1).
+**Status: being built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md)).
 
 ## Overview
 
@@ -31,8 +31,10 @@ in the vault except the settings in `.frostnotes/`.
 - **Data directory** (`FROSTNOTES_DATA_DIR`): `notesd.db`, one SQLite
   database for all vaults (WAL, `STRICT` tables, foreign keys on), and
   `blobs/`, content addressed by SHA-256.
-- **First open of an Obsidian vault:** `.obsidian/daily-notes.json`,
-  `templates.json` and `types.json` seed `.frostnotes/` if it does not exist.
+- **An Obsidian vault's settings:** while `.frostnotes/` lacks a setting,
+  notesd reads it from `.obsidian/daily-notes.json`, `templates.json` or
+  `types.json`, and writes `.frostnotes/` only when a setting changes, so
+  registering a vault writes nothing to it.
 
 ### Scan and watch
 
@@ -54,7 +56,9 @@ in the vault except the settings in `.frostnotes/`.
 
 ### Parse
 
-`internal/markdown` turns a note into: frontmatter (YAML; invalid YAML is
+`internal/markdown` parses a note with goldmark (CommonMark and GFM) and
+a Frostnotes extension for the Obsidian syntax, as
+[specs/markdown.md](../specs/markdown.md) pins it, into: frontmatter (YAML; invalid YAML is
 recorded as a property error and the body is still indexed), aliases,
 tags (frontmatter and inline, nested `#a/b`), links (wikilinks and
 markdown links to vault files: target, subpath `#heading` or `#^block`,
@@ -73,23 +77,31 @@ FTS5 table over title, aliases and plain text.
 
 ### Link resolution
 
-Obsidian's rules, pinned with fixtures in `specs/markdown.md` and checked
-against Obsidian itself: a vault path when the link has one, else the note
-whose name or alias matches, case-insensitively, with ties broken as
-Obsidian breaks them. Links are re-resolved when a file whose name could
-match is created, moved or deleted. Unresolved links are kept: the app and
-the graph show them.
+Obsidian's rules, as [specs/markdown.md](../specs/markdown.md#link-resolution)
+pins them and Obsidian's own answers for 179 of the user's links confirm:
+relative to the linking note's folder first, then a whole-segment path
+suffix, ignoring case; among several suffix matches the note's own
+folder wins first. Aliases
+do not resolve links; they name a note in search and link suggestions.
+`files` keeps each path's lower-cased last segment, which is all
+`markdown.Resolve` asks for. Links are re-resolved when a file with a name
+they could match is created, moved or deleted. Unresolved links are kept:
+the app and the graph show them.
 
 ### Writes
 
 `note.write(path, base, content)` and every other write:
 
+`base` is the SHA-256 of the content the writer started from (`note.read`
+returns it); M2 adds sync's revisions. A vault's writes run one at a time.
+
 1. Compare `base` with the indexed version. If it differs, merge three ways
-   (`internal/merge`) with the base's content from `blobs/`.
+   (`internal/merge`) with the base's content from `blobs/`. A base whose
+   content is gone (pruned) is refused, and the writer reads again.
 2. Re-read the file. If it changed since the last scan, merge that change
    in too.
-3. Write a temporary file in the same directory, fsync, rename, fsync the
-   directory.
+3. Put the result in `blobs/`, then write a temporary dot-file in the same
+   directory (so scans skip it), fsync, rename, fsync the directory.
 4. In one `Tx`: index the new content, append a version, emit
    `note.changed`.
 5. Return the new revision and, if a merge happened, the merged content.
@@ -97,6 +109,21 @@ the graph show them.
 Moves (`note.move`) rename the file and, when asked, rewrite links in every
 note that points at it (Obsidian's "update internal links"). Each rewrite is
 an ordinary write with a base.
+
+A crash after the rename and before the `Tx` loses only the attribution:
+the next scan indexes the new bytes as an outside version.
+
+### Daily notes
+
+The daily-note settings are a folder, a moment.js date format and a
+template, from `.frostnotes/vault.yaml` or else
+`.obsidian/daily-notes.json`, and Obsidian's defaults without either (the
+vault root, `YYYY-MM-DD`, no template). Today's note is the folder plus the
+date formatted with `internal/moment`; a format may contain `/` and so
+name subfolders. A missing daily note is created from the template, whose
+`{{title}}`, `{{date}}`, `{{time}}` and `{{date:FORMAT}}` are expanded as
+Obsidian's Templates plugin does. MCP's `append_to_daily_note` creates it
+that way, then appends with a base like any write.
 
 ### Versions
 
@@ -123,4 +150,5 @@ long-term history ([sync.md](sync.md)).
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
-- Built in: [roadmap — M1](../plans/0002-roadmap.md)
+- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md)
+- Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))
