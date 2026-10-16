@@ -8,12 +8,14 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/config"
+	"github.com/frostyard/frostnotes/internal/devgw"
 	"github.com/frostyard/frostnotes/internal/engine"
 	"github.com/frostyard/frostnotes/internal/events"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
@@ -39,6 +41,8 @@ func run(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("notesd", flag.ContinueOnError)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	debug := fs.Bool("debug", false, "log at debug level")
+	devgwAddr := fs.String("devgw", "", "also serve the API over a WebSocket on this loopback address, for UI development "+
+		"in a browser; needs FROSTNOTES_DEVGW_TOKEN (at least 16 characters)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -79,7 +83,18 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *devgwAddr != "" {
+		// The gateway stands in for the app's bridge, so its connections
+		// are local callers (docs/specs/rpc-protocol.md).
+		serve := func(nc net.Conn) { srv.ServeConn(ctx, nc, router, api.CallerLocal) }
+		go func() {
+			if err := devgw.ListenAndServe(ctx, *devgwAddr, os.Getenv("FROSTNOTES_DEVGW_TOKEN"), serve, logger); err != nil {
+				logger.Error("dev gateway stopped", "err", err)
+			}
+		}()
+	}
 	logger.Info("notesd started", "version", version, "socket", paths.Socket, "db", paths.DB)
+
 	err = srv.Serve(ctx, ln, router)
 	logger.Info("notesd stopped")
 	return err
