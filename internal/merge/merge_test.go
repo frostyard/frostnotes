@@ -209,7 +209,7 @@ func BenchmarkTenThousandLines(b *testing.B) {
 	for i := range 10000 {
 		line := fmt.Sprintf("line %d with a few words in it\n", i)
 		base.WriteString(line)
-		other.WriteString(fmt.Sprintf("unrelated %d\n", i))
+		fmt.Fprintf(&other, "unrelated %d\n", i)
 		switch {
 		case i%97 == 0:
 			head.WriteString("head " + line)
