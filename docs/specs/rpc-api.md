@@ -44,6 +44,341 @@ The state of a new subscription.
 | `seq` | `int` | The latest durable sequence number when the subscription started. |
 | `resync` | `bool` | True when sinceSeq is older than the retained log; the client must refetch all state. |
 
+## note
+
+The notes and attachments in a vault, and what notesd's index knows of them (docs/design/vault.md). A path is vault-relative and slash-separated, as on disk. Every write names the hash of the content it started from, as note.read returns it (ADR-0006): when the file changed since, notesd merges three ways, writes the result and returns it. Only a create has no base.
+
+Callers: `local`.
+
+### `note.list`
+
+The notes in a vault, by path. The filters combine: a note must match every one given.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `folder` | `string` (optional) | Only notes in this folder or below it. |
+| `tag` | `string` (optional) | Only notes with this tag or one nested under it (tag/…), ignoring case; a leading '#' is ignored. |
+| `property` | `string` (optional) | Only notes whose frontmatter has this key. |
+| `value` | `string` (optional) | With property: only notes where the key's value, or an item of its list, equals this, ignoring case. |
+
+Result: `[]NoteEntry`.
+Errors: `notFound`, `invalidParams`.
+
+### `note.read`
+
+A note's content and what the index found in it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+
+Result: `Note`.
+Errors: `notFound`.
+
+### `note.search`
+
+Full-text search over titles, aliases, bodies and frontmatter, best match first. Each word matches as a prefix ("plan" finds "planting"), a phrase in double quotes matches as written, and every word or phrase must match. Case and diacritics are ignored.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `query` | `string` |  |
+| `limit` | `int` (optional) | At most this many; default 20, at most 100. |
+
+Result: `[]SearchHit`.
+Errors: `notFound`, `invalidParams`.
+
+### `note.backlinks`
+
+The links to a note or attachment from the notes of its vault, by source path, then line.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+
+Result: `[]Backlink`.
+Errors: `notFound`.
+
+### `note.links`
+
+A note's links in the order they are written, each with the file it resolves to.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+
+Result: `[]Link`.
+Errors: `notFound`.
+
+### `note.create`
+
+Create a note or attachment, and any missing folders. Fails with conflict if the path exists.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `content` | `string` |  |
+| `source` | `VersionSource` (optional) | editor (the default) or agent. |
+| `author` | `string` (optional) | Who is writing, for the version list; defaults to the client name given to rpc.hello. |
+
+Result: `WriteResult`.
+Errors: `notFound`, `conflict`, `invalidParams`.
+
+### `note.write`
+
+Replace a file's content. base is the hash the writer started from. If the file changed since, notesd merges: frontmatter by key, then the body by line and word (ADR-0005). A base notesd has no version of (pruned after 30 days) is refused with conflict: read again.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `base` | `string` | The hash of the content this write started from. |
+| `content` | `string` |  |
+| `source` | `VersionSource` (optional) | editor (the default) or agent. |
+| `author` | `string` (optional) | Who is writing, for the version list; defaults to the client name given to rpc.hello. |
+
+Result: `WriteResult`.
+Errors: `notFound`, `conflict`, `invalidParams`.
+
+### `note.move`
+
+Rename or move a note or attachment, creating missing folders. The file keeps its versions. With updateLinks, every link to it from another note is rewritten to the new path, each as a write.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `to` | `string` | The new path; it must not exist. |
+| `updateLinks` | `bool` (optional) | Rewrite links to the file, as Obsidian's "Automatically update internal links" does. |
+
+Result: `MoveResult`.
+Errors: `notFound`, `conflict`, `invalidParams`.
+
+### `note.delete`
+
+Delete a note or attachment: notesd removes the file, and its versions stay for 30 days, so note.revert can bring it back. base must be its current hash: a file changed since base is not deleted (conflict), because an edit beats a delete (ADR-0005).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `base` | `string` |  |
+
+Result: none (`null`).
+Errors: `notFound`, `conflict`.
+
+### `note.versions`
+
+A file's versions, newest first, its deletion included. For a deleted file, the versions of the last file at that path.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `limit` | `int` (optional) | At most this many; default 50. |
+
+Result: `[]Version`.
+Errors: `notFound`.
+
+### `note.revert`
+
+Make a file's content that of one of its versions, as a write with a base. A deleted file comes back at its last path.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `version` | `int` | The version's id, from note.versions. |
+| `base` | `string` | The file's current hash; empty when it is deleted. |
+
+Result: `WriteResult`.
+Errors: `notFound`, `conflict`.
+
+### `note.daily`
+
+A day's daily note, created from the vault's daily-note template when missing (docs/design/vault.md#daily-notes).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `date` | `string` (optional) | YYYY-MM-DD; default today in notesd's time zone. |
+
+Result: `DailyNote`.
+Errors: `notFound`, `invalidParams`.
+
+### Event `note.changed` (durable)
+
+A file was created or its content changed, by a write or on disk.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `hash` | `string` |  |
+| `source` | `VersionSource` |  |
+
+### Event `note.moved` (durable)
+
+A file was renamed or moved.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `from` | `string` |  |
+| `to` | `string` |  |
+
+### Event `note.removed` (durable)
+
+A file was deleted, by note.delete or on disk.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+
+### Type `NoteEntry`
+
+A note in a listing.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `title` | `string` | The file name without .md. |
+| `hash` | `string` | The SHA-256 of the content, lowercase hex: the base for the next write. |
+| `size` | `int` | In bytes. |
+| `modifiedAt` | `time` | The file's modification time. |
+
+### Type `Note`
+
+A note's content and what the index found in it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `title` | `string` | The file name without .md. |
+| `hash` | `string` | The SHA-256 of content, lowercase hex: the base for the next write. |
+| `modifiedAt` | `time` | The file's modification time. |
+| `content` | `string` | The file's text, byte for byte; invalid UTF-8 reads as U+FFFD. |
+| `props` | `json` | The frontmatter as a JSON object; {} without one or when it is not a YAML mapping. |
+| `propError` | `string` (optional) | Why the frontmatter is not a YAML mapping. |
+| `aliases` | `[]string` |  |
+| `tags` | `[]string` | Frontmatter and inline tags, each once, as first spelled, without '#'. |
+
+### Type `Link`
+
+A link in a note (docs/specs/markdown.md#parse-output).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `kind` | `LinkKind` |  |
+| `target` | `string` | The file named, as written (percent-decoded in a markdown link); empty for the note itself. |
+| `subpath` | `string` | A heading or block ID with its '#'; empty when none. |
+| `alias` | `string` | The display text; empty when none. |
+| `embed` | `bool` |  |
+| `key` | `string` | The frontmatter key of a property link; empty otherwise. |
+| `line` | `int` | 1-based line in the note; a property link's key's line. |
+| `resolved` | `string` (optional) | The path of the file it resolves to; absent when unresolved. |
+
+### Type `Backlink`
+
+A link to a file from a note.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `source` | `string` | The linking note's path. |
+| `link` | `Link` |  |
+
+### Type `SnippetPart`
+
+A piece of a search snippet.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `text` | `string` |  |
+| `match` | `bool` | This text matched the query. |
+
+### Type `SearchHit`
+
+A note that matched a search.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `title` | `string` |  |
+| `snippet` | `[]SnippetPart` | About 16 words around the best match, from the column that matched best; '…' marks cut text. |
+
+### Type `WriteResult`
+
+A note after a write.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `hash` | `string` | The new content's hash: the base for the next write. |
+| `merged` | `bool` | The file had changed since the base, and notesd merged the write into it. |
+| `content` | `string` (optional) | What the file now holds, when merged is true. |
+| `conflicts` | `int` | Hunks both sides changed differently; the file's newer side of each stands, and the content sent is kept as a conflict version (ADR-0005). |
+
+### Type `MoveResult`
+
+A file after a move.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` | The new path. |
+| `rewritten` | `[]string` | The notes whose links to the file were rewritten, by path. |
+
+### Type `Version`
+
+A version of a file, as notesd wrote or scanned it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+| `path` | `string` | The file's path when this version was made. |
+| `hash` | `string` | The content's hash; empty for a deletion. |
+| `size` | `int` |  |
+| `at` | `time` |  |
+| `source` | `VersionSource` |  |
+| `author` | `string` | The writer's name; empty for an outside edit. |
+| `deleted` | `bool` | This version records the file's deletion. |
+| `conflict` | `bool` | A writer's content that lost a conflicting hunk in a merge: kept so nothing is lost, but never the file's content. |
+
+### Type `DailyNote`
+
+A day's daily note.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `note` | `Note` |  |
+| `created` | `bool` | notesd created it from the vault's template for this call. |
+
+### Enum `LinkKind`
+
+Where a link is written (docs/specs/markdown.md).
+
+| Value | Meaning |
+| --- | --- |
+| `wiki` | A [[wikilink]] or ![[embed]] in the body. |
+| `markdown` | A markdown link or image to a vault file. |
+| `property` | A wikilink in a frontmatter value. |
+
+### Enum `VersionSource`
+
+Who made a version.
+
+| Value | Meaning |
+| --- | --- |
+| `editor` | A client: the app, the web app or notesctl. |
+| `agent` | An agent, through MCP. |
+| `outside` | Another program: notesd found the change on disk. |
+| `sync` | Another device, through the hub. |
+
 ## rpc
 
 Connection setup. A client calls rpc.hello first on every connection; the server answers any other method with notReady until hello succeeds.
@@ -108,6 +443,36 @@ Forget a vault. Its directory and files are untouched.
 Result: none (`null`).
 Errors: `notFound`.
 
+### `vault.status`
+
+The state of a vault's index and its scans.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+
+Result: `ScanStatus`.
+Errors: `notFound`.
+
+### `vault.reindex`
+
+Read every file of a vault again and rebuild its index, as if none matched it. File IDs and versions are kept, so nothing is lost. The scan runs in the background; vault.scan events report its progress.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+
+Result: `ScanStatus`.
+Errors: `notFound`.
+
+### Event `vault.scan` (transient)
+
+A vault's scan started, made progress (at most every 250 ms) or ended.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | `ScanStatus` |  |
+
 ### Event `vault.added` (durable)
 
 A vault was registered.
@@ -124,6 +489,22 @@ A vault was forgotten.
 | --- | --- | --- |
 | `id` | `int` |  |
 
+### Type `ScanStatus`
+
+The state of a vault's index and its scans.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `state` | `ScanState` |  |
+| `done` | `int` | Files the running scan has compared with the index; 0 when none runs. |
+| `total` | `int` | Files the running scan found; 0 when none runs. |
+| `notes` | `int` | Notes in the index. |
+| `attachments` | `int` | Attachments in the index. |
+| `scannedAt` | `time` (optional) | When the last scan finished; absent until one has since notesd started. |
+| `network` | `bool` | The vault is on a network file system, so notesd rescans it every 10 seconds instead of every 5 minutes. |
+| `error` | `string` (optional) | Why the last scan failed. |
+
 ### Type `Vault`
 
 A registered vault.
@@ -134,3 +515,13 @@ A registered vault.
 | `name` | `string` | Display name; the directory's base name unless one was given. |
 | `path` | `string` | Absolute, cleaned path of the vault directory. |
 | `createdAt` | `time` |  |
+
+### Enum `ScanState`
+
+What a vault's scanner is doing.
+
+| Value | Meaning |
+| --- | --- |
+| `idle` | No scan is running; the index holds what the last scan and the watcher found. |
+| `scanning` | A scan is running. |
+| `failed` | The last scan failed and error says why; the index keeps what it held. |

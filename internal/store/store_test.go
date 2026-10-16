@@ -136,3 +136,54 @@ func TestPruneKeepsLatestSeq(t *testing.T) {
 		t.Fatalf("after prune oldest=%d latest=%d, want 4 and 5", oldest, latest)
 	}
 }
+
+// The index's rows leave with their note, file or vault, the search row
+// through a trigger that cascades fire too; a link to a deleted file
+// becomes unresolved; versions outlive their file.
+func TestSchemaCascades(t *testing.T) {
+	d, _ := openTest(t)
+	ctx := t.Context()
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if err := d.Tx(ctx, func(tx *Tx) error { _, err := tx.ExecContext(ctx, q, args...); return err }); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	count := func(table string) int {
+		t.Helper()
+		var n int
+		if err := d.db.QueryRowContext(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	exec(`INSERT INTO vaults (id, name, path, created_at) VALUES (1, 'v', '/v', 'x')`)
+	exec(`INSERT INTO files (id, vault_id, path, name, kind, size, mtime, hash) VALUES
+		(1, 1, 'A.md', 'a.md', 'note', 1, 1, 'h1'), (2, 1, 'B.md', 'b.md', 'note', 1, 1, 'h2')`)
+	exec(`INSERT INTO notes (file_id, title, props, prop_error, aliases, words) VALUES
+		(1, 'A', '{}', '', '[]', 0), (2, 'B', '{}', '', '[]', 0)`)
+	exec(`INSERT INTO links (file_id, ord, kind, target, subpath, alias, embed, key, start, stop, line, name, dest_id)
+		VALUES (1, 0, 'wiki', 'B', '', '', 0, '', 0, 5, 1, 'b', 2)`)
+	exec(`INSERT INTO tags (file_id, folded, name, front, line) VALUES (1, 'x', 'X', 0, 1)`)
+	exec(`INSERT INTO notes_fts (rowid, title, aliases, body, props) VALUES (1, 'A', '', 'apple', ''), (2, 'B', '', 'butter', '')`)
+	exec(`INSERT INTO versions (vault_id, file_id, path, hash, size, at, source, author) VALUES (1, 2, 'B.md', 'h2', 1, 'x', 'outside', '')`)
+
+	exec(`DELETE FROM files WHERE id = 2`)
+	var dest *int64
+	if err := d.db.QueryRowContext(ctx, `SELECT dest_id FROM links`).Scan(&dest); err != nil || dest != nil {
+		t.Fatalf("link to a deleted file: dest_id %v, %v; want NULL", dest, err)
+	}
+	if n := count(`notes_fts WHERE notes_fts MATCH 'butter'`); n != 0 {
+		t.Fatalf("a deleted file's search row remains")
+	}
+	if n := count(`versions`); n != 1 {
+		t.Fatalf("versions = %d, want the deleted file's version kept", n)
+	}
+
+	exec(`DELETE FROM vaults WHERE id = 1`)
+	for _, table := range []string{"files", "notes", "links", "tags", "notes_fts", "versions"} {
+		if n := count(table); n != 0 {
+			t.Errorf("%s keeps %d rows after its vault is removed", table, n)
+		}
+	}
+}

@@ -29,6 +29,9 @@ type Options struct {
 	DataDir string
 	// Now, when set, is the clock for stored timestamps.
 	Now func() time.Time
+	// Note, when set, serves the note domain in place of the engine's, so
+	// a client's tests can run against a fake.
+	Note api.NoteService
 }
 
 // Server is a running test server; it stops when the test ends.
@@ -82,7 +85,11 @@ func StartWith(t testing.TB, o Options) *Server {
 	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log})
 	srv.RPC = rpc
 	eng := engine.New(db)
-	router, err := api.NewRouter(api.Services{RPC: rpc, Events: rpc, Vault: eng.Vaults()})
+	note := o.Note
+	if note == nil {
+		note = eng.Notes()
+	}
+	router, err := api.NewRouter(api.Services{RPC: rpc, Events: rpc, Vault: eng.Vaults(), Note: note})
 	if err != nil {
 		t.Fatal(err)
 	}

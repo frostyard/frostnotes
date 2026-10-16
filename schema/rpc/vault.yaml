@@ -3,7 +3,26 @@ callers: [local]
 doc: >-
   The vaults this notesd owns: directories of markdown notes (ADR-0003).
   Registering a vault never writes to it.
+enums:
+  - name: ScanState
+    doc: What a vault's scanner is doing.
+    values:
+      - {name: idle, doc: "No scan is running; the index holds what the last scan and the watcher found."}
+      - {name: scanning, doc: "A scan is running."}
+      - {name: failed, doc: "The last scan failed and error says why; the index keeps what it held."}
 types:
+  - name: ScanStatus
+    doc: The state of a vault's index and its scans.
+    fields:
+      - {name: vaultId, type: int}
+      - {name: state, type: ScanState}
+      - {name: done, type: int, doc: "Files the running scan has compared with the index; 0 when none runs."}
+      - {name: total, type: int, doc: "Files the running scan found; 0 when none runs."}
+      - {name: notes, type: int, doc: "Notes in the index."}
+      - {name: attachments, type: int, doc: "Attachments in the index."}
+      - {name: scannedAt, type: time, optional: true, doc: "When the last scan finished; absent until one has since notesd started."}
+      - {name: network, type: bool, doc: "The vault is on a network file system, so notesd rescans it every 10 seconds instead of every 5 minutes."}
+      - {name: error, type: string, optional: true, doc: "Why the last scan failed."}
   - name: Vault
     doc: A registered vault.
     fields:
@@ -29,7 +48,26 @@ methods:
     params:
       - {name: id, type: int}
     errors: [notFound]
+  - name: status
+    doc: The state of a vault's index and its scans.
+    params:
+      - {name: id, type: int}
+    result: ScanStatus
+    errors: [notFound]
+  - name: reindex
+    doc: >-
+      Read every file of a vault again and rebuild its index, as if none
+      matched it. File IDs and versions are kept, so nothing is lost. The
+      scan runs in the background; vault.scan events report its progress.
+    params:
+      - {name: id, type: int}
+    result: ScanStatus
+    errors: [notFound]
 events:
+  - name: scan
+    doc: A vault's scan started, made progress (at most every 250 ms) or ended.
+    fields:
+      - {name: status, type: ScanStatus}
   - name: added
     doc: A vault was registered.
     durable: true

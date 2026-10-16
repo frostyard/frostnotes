@@ -73,6 +73,14 @@ func (v vaults) Remove(ctx context.Context, p *api.VaultRemoveParams) error {
 	return apiError(err, fmt.Sprintf("vault %d", p.ID))
 }
 
+func (v vaults) Status(context.Context, *api.VaultStatusParams) (*api.ScanStatus, error) {
+	return nil, notYet("vault.status")
+}
+
+func (v vaults) Reindex(context.Context, *api.VaultReindexParams) (*api.ScanStatus, error) {
+	return nil, notYet("vault.reindex")
+}
+
 // within reports whether path is dir or lies inside it.
 func within(path, dir string) bool {
 	rel, err := filepath.Rel(dir, path)

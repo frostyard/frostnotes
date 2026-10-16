@@ -79,7 +79,7 @@ func run(ctx context.Context, args []string) error {
 	}
 	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger})
 	eng := engine.New(db)
-	router, err := api.NewRouter(api.Services{RPC: srv, Events: srv, Vault: eng.Vaults()})
+	router, err := api.NewRouter(api.Services{RPC: srv, Events: srv, Vault: eng.Vaults(), Note: eng.Notes()})
 	if err != nil {
 		return err
 	}

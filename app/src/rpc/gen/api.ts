@@ -78,6 +78,386 @@ function eventsClient(t: Transport): EventsClient {
   };
 }
 
+// ---- note ----
+
+/** Where a link is written (docs/specs/markdown.md). */
+export type LinkKind = "wiki" | "markdown" | "property";
+export const LinkKindValues: readonly LinkKind[] = ["wiki", "markdown", "property"];
+
+/** Who made a version. */
+export type VersionSource = "editor" | "agent" | "outside" | "sync";
+export const VersionSourceValues: readonly VersionSource[] = ["editor", "agent", "outside", "sync"];
+
+/** A note in a listing. */
+export interface NoteEntry {
+  path: string;
+  /** The file name without .md. */
+  title: string;
+  /**
+   * The SHA-256 of the content, lowercase hex: the base for the next write.
+   */
+  hash: string;
+  /** In bytes. */
+  size: number;
+  /** The file's modification time. */
+  modifiedAt: string /* RFC 3339 */;
+}
+
+/** A note's content and what the index found in it. */
+export interface Note {
+  path: string;
+  /** The file name without .md. */
+  title: string;
+  /** The SHA-256 of content, lowercase hex: the base for the next write. */
+  hash: string;
+  /** The file's modification time. */
+  modifiedAt: string /* RFC 3339 */;
+  /** The file's text, byte for byte; invalid UTF-8 reads as U+FFFD. */
+  content: string;
+  /**
+   * The frontmatter as a JSON object; {} without one or when it is not a YAML
+   * mapping.
+   */
+  props: unknown;
+  /** Why the frontmatter is not a YAML mapping. */
+  propError?: string;
+  aliases: string[];
+  /** Frontmatter and inline tags, each once, as first spelled, without '#'. */
+  tags: string[];
+}
+
+/** A link in a note (docs/specs/markdown.md#parse-output). */
+export interface Link {
+  kind: LinkKind;
+  /**
+   * The file named, as written (percent-decoded in a markdown link); empty
+   * for the note itself.
+   */
+  target: string;
+  /** A heading or block ID with its '#'; empty when none. */
+  subpath: string;
+  /** The display text; empty when none. */
+  alias: string;
+  embed: boolean;
+  /** The frontmatter key of a property link; empty otherwise. */
+  key: string;
+  /** 1-based line in the note; a property link's key's line. */
+  line: number;
+  /** The path of the file it resolves to; absent when unresolved. */
+  resolved?: string;
+}
+
+/** A link to a file from a note. */
+export interface Backlink {
+  /** The linking note's path. */
+  source: string;
+  link: Link;
+}
+
+/** A piece of a search snippet. */
+export interface SnippetPart {
+  text: string;
+  /** This text matched the query. */
+  match: boolean;
+}
+
+/** A note that matched a search. */
+export interface SearchHit {
+  path: string;
+  title: string;
+  /**
+   * About 16 words around the best match, from the column that matched best;
+   * '…' marks cut text.
+   */
+  snippet: SnippetPart[];
+}
+
+/** A note after a write. */
+export interface WriteResult {
+  path: string;
+  /** The new content's hash: the base for the next write. */
+  hash: string;
+  /**
+   * The file had changed since the base, and notesd merged the write into it.
+   */
+  merged: boolean;
+  /** What the file now holds, when merged is true. */
+  content?: string;
+  /**
+   * Hunks both sides changed differently; the file's newer side of each
+   * stands, and the content sent is kept as a conflict version (ADR-0005).
+   */
+  conflicts: number;
+}
+
+/** A file after a move. */
+export interface MoveResult {
+  /** The new path. */
+  path: string;
+  /** The notes whose links to the file were rewritten, by path. */
+  rewritten: string[];
+}
+
+/** A version of a file, as notesd wrote or scanned it. */
+export interface Version {
+  id: number;
+  /** The file's path when this version was made. */
+  path: string;
+  /** The content's hash; empty for a deletion. */
+  hash: string;
+  size: number;
+  at: string /* RFC 3339 */;
+  source: VersionSource;
+  /** The writer's name; empty for an outside edit. */
+  author: string;
+  /** This version records the file's deletion. */
+  deleted: boolean;
+  /**
+   * A writer's content that lost a conflicting hunk in a merge: kept so
+   * nothing is lost, but never the file's content.
+   */
+  conflict: boolean;
+}
+
+/** A day's daily note. */
+export interface DailyNote {
+  note: Note;
+  /** notesd created it from the vault's template for this call. */
+  created: boolean;
+}
+
+/** Params of note.list. */
+export interface NoteListParams {
+  vaultId: number;
+  /** Only notes in this folder or below it. */
+  folder?: string;
+  /**
+   * Only notes with this tag or one nested under it (tag/…), ignoring case;
+   * a leading '#' is ignored.
+   */
+  tag?: string;
+  /** Only notes whose frontmatter has this key. */
+  property?: string;
+  /**
+   * With property: only notes where the key's value, or an item of its list,
+   * equals this, ignoring case.
+   */
+  value?: string;
+}
+
+/** Params of note.read. */
+export interface NoteReadParams {
+  vaultId: number;
+  path: string;
+}
+
+/** Params of note.search. */
+export interface NoteSearchParams {
+  vaultId: number;
+  query: string;
+  /** At most this many; default 20, at most 100. */
+  limit?: number;
+}
+
+/** Params of note.backlinks. */
+export interface NoteBacklinksParams {
+  vaultId: number;
+  path: string;
+}
+
+/** Params of note.links. */
+export interface NoteLinksParams {
+  vaultId: number;
+  path: string;
+}
+
+/** Params of note.create. */
+export interface NoteCreateParams {
+  vaultId: number;
+  path: string;
+  content: string;
+  /** editor (the default) or agent. */
+  source?: VersionSource;
+  /**
+   * Who is writing, for the version list; defaults to the client name given
+   * to rpc.hello.
+   */
+  author?: string;
+}
+
+/** Params of note.write. */
+export interface NoteWriteParams {
+  vaultId: number;
+  path: string;
+  /** The hash of the content this write started from. */
+  base: string;
+  content: string;
+  /** editor (the default) or agent. */
+  source?: VersionSource;
+  /**
+   * Who is writing, for the version list; defaults to the client name given
+   * to rpc.hello.
+   */
+  author?: string;
+}
+
+/** Params of note.move. */
+export interface NoteMoveParams {
+  vaultId: number;
+  path: string;
+  /** The new path; it must not exist. */
+  to: string;
+  /**
+   * Rewrite links to the file, as Obsidian's "Automatically update internal
+   * links" does.
+   */
+  updateLinks?: boolean;
+}
+
+/** Params of note.delete. */
+export interface NoteDeleteParams {
+  vaultId: number;
+  path: string;
+  base: string;
+}
+
+/** Params of note.versions. */
+export interface NoteVersionsParams {
+  vaultId: number;
+  path: string;
+  /** At most this many; default 50. */
+  limit?: number;
+}
+
+/** Params of note.revert. */
+export interface NoteRevertParams {
+  vaultId: number;
+  path: string;
+  /** The version's id, from note.versions. */
+  version: number;
+  /** The file's current hash; empty when it is deleted. */
+  base: string;
+}
+
+/** Params of note.daily. */
+export interface NoteDailyParams {
+  vaultId: number;
+  /** YYYY-MM-DD; default today in notesd's time zone. */
+  date?: string;
+}
+
+/** A file was created or its content changed, by a write or on disk. */
+export interface NoteChanged {
+  vaultId: number;
+  path: string;
+  hash: string;
+  source: VersionSource;
+}
+
+/** A file was renamed or moved. */
+export interface NoteMoved {
+  vaultId: number;
+  from: string;
+  to: string;
+}
+
+/** A file was deleted, by note.delete or on disk. */
+export interface NoteRemoved {
+  vaultId: number;
+  path: string;
+}
+
+/**
+ * The notes and attachments in a vault, and what notesd's index knows of them
+ * (docs/design/vault.md). A path is vault-relative and slash-separated, as on
+ * disk. Every write names the hash of the content it started from, as
+ * note.read returns it (ADR-0006): when the file changed since, notesd merges
+ * three ways, writes the result and returns it. Only a create has no base.
+ */
+export interface NoteClient {
+  /**
+   * The notes in a vault, by path. The filters combine: a note must match
+   * every one given.
+   */
+  list(params: NoteListParams): Promise<NoteEntry[]>;
+  /** A note's content and what the index found in it. */
+  read(params: NoteReadParams): Promise<Note>;
+  /**
+   * Full-text search over titles, aliases, bodies and frontmatter, best match
+   * first. Each word matches as a prefix ("plan" finds "planting"), a phrase
+   * in double quotes matches as written, and every word or phrase must match.
+   * Case and diacritics are ignored.
+   */
+  search(params: NoteSearchParams): Promise<SearchHit[]>;
+  /**
+   * The links to a note or attachment from the notes of its vault, by source
+   * path, then line.
+   */
+  backlinks(params: NoteBacklinksParams): Promise<Backlink[]>;
+  /**
+   * A note's links in the order they are written, each with the file it
+   * resolves to.
+   */
+  links(params: NoteLinksParams): Promise<Link[]>;
+  /**
+   * Create a note or attachment, and any missing folders. Fails with conflict
+   * if the path exists.
+   */
+  create(params: NoteCreateParams): Promise<WriteResult>;
+  /**
+   * Replace a file's content. base is the hash the writer started from. If
+   * the file changed since, notesd merges: frontmatter by key, then the body
+   * by line and word (ADR-0005). A base notesd has no version of (pruned
+   * after 30 days) is refused with conflict: read again.
+   */
+  write(params: NoteWriteParams): Promise<WriteResult>;
+  /**
+   * Rename or move a note or attachment, creating missing folders. The file
+   * keeps its versions. With updateLinks, every link to it from another note
+   * is rewritten to the new path, each as a write.
+   */
+  move(params: NoteMoveParams): Promise<MoveResult>;
+  /**
+   * Delete a note or attachment: notesd removes the file, and its versions
+   * stay for 30 days, so note.revert can bring it back. base must be its
+   * current hash: a file changed since base is not deleted (conflict),
+   * because an edit beats a delete (ADR-0005).
+   */
+  delete(params: NoteDeleteParams): Promise<void>;
+  /**
+   * A file's versions, newest first, its deletion included. For a deleted
+   * file, the versions of the last file at that path.
+   */
+  versions(params: NoteVersionsParams): Promise<Version[]>;
+  /**
+   * Make a file's content that of one of its versions, as a write with a
+   * base. A deleted file comes back at its last path.
+   */
+  revert(params: NoteRevertParams): Promise<WriteResult>;
+  /**
+   * A day's daily note, created from the vault's daily-note template when
+   * missing (docs/design/vault.md#daily-notes).
+   */
+  daily(params: NoteDailyParams): Promise<DailyNote>;
+}
+
+function noteClient(t: Transport): NoteClient {
+  return {
+    list: (params) => t.call<NoteEntry[]>("note.list", params),
+    read: (params) => t.call<Note>("note.read", params),
+    search: (params) => t.call<SearchHit[]>("note.search", params),
+    backlinks: (params) => t.call<Backlink[]>("note.backlinks", params),
+    links: (params) => t.call<Link[]>("note.links", params),
+    create: (params) => t.call<WriteResult>("note.create", params),
+    write: (params) => t.call<WriteResult>("note.write", params),
+    move: (params) => t.call<MoveResult>("note.move", params),
+    delete: (params) => t.call<null>("note.delete", params).then(() => undefined),
+    versions: (params) => t.call<Version[]>("note.versions", params),
+    revert: (params) => t.call<WriteResult>("note.revert", params),
+    daily: (params) => t.call<DailyNote>("note.daily", params),
+  };
+}
+
 // ---- rpc ----
 
 /** Server identity and the negotiated protocol. */
@@ -116,6 +496,35 @@ function rpcClient(t: Transport): RPCClient {
 
 // ---- vault ----
 
+/** What a vault's scanner is doing. */
+export type ScanState = "idle" | "scanning" | "failed";
+export const ScanStateValues: readonly ScanState[] = ["idle", "scanning", "failed"];
+
+/** The state of a vault's index and its scans. */
+export interface ScanStatus {
+  vaultId: number;
+  state: ScanState;
+  /** Files the running scan has compared with the index; 0 when none runs. */
+  done: number;
+  /** Files the running scan found; 0 when none runs. */
+  total: number;
+  /** Notes in the index. */
+  notes: number;
+  /** Attachments in the index. */
+  attachments: number;
+  /**
+   * When the last scan finished; absent until one has since notesd started.
+   */
+  scannedAt?: string /* RFC 3339 */;
+  /**
+   * The vault is on a network file system, so notesd rescans it every 10
+   * seconds instead of every 5 minutes.
+   */
+  network: boolean;
+  /** Why the last scan failed. */
+  error?: string;
+}
+
 /** A registered vault. */
 export interface Vault {
   /** Stable local identifier. */
@@ -143,6 +552,21 @@ export interface VaultRemoveParams {
   id: number;
 }
 
+/** Params of vault.status. */
+export interface VaultStatusParams {
+  id: number;
+}
+
+/** Params of vault.reindex. */
+export interface VaultReindexParams {
+  id: number;
+}
+
+/** A vault's scan started, made progress (at most every 250 ms) or ended. */
+export interface VaultScan {
+  status: ScanStatus;
+}
+
 /** A vault was registered. */
 export interface VaultAdded {
   vault: Vault;
@@ -168,6 +592,14 @@ export interface VaultClient {
   add(params: VaultAddParams): Promise<Vault>;
   /** Forget a vault. Its directory and files are untouched. */
   remove(params: VaultRemoveParams): Promise<void>;
+  /** The state of a vault's index and its scans. */
+  status(params: VaultStatusParams): Promise<ScanStatus>;
+  /**
+   * Read every file of a vault again and rebuild its index, as if none
+   * matched it. File IDs and versions are kept, so nothing is lost. The scan
+   * runs in the background; vault.scan events report its progress.
+   */
+  reindex(params: VaultReindexParams): Promise<ScanStatus>;
 }
 
 function vaultClient(t: Transport): VaultClient {
@@ -175,11 +607,17 @@ function vaultClient(t: Transport): VaultClient {
     list: (params = {}) => t.call<Vault[]>("vault.list", params),
     add: (params) => t.call<Vault>("vault.add", params),
     remove: (params) => t.call<null>("vault.remove", params).then(() => undefined),
+    status: (params) => t.call<ScanStatus>("vault.status", params),
+    reindex: (params) => t.call<ScanStatus>("vault.reindex", params),
   };
 }
 
 /** A server notification. Durable events carry seq. */
 export type Event =
+  | { event: "note.changed"; seq?: number; data: NoteChanged }
+  | { event: "note.moved"; seq?: number; data: NoteMoved }
+  | { event: "note.removed"; seq?: number; data: NoteRemoved }
+  | { event: "vault.scan"; seq?: number; data: VaultScan }
   | { event: "vault.added"; seq?: number; data: VaultAdded }
   | { event: "vault.removed"; seq?: number; data: VaultRemoved }
 ;
@@ -187,20 +625,36 @@ export type Event =
 /** Every method's wire name, in schema order. */
 export const METHODS = [
   "events.subscribe",
+  "note.list",
+  "note.read",
+  "note.search",
+  "note.backlinks",
+  "note.links",
+  "note.create",
+  "note.write",
+  "note.move",
+  "note.delete",
+  "note.versions",
+  "note.revert",
+  "note.daily",
   "rpc.hello",
   "vault.list",
   "vault.add",
   "vault.remove",
+  "vault.status",
+  "vault.reindex",
 ] as const;
 
 /** The typed notesd API over a Transport. */
 export class Client {
   readonly events: EventsClient;
+  readonly note: NoteClient;
   readonly rpc: RPCClient;
   readonly vault: VaultClient;
 
   constructor(readonly transport: Transport) {
     this.events = eventsClient(transport);
+    this.note = noteClient(transport);
     this.rpc = rpcClient(transport);
     this.vault = vaultClient(transport);
   }
