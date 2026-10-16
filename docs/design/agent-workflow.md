@@ -55,18 +55,23 @@ planner: card + _given tests ──▶ make task T=NNNN ──▶ executor ─�
 4. After each attempt it runs the acceptance command, then `taskrun verify`;
    on either failure it resumes the session with the error and a digest of
    the output, up to `-attempts` (3).
-5. `taskrun verify` (and `make task-verify T=NNNN`) fails if any changed file
-   is outside `touch`, a given file differs from `_given`, acceptance fails,
-   `make check` fails, or, for a card that touches `app/`, `make ui-check`
-   fails.
+5. `taskrun verify` (and `make task-verify T=NNNN`) runs acceptance,
+   `make check` and, for a card that touches `app/`, `make ui-check`; then,
+   because `make check` formats, it checks that every changed file is in
+   `touch` and every given file still matches `_given`. Any failure fails
+   the card.
 6. `make task-finish T=NNNN` re-verifies, moves the card to `done/` and
    commits the work. The human reviews and merges the branch; the planner
    reviews all of a milestone's merged cards.
 
 ### Batching cards
 
-Cards run one at a time, each branched from the branch that is current when
-it starts. Cards that touch the same file, or the same Go package, run one
+Cards run one at a time in the executor worktree,
+`git worktree add .worktrees/exec -b <milestone>/cards`, so the main
+checkout may stay dirty while cards run (taskrun requires a clean tree).
+Each card branches from the worktree's current branch, and the planner
+merges each reviewed card back before the next starts.
+ Cards that touch the same file, or the same Go package, run one
 after another with the first merged before the second starts: two cards
 branched from the same commit cannot see each other's code, and same-package
 helpers collide only at merge. A card whose given tests call another card's

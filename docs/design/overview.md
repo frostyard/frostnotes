@@ -5,9 +5,11 @@ Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md).
 Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md).
 
-**Status: designed, not built.** No code exists yet. This document describes
-the planned system and is rewritten as each milestone lands
-([roadmap](../plans/0002-roadmap.md)).
+**Status: M0 built** ([plan 0001](../plans/0001-m0-foundations.md)): notesd
+with the store, the socket and caller kinds; `notesctl hello` and `vault`;
+the app shell on the desktop and in a browser; `internal/merge` and
+`internal/markdown`'s first parsers. Everything else here is the planned
+system, rewritten as each milestone lands ([roadmap](../plans/0002-roadmap.md)).
 
 ## Overview
 

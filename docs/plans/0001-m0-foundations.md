@@ -4,7 +4,8 @@ Goal: everything later milestones stand on, proven before any notes
 feature is built. Most of it comes from frostmail, copied and then owned
 here ([ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md),
 [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)).
-Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
+Status: **done** (2026-10-16), except two checks by hand that move to M1:
+IME input in the editor, and Obsidian's own link resolution (spike 4).
 
 ## Phase 1 — Repository
 
@@ -33,8 +34,9 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   ([ADR-0009](../adr/0009-development-environment-and-gates.md)).
 - **Done when:** a fresh `nsl create frostnotes` plus the script builds the
   app shell.
-- **Result (2026-10-16):** the machine provisioned on the first run (Node
-  24.21.0, Go 1.27.1, Rust 1.99.0).
+- **Result (2026-10-16): done.** The machine provisioned on the first run
+  (Node 24.21.0, Go 1.27.1, Rust 1.99.0) and builds the app shell
+  (`make app-build`).
 
 ## Phase 3 — Contracts and runtime
 
@@ -48,8 +50,9 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 - `specs/rpc-protocol.md`.
 - **Done when:** `notesctl hello` and `notesctl vault add/list` work against
   a running notesd, and `make gen-check` passes.
-- **Result (2026-10-16):** `notesctl hello` works against a running notesd,
-  and `make gen-check` passes. `vault.add` resolves symlinks and refuses
+- **Result (2026-10-16): done.** `notesctl hello` and, after T-0003,
+  `notesctl vault add/list/rm` work against a running notesd, and
+  `make gen-check` passes. `vault.add` resolves symlinks and refuses
   vaults that contain or lie inside one another. The `notesctl vault`
   commands became calibration card T-0003 rather than planner work.
 
@@ -65,6 +68,15 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
   development mode, so the same shell runs in a browser.
 - **Done when:** the app shows `rpc.hello` from notesd in the Tauri window
   and in Firefox.
+- **Result (2026-10-16): done.** The built app showed notesd's hello and
+  its vaults in the Tauri window (WebKitGTK under Xvfb in nsl, driven by
+  WebKitWebDriver). In a browser, `make ui-dev` (notesd `-devgw` plus Vite)
+  showed the same, and a vault added with `notesctl vault add` appeared live
+  through `vault.added`. `make ui-check` (9 files, 36 tests) and
+  `make app-test` (7 Rust tests) pass. Deviations from frostmail: `ci`
+  builds before `app-test` (cargo test needs `app/dist`); pnpm overrides
+  hold `@lezer/css` 1.3.8 and `@lezer/lr` 1.4.10, since the newest were
+  under two weeks old.
 
 ## Phase 5 — Spikes (go or no-go)
 
@@ -89,6 +101,16 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 
 Results (2026-10-16):
 
+1. **CodeMirror 6 in WebKitGTK: go.** `app/src/spike` runs a decoration-only
+   live preview (hidden marks and heading `#`s off the cursor's lines,
+   wikilinks with aliases, checkbox widgets) over a generated 10,000-line,
+   946,429-character note. Natively on the host GPU (`make spike-cm6`,
+   device pixel ratio 2): keystroke-to-paint median 7 ms, p95 9 ms, max
+   29 ms over 200 keystrokes; scrolling the whole note at 59.5 fps (frame
+   p95 18 ms, none over 33 ms); first paint 78 ms; a full parse 85 ms. In
+   nsl with software rendering: p95 11–12 ms and 54–55 fps. In every run
+   the text stayed byte-exact through typing and checkbox toggles. IME
+   input needs a hand check (`make spike-cm6 SPIKE=cm6:manual`).
 2. **Merge library shape: go.** `internal/merge` has `Text`, `Note` and
    `Create`; 30 golden cases and a 300-seed property test pass. Two
    findings changed the design ([sync.md](../design/sync.md#merge)): pure
@@ -131,12 +153,31 @@ Results (2026-10-16):
   all size S. Writing them, the planner's own expected byte offsets were
   wrong four times and the reference solutions right, which is the case
   for checking given tests against a reference before a card ships.
+- **Result (2026-10-16): done, three of three on the first attempt.**
+  Codex (codex-cli 0.161, the user's default model) in the
+  `.worktrees/exec` worktree, each card on its own branch:
+
+  | Card | Attempts | Wall time | Files | Review |
+  | --- | --- | --- | --- | --- |
+  | T-0001 split frontmatter | 1 | 57 s | 1 | matches the contract, edge cases included |
+  | T-0002 wikilinks and tags | 1 | 100 s | 1 | correct; blanks code in a copy so offsets hold |
+  | T-0003 `notesctl vault` | 1 | 61 s | 2 | correct; better factored than the reference |
+
+  T-0002's first run stopped by design: its given test was named
+  `TestInlineTags`, which `internal/repocheck` rejects, and Codex refused to
+  edit a given test and said why. The card was fixed (`TestTagsInBody`) and
+  rerun. taskrun gained two fixes: it creates `doing/` and `done/` (git
+  tracks no empty directories), and it checks scope after `make check`,
+  because formatting can change files too. Size M cards are unlocked for
+  M1 ([agent workflow](../design/agent-workflow.md#sizing)).
 
 ## Done when
 
 `make check` is green on the host and `make ui-check` in nsl; the app shows
 data from notesd on the desktop and in a browser; the spikes are go; and
-Codex has passed its calibration cards. Next: the M1 plan and its cards.
+Codex has passed its calibration cards. All met on 2026-10-16. Next: the M1
+plan and its cards, starting with Obsidian's link dump from the user's
+vault (spike 4) and the IME check.
 
 ## Open questions
 

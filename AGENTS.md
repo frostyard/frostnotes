@@ -51,7 +51,15 @@ file a step names before writing its frostnotes counterpart.
 - `internal/merge`: three-way merges (planner-owned; never a card's).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
   (SHA-pinned actions; no unit test named `TestI…`).
-- `dev/nsl/provision.sh`: the nsl machine for the app toolchain.
+- `app/`: Tauri v2 + React + TypeScript. `app/src-tauri/src/bridge.rs` only
+  moves lines to notesd's socket; JSON-RPC multiplexing is in
+  `app/src/rpc/transport.ts`, with Tauri, WebSocket (`transport/ws.ts`) and
+  mock (`rpc/mock/`) transports. `app/src/features/` is presentational;
+  `app/src/app/` and `app/src/data/` connect it. `app/src/spike/` is M0's
+  CodeMirror spike. The icon's master is `app/src-tauri/icons/icon.svg`
+  (`scripts/render-icons.py`, ADR-0013).
+- `dev/nsl/provision.sh`: the nsl machine for the app toolchain;
+  `scripts/dev-app.sh` runs notesd beside the app or Vite there.
   `tools/rpcgen`, `tools/taskrun`: the contract generator and the task-card
   runner.
 
@@ -59,8 +67,11 @@ file a step names before writing its frostnotes counterpart.
 
 - `make check` formats, then runs `make verify`: tidy, `gen-check`, vet,
   gofmt, the pinned golangci-lint (`mise install`) and unit tests. Run it
-  before claiming any Go change is complete. `make ci` adds the race
-  detector.
+  before claiming any Go change is complete. `make ui-check` (Biome, tsc,
+  Vitest), `make app-build` and `make app-test` run in the nsl machine;
+  `make ci` is verify plus those and the race detector. Never run pnpm,
+  node or cargo on the host.
+
 - Unit tests run with `-run '^Test[^I]'` (frostyard/core ADR-0022): never
   name a unit test `TestI…`; `internal/repocheck` fails if you do.
 - Fix a lint finding rather than loosening `.golangci.yml`.
