@@ -165,4 +165,3 @@ func (m *Manager) Prune(ctx context.Context) error {
 	}
 	return nil
 }
-

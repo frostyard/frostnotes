@@ -16,7 +16,7 @@ func TestCheckPath(t *testing.T) {
 	for p, ok := range map[string]bool{
 		"Plan.md":                true,
 		"Orchard/North Block.md": true,
-		"Café ☕/Plan.md":          true,
+		"Café ☕/Plan.md":         true,
 		".frostnotes/vault.yaml": true,
 		"media/map.png":          true,
 		"":                       false,
@@ -175,7 +175,9 @@ func TestScanBatches(t *testing.T) {
 	if !slices.Equal(a, b) {
 		t.Fatalf("batches of 2 give a different index:\n%s\nwant\n%s", strings.Join(a, "\n"), strings.Join(b, "\n"))
 	}
-	if !slices.ContainsFunc(a, func(row string) bool { return strings.HasPrefix(row, "link n0/Note 0.md 0 ") && strings.HasSuffix(row, "'n1/Note 1.md'") }) {
+	if !slices.ContainsFunc(a, func(row string) bool {
+		return strings.HasPrefix(row, "link n0/Note 0.md 0 ") && strings.HasSuffix(row, "'n1/Note 1.md'")
+	}) {
 		t.Errorf("a link to a note in a later batch did not resolve:\n%s", strings.Join(a, "\n"))
 	}
 }

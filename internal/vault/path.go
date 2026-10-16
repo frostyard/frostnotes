@@ -33,7 +33,7 @@ func CheckPath(p string) error {
 			return fmt.Errorf("%w: %q has an empty segment", ErrPath, p)
 		case seg == "." || seg == "..":
 			return fmt.Errorf("%w: %q has a %q segment", ErrPath, p, seg)
-		case strings.HasPrefix(seg, ".") && !(i == 0 && seg == SettingsDir):
+		case strings.HasPrefix(seg, ".") && (i != 0 || seg != SettingsDir):
 			return fmt.Errorf("%w: %q has a hidden segment %q", ErrPath, p, seg)
 		}
 	}

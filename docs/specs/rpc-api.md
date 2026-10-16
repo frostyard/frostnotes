@@ -57,7 +57,7 @@ The notes in a vault, by path. The filters combine: a note must match every one 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
-| `folder` | `string` (optional) | Only notes in this folder or below it. |
+| `folder` | `string` (optional) | Only notes in this folder or below it; "/" is the whole vault. |
 | `tag` | `string` (optional) | Only notes with this tag or one nested under it (tag/…), ignoring case; a leading '#' is ignored. |
 | `property` | `string` (optional) | Only notes whose frontmatter has this key. |
 | `value` | `string` (optional) | With property: only notes where the key's value, or an item of its list, equals this, ignoring case. |
@@ -131,7 +131,7 @@ Errors: `notFound`, `conflict`, `invalidParams`.
 
 ### `note.write`
 
-Replace a file's content. base is the hash the writer started from. If the file changed since, notesd merges: frontmatter by key, then the body by line and word (ADR-0005). A base notesd has no version of (pruned after 30 days) is refused with conflict: read again.
+Replace a file's content. base is the hash the writer started from. If the file changed since, notesd merges: frontmatter by key, then the body by line and word (ADR-0005). A base notesd has no version of (pruned after 30 days) is refused with conflict: read again, as is a stale base of a file that is not text, which does not merge. Bytes of the base that are not UTF-8, which note.read showed as U+FFFD, are kept wherever content leaves the words around them as they were (ADR-0014).
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -263,7 +263,7 @@ A note's content and what the index found in it.
 | `title` | `string` | The file name without .md. |
 | `hash` | `string` | The SHA-256 of content, lowercase hex: the base for the next write. |
 | `modifiedAt` | `time` | The file's modification time. |
-| `content` | `string` | The file's text, byte for byte; invalid UTF-8 reads as U+FFFD. |
+| `content` | `string` | The file's text, byte for byte, except that each sequence of bytes that is not UTF-8 reads as U+FFFD; note.write keeps those bytes where a write leaves them be (ADR-0014). |
 | `props` | `json` | The frontmatter as a JSON object; {} without one or when it is not a YAML mapping. |
 | `propError` | `string` (optional) | Why the frontmatter is not a YAML mapping. |
 | `aliases` | `[]string` |  |

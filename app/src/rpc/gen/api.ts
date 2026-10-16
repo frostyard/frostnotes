@@ -112,7 +112,11 @@ export interface Note {
   hash: string;
   /** The file's modification time. */
   modifiedAt: string /* RFC 3339 */;
-  /** The file's text, byte for byte; invalid UTF-8 reads as U+FFFD. */
+  /**
+   * The file's text, byte for byte, except that each sequence of bytes that
+   * is not UTF-8 reads as U+FFFD; note.write keeps those bytes where a write
+   * leaves them be (ADR-0014).
+   */
   content: string;
   /**
    * The frontmatter as a JSON object; {} without one or when it is not a YAML
@@ -229,7 +233,7 @@ export interface DailyNote {
 /** Params of note.list. */
 export interface NoteListParams {
   vaultId: number;
-  /** Only notes in this folder or below it. */
+  /** Only notes in this folder or below it; "/" is the whole vault. */
   folder?: string;
   /**
    * Only notes with this tag or one nested under it (tag/…), ignoring case;
@@ -408,7 +412,10 @@ export interface NoteClient {
    * Replace a file's content. base is the hash the writer started from. If
    * the file changed since, notesd merges: frontmatter by key, then the body
    * by line and word (ADR-0005). A base notesd has no version of (pruned
-   * after 30 days) is refused with conflict: read again.
+   * after 30 days) is refused with conflict: read again, as is a stale base
+   * of a file that is not text, which does not merge. Bytes of the base that
+   * are not UTF-8, which note.read showed as U+FFFD, are kept wherever
+   * content leaves the words around them as they were (ADR-0014).
    */
   write(params: NoteWriteParams): Promise<WriteResult>;
   /**

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/frostyard/clix"
 	"github.com/frostyard/frostnotes/api"
@@ -37,6 +38,10 @@ func newWriteCmd(opts *rootOptions) *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("read content from stdin: %w", err)
 				}
+			}
+			if !utf8.Valid(content) {
+				// notesd's API carries text (ADR-0014).
+				return fmt.Errorf("the content is not valid UTF-8 text; notesd writes text only")
 			}
 			return opts.withVault(cmd, func(c *api.Client, vault int64) error {
 				var res *api.WriteResult

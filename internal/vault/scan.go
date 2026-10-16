@@ -41,10 +41,13 @@ func kindOf(p string) store.FileKind { return store.File{Path: p}.Kind() }
 
 // runScan scans the vault, keeping its status.
 func (v *Vault) runScan(ctx context.Context, reindex bool) (Listing, error) {
-	if network, err := onNetwork(v.root); err == nil {
-		v.setStatus(func(s *api.ScanStatus) { s.Network = network }, false)
+	network, err := onNetwork(v.root)
+	if err != nil {
+		v.log.Debug("statfs", "err", err)
 	}
-	v.setStatus(func(s *api.ScanStatus) { s.State, s.Done, s.Total = api.ScanStateScanning, 0, 0 }, true)
+	v.setStatus(func(s *api.ScanStatus) {
+		s.State, s.Done, s.Total, s.Network = api.ScanStateScanning, 0, 0, network
+	}, true)
 	listing, err := v.scan(ctx, reindex)
 	if ctx.Err() != nil {
 		return Listing{}, ctx.Err()

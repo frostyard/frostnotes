@@ -107,6 +107,7 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 		}
 		res.Rewritten = append(res.Rewritten, source)
 	}
+	slices.Sort(res.Rewritten)
 	return res, nil
 }
 

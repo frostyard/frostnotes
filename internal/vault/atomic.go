@@ -151,8 +151,8 @@ type content struct {
 	data []byte // nil for a big file, whose bytes are read again to store them
 }
 
-func (c content) size() int64          { return c.info.Size() }
-func (c content) modTime() time.Time   { return c.info.ModTime() }
+func (c content) size() int64        { return c.info.Size() }
+func (c content) modTime() time.Time { return c.info.ModTime() }
 func (c content) sameStat(fi fs.FileInfo) bool {
 	return fi != nil && fi.Size() == c.info.Size() && fi.ModTime().Equal(c.info.ModTime())
 }
