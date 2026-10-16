@@ -358,7 +358,6 @@ func (r *runner) mkdir(card string) error {
 	return os.MkdirAll(filepath.Join(r.root, filepath.Dir(card)), 0o755)
 }
 
-
 // capture runs fn with the runner's output also copied into buf.
 func (r *runner) capture(buf *bytes.Buffer, fn func() error) error {
 	orig := r.out
