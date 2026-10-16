@@ -37,7 +37,9 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 
 ### Specs
 
-*(none yet — `rpc-protocol.md` in M0; `markdown.md` in M1; `sync-protocol.md` and `merge.md` in M2)*
+- [RPC protocol](specs/rpc-protocol.md) — transports, caller kinds, messages, connection setup, events
+- [RPC API](specs/rpc-api.md) — every method, type and event (generated from `schema/rpc`)
+
 
 ### Plans
 

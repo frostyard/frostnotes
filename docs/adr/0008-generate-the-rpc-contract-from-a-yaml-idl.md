@@ -54,6 +54,6 @@ cards.
 
 ## References
 
-- Shapes: [design/overview.md](../design/overview.md); `docs/specs/rpc-protocol.md` (M0)
+- Shapes: [design/overview.md](../design/overview.md), [specs/rpc-protocol.md](../specs/rpc-protocol.md)
 - Builds on: frostmail ADR-0007
 - Built in: [M0 plan](../plans/0001-m0-foundations.md)

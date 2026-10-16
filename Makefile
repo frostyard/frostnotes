@@ -1,4 +1,4 @@
-.PHONY: help build fmt lint lint-version-check test verify check ci clean
+.PHONY: help build fmt gen gen-check lint lint-version-check test verify check ci clean
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -19,6 +19,12 @@ build: ## Build notesd and notesctl into build/
 fmt: ## Format Go code
 	gofmt -w $(GO_FILES)
 
+gen: ## Regenerate the RPC contract from schema/rpc
+	go run ./tools/rpcgen
+
+gen-check: ## Fail if generated RPC files are stale
+	go run ./tools/rpcgen -check
+
 lint: lint-version-check ## Run the pinned golangci-lint
 	golangci-lint run
 
@@ -38,9 +44,11 @@ test: ## Run the Go unit tests
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
 # detector.
-verify: ## Tidy, vet, format, lint and unit tests
+verify: ## Tidy, generated files, vet, format, lint and unit tests
 	go mod tidy -diff
+	$(MAKE) --no-print-directory gen-check
 	go vet ./...
+
 	test -z "$$(gofmt -l $(GO_FILES))"
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test

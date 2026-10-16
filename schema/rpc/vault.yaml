@@ -1,0 +1,42 @@
+domain: vault
+callers: [local]
+doc: >-
+  The vaults this notesd owns: directories of markdown notes (ADR-0003).
+  Registering a vault never writes to it.
+types:
+  - name: Vault
+    doc: A registered vault.
+    fields:
+      - {name: id, type: int, doc: "Stable local identifier."}
+      - {name: name, type: string, doc: "Display name; the directory's base name unless one was given."}
+      - {name: path, type: string, doc: "Absolute, cleaned path of the vault directory."}
+      - {name: createdAt, type: time}
+methods:
+  - name: list
+    doc: Every registered vault, by name.
+    result: "[]Vault"
+  - name: add
+    doc: >-
+      Register a directory as a vault. The path must be absolute and name an
+      existing directory, and no registered vault may contain it or lie inside it.
+    params:
+      - {name: path, type: string, doc: "Absolute path of the vault directory."}
+      - {name: name, type: string, optional: true, doc: "Display name; defaults to the directory's base name."}
+    result: Vault
+    errors: [invalidParams, conflict]
+  - name: remove
+    doc: Forget a vault. Its directory and files are untouched.
+    params:
+      - {name: id, type: int}
+    errors: [notFound]
+events:
+  - name: added
+    doc: A vault was registered.
+    durable: true
+    fields:
+      - {name: vault, type: Vault}
+  - name: removed
+    doc: A vault was forgotten.
+    durable: true
+    fields:
+      - {name: id, type: int}

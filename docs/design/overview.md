@@ -3,7 +3,7 @@
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
 [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md).
-Contracts: `specs/rpc-protocol.md` and `specs/rpc-api.md` (M0).
+Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md).
 
 **Status: designed, not built.** No code exists yet. This document describes
 the planned system and is rewritten as each milestone lands

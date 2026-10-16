@@ -1,0 +1,20 @@
+# Application error codes, returned in JSON-RPC error objects. The JSON-RPC
+# 2.0 codes (parseError -32700, invalidRequest -32600, methodNotFound -32601,
+# invalidParams -32602, internal -32603) are built in and need no entry here.
+# Codes are never reused: retire an error by leaving its entry in place.
+errors:
+  - name: notFound
+    code: 1001
+    doc: The referenced entity does not exist.
+  - name: conflict
+    code: 1002
+    doc: The request conflicts with existing state, such as a vault that is already registered.
+  - name: protocolMismatch
+    code: 1003
+    doc: The server does not speak the client's protocol major version.
+  - name: notReady
+    code: 1004
+    doc: The connection has not completed rpc.hello.
+  - name: unavailable
+    code: 1005
+    doc: The operation cannot run now, for example while the hub is unreachable; retrying later can succeed.

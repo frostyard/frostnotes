@@ -1,0 +1,20 @@
+domain: rpc
+protocol: 1
+callers: [local, session, device]
+doc: >-
+  Connection setup. A client calls rpc.hello first on every connection; the
+  server answers any other method with notReady until hello succeeds.
+types:
+  - name: Hello
+    doc: Server identity and the negotiated protocol.
+    fields:
+      - {name: protocol, type: int, doc: "Protocol major version the server speaks."}
+      - {name: server, type: string, doc: "Server name and version, for logs."}
+methods:
+  - name: hello
+    doc: Negotiate the protocol major version. Changes within a major version are additive only.
+    params:
+      - {name: protocol, type: int, doc: "Protocol major version the client speaks."}
+      - {name: client, type: string, doc: "Client name and version, for logs."}
+    result: Hello
+    errors: [protocolMismatch]
