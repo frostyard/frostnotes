@@ -9,9 +9,9 @@ from `notesctl` and from an agent through `notesctl mcp`. It follows
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the spec, the schema, scan and watch, the write path, merges
 and the MCP surface; the executor owns cards T-0004 onward.
-Status: **Phases 1 to 3 done** (2026-10-16): this plan,
-[specs/markdown.md](../specs/markdown.md), cards T-0004 to T-0008
-merged, and the index contracts with cards T-0009 to T-0020.
+Status: **Phases 1, 2, 3 and 5 done** (2026-10-16): this plan,
+[specs/markdown.md](../specs/markdown.md), the index contracts, and cards
+T-0004 to T-0020 merged. Phase 4 (the engine) and Phase 6 (MCP) are next.
 
 ## Decisions taken for M1
 
@@ -258,6 +258,21 @@ are merged.
   not wait for the parser cards; the notesctl cards test against a fake
   note service, so they do not wait for Phase 4.
 - **Done when:** every card is merged and `make check` is green.
+- **Result (2026-10-16): done.** Codex passed all twelve cards on the
+  first attempt; the planner reviewed each before merging it into
+  `m1/batch2`. `make verify` and the race detector pass. Against
+  Obsidian's dump, `Parse` now finds exactly Obsidian's links in all 43
+  notes (179 of 179, measured with a scratch test; Phase 4 commits it in
+  `TestIObsidianLinkDump`), and `Resolve` still agrees on all 179.
+  T-0009's vaults at 666 notes have 89 folders and 2.6 MB of varied text
+  (the user's vault: 97 folders, 2.2 MiB). Found in review, for later
+  phases:
+  - the API carries note content as a JSON string, so a note with invalid
+    UTF-8 cannot be written through `note.write` (encoding rejects it);
+    the spec allows such notes on disk. Phase 4 decides (an error, or
+    bytes as base64).
+  - `ListNotes` with the folder `/` matches nothing; `notesctl ls /`
+    should list the whole vault. A one-line fix in Phase 4.
 
 ## Phase 6 — MCP
 
