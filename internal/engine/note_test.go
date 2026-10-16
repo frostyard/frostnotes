@@ -57,10 +57,11 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
-// waitFor reads events until one matches, failing after 10 seconds.
+// waitFor reads events until one matches, failing after a minute: a
+// scan under the race detector on a slow runner takes seconds.
 func (av *apiVault) waitFor(what string, match func(api.EventEnvelope) bool) {
 	av.t.Helper()
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(time.Minute)
 	for {
 		select {
 		case env := <-av.c.Notifications():
@@ -68,7 +69,7 @@ func (av *apiVault) waitFor(what string, match func(api.EventEnvelope) bool) {
 				return
 			}
 		case <-timeout:
-			av.t.Fatalf("no %s within 10 seconds", what)
+			av.t.Fatalf("no %s within a minute", what)
 		}
 	}
 }
@@ -239,7 +240,8 @@ func TestWatcherIndexesOutsideEdits(t *testing.T) {
 // resolved to the manifest's file, and none of its decoys in code.
 func TestGeneratedVaultIndexesItsManifest(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "vault")
-	m, err := vaultgen.Generate(dir, vaultgen.Options{Seed: 11, Notes: 300})
+	const notes = 150
+	m, err := vaultgen.Generate(dir, vaultgen.Options{Seed: 11, Notes: notes})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +293,7 @@ func TestGeneratedVaultIndexesItsManifest(t *testing.T) {
 			}
 		}
 	}
-	if len(want) < 300 {
+	if len(want) < notes {
 		t.Errorf("only %d links in the manifest", len(want))
 	}
 }

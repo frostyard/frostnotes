@@ -261,12 +261,17 @@ T-0004 to T-0020, and the engine. Phase 6 (MCP) is next.
   has seen, against an edit made while the write was staged, and two and
   three writers on one base, the third keeping a conflict version), with
   creates, deletes, reverts, moves, daily notes, pruning, symlinks and the
-  watcher; a 300-note generated vault whose index holds exactly its
+  watcher; a 150-note generated vault whose index holds exactly its
   manifest's links, each resolved to `Want`, and none of its decoys;
   `make vault-it`, which killed a child notesd 100 times during writes and
   100 times during scans (cold and reindex) and found every file a
   complete version notesd knows and the index equal to a fresh rebuild
-  after each restart (101 s). `make obsidian-links` now checks `Parse`
+  after each restart (101 s). Checked by mutation: a build whose writes
+  truncate and rewrite the file in place failed the harness on run 17 of
+  100 with a torn note. The mutation also found a hole, now fixed: a child
+  that failed by itself passed, since killing an exited child that is not
+  yet reaped succeeds, so the harness now requires the child's wait status
+  to be the kill. `make obsidian-links` now checks `Parse`
   too: it finds Obsidian's links in 43 of 43 notes (179 of 179), and
   `Resolve` agrees on all 179.
 

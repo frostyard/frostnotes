@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -117,7 +118,12 @@ func killChild(t *testing.T, mode, data, dir string, run int, delay time.Duratio
 	if err := cmd.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}
-	_ = cmd.Wait()
+	// Killing a child that already exited succeeds until it is reaped, so
+	// only its wait status tells a kill from a child that failed by itself.
+	err = cmd.Wait()
+	if ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); !ok || !ws.Signaled() || ws.Signal() != syscall.SIGKILL {
+		t.Fatalf("run %d: the child ended before the kill: %v", run, err)
+	}
 }
 
 // TestIKillChild is the child notesd; it only runs under TestIKillNotesd.
