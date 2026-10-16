@@ -45,12 +45,14 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 
 - [RPC protocol](specs/rpc-protocol.md) — transports, caller kinds, messages, connection setup, events
 - [RPC API](specs/rpc-api.md) — every method, type and event (generated from `schema/rpc`)
+- [Markdown](specs/markdown.md) — the Obsidian dialect, link resolution and the parse fixtures
 
 
 ### Plans
 
 - [0001 — M0 foundations](plans/0001-m0-foundations.md)
 - [0002 — Roadmap to replacing Obsidian](plans/0002-roadmap.md)
+- [0003 — M1 headless vault](plans/0003-m1-headless-vault.md)
 
 ## Conventions
 

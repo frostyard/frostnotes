@@ -15,8 +15,9 @@ the canonical paths; keep content tool-agnostic.
 
 ## Status
 
-M0 (foundations) is in progress ([plan 0001](docs/plans/0001-m0-foundations.md));
-the roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
+M0 (foundations) is done ([plan 0001](docs/plans/0001-m0-foundations.md));
+M1, the headless vault, is in progress ([plan 0003](docs/plans/0003-m1-headless-vault.md)).
+The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
 file a step names before writing its frostnotes counterpart.

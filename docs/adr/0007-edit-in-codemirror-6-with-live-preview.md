@@ -60,6 +60,6 @@ the hub serves them to browsers over the network.
 
 ## References
 
-- Shapes: [design/overview.md](../design/overview.md); the app design doc (M3)
+- Shapes: [design/overview.md](../design/overview.md), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run); the app design doc (M3)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0006](0006-every-write-names-the-version-it-changes.md)
 - Built in: [roadmap — M0 spike, M3](../plans/0002-roadmap.md)
