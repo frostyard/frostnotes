@@ -59,6 +59,22 @@ a thin client.
   by `notesctl mcp` and over HTTP by the hub
   ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)).
 
+### Application icon
+
+Frostnotes uses a snowflake-marked notebook with a faceted blue spine, ruled
+cover and ribbon bookmark. Its chamfered frame, palette and snow crystal
+match Frostmail's icon ([ADR-0013](../adr/0013-use-a-sibling-frostyard-notebook-icon.md)),
+extending the sibling identity in [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md).
+It belongs to the [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell).
+
+The editable master is `app/src-tauri/icons/icon.svg`. Its comments record
+the exact color tokens from core's `frostyard-design/tokens/colors.css`.
+Run `python3 scripts/render-icons.py` with PyGObject, GdkPixbuf and its
+librsvg SVG loader to regenerate the 32, 128 and 512 pixel RGBA PNGs used
+by Tauri. Commit the master and all three exports together; ordinary builds
+need only the PNGs. Check the two sibling icons at native size on light and
+dark backgrounds after editing. This artwork does not change the UI tokens.
+
 ### Planned layout
 
 | Path | Contents |

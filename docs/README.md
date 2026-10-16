@@ -31,6 +31,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0010 — Claude plans and verifies; Codex runs task cards](adr/0010-claude-plans-and-codex-runs-task-cards.md)
 - [0011 — Look like frostmail's sibling, with Obsidian's layout](adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - [0012 — Agents reach notes through MCP](adr/0012-agents-reach-notes-through-mcp.md)
+- [0013 — Use a sibling Frostyard notebook icon](adr/0013-use-a-sibling-frostyard-notebook-icon.md)
 
 ### Design
 

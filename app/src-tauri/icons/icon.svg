@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <title>Frostnotes</title>
+  <desc>A snowflake-marked ice-blue notebook with a faceted spine and ribbon bookmark on a chamfered midnight-blue tile.</desc>
+  <!-- Frostyard core .agents/skills/frostyard-design/tokens/colors.css:
+       ink #06111d, deep #081b2d, panel #0d263b, ice #aee9ff,
+       sky #47b8ef, blue #168bd0, text-body #edf8ff, line-strong #2c6380.
+       Gradient stops below also come from gradient-panel / gradient-primary.
+       Frame geometry and snow crystal match Frostmail's sibling icon. -->
+  <defs>
+    <linearGradient id="tile" x1="32" y1="32" x2="480" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d2d45"/>
+      <stop offset="1" stop-color="#071827"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="160" y1="92" x2="392" y2="384" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#edf8ff"/>
+      <stop offset="1" stop-color="#aee9ff"/>
+    </linearGradient>
+    <linearGradient id="spine" x1="104" y1="92" x2="160" y2="408" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5ac9f7"/>
+      <stop offset="1" stop-color="#1584ca"/>
+    </linearGradient>
+    <path id="flake-arm" d="M272 144V200 M257 157L272 172L287 157"/>
+  </defs>
+  <!-- Identical frame, padding and hairline to Frostmail. -->
+  <path d="M64 16H448L496 64V448L448 496H64L16 448V64Z" fill="#06111d"/>
+  <path d="M66 20H446L492 66V446L446 492H66L20 446V66Z" fill="url(#tile)" stroke="#2c6380" stroke-width="2"/>
+  <!-- Hard cover and visible page block give the notebook a bound silhouette. -->
+  <path d="M128 92H352L408 148V408L392 424H128L104 400V116Z" fill="#168bd0"/>
+  <path d="M136 376H400V408H136L120 392Z" fill="#aee9ff"/>
+  <path d="M144 392H400" stroke="#2c6380" stroke-width="4"/>
+  <!-- Pale cover, cut upper corner and broad blue spine. -->
+  <path d="M128 88H352L408 144V376L392 392H128L104 368V112Z" fill="url(#paper)"/>
+  <path d="M128 88H160V392H128L104 368V112Z" fill="url(#spine)"/>
+  <path d="M128 88V392L104 368V112Z" fill="#47b8ef"/>
+  <path d="M160 92V388" stroke="#081b2d" stroke-width="6"/>
+  <path d="M352 88V144H408Z" fill="#47b8ef"/>
+  <path d="M352 144H408L352 168Z" fill="#168bd0" opacity=".24"/>
+  <!-- The same sixfold snow crystal as Frostmail, without a font dependency. -->
+  <g stroke="#0d263b" stroke-width="8" stroke-linecap="square" stroke-linejoin="miter">
+    <use href="#flake-arm"/>
+    <use href="#flake-arm" transform="rotate(60 272 200)"/>
+    <use href="#flake-arm" transform="rotate(120 272 200)"/>
+    <use href="#flake-arm" transform="rotate(180 272 200)"/>
+    <use href="#flake-arm" transform="rotate(240 272 200)"/>
+    <use href="#flake-arm" transform="rotate(300 272 200)"/>
+  </g>
+  <!-- Three generous rules read as notes even at launcher sizes. -->
+  <path d="M200 284H352M200 316H352M200 348H288" stroke="#2c6380" stroke-width="10"/>
+  <!-- A split-tip ribbon is the notebook's own crystalline detail. -->
+  <path d="M320 376H356V436L338 422L320 436Z" fill="#081b2d"/>
+  <path d="M326 376H350V424L338 414L326 424Z" fill="#47b8ef"/>
+  <path d="M326 376H338V414L326 424Z" fill="#aee9ff"/>
+</svg>

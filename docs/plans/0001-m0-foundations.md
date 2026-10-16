@@ -55,6 +55,9 @@ Status: **in progress** (ADRs 0003–0012 accepted 2026-10-16).
 
 ## Phase 4 — App shell
 
+- The sibling notebook [application icon](../design/overview.md#application-icon)
+  ([ADR-0013](../adr/0013-use-a-sibling-frostyard-notebook-icon.md)), with an
+  editable SVG master and reproducible PNG exports.
 - `app/` from frostmail's shell, with the mail stripped out: `bridge.rs`,
   `transport.ts`, the mock transport, tokens, window chrome, Biome,
   Vitest, and `make ui-check`, `app-dev` and `app-build`.
