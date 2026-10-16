@@ -35,6 +35,16 @@ func ID(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// IDReader returns the lowercase hex SHA-256 of everything r yields: ID
+// for content too big to hold in memory.
+func IDReader(r io.Reader) (string, error) {
+	h := sha256.New()
+	if _, err := io.Copy(h, r); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func validID(id string) bool {
 	if len(id) != sha256.Size*2 {
 		return false

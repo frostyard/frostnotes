@@ -14,12 +14,14 @@ import (
 	"syscall"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/config"
 	"github.com/frostyard/frostnotes/internal/devgw"
 	"github.com/frostyard/frostnotes/internal/engine"
 	"github.com/frostyard/frostnotes/internal/events"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
 	"github.com/frostyard/frostnotes/internal/store"
+	"github.com/frostyard/frostnotes/internal/vault"
 )
 
 // Set via ldflags at build time.
@@ -73,12 +75,21 @@ func run(ctx context.Context, args []string) error {
 	broker := events.NewBroker(db)
 	db.OnCommit = broker.Publish
 
+	// One actor per vault scans and watches it and makes its writes; the
+	// manager also prunes versions daily (docs/design/vault.md).
+	vaults := vault.NewManager(vault.Config{DB: db, Blobs: blobs.New(paths.Blobs), Log: logger, Publish: broker.Publish})
+	vctx, stopVaults := context.WithCancel(ctx)
+	defer func() { stopVaults(); vaults.Wait() }()
+	if err := vaults.Start(vctx); err != nil {
+		return err
+	}
+
 	ln, err := rpcserver.Listen(paths.Socket)
 	if err != nil {
 		return err
 	}
 	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger})
-	eng := engine.New(db)
+	eng := engine.New(db, vaults)
 	router, err := api.NewRouter(api.Services{RPC: srv, Events: srv, Vault: eng.Vaults(), Note: eng.Notes()})
 	if err != nil {
 		return err

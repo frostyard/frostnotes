@@ -1,0 +1,291 @@
+package vault
+
+import (
+	"context"
+	"errors"
+	"io/fs"
+	"net/url"
+	"os"
+	"path"
+	"slices"
+	"strings"
+
+	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/markdown"
+	"github.com/frostyard/frostnotes/internal/store"
+)
+
+// Move renames from to to, which must not exist, creating missing folders;
+// the file keeps its ID and versions. With updateLinks, every link to it
+// from a note, and every link of a moved note that the move would point
+// elsewhere, is rewritten to the shortest target that resolves to the same
+// file, as Obsidian's "Automatically update internal links" does; each
+// note's rewrite is an ordinary write with a base
+// (docs/design/vault.md#writes).
+func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who Author) (*api.MoveResult, error) {
+	for _, p := range []string{from, to} {
+		if err := checkNotePath(p); err != nil {
+			return nil, err
+		}
+	}
+	if from == to {
+		return nil, api.InvalidParams("%s is already at %s", from, to)
+	}
+	r, err := v.open()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	row, _, err := v.refresh(ctx, r, from)
+	if err != nil {
+		return nil, apiError(from, err)
+	}
+	if _, _, err := v.refresh(ctx, r, to); err == nil {
+		return nil, api.Conflict("%s exists", to)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, apiError(to, err)
+	}
+	if _, err := r.Lstat(to); err == nil {
+		return nil, api.Conflict("%s exists and is not a regular file", to)
+	}
+	var plans []rewritePlan
+	if updateLinks {
+		if plans, err = v.planRewrites(ctx, r, row, to); err != nil {
+			return nil, err
+		}
+	}
+	if err := mkdirs(r, to); err != nil {
+		return nil, apiError(to, err)
+	}
+	if err := rename(r, from, to); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return nil, api.Conflict("%s exists", to)
+		}
+		return nil, err
+	}
+	var doc markdown.Doc
+	var data []byte
+	becameNote := kindOf(to) == store.FileNote && row.Kind() != store.FileNote
+	if becameNote {
+		if c, err := read(r, to); err == nil && c.data != nil {
+			data, doc = c.data, markdown.Parse(c.data)
+		}
+	}
+	err = v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
+		f, err := tx.MoveFile(ctx, row.ID, to)
+		if err != nil {
+			return err
+		}
+		if becameNote {
+			if err := tx.IndexNote(ctx, f, data, doc); err != nil {
+				return err
+			}
+		}
+		return tx.Emit(ctx, api.NoteMoved{VaultID: v.id, From: from, To: to})
+	})
+	if err != nil {
+		return nil, err
+	}
+	res := &api.MoveResult{Path: to, Rewritten: []string{}}
+	for _, plan := range plans {
+		source := plan.source
+		if source == from {
+			source = to
+		}
+		content, changed, err := v.rewriteLinks(ctx, source, plan)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			continue
+		}
+		if _, err := v.write(ctx, r, source, plan.hash, content, false, who); err != nil {
+			v.log.Warn("rewrite links after a move", "note", source, "err", err)
+			continue
+		}
+		res.Rewritten = append(res.Rewritten, source)
+	}
+	return res, nil
+}
+
+// rewritePlan is a note whose links a move retargets, as read before it.
+type rewritePlan struct {
+	source string // the note's path before the move
+	hash   string // its content's hash: the base of its rewrite
+	data   []byte
+	links  []retarget
+}
+
+// retarget is a link and the file it must resolve to after the move.
+type retarget struct {
+	link markdown.Link
+	want string
+}
+
+// lookup is markdown.Resolve's files(name) over the vault's index; errors
+// leave it empty, so a link they touch is left as it is.
+func (v *Vault) lookup(ctx context.Context) func(string) []string {
+	return func(name string) []string {
+		paths, err := v.cfg.DB.FilesNamed(ctx, v.id, name)
+		if err != nil {
+			v.log.Warn("look up files by name", "name", name, "err", err)
+		}
+		return paths
+	}
+}
+
+// planRewrites finds, before moved goes to to, the notes that link to it
+// and, when it is a note, its own links.
+func (v *Vault) planRewrites(ctx context.Context, r *os.Root, moved store.File, to string) ([]rewritePlan, error) {
+	backlinks, err := v.cfg.DB.Backlinks(ctx, moved.ID)
+	if err != nil {
+		return nil, err
+	}
+	var sources []string
+	for _, b := range backlinks {
+		sources = append(sources, b.Source)
+	}
+	if moved.Kind() == store.FileNote {
+		sources = append(sources, moved.Path)
+	}
+	slices.Sort(sources)
+	sources = slices.Compact(sources)
+	lookup := v.lookup(ctx)
+	var plans []rewritePlan
+	for _, source := range sources {
+		row, cur, err := v.refresh(ctx, r, source)
+		if err != nil || cur.data == nil || row.Kind() != store.FileNote {
+			continue
+		}
+		plan := rewritePlan{source: source, hash: row.Hash, data: cur.data}
+		for _, l := range markdown.Parse(cur.data).Links {
+			if l.Target == "" {
+				continue // the note itself, wherever it is
+			}
+			switch dest := markdown.Resolve(source, l.Target, lookup); {
+			case dest == moved.Path:
+				plan.links = append(plan.links, retarget{l, to})
+			case source == moved.Path && dest != "":
+				plan.links = append(plan.links, retarget{l, dest})
+			}
+		}
+		if len(plan.links) > 0 {
+			plans = append(plans, plan)
+		}
+	}
+	return plans, nil
+}
+
+// rewriteLinks returns plan's note, now at source, with each link that no
+// longer resolves to its file retargeted, and whether any was.
+func (v *Vault) rewriteLinks(ctx context.Context, source string, plan rewritePlan) ([]byte, bool, error) {
+	lookup := v.lookup(ctx)
+	var out []byte
+	last, changed := 0, false
+	for _, rt := range plan.links {
+		l := rt.link
+		if markdown.Resolve(source, l.Target, lookup) == rt.want {
+			continue
+		}
+		target, ok := shortestTarget(source, rt.want, l.Kind, lookup)
+		if !ok {
+			continue
+		}
+		text, ok := retargetText(string(plan.data[l.Start:l.End]), l.Kind, target)
+		if !ok {
+			continue
+		}
+		out = append(out, plan.data[last:l.Start]...)
+		out = append(out, text...)
+		last, changed = l.End, true
+	}
+	out = append(out, plan.data[last:]...)
+	return out, changed, nil
+}
+
+// shortestTarget is how a link from source names want, as Obsidian's
+// "shortest path when possible" writes it: the file name when that
+// resolves to want, else its vault path, else the path from the root. A
+// wikilink leaves out a note's ".md"; a markdown link keeps it.
+func shortestTarget(source, want string, kind markdown.LinkKind, files func(string) []string) (string, bool) {
+	full := want
+	if kind != markdown.LinkMarkdown {
+		full = strings.TrimSuffix(full, ".md")
+	}
+	for _, target := range []string{path.Base(full), full, "/" + full} {
+		if markdown.Resolve(source, target, files) == want {
+			return target, true
+		}
+	}
+	return "", false
+}
+
+// retargetText replaces the target in a link's text, keeping its subpath,
+// alias and embed mark.
+func retargetText(raw string, kind markdown.LinkKind, target string) (string, bool) {
+	if kind != markdown.LinkMarkdown {
+		if strings.ContainsAny(target, "[]|#^") {
+			return "", false
+		}
+		open, end := strings.Index(raw, "[["), strings.LastIndex(raw, "]]")
+		if open < 0 || end < open+2 {
+			return "", false
+		}
+		inner := raw[open+2 : end]
+		cut := len(inner)
+		if i := strings.IndexByte(inner, '|'); i >= 0 {
+			cut = i
+			if cut > 0 && inner[cut-1] == '\\' {
+				cut--
+			}
+		}
+		if i := strings.IndexByte(inner[:cut], '#'); i >= 0 {
+			cut = i
+		}
+		return raw[:open+2] + target + inner[cut:] + raw[end:], true
+	}
+	i := strings.LastIndex(raw, "](")
+	if i < 0 || !strings.HasSuffix(raw, ")") {
+		return "", false // a reference link: its definition names the file
+	}
+	inside := raw[i+2 : len(raw)-1]
+	rest := strings.TrimLeft(inside, " \t")
+	lead := inside[:len(inside)-len(rest)]
+	angle := strings.HasPrefix(rest, "<")
+	var dest string
+	if angle {
+		end := strings.IndexByte(rest, '>')
+		if end < 0 || strings.ContainsAny(target, "<>") {
+			return "", false
+		}
+		dest = rest[1:end]
+		rest = rest[end+1:]
+	} else {
+		end := strings.IndexAny(rest, " \t")
+		if end < 0 {
+			end = len(rest)
+		}
+		dest, rest = rest[:end], rest[end:]
+	}
+	sub := ""
+	if j := strings.IndexByte(dest, '#'); j >= 0 {
+		sub = dest[j:]
+	}
+	newDest := escapePath(target) + sub
+	if angle {
+		newDest = "<" + target + sub + ">"
+	}
+	return raw[:i+2] + lead + newDest + rest + ")", true
+}
+
+// escapePath percent-encodes each segment of a vault path for a markdown
+// link's destination.
+func escapePath(p string) string {
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	return strings.Join(segs, "/")
+}

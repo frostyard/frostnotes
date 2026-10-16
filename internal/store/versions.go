@@ -97,6 +97,40 @@ func (d *DB) GetVersion(ctx context.Context, id int64) (Version, error) {
 	return v, nil
 }
 
+// HasVersion reports whether file fileID has a version with content hash,
+// a conflict version included: whether hash may be the base of a write.
+func (d *DB) HasVersion(ctx context.Context, fileID int64, hash string) (bool, error) {
+	var ok bool
+	err := d.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM versions WHERE file_id = ? AND hash = ?)`,
+		fileID, hash).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("find version %s of file %d: %w", hash, fileID, err)
+	}
+	return ok, nil
+}
+
+// UsedHashes returns every hash a version or a file names, in every vault:
+// the blobs that must stay.
+func (d *DB) UsedHashes(ctx context.Context) (map[string]bool, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT hash FROM versions WHERE hash != '' UNION SELECT hash FROM files`)
+	if err != nil {
+		return nil, fmt.Errorf("list used hashes: %w", err)
+	}
+	defer rows.Close()
+	used := map[string]bool{}
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, fmt.Errorf("list used hashes: %w", err)
+		}
+		used[hash] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list used hashes: %w", err)
+	}
+	return used, nil
+}
+
 // LastFileAt returns the ID of the file whose newest version was recorded
 // at path in vault, the way to a deleted file's versions, or ErrNotFound.
 // Task card T-0018.

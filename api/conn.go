@@ -9,6 +9,9 @@ type Conn interface {
 	Notify(Event) error
 	// Done is closed when the connection ends.
 	Done() <-chan struct{}
+	// Client is the client name the connection gave rpc.hello, such as
+	// "notesctl": the default author of the writes it makes.
+	Client() string
 }
 
 type connKey struct{}

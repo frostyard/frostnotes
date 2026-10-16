@@ -101,8 +101,9 @@ type conn struct {
 	sem    chan struct{}
 	ctx    context.Context
 
-	wmu   sync.Mutex
-	ready atomic.Bool
+	wmu    sync.Mutex
+	ready  atomic.Bool
+	client atomic.Pointer[string] // the name given to rpc.hello
 
 	mu      sync.Mutex
 	sub     *events.Subscription
@@ -220,6 +221,14 @@ func (c *conn) Notify(ev api.Event) error {
 // Done implements api.Conn.
 func (c *conn) Done() <-chan struct{} { return c.ctx.Done() }
 
+// Client implements api.Conn: "" until rpc.hello succeeds.
+func (c *conn) Client() string {
+	if name := c.client.Load(); name != nil {
+		return *name
+	}
+	return ""
+}
+
 var _ api.Conn = (*conn)(nil)
 
 func (c *conn) startEvents() {
@@ -251,6 +260,7 @@ func (s *Server) Hello(ctx context.Context, p *api.RPCHelloParams) (*api.Hello, 
 		return nil, api.ProtocolMismatch("notesd speaks protocol %d, not %d", api.Protocol, p.Protocol)
 	}
 	if c := connFrom(ctx); c != nil {
+		c.client.Store(&p.Client)
 		c.ready.Store(true)
 		s.opts.Logger.Debug("client connected", "client", p.Client, "caller", c.caller)
 	}
