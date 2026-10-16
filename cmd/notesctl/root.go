@@ -25,6 +25,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&opts.socket, "socket", "", "notesd socket (default: $FROSTNOTES_SOCKET, else $XDG_RUNTIME_DIR/frostnotes/notesd.sock)")
 	root.AddCommand(
 		newHelloCmd(opts),
+		newVaultCmd(opts),
 	)
 	return root
 }
