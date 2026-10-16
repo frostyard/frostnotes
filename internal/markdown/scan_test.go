@@ -49,7 +49,7 @@ func TestWikilinks(t *testing.T) {
 	}
 }
 
-func TestInlineTags(t *testing.T) {
+func TestTagsInBody(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
 		want       []string

@@ -108,3 +108,27 @@ spike-cm6: ## Run spike 1 natively on the host GPU with build/frostnotes-app (fr
 spike-cm6-nsl: ## Run spike 1 in the nsl machine under Xvfb (software rendering)
 	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
 	$(IN_NSL) 'FROSTNOTES_SPIKE=cm6 $(XVFB) build/frostnotes-app'
+
+# Task cards (docs/design/agent-workflow.md). The executor is Codex with the
+# user's model unless EXECUTOR_MODEL names one; or opencode with
+# EXECUTOR_MODEL as its provider/model (ADR-0010).
+.PHONY: tasks accept task task-verify task-finish
+EXECUTOR ?= codex
+EXECUTOR_MODEL ?=
+
+tasks: ## List task cards
+	@go run ./tools/taskrun list
+
+accept: ## Run a task card's acceptance command: make accept T=0001
+	@test -n "$(T)" || { echo "usage: make accept T=NNNN"; exit 2; }
+	go run ./tools/taskrun accept $(T)
+
+task: ## Run a task card through the executor (Codex by default): make task T=0001
+	@test -n "$(T)" || { echo "usage: make task T=NNNN"; exit 2; }
+	go run ./tools/taskrun -executor '$(EXECUTOR)' -model '$(EXECUTOR_MODEL)' run $(T)
+
+task-verify: ## Check a task branch's scope, given files and gates
+	go run ./tools/taskrun verify $(T)
+
+task-finish: ## Verify, move the card to done/ and commit the task's work
+	go run ./tools/taskrun finish $(T)

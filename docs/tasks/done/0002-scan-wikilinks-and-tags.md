@@ -7,7 +7,7 @@ touch:
   - internal/markdown/scan.go
 given:
   - internal/markdown/scan_test.go # copied from 0002-scan-wikilinks-and-tags/_given/ when the task starts
-acceptance: go test ./internal/markdown -run 'TestWikilinks|TestInlineTags' -count=1
+acceptance: go test ./internal/markdown -run 'TestWikilinks|TestTagsInBody' -count=1
 ---
 # T-0002: Scan a note body for wikilinks and tags
 
@@ -89,7 +89,7 @@ Tags:
 ## Tests (given, do not edit)
 
 `internal/markdown/scan_test.go`: `TestWikilinks` (21 cases) and
-`TestInlineTags` (14 cases).
+`TestTagsInBody` (14 cases).
 
 ## Gotchas
 
