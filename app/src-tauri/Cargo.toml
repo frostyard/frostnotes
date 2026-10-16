@@ -1,0 +1,22 @@
+[package]
+name = "frostnotes"
+version = "0.0.0"
+description = "Frostnotes, a notes app for Linux"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.1", features = [] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1.53", features = ["net", "io-util", "sync", "time"] }
+tauri-plugin-single-instance = "2.5.2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
