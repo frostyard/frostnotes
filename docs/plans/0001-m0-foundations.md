@@ -4,7 +4,7 @@ Goal: everything later milestones stand on, proven before any notes
 feature is built. Most of it comes from frostmail, copied and then owned
 here ([ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md),
 [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)).
-Status: **done** (2026-10-16), except the IME check by hand in the editor.
+Status: **done** (2026-10-16).
 
 ## Phase 1 — Repository
 
@@ -108,8 +108,9 @@ Results (2026-10-16):
    29 ms over 200 keystrokes; scrolling the whole note at 59.5 fps (frame
    p95 18 ms, none over 33 ms); first paint 78 ms; a full parse 85 ms. In
    nsl with software rendering: p95 11–12 ms and 54–55 fps. In every run
-   the text stayed byte-exact through typing and checkbox toggles. IME
-   input needs a hand check (`make spike-cm6 SPIKE=cm6:manual`).
+   the text stayed byte-exact through typing and checkbox toggles. The user
+   checked IME input by hand on the host (`make spike-cm6 SPIKE=cm6:manual`):
+   composition and committed text were correct.
 2. **Merge library shape: go.** `internal/merge` has `Text`, `Note` and
    `Create`; 30 golden cases and a 300-seed property test pass. Two
    findings changed the design ([sync.md](../design/sync.md#merge)): pure
@@ -179,8 +180,7 @@ Results (2026-10-16):
 `make check` is green on the host and `make ui-check` in nsl; the app shows
 data from notesd on the desktop and in a browser; the spikes are go; and
 Codex has passed its calibration cards. All met on 2026-10-16. Next: the M1
-plan and its cards, starting with Obsidian's link dump from the user's
-vault (spike 4) and the IME check.
+plan and its cards.
 
 ## Open questions
 
