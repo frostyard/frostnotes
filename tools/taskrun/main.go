@@ -274,21 +274,7 @@ func (r *runner) verify(ctx context.Context, c *Card) error {
 	if err := r.onBranch(ctx, c); err != nil {
 		return err
 	}
-	changed, err := r.changedSinceStart(ctx, c)
-	if err != nil {
-		return err
-	}
 	var problems []string
-	if bad := ScopeViolations(c, changed); len(bad) > 0 {
-		problems = append(problems, fmt.Sprintf("changed files outside the card's touch list: %v", bad))
-	}
-	changedGiven, err := r.changedGiven(c)
-	if err != nil {
-		return err
-	}
-	for _, g := range changedGiven {
-		problems = append(problems, fmt.Sprintf("given file %s was modified or removed", g))
-	}
 	if err := r.accept(ctx, c, r.out); err != nil {
 		problems = append(problems, err.Error())
 	}
@@ -299,6 +285,22 @@ func (r *runner) verify(ctx context.Context, c *Card) error {
 		if err := r.cmd(ctx, "make", "ui-check"); err != nil {
 			problems = append(problems, "make ui-check: "+err.Error())
 		}
+	}
+	// Scope is checked after the gates, because make check formats: a file
+	// the formatter rewrote is a change like any other.
+	changed, err := r.changedSinceStart(ctx, c)
+	if err != nil {
+		return err
+	}
+	if bad := ScopeViolations(c, changed); len(bad) > 0 {
+		problems = append(problems, fmt.Sprintf("changed files outside the card's touch list: %v", bad))
+	}
+	changedGiven, err := r.changedGiven(c)
+	if err != nil {
+		return err
+	}
+	for _, g := range changedGiven {
+		problems = append(problems, fmt.Sprintf("given file %s was modified or removed", g))
 	}
 	if len(problems) > 0 {
 		return fmt.Errorf("task %s does not verify:\n  %s", c.ID, strings.Join(problems, "\n  "))
