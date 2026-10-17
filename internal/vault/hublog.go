@@ -142,3 +142,11 @@ func (v *Vault) Resolve(ctx context.Context, fileID, seq int64, who Author) erro
 		return err
 	})
 }
+
+// Ignores reports whether the vault's settings leave p out: a device
+// skips pulled heads at such paths.
+func (v *Vault) Ignores(p string) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.ignored(p)
+}

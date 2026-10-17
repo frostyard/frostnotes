@@ -292,9 +292,9 @@ func TestPull(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []api.LogFile{
-		{File: 1, Seq: 4, Revision: 4, Path: "a.md", Hash: fakeHash("a2"), Size: 2},
-		{File: 2, Seq: 5, Revision: 5, Path: "b.md", Deleted: true},
-		{File: 3, Seq: 6, Revision: 3, Path: "c.png", Hash: fakeHash("c1"), Size: 2, Conflicted: true},
+		{File: 1, Seq: 4, Revision: 4, Path: "a.md", Hash: fakeHash("a2"), Size: 2, Author: "notesctl", DeviceName: "hub"},
+		{File: 2, Seq: 5, Revision: 5, Path: "b.md", Deleted: true, Author: "notesctl", DeviceName: "hub"},
+		{File: 3, Seq: 6, Revision: 3, Path: "c.png", Hash: fakeHash("c1"), Size: 2, Conflicted: true, Author: "notesctl", DeviceName: "hub"},
 	}
 	if len(page.Files) != 3 || page.Next != 6 || page.More {
 		t.Fatalf("Pull(0) = %+v; want three files, next 6, no more", page)

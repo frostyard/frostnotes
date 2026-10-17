@@ -6,24 +6,38 @@ import (
 	"github.com/frostyard/frostnotes/api"
 )
 
-// The sync domains (docs/specs/sync-protocol.md) are stubs until plan
-// 0004's Phase 4 builds internal/hub and internal/sync.
+// The sync domains (docs/specs/sync-protocol.md) are internal/hub's and
+// internal/syncer's; an engine built without them answers unavailable.
 
 // Hub implements the hub domain.
-func (e *Engine) Hub() api.HubService { return unbuiltHub{} }
-
-// Sync implements the sync domain.
-func (e *Engine) Sync() api.SyncService { return unbuiltSync{} }
-
-// Log implements the log domain.
-func (e *Engine) Log() api.LogService { return unbuiltLog{} }
-
-func unbuilt(method string) error {
-	return api.Unavailable("%s is not built yet (plan 0004, Phase 4)", method)
+func (e *Engine) Hub() api.HubService {
+	if e.hub == nil {
+		return unbuiltHub{}
+	}
+	return e.hub.Service()
 }
 
-// unbuiltHub answers every hub method unavailable until plan 0004, Phase 4,
-// builds it (on a hub).
+// Sync implements the sync domain.
+func (e *Engine) Sync() api.SyncService {
+	if e.sync == nil {
+		return unbuiltSync{}
+	}
+	return e.sync.Service()
+}
+
+// Log implements the log domain.
+func (e *Engine) Log() api.LogService {
+	if e.hub == nil {
+		return unbuiltLog{}
+	}
+	return e.hub.Log()
+}
+
+func unbuilt(method string) error {
+	return api.Unavailable("%s needs the hub or the syncer, which this notesd does not run", method)
+}
+
+// unbuiltHub answers every hub method unavailable (on a hub).
 type unbuiltHub struct{}
 
 var _ api.HubService = unbuiltHub{}
@@ -56,8 +70,7 @@ func (unbuiltHub) Revoke(context.Context, *api.HubRevokeParams) error {
 	return unbuilt("hub.revoke")
 }
 
-// unbuiltSync answers every sync method unavailable until plan 0004, Phase 4,
-// builds it (on a device).
+// unbuiltSync answers every sync method unavailable (on a device).
 type unbuiltSync struct{}
 
 var _ api.SyncService = unbuiltSync{}
@@ -106,8 +119,7 @@ func (unbuiltSync) History(context.Context, *api.SyncHistoryParams) ([]api.Revis
 	return nil, unbuilt("sync.history")
 }
 
-// unbuiltLog answers every log method unavailable until plan 0004, Phase 4,
-// builds it (for devices).
+// unbuiltLog answers every log method unavailable (for devices).
 type unbuiltLog struct{}
 
 var _ api.LogService = unbuiltLog{}

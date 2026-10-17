@@ -268,6 +268,13 @@ export interface LogFile {
   size: number;
   /** A conflict revision came after the last resolve. */
   conflicted: boolean;
+  /**
+   * Who made the head, on the device or hub that made it; empty for an
+   * outside edit.
+   */
+  author: string;
+  /** The device that made the head, or hub. */
+  deviceName: string;
 }
 
 /** What the hub did with one pushed item. */

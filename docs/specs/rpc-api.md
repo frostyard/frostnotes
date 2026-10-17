@@ -340,6 +340,8 @@ A file's state in the log.
 | `deleted` | `bool` |  |
 | `size` | `int` |  |
 | `conflicted` | `bool` | A conflict revision came after the last resolve. |
+| `author` | `string` | Who made the head, on the device or hub that made it; empty for an outside edit. |
+| `deviceName` | `string` | The device that made the head, or hub. |
 
 ### Type `PushAnswer`
 

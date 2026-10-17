@@ -214,8 +214,8 @@ func (t *Tx) Revision(ctx context.Context, vaultID, seq int64) (Revision, error)
 }
 
 // LogFile returns file fileID as log.pull shows it: its hub_files row with
-// its head revision's path, hash and size, and Deleted when the head is a
-// delete. ErrNotFound when the log does not have the file. Task card
+// its head revision's path, hash, size, author and device name ("hub" for
+// the hub's own writers), and Deleted when the head is a delete. ErrNotFound when the log does not have the file. Task card
 // T-0024.
 func (d *DB) LogFile(ctx context.Context, vaultID, fileID int64) (api.LogFile, error) {
 	return scanLogFile(d.db.QueryRowContext(ctx, logFileSelect+` WHERE f.vault_id = ? AND f.file_id = ?`, vaultID, fileID))
@@ -365,12 +365,14 @@ func scanRevision(sc interface{ Scan(...any) error }) (Revision, error) {
 	return r, err
 }
 
-const logFileSelect = `SELECT f.file_id, f.seq, f.revision, r.path, r.hash, r.size, r.op = 'delete', f.conflicted
-	FROM hub_files f JOIN revisions r ON r.vault_id = f.vault_id AND r.seq = f.revision`
+const logFileSelect = `SELECT f.file_id, f.seq, f.revision, r.path, r.hash, r.size, r.op = 'delete', f.conflicted,
+	r.author, COALESCE(d.name, 'hub')
+	FROM hub_files f JOIN revisions r ON r.vault_id = f.vault_id AND r.seq = f.revision
+	LEFT JOIN hub_devices d ON d.id = r.device_id`
 
 func scanLogFile(sc interface{ Scan(...any) error }) (api.LogFile, error) {
 	var f api.LogFile
-	err := sc.Scan(&f.File, &f.Seq, &f.Revision, &f.Path, &f.Hash, &f.Size, &f.Deleted, &f.Conflicted)
+	err := sc.Scan(&f.File, &f.Seq, &f.Revision, &f.Path, &f.Hash, &f.Size, &f.Deleted, &f.Conflicted, &f.Author, &f.DeviceName)
 	if err != nil {
 		return api.LogFile{}, hubReadError("read log file", err)
 	}

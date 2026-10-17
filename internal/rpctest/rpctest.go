@@ -6,6 +6,8 @@ package rpctest
 import (
 	"context"
 	"log/slog"
+	"net"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -15,8 +17,11 @@ import (
 	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/engine"
 	"github.com/frostyard/frostnotes/internal/events"
+	"github.com/frostyard/frostnotes/internal/hub"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
+	"github.com/frostyard/frostnotes/internal/secrets"
 	"github.com/frostyard/frostnotes/internal/store"
+	"github.com/frostyard/frostnotes/internal/syncer"
 	"github.com/frostyard/frostnotes/internal/vault"
 )
 
@@ -43,6 +48,13 @@ type Options struct {
 	// Vault tunes the vaults' actors (intervals, batch size); its DB,
 	// Blobs, Log, Publish and, when Now is set, Now are filled in.
 	Vault vault.Config
+	// HubListen serves the hub's endpoints on a loopback port, at
+	// Server.HubURL, as notesd --hub does.
+	HubListen bool
+	// Syncer tunes the device's sync loops (quiet periods, backoff, the
+	// device's name); its stores, broker, secrets, log and, when Now is
+	// set, Now are filled in.
+	Syncer syncer.Config
 }
 
 // Server is a running test server; it stops when the test ends.
@@ -56,6 +68,12 @@ type Server struct {
 	// Router serves every domain; pass it to RPC.ServeConn to test a
 	// connection of another caller kind.
 	Router *api.Router
+	// Hub and Syncer are this notesd's hub role and sync loops; Secrets
+	// keeps its device tokens, in a file. HubURL is set with HubListen.
+	Hub     *hub.Hub
+	Syncer  *syncer.Syncer
+	Secrets secrets.Store
+	HubURL  string
 
 	stop func()
 }
@@ -108,7 +126,29 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log})
 	srv.RPC = rpc
-	eng := engine.New(db, srv.Vaults)
+	srv.Secrets = secrets.NewFile(filepath.Join(data, "secrets.json"))
+	parts := filepath.Join(data, "parts")
+	if err := os.MkdirAll(parts, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	hc := hub.Config{DB: db, Blobs: srv.Blobs, Vaults: srv.Vaults, RPC: rpc, Log: log, Now: o.Now}
+	var hubLn net.Listener
+	if o.HubListen {
+		if hubLn, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+			t.Fatal(err)
+		}
+		hc.Listen = hubLn.Addr().String()
+		srv.HubURL = "http://" + hc.Listen
+	}
+	srv.Hub = hub.New(hc)
+	sc := o.Syncer
+	sc.DB, sc.Blobs, sc.Vaults, sc.Secrets, sc.Broker, sc.Publish, sc.Log = db, srv.Blobs, srv.Vaults, srv.Secrets, broker, broker.Publish, log
+	sc.PartDir = parts
+	if o.Now != nil {
+		sc.Now = o.Now
+	}
+	srv.Syncer = syncer.New(sc)
+	eng := engine.New(db, srv.Vaults, srv.Hub, srv.Syncer)
 	note := o.Note
 	if note == nil {
 		note = eng.Notes()
@@ -129,18 +169,32 @@ func StartWith(t testing.TB, o Options) *Server {
 		t.Fatal(err)
 	}
 	srv.Router = router
+	srv.Hub.SetRouter(router)
 	done := make(chan error, 1)
 	go func() { done <- rpc.Serve(ctx, ln, router) }()
+	hubDone := make(chan error, 1)
+	if hubLn != nil {
+		go func() { hubDone <- srv.Hub.Serve(ctx, hubLn) }()
+	} else {
+		hubDone <- nil
+	}
+	if err := srv.Syncer.Start(ctx); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
 	srv.stop = sync.OnceFunc(func() {
 		cancel()
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Errorf("Serve: %v", err)
+		for _, ch := range []chan error{done, hubDone} {
+			select {
+			case err := <-ch:
+				if err != nil {
+					t.Errorf("Serve: %v", err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Error("Serve did not stop")
 			}
-		case <-time.After(5 * time.Second):
-			t.Error("Serve did not stop")
 		}
+		srv.Syncer.Wait()
 		srv.Vaults.Wait()
 		_ = db.Close()
 		cleanup()

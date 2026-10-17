@@ -540,6 +540,11 @@ type LogFile struct {
 	Size    int64  `json:"size"`
 	// A conflict revision came after the last resolve.
 	Conflicted bool `json:"conflicted"`
+	// Who made the head, on the device or hub that made it; empty for an outside
+	// edit.
+	Author string `json:"author"`
+	// The device that made the head, or hub.
+	DeviceName string `json:"deviceName"`
 }
 
 // PushAnswer: What the hub did with one pushed item.

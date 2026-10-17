@@ -138,7 +138,8 @@ and the push merged as a create.
 
 `LogFile`: `file`; `seq`, its latest revision of any kind; `revision`,
 its head (the latest create, put, move or delete); `path`; `hash` (empty
-when deleted); `deleted`; `size`; `conflicted`.
+when deleted); `deleted`; `size`; `conflicted`; and the head's `author`
+and `deviceName` (`hub` for the hub's own writers).
 
 `Revision`: `seq`, `file`, `op` (`create`, `put`, `move`, `delete`,
 `conflict`, `resolve`), `path`, `hash` (empty for a delete), `size`,

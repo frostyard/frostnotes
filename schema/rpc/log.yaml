@@ -70,6 +70,8 @@ types:
       - {name: deleted, type: bool}
       - {name: size, type: int}
       - {name: conflicted, type: bool, doc: "A conflict revision came after the last resolve."}
+      - {name: author, type: string, doc: "Who made the head, on the device or hub that made it; empty for an outside edit."}
+      - {name: deviceName, type: string, doc: "The device that made the head, or hub."}
   - name: PushAnswer
     doc: What the hub did with one pushed item.
     fields:
