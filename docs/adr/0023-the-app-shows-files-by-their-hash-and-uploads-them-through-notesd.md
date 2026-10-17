@@ -85,6 +85,6 @@ binary attachments to an upload method in M3.
 
 ## References
 
-- Shapes: [design/app.md](../design/app.md#attachments), [specs/ui.md](../specs/ui.md); [specs/rpc-api.md](../specs/rpc-api.md) (`note.upload`, M3 Phase 3)
+- Shapes: [design/app.md](../design/app.md#attachments), [specs/ui.md](../specs/ui.md), [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports) (the two servers of a hash); [specs/rpc-api.md](../specs/rpc-api.md) (`note.upload`, M3 Phase 3)
 - Builds on: [ADR-0006](0006-every-write-names-the-version-it-changes.md), [ADR-0014](0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0018](0018-move-blobs-over-http-named-by-their-hash.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md)

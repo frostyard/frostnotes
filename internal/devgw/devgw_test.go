@@ -65,10 +65,10 @@ func TestListenOnlyOnLoopback(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	log := slog.New(slog.DiscardHandler)
-	if err := ListenAndServe(ctx, "0.0.0.0:0", "0123456789abcdef", echo, log); err == nil {
+	if err := ListenAndServe(ctx, "0.0.0.0:0", "0123456789abcdef", echo, nil, log); err == nil {
 		t.Error("listened on all interfaces")
 	}
-	if err := ListenAndServe(ctx, "127.0.0.1:0", "short", echo, log); err == nil {
+	if err := ListenAndServe(ctx, "127.0.0.1:0", "short", echo, nil, log); err == nil {
 		t.Error("accepted a short token")
 	}
 }

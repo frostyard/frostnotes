@@ -212,12 +212,23 @@ does, so the plan records them without ADRs:
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md));
   the CSP's `notesblob:` and `https:` for images.
 - `MockTransport`'s vault: the `note` and `vault` domains, events, and
-  scripted merges.
+  scripted merges. *Moved to Phase 5,* with the containers that use it: no
+  card needs it, since batch 2's components take props.
 - The batch-3 cards whose contracts these settle, each checked against a
   reference.
 - **Done when:** `make check` and `make ui-check` are green with every
   stub in place, `make gen-check` passes, and each card has passed its
   reference.
+- **Result, part 3 (2026-10-17): files by hash.** `notesblob://` is built
+  (`app/src-tauri/src/protocol.rs`, registered in `main.rs`, the data
+  directory found as `internal/config` finds it), with Rust tests of its
+  path check, content types, ranges and responses; the dev gateway serves
+  `/blobs/` behind its token with `Range` (`internal/devgw/blobs.go`, and
+  notesd passes it the blob store); the CSP admits `notesblob:` for images
+  and media and `https:` for remote images. Both servers share one table
+  of content types ([design/app.md](../design/app.md#attachments)) and
+  the headers [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports)
+  now pins.
 
 ## Phase 4 — notesd's additions (planner, alongside Phase 5)
 
@@ -250,7 +261,9 @@ live preview, reading view, history and merges, commands) and the parts
 of [specs/ui.md](../specs/ui.md) not marked for a batch.
 
 - `data/`: `Session` from the stored sequence number; the files, sync
-  and settings stores.
+  and settings stores; `MockTransport`'s vault (the `note` and `vault`
+  domains with notesd's semantics, events, scripted merges), moved here
+  from Phase 3.
 - `workspace/`: the model, its operations, validation and persistence;
   the layout (ribbon, sidebars, splits, strips from T-0042, view
   headers) and drag and drop between groups.

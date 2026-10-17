@@ -139,7 +139,7 @@ func run(ctx context.Context, args []string) error {
 		// are local callers (docs/specs/rpc-protocol.md).
 		serve := func(nc net.Conn) { srv.ServeConn(ctx, nc, router, api.CallerLocal) }
 		go func() {
-			if err := devgw.ListenAndServe(ctx, *devgwAddr, os.Getenv("FROSTNOTES_DEVGW_TOKEN"), serve, logger); err != nil {
+			if err := devgw.ListenAndServe(ctx, *devgwAddr, os.Getenv("FROSTNOTES_DEVGW_TOKEN"), serve, blobStore, logger); err != nil {
 				logger.Error("dev gateway stopped", "err", err)
 			}
 		}()

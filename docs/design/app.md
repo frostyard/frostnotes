@@ -17,7 +17,8 @@ Contracts: [specs/ui.md](../specs/ui.md), [specs/rpc-protocol.md](../specs/rpc-p
 
 **Status: M0's shell is built** ([plan 0001](../plans/0001-m0-foundations.md#phase-4--app-shell)):
 the transports, the mock, `Session`, the vault store, the title bar, the
-status bar, and the CodeMirror spike (`app/src/spike`). Everything else
+status bar, and the CodeMirror spike (`app/src/spike`); so are M3's
+`notesblob://` and the dev gateway's `/blobs/` (Phase 3). Everything else
 here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
@@ -245,6 +246,23 @@ shows as a chip that opens it with the system's application
 (`tauri-plugin-opener`). With the Load remote images preference off,
 the reading view drops remote `img` sources. Pasting or
 dropping an image calls `note.upload` and inserts `![[name]]`.
+
+Both servers of a hash (`protocol.rs` in Tauri, `internal/devgw` in a
+browser; [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports))
+name the content type by extension, from one table:
+
+| Extensions | Content type |
+| --- | --- |
+| `png`, `jpg` and `jpeg`, `gif`, `webp`, `avif`, `bmp`, `svg` | `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/avif`, `image/bmp`, `image/svg+xml` |
+| `mp3`, `wav`, `m4a`, `3gp`, `flac`, `ogg` and `oga`, `opus` | `audio/mpeg`, `audio/wav`, `audio/mp4`, `audio/3gpp`, `audio/flac`, `audio/ogg`, `audio/opus` |
+| `mp4`, `webm`, `ogv`, `mov`, `mkv` | `video/mp4`, `video/webm`, `video/ogg`, `video/quicktime`, `video/x-matroska` |
+| `pdf`, `md` | `application/pdf`, `text/markdown; charset=utf-8` |
+| anything else | `application/octet-stream` |
+
+Under `make app-dev` the page comes from Vite's server, and WebKitGTK may
+not load a custom scheme into it (frostmail found that with `mailpart:`
+and serves `/mailpart/` from Vite in development); Phase 5 checks, and
+serves `/blobs/` from Vite there if it must.
 
 ## History and merges
 

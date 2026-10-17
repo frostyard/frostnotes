@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"golang.org/x/net/websocket"
+
+	"github.com/frostyard/frostnotes/internal/blobs"
 )
 
 // Origins are the pages allowed to connect: the Vite dev server.
@@ -50,8 +52,8 @@ func Handler(token string, origins []string, serve func(nc net.Conn)) http.Handl
 }
 
 // ListenAndServe serves Handler on addr, which must be a loopback address,
-// until ctx ends.
-func ListenAndServe(ctx context.Context, addr, token string, serve func(nc net.Conn), log *slog.Logger) error {
+// and BlobHandler over store at /blobs/, until ctx ends.
+func ListenAndServe(ctx context.Context, addr, token string, serve func(nc net.Conn), store *blobs.Store, log *slog.Logger) error {
 	ap, err := netip.ParseAddrPort(addr)
 	if err != nil {
 		return fmt.Errorf("devgw: %w", err)
@@ -62,7 +64,10 @@ func ListenAndServe(ctx context.Context, addr, token string, serve func(nc net.C
 	if len(token) < 16 {
 		return errors.New("devgw: the token must be at least 16 characters")
 	}
-	srv := &http.Server{Addr: addr, Handler: Handler(token, Origins, serve), ReadHeaderTimeout: 10 * time.Second}
+	mux := http.NewServeMux()
+	mux.Handle("/blobs/", BlobHandler(token, store))
+	mux.Handle("/", Handler(token, Origins, serve))
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
 	defer stop()
 	log.Warn("dev gateway listening; for development only", "addr", addr)
