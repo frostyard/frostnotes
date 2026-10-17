@@ -63,6 +63,9 @@ type Hub struct {
 	router   *api.Router
 	pairings map[string]*pairing        // by pairing ID
 	conns    map[int64]map[net.Conn]int // a device's live connections
+	// logs guards whole push batches and their answers against other log
+	// calls on the same vault. mu guards this map; each lock guards the log.
+	logs map[int64]*sync.RWMutex
 }
 
 // New returns a hub over cfg.
@@ -76,7 +79,20 @@ func New(cfg Config) *Hub {
 	if cfg.MaxBlob == 0 {
 		cfg.MaxBlob = blobxfer.DefaultMaxSize
 	}
-	return &Hub{cfg: cfg, pairings: map[string]*pairing{}, conns: map[int64]map[net.Conn]int{}}
+	return &Hub{cfg: cfg, pairings: map[string]*pairing{}, conns: map[int64]map[net.Conn]int{},
+		logs: map[int64]*sync.RWMutex{}}
+}
+
+// logLock keeps a push's ordered moves and answers together: another
+// push, pull or match must not see a partially applied swap or parked
+// path. Different vaults can still sync independently.
+func (h *Hub) logLock(vaultID int64) *sync.RWMutex {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.logs[vaultID] == nil {
+		h.logs[vaultID] = &sync.RWMutex{}
+	}
+	return h.logs[vaultID]
 }
 
 // SetRouter sets the router device connections dispatch through; it is
