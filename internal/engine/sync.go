@@ -119,6 +119,10 @@ func (unbuiltSync) History(context.Context, *api.SyncHistoryParams) ([]api.Revis
 	return nil, unbuilt("sync.history")
 }
 
+func (unbuiltSync) ReadRevision(context.Context, *api.SyncReadRevisionParams) (*api.RevisionContent, error) {
+	return nil, unbuilt("sync.readRevision")
+}
+
 // unbuiltLog answers every log method unavailable (for devices).
 type unbuiltLog struct{}
 

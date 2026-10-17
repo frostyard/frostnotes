@@ -434,3 +434,9 @@ func (s *Syncer) recorded(ctx context.Context, sess *session, r store.Remote, p 
 	}
 	return slices.ContainsFunc(revs, func(rv api.Revision) bool { return rv.Hash == p.Hash }), nil
 }
+
+// ReadRevision answers unavailable until M3's Phase 4 builds it
+// (docs/plans/0005-m3-desktop-app.md).
+func (sv service) ReadRevision(context.Context, *api.SyncReadRevisionParams) (*api.RevisionContent, error) {
+	return nil, api.Unavailable("sync.readRevision is not built yet")
+}

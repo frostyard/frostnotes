@@ -89,6 +89,50 @@ func (f *fakeNotes) Daily(_ context.Context, p *api.NoteDailyParams) (*api.Daily
 	return nil, f.record(p)
 }
 
+func (f *fakeNotes) Files(_ context.Context, p *api.NoteFilesParams) (*api.VaultFiles, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Resolve(_ context.Context, p *api.NoteResolveParams) ([]api.Resolution, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Render(_ context.Context, p *api.NoteRenderParams) (*api.RenderedNote, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Upload(_ context.Context, p *api.NoteUploadParams) (*api.WriteResult, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) ReadVersion(_ context.Context, p *api.NoteReadVersionParams) (*api.VersionContent, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Tags(_ context.Context, p *api.NoteTagsParams) ([]api.TagCount, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Properties(_ context.Context, p *api.NotePropertiesParams) ([]api.PropertyCount, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Template(_ context.Context, p *api.NoteTemplateParams) (*api.ExpandedTemplate, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) MoveFolder(_ context.Context, p *api.NoteMoveFolderParams) (*api.FolderMoveResult, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) DeleteFolder(_ context.Context, p *api.NoteDeleteFolderParams) (*api.FolderDeleteResult, error) {
+	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Mkdir(_ context.Context, p *api.NoteMkdirParams) error {
+	return f.record(p)
+}
+
 // notesServer runs notesd with fake as its note domain and registers one
 // vault per name, in order, so their IDs are 1, 2, ….
 func notesServer(t *testing.T, fake *fakeNotes, vaults ...string) *rpctest.Server {

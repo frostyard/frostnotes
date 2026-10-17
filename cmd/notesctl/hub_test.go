@@ -121,6 +121,10 @@ func (f *fakeSync) History(_ context.Context, p *api.SyncHistoryParams) ([]api.R
 	return f.history, f.record(p)
 }
 
+func (f *fakeSync) ReadRevision(_ context.Context, p *api.SyncReadRevisionParams) (*api.RevisionContent, error) {
+	return nil, f.record(p)
+}
+
 // syncServer runs notesd with the fakes as its hub and sync domains and
 // registers one vault per name, so their IDs are 1, 2, ….
 func syncServer(t *testing.T, hub *fakeHub, dev *fakeSync, vaults ...string) *rpctest.Server {
