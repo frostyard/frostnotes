@@ -41,9 +41,10 @@ Phase 1 before any code:
   a merged answer is diffed against what was sent, mapped over the edits
   typed since, and dispatched as one transaction outside the undo
   history, so the cursor holds and Ctrl+Z undoes only the user's own
-  edits. Other writers' changes arrive the same way. Conflicts show a
-  notice and open the merge view, `@codemirror/merge`, against the
-  conflict version notesd kept.
+  edits. Other writers' changes arrive the same way. A conflict shows a
+  notice whose Compare opens the merge view, `@codemirror/merge`,
+  against the conflict version notesd kept; a base notesd refuses opens
+  it at once.
 - **Files show by their hash and upload through notesd**
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)).
   `notesblob://localhost/<sha256>.<ext>` serves notesd's blob store from
@@ -82,14 +83,18 @@ does, so the plan records them without ADRs:
   `note.upload`, `note.readVersion`, `note.tags` and `note.properties`
   (with counts), `note.template` (a template expanded by
   `internal/templates`), folder operations (create, move with link
-  updates, delete), and `vault.settings` and `vault.configure`; search
-  gains `path:`, `file:` and `tag:`.
+  updates, delete), `vault.settings` and `vault.configure`, and
+  `sync.readRevision` (a hub revision's content, which the device fetches
+  for the merge view when it is another device's); `WriteResult` gains
+  the conflict version's ID and who made the side that won, for the
+  conflict notice; search gains `path:`, `file:` and `tag:`.
 - **One window shows one vault.** A switcher at the bottom of the left
   sidebar changes it. More windows and pop-out tabs wait.
 - **New dependencies are the planner's,** pinned, each release at least
   two weeks old: `@codemirror/merge`, `@codemirror/autocomplete`,
   `@codemirror/search`, `dompurify`, `katex` and `@tanstack/react-virtual`;
-  in Go, nothing new (the sanitizer walks `golang.org/x/net/html`, already
+  in Rust, `tauri-plugin-opener` (frostmail's), which opens web links
+  and files in the system's applications; in Go, nothing new (the sanitizer walks `golang.org/x/net/html`, already
   in the module). Cards never add one.
 - **M0's spike is the live-preview framework's first draft.** Its
   decorations become the first providers; `make spike-cm6` stays until
@@ -108,7 +113,7 @@ does, so the plan records them without ADRs:
   design ADR-0007 and ADR-0011 named), [specs/ui.md](../specs/ui.md),
   this plan, and the roadmap's M3 row.
 - The spec's new tokens and type roles in `app/src/styles/tokens.css` and
-  `app.css`.
+  `app.css`, and the `data-theme` rules the Theme preference will set.
 - Batch-1 cards, T-0038 to T-0042: pure helpers and one presentational
   component that need nothing the planner has not built, each with a
   stub and given tests, checked against a reference that is then
@@ -138,7 +143,18 @@ does, so the plan records them without ADRs:
   two things: the keymap's uniqueness test, which only checks the spec's
   own table, now says so; and the file tree's first reference grew its
   lists by copying them, so the card now says to group by folder once,
-  and its test builds a 10,101-row vault.
+  and its test builds a 10,101-row vault. An independent review (a
+  separate agent, read-only) found no card at odds with its tests, and
+  these, each fixed: `text-badge` would have taken `--color-badge`'s
+  color instead of its size (Tailwind tries colors first), so the role is
+  `text-keycap`; the Theme preference had no `data-theme` rules to set;
+  the spec's window size was not the shell's; the API could not yet give
+  a conflict notice its writer and version, nor a hub revision's content
+  (so `WriteResult` grows and `sync.readRevision` joins Phase 3);
+  ADR-0007's remote-images setting and `tauri-plugin-opener` were
+  missing; KaTeX's own markup needed an exception to the no-`style` rule;
+  the agent workflow did not yet allow two executor worktrees at once;
+  and some back-links and phases' links were missing.
 
 ## Phase 2 — Executor batch 1 (alongside Phase 3)
 
@@ -150,6 +166,9 @@ does, so the plan records them without ADRs:
 | [T-0041](../tasks/todo/0041-outline.md) | S | `app/src/lib/outline.ts` | the Outline pane's tree of headings, its visible rows, and the heading a position is under |
 | [T-0042](../tasks/todo/0042-tab-strip.md) | M | `app/src/features/workspace/TabStrip.tsx` | a tab group's strip: tabs, close, new tab, the tab list, keys, and the commands it sends |
 
+- They implement [specs/ui.md](../specs/ui.md)'s keyboard map, Prompts,
+  Files pane, Outline and Tab strip, and
+  [design/app.md](../design/app.md#commands-and-keys)'s keymap.
 - The cards touch separate files and use nothing of each other's, so
   they may run in any order, in two executor worktrees at once
   ([agent workflow](../design/agent-workflow.md#batching-cards)).
@@ -180,6 +199,10 @@ does, so the plan records them without ADRs:
 
 ## Phase 4 — notesd's additions (planner, alongside Phase 5)
 
+Implements [design/vault.md](../design/vault.md) (written settings,
+folders), [design/app.md](../design/app.md#reading-view) (rendering) and
+the Phase 3 methods in [specs/rpc-api.md](../specs/rpc-api.md).
+
 - The new methods over the vault's actor: the listing walks folders, so
   empty ones show; `note.resolve` runs `markdown.Resolve` from the given
   note's folder; `note.render` renders the given text or the file;
@@ -199,6 +222,10 @@ does, so the plan records them without ADRs:
   passes.
 
 ## Phase 5 — The app's core (planner)
+
+Implements [design/app.md](../design/app.md) (data, workspace, editor,
+live preview, reading view, history and merges, commands) and the parts
+of [specs/ui.md](../specs/ui.md) not marked for a batch.
 
 - `data/`: `Session` from the stored sequence number; the files, sync
   and settings stores.
@@ -220,8 +247,8 @@ does, so the plan records them without ADRs:
 - **Done when:** in the built app against a real notesd, a note opens
   from the Files pane, takes typing, saves, and takes an outside edit
   made meanwhile, merged, with the cursor where it was and Ctrl+Z
-  undoing only the typing; a forced conflict opens the merge view; the
-  reading view shows the same note; and typing in a generated
+  undoing only the typing; a forced conflict shows its notice, whose
+  Compare opens the merge view; the reading view shows the same note; and typing in a generated
   10,000-line note with the framework on stays under 16 ms a keystroke at
   p95 on the host.
 
@@ -255,6 +282,10 @@ into its container as it merges.
   the built app.
 
 ## Phase 7 — Review and exit evidence
+
+Checks [specs/ui.md](../specs/ui.md) (the keyboard map, the rules) and
+[design/app.md](../design/app.md) (saves and merges, attachments)
+against the built app.
 
 - An independent review of what renders and loads: both sanitizers, the
   CSP, link handling (the webview never navigates; only `http`, `https`

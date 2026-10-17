@@ -88,7 +88,7 @@ is `note`:
 | status bar | 11 / 14 | 400 | `text-status` |
 | empty state, prompt input | 15 / 20 | 400 | `text-empty` |
 | prompt row | 13 / 18, its note 12 / 16 | 400 | `text-sidebar-row` |
-| key cap, extension badge | 10 / 12 | 600 | `text-badge` |
+| key cap, extension badge | 10 / 12 | 600 | `text-keycap` |
 
 The editor and the reading view (Obsidian's defaults):
 
@@ -125,8 +125,8 @@ it every `em` above.
  ribbon 44   left sidebar 260          workspace (rest)                 right sidebar 300
 ```
 
-- **Window:** default 1200 × 800, minimum 640 × 480, no system title
-  bar.
+- **Window:** default 1200 × 780, minimum 640 × 400 (as
+  `app/src-tauri/src/main.rs` makes it), no system title bar.
 - **Panes:** the ribbon is 44 wide. The left sidebar defaults to 260
   wide and the right to 300, each between 200 and 600; the workspace
   takes the rest, at least 320. Sidebars, splits and the workspace are
@@ -259,7 +259,7 @@ holds a space.
   `tag:#name`.
 - **All properties:** every frontmatter key in the vault with its type's
   icon and count, sorted as Tags are. A click lists the notes with that
-  key in the search pane.
+  key in the search pane (`note.list` with the key).
 - **Outline:** the active note's headings, live from the editor's syntax
   tree, nested as `lib/outline.ts` builds them (T-0041): rows 28 high,
   left padding 8 + 16 × depth, a chevron where a heading has children.
@@ -477,6 +477,7 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 | | Smart lists | on | app |
 | | Indent using tabs; Tab size | on; 4 | app |
 | | Confirm file deletion | on | app |
+| | Load remote images ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)) | on | app |
 | Files and links | Default location for new notes: Vault folder, Same folder as current file, In the folder specified below | Vault folder | vault |
 | | Folder to create new notes in | (none) | vault |
 | | New link format: Shortest path when possible, Relative path to file, Absolute path in vault | Shortest path when possible | vault |
@@ -599,8 +600,9 @@ belongs to the field, a prompt or a menu.
 - No component draws literal colors or fonts; tokens only.
 - Rendered note HTML reaches the page only through the reading view,
   sanitized by notesd and again by DOMPurify, and never through
-  `dangerouslySetInnerHTML` elsewhere; no element of it carries `style`
-  or an event handler.
+  `dangerouslySetInnerHTML` elsewhere; no element of it carries an event
+  handler, and none carries `style` except the markup KaTeX draws for
+  math afterwards, from the `data-tex` text alone.
 - The editor's document is the file's text: only CodeMirror transactions
   change it, and only the document registry writes it, with its base
   ([ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)).

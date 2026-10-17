@@ -64,8 +64,9 @@ Obsidian's defaults.
   from (`.frostnotes/`, `.obsidian/`, or the default), and
   `vault.configure` changes them, writing `vault.yaml` atomically. The
   settings M3 adds (new note location, attachment folder, link format,
-  updating links on move) are read from `.obsidian/app.json` as defaults,
-  as M1 reads the daily-note and template settings.
+  wikilinks or markdown links, updating links on move) are read from
+  `.obsidian/app.json` as defaults, as M1 reads the daily-note and
+  template settings; excluded files are M1's ignore patterns.
 
 ## Consequences
 

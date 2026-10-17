@@ -138,8 +138,8 @@ vault and path while any tab shows it:
   (`@codemirror/merge`'s diff, with a time budget), maps the change over
   the edits made since the send, and dispatches it to every view with
   `addToHistory: false` and the `remote` annotation. With conflicts, the
-  document records a notice for its tabs, naming the writer and the
-  conflict version.
+  document records a notice for its tabs, naming the writer whose side
+  won and the conflict version, both of which the answer carries.
 - **Events:** `note.changed` with a hash it does not know reads the note
   (clean) or saves at once (dirty); `note.moved` renames the document and
   its tabs; `note.removed` creates it again with unsaved edits, else marks
@@ -241,14 +241,18 @@ Per [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-th
 `notesblob://localhost/…` in Tauri, the dev gateway's `/blobs/…` in a
 browser, a `data:` URL from the mock. Images, audio and video show
 inline in live preview, in the reading view and in a `file` tab; a PDF
-shows as a chip that opens it with the system's application. Pasting or
+shows as a chip that opens it with the system's application
+(`tauri-plugin-opener`). With the Load remote images preference off,
+the reading view drops remote `img` sources. Pasting or
 dropping an image calls `note.upload` and inserts `![[name]]`.
 
 ## History and merges
 
 - **History** (a `history` tab): the file's versions from
   `note.versions`, each readable with `note.readVersion`, and for a
-  synced vault the hub's revisions from `sync.history`. Selecting one
+  synced vault the hub's revisions from `sync.history`, each readable
+  with `sync.readRevision`, which fetches another device's content from
+  the hub. Selecting one
   shows it, or its difference from the current text; Restore is
   `note.revert` with the current base.
 - **Merge** (a `merge` tab): `@codemirror/merge`'s side-by-side view,

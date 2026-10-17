@@ -67,9 +67,9 @@
   --text-empty--line-height: 20px;
   --text-tab: 13px;
   --text-tab--line-height: 16px;
-  --text-badge: 10px;
-  --text-badge--line-height: 12px;
-  --text-badge--font-weight: 600;
+  --text-keycap: 10px;
+  --text-keycap--line-height: 12px;
+  --text-keycap--font-weight: 600;
 }
 
 @layer base {
