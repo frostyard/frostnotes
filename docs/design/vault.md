@@ -7,7 +7,9 @@ for deletes and conflict versions, and
 [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
 for content that is not UTF-8, and
 [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) for
-comments.
+comments, and
+[ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
+for what sync changes in writes.
 Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated), [specs/mcp.md](../specs/mcp.md) (agents' writes).
 
 **Status: built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md),
@@ -161,7 +163,11 @@ the app and the graph show them.
 `note.write(path, base, content)` and every other write:
 
 `base` is the SHA-256 of the content the writer started from (`note.read`
-returns it); M2 adds sync's revisions. A vault's writes run one at a time,
+returns it). Sync keeps it so: revisions number the hub's log, and a
+device applies what it pulls through `vault.Apply`, which compares the
+file's hash instead of merging; on a hub, each write also appends a
+revision in its `Tx` ([ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md),
+[sync.md](sync.md#device-loop); M2). A vault's writes run one at a time,
 under the vault's lock. Paths pass the guard first: vault-relative and
 slash-separated, no empty, `.` or `..` segment, no hidden segment, and no
 symlink on the way (every file operation goes through an `os.Root` of the
@@ -281,7 +287,7 @@ long-term history ([sync.md](sync.md)).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
-- Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))
+- Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md) ([roadmap](../plans/0002-roadmap.md))
