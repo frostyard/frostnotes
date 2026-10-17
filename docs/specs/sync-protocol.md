@@ -3,7 +3,7 @@
 How a device's notesd and a hub sync a vault: the hub's HTTP endpoints,
 pairing, the `log` methods a device calls, what the hub does with a push,
 and what a device does with what it pulls. `internal/hub` implements the
-hub's side and `internal/sync` the device's; `notesctl hub` and `notesctl
+hub's side and `internal/syncer` the device's; `notesctl hub` and `notesctl
 sync` drive them through the local `hub` and `sync` domains
 ([rpc-api.md](rpc-api.md)). Rationale:
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),

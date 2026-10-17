@@ -93,7 +93,8 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/merge` | diff3 by line and word, frontmatter by key (planner-owned) |
 | `internal/blobs` | the content-addressed blob store |
 | `internal/render` | goldmark rendering and the HTML sanitizer |
-| `internal/sync`, `internal/hub` | the device's sync client; the hub's log, pairing, HTTP and sessions |
+| `internal/syncer`, `internal/hub` | the device's sync loops; the hub's endpoints, pairing and log domain |
+| `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
 | `app/` | Tauri v2 + React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
 | `tools/rpcgen`, `tools/taskrun`, `tools/vaultgen` | the contract generator, the task-card runner, generated test vaults |

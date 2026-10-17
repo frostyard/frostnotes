@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
@@ -399,5 +400,47 @@ func TestApplyStreamsFilesTooBigForTheAPI(t *testing.T) {
 	}
 	if info, err := tv.db.NoteInfo(ctx, f.ID); err != nil || info.Title != "huge" {
 		t.Fatalf("a big note's index = %+v, %v; want it indexed by name", info, err)
+	}
+}
+
+// An upload no version names yet waits a day for its push before the
+// prune may remove it (docs/specs/sync-protocol.md, Blobs).
+func TestPruneKeepsAFreshUploadADay(t *testing.T) {
+	tv := newTestVault(t, nil, nil)
+	upload := tv.blob("a device's upload, its push on the way")
+	m := &Manager{cfg: *tv.v.cfg, vaults: map[int64]*Vault{tv.v.id: tv.v}}
+	for _, tc := range []struct {
+		after time.Duration
+		kept  bool
+	}{{time.Hour, true}, {25 * time.Hour, false}} {
+		*tv.clock = time.Now().Add(tc.after)
+		if err := m.Prune(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if ok, _ := tv.blobs.Has(upload); ok != tc.kept {
+			t.Fatalf("%v after the upload, kept = %v, want %v", tc.after, ok, tc.kept)
+		}
+	}
+}
+
+// The daily prune thins a hub's log (ADR-0019).
+func TestPruneThinsTheHubsLog(t *testing.T) {
+	hv := newHubVault(t, map[string]string{"a.md": "one\n"})
+	ctx := t.Context()
+	id := hv.row("a.md").ID
+	first := hv.head(id)
+	hv.push(hv.change(first, "a.md", "two\n"))
+	hv.push(hv.change(hv.head(id), "a.md", "three\n"))
+	m := &Manager{cfg: *hv.v.cfg, vaults: map[int64]*Vault{hv.v.id: hv.v}}
+	*hv.clock = hv.clock.Add(40 * 24 * time.Hour)
+	if err := m.Prune(ctx); err != nil {
+		t.Fatal(err)
+	}
+	revs := hv.history(id)
+	if revs[0].Pruned || !revs[1].Pruned || !revs[2].Pruned {
+		t.Fatalf("after 40 days: %+v; want the head kept and the day's earlier revisions pruned", revs)
+	}
+	if ok, _ := hv.blobs.Has(first.Hash); ok {
+		t.Fatal("a pruned revision's blob, which nothing else names, survived")
 	}
 }

@@ -30,8 +30,11 @@ import (
 // re-runs this test binary as a child notesd that writes, or indexes, a
 // generated vault, kills it at a random point, restarts on the same data,
 // and checks that every file holds a complete version notesd knows and
-// that the index equals a fresh rebuild. FROSTNOTES_KILL_RUNS sets the
-// kills per mode (default 100); run it with make vault-it.
+// that the index equals a fresh rebuild. Two modes are sync's (plan 0004,
+// Phase 4): a hub applying devices' pushes, after which the log must agree
+// with the files, and a device applying pulled heads, after which its
+// agreed state must name versions its files had. FROSTNOTES_KILL_RUNS sets
+// the kills per mode (default 100); run it with make vault-it.
 
 const (
 	killMode  = "FROSTNOTES_KILL_CHILD" // writes or scan: run as the child
@@ -62,7 +65,7 @@ func TestIKillNotesd(t *testing.T) {
 	coldScan := time.Since(start)
 	t.Logf("a cold scan of %d files takes %v", len(original), coldScan)
 
-	for _, mode := range []string{"writes", "scan"} {
+	for _, mode := range []string{"writes", "scan", "hub", "apply"} {
 		t.Run(mode, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "vault")
 			copyTree(t, pristine, dir)
@@ -79,6 +82,12 @@ func TestIKillNotesd(t *testing.T) {
 				delay := time.Duration(rng.Int64N(int64(window)))
 				killChild(t, mode, data, dir, run, delay)
 				checkAfterKill(t, data, dir, original, run)
+				switch mode {
+				case "hub":
+					checkLogAfterKill(t, data, dir, run)
+				case "apply":
+					checkAgreedAfterKill(t, data, dir, run)
+				}
 			}
 		})
 	}
@@ -136,6 +145,12 @@ func TestIKillChild(t *testing.T) {
 	tv.db.Now = time.Now
 	ctx := context.Background()
 	seed, _ := strconv.Atoi(os.Getenv(killSeed))
+	switch mode {
+	case "hub":
+		hubChild(t, tv, seed)
+	case "apply":
+		applyChild(t, tv, seed)
+	}
 	if mode == "scan" {
 		fmt.Println("ready")
 		reindex := os.Getenv("FROSTNOTES_KILL_REINDEX") == "true"

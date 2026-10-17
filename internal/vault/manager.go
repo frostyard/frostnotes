@@ -142,7 +142,9 @@ func (m *Manager) Vault(id int64) (*Vault, error) {
 }
 
 // Prune deletes the versions older than Config.Keep, except each file's
-// newest, and the blobs that no version or file names any more, with
+// newest, thins a hub's log by ADR-0019, and removes the blobs that no
+// version, file or kept revision names any more and that are a day old,
+// with
 // every vault's changes held off, and no vault starting, so none can name
 // a blob it removes (docs/design/vault.md#versions); requests that only
 // read the index go on. Temporary blobs older than an hour go too.
@@ -160,7 +162,12 @@ func (m *Manager) Prune(ctx context.Context) error {
 	var freed []string
 	err := m.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
 		var err error
-		freed, err = tx.PruneVersions(ctx, now.Add(-m.cfg.Keep))
+		if freed, err = tx.PruneVersions(ctx, now.Add(-m.cfg.Keep)); err != nil {
+			return err
+		}
+		// A hub thins its log's content by age (ADR-0019).
+		revs, err := tx.PruneRevisions(ctx, now, time.Local)
+		freed = append(freed, revs...)
 		return err
 	})
 	if err != nil {
@@ -183,12 +190,18 @@ func (m *Manager) Prune(ctx context.Context) error {
 	}
 	orphans := 0
 	for _, id := range ids {
-		if !used[id] {
-			if err := m.cfg.Blobs.Remove(id); err != nil {
-				return err
-			}
-			orphans++
+		if used[id] {
+			continue
 		}
+		// A blob a device uploaded waits a day for the push that names it
+		// (docs/specs/sync-protocol.md, Blobs).
+		if at, err := m.cfg.Blobs.ModTime(id); err != nil || at.After(now.Add(-24*time.Hour)) {
+			continue
+		}
+		if err := m.cfg.Blobs.Remove(id); err != nil {
+			return err
+		}
+		orphans++
 	}
 	if _, err := m.cfg.Blobs.RemoveTemp(now.Add(-time.Hour)); err != nil {
 		return err

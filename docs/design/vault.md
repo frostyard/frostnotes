@@ -166,8 +166,10 @@ the app and the graph show them.
 returns it). Sync keeps it so: revisions number the hub's log, and a
 device applies what it pulls through `vault.Apply`, which compares the
 file's hash instead of merging; on a hub, each write also appends a
-revision in its `Tx` ([ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md),
-[sync.md](sync.md#device-loop); M2). A vault's writes run one at a time,
+revision in its `Tx` (`vault.logRevision`;
+[ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md),
+[sync.md](sync.md#device-loop)). A device's push on a hub is `vault.Push`,
+which applies the protocol's rules through this same write path. A vault's writes run one at a time,
 under the vault's lock. Paths pass the guard first: vault-relative and
 slash-separated, no empty, `.` or `..` segment, no hidden segment, and no
 symlink on the way (every file operation goes through an `os.Root` of the

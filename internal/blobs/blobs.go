@@ -159,6 +159,20 @@ func (s *Store) Size(id string) (int64, error) {
 	return fi.Size(), nil
 }
 
+// ModTime returns when a blob was stored. A missing blob returns an error
+// matching fs.ErrNotExist; a malformed ID returns ErrInvalidID.
+func (s *Store) ModTime(id string) (time.Time, error) {
+	p, err := s.path(id)
+	if err != nil {
+		return time.Time{}, err
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("blobs: stat %s: %w", id, err)
+	}
+	return fi.ModTime(), nil
+}
+
 func (s *Store) publish(ctx context.Context, name, id string) error {
 	shard := filepath.Join(s.dir, id[:2])
 	if err := os.MkdirAll(shard, 0o700); err != nil {

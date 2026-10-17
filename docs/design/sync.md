@@ -11,8 +11,12 @@ Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md) and
 [specs/merge.md](../specs/merge.md), written in
 [plan 0004](../plans/0004-m2-sync.md)'s Phase 2.
 
-**Status: designed, not built** (M2, [plan 0004](../plans/0004-m2-sync.md)).
-This is the design; the specs are the contract.
+**Status: built** through [plan 0004](../plans/0004-m2-sync.md)'s Phase 4:
+`internal/hub` (pairing, the token check, the `/sync` WebSocket, pushes
+as writes through the vault's actor), `internal/syncer` (the device's
+loop), `internal/blobxfer`, and `vault.Apply` and `vault.Push`. The
+simulation (Phase 5) and the exit evidence (Phase 7) are next. The specs
+are the contract.
 
 ## Overview
 
