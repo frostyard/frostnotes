@@ -23,10 +23,12 @@ for 30 days, then daily for a year, and conflicts until resolved.
   path, hash, base, author, time) is never deleted, so sequence numbers
   have no gaps, every base names a row, and history lists every change.
 - **Content thins by age, per file:** every revision's content for 30
-  days; then each file's last revision with content of each day, in the
-  hub's time zone, for a year; then its last of each month. A file's head
-  keeps its content however old, and so does a conflict revision while
-  its file is flagged; after that it thins like the rest.
+  days; then each file's last state of each day (its last create, put or
+  move), in the hub's time zone, for a year; then its last of each month.
+  A file's head keeps its content however old, and so does a conflict
+  revision while its file is flagged. A conflict revision is content that
+  lost, never a state of the file, so once its file is resolved it is kept
+  only for its 30 days.
 - **A pruned revision says so:** history shows it without content, and it
   cannot be restored.
 - **A push whose base content is pruned merges as a create**
