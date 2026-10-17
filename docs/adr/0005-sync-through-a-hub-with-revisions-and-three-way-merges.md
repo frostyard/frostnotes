@@ -95,5 +95,5 @@ person owns all of them.
 
 - Shapes: [design/sync.md](../design/sync.md), [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md) (local deletes and conflict versions), [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0004](0004-a-notes-daemon-with-thin-clients.md)
-- Related: [ADR-0006](0006-every-write-names-the-version-it-changes.md)
+- Related: [ADR-0006](0006-every-write-names-the-version-it-changes.md), [ADR-0022](0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md) (the editor keeps an edit over a delete)
 - Built in: [roadmap — M2](../plans/0002-roadmap.md)

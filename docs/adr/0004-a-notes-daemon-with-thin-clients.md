@@ -63,6 +63,6 @@ generated JSON-RPC contract, and a React UI behind a swappable transport
 
 ## References
 
-- Shapes: [design/overview.md](../design/overview.md)
+- Shapes: [design/overview.md](../design/overview.md), [design/app.md](../design/app.md) (the app as a thin client)
 - Builds on: frostmail ADR-0002 and ADR-0009
 - Related: [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0008](0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md)

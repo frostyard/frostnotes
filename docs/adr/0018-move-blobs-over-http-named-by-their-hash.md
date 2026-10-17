@@ -63,5 +63,5 @@ content of vaults it does not serve.
 
 - Shapes: [design/sync.md](../design/sync.md#blob-transfer), [specs/sync-protocol.md](../specs/sync-protocol.md#blobs)
 - Builds on: [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0014](0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0016](0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md)
-- Related: [ADR-0017](0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
+- Related: [ADR-0017](0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (the app loads files by hash too)
 - Built in: [plan 0004](../plans/0004-m2-sync.md)

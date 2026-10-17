@@ -66,9 +66,12 @@ planner: card + _given tests ──▶ make task T=NNNN ──▶ executor ─�
 
 ### Batching cards
 
-Cards run one at a time in the executor worktree,
+Cards run one at a time in an executor worktree,
 `git worktree add .worktrees/exec -b <milestone>/cards`, so the main
 checkout may stay dirty while cards run (taskrun requires a clean tree).
+Cards that share no file and no Go package may run at once in separate
+executor worktrees (`.worktrees/exec-<name>`), each on its own branch, as
+M2's store and notesctl cards did.
 Each card branches from the worktree's current branch, and the planner
 merges each reviewed card back before the next starts.
  Cards that touch the same file, or the same Go package, run one

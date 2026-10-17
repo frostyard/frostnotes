@@ -77,4 +77,5 @@ lives on a network home directory today.
 
 - Shapes: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md)
 - Builds on: [ADR-0001](0001-record-architecture-decisions.md)
+- Related: [ADR-0021](0021-keep-the-workspace-and-app-preferences-on-each-device.md) (the app's workspace stays out of the vault)
 - Built in: [roadmap — M1](../plans/0002-roadmap.md), [plan 0003](../plans/0003-m1-headless-vault.md)

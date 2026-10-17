@@ -36,10 +36,19 @@
   --avatar-5: #ff375f;
   --avatar-6: #bf5af2;
   --avatar-7: #8e8e93;
+  /* Frostnotes' own (docs/specs/ui.md, Tokens). */
+  --bg-code: #f5f5f7;
+  --bg-highlight: rgb(255 204 0 / 0.4);
+  --bg-tag: rgb(0 122 255 / 0.1);
+  --callout-cyan: #30b0c7;
+  --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
 }
 
+/* Dark values: from the system while the Theme preference is System, and
+   always with Dark, which sets data-theme on the root (docs/specs/ui.md,
+   Tokens). The two blocks hold the same values: change them together. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg-window: #1e1e1e;
     --bg-sidebar: #2a2a2c;
     --bg-toolbar: #2c2c2e;
@@ -64,5 +73,47 @@
     --quote-1: #5aa0f0;
     --quote-2: #4cc76a;
     --quote-3: #f0884a;
+    --bg-code: #2a2a2c;
+    --bg-highlight: rgb(255 214 10 / 0.3);
+    --bg-tag: rgb(10 132 255 / 0.2);
+    --callout-cyan: #40c8e0;
+    --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-window: #1e1e1e;
+  --bg-sidebar: #2a2a2c;
+  --bg-toolbar: #2c2c2e;
+  --bg-banner: #2c2c2e;
+  --text-primary: #f5f5f7;
+  --text-secondary: #a1a1a6;
+  --text-tertiary: #6e6e73;
+  --separator: #3a3a3c;
+  --accent: #0a84ff;
+  --selection-inactive: #3a3a3c;
+  --selection-sidebar: #3a3a3c;
+  --badge-bg: #3a3a3c;
+  --badge-text: #a1a1a6;
+  --focus-ring: rgb(10 132 255 / 0.6);
+  --flag-1: #ff453a;
+  --flag-2: #ff9f0a;
+  --flag-3: #ffd60a;
+  --flag-4: #30d158;
+  --flag-5: #0a84ff;
+  --flag-6: #bf5af2;
+  --flag-7: #98989d;
+  --quote-1: #5aa0f0;
+  --quote-2: #4cc76a;
+  --quote-3: #f0884a;
+  --bg-code: #2a2a2c;
+  --bg-highlight: rgb(255 214 10 / 0.3);
+  --bg-tag: rgb(10 132 255 / 0.2);
+  --callout-cyan: #40c8e0;
+  --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
