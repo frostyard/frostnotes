@@ -28,6 +28,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(
 		newHelloCmd(opts),
 		newVaultCmd(opts),
+		newHubCmd(opts),
 		newLsCmd(opts),
 		newCatCmd(opts),
 		newSearchCmd(opts),
