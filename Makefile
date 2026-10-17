@@ -66,6 +66,15 @@ vault-it: ## Kill notesd during writes and scans, and check every restart
 sync-sim: ## Run sync's seeded simulation (SIM_SEEDS, SIM_STEPS, SIM_MODE)
 	go test -tags integration -run '^(TestISimulation|TestRegressions)$$' -count=1 -v -timeout 4h ./internal/synctest
 
+# M2's exit evidence 1 and 2 (docs/plans/0004-m2-sync.md, Phase 7): the
+# seeded simulation's 10,000 steps per seed in each mode, and a 100 MB
+# attachment through a hub between three notesd processes in bounded memory.
+# Evidence 3, the 7-day trial on the user's vault, is the user's to run.
+.PHONY: m2-evidence
+m2-evidence: ## Record M2's exit evidence 1-2 (the simulation; 100 MB across three notesd)
+	$(MAKE) --no-print-directory sync-sim
+	go test -tags integration -run '^TestIHundredMegabyteAttachment$$' -count=1 -v -timeout 10m ./internal/syncer
+
 # M1's exit evidence 1 to 4 (docs/plans/0003-m1-headless-vault.md, Phase 7):
 # Obsidian's link dump, the user's vault indexed cold (read only), a vim save
 # searchable within 1 s, and the kill -9 harness. Set TMPDIR to put the test
