@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path"
@@ -59,11 +60,12 @@ func files(n *Node) map[string]string {
 }
 
 // pick returns the k-th of node n's files (notes only when notes), by
-// path, or "" when it has none.
+// path, or "" when it has none. A file sync has parked for a moment
+// (name.sync-N.ext) is not one a user would pick.
 func pick(n *Node, k uint64, notes bool) string {
 	var ps []string
 	for p := range files(n) {
-		if !notes || strings.HasSuffix(p, ".md") {
+		if (!notes || strings.HasSuffix(p, ".md")) && !strings.Contains(p, ".sync-") {
 			ps = append(ps, p)
 		}
 	}
@@ -151,6 +153,18 @@ func (w *World) step(i int, s Step) error {
 		if _, err := d.C.Sync().Reset(w.t.Context(), &api.SyncResetParams{VaultID: d.Vault}); err != nil && !benign(err) {
 			return err
 		}
+	case Swap:
+		return w.swap(d, i, s)
+	case CaseRename:
+		return w.caseRename(d, s)
+	case BigAttach:
+		return w.bigAttach(d, s)
+	case RevokeAndPair:
+		return w.revokeAndPair(d)
+	case Snapshot:
+		w.snapshots[s.Device%len(w.Devices)] = maps.Clone(files(d))
+	case Rejoin:
+		return w.rejoin(s.Device % len(w.Devices))
 	}
 	return nil
 }

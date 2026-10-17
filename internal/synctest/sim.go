@@ -36,11 +36,20 @@ const (
 	HubCrash             // the hub crashing after a push's rename
 	DropAnswer           // the hub losing a push's answer
 	Reset                // sync.reset
+	// The ops below plan only in a Profile that weighs them, so the default
+	// plans stay what they were.
+	Swap          // two notes swap paths through notesd
+	CaseRename    // a note's name changes only in case
+	BigAttach     // an attachment over 10 MB, written on disk
+	RevokeAndPair // the hub revokes the device, which pairs again
+	Snapshot      // the device's vault copied, for a later Rejoin
+	Rejoin        // the device replaced by a new one joining with its copy
 	numOps
 )
 
 var opNames = [...]string{"edit", "stale edit", "append", "outside edit", "create", "daily", "delete", "move", "disk move",
-	"attach", "offline", "online", "crash", "hub restart", "hub crash", "drop answer", "reset"}
+	"attach", "offline", "online", "crash", "hub restart", "hub crash", "drop answer", "reset", "swap", "case rename",
+	"big attach", "revoke and pair", "snapshot", "rejoin"}
 
 func (o Op) String() string { return opNames[o] }
 
@@ -131,6 +140,8 @@ type World struct {
 	// lagging are outside edits a step left for the watcher to index; a
 	// quiet point indexes them first, since they are changes to push.
 	lagging []lag
+	// snapshots are copies of devices' vaults, by index, for Rejoin.
+	snapshots map[int]map[string]string
 }
 
 type lag struct {
@@ -168,7 +179,8 @@ func NewWorld(t testing.TB, o Options) *World {
 	t.Helper()
 	o = o.withDefaults()
 	w := &World{t: t, o: o, oracle: oracle{prefix: fmt.Sprintf("tok%x", o.Seed), inserted: map[string]bool{},
-		removed: map[string]bool{}, origin: map[string]string{}, at: map[string]string{}, tried: map[string][]string{}}, paths: map[string]bool{}}
+		removed: map[string]bool{}, origin: map[string]string{}, at: map[string]string{}, tried: map[string][]string{}}, paths: map[string]bool{},
+		snapshots: map[int]map[string]string{}}
 	w.Hub = newNode(t, "hub", o, true, freeAddr(t))
 	for p, c := range seedFiles {
 		full := filepath.Join(w.Hub.Dir, filepath.FromSlash(p))

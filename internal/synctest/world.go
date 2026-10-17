@@ -40,6 +40,9 @@ type Options struct {
 	// Watch, when set, logs each node's copy of the file at that path
 	// after every step: a debugging aid.
 	Watch string
+	// Profile, when set, adds a scenario's checks to every quiet point;
+	// its weights are PlanWith's to plan with.
+	Profile *Profile
 }
 
 func (o Options) withDefaults() Options {
@@ -332,7 +335,26 @@ func (w *World) settle() error {
 			return nil
 		}
 	}
-	return errors.New("the world did not go quiet")
+	return fmt.Errorf("the world did not go quiet%s", w.restless())
+}
+
+// restless describes a world that does not go quiet: each device's status
+// and the hub's latest revisions.
+func (w *World) restless() string {
+	ctx := context.WithoutCancel(w.t.Context())
+	out := ""
+	for _, d := range w.Devices {
+		if st, err := w.Status(d); err == nil {
+			out += fmt.Sprintf("\n  %s: %s, cursor %d of %d, %d pending", d.Name, st.State, st.Cursor, st.HubSeq, st.Pending)
+		}
+	}
+	if _, revs, err := w.hubLog(ctx); err == nil {
+		for _, r := range revs[max(0, len(revs)-24):] {
+			out += fmt.Sprintf("\n  rev %d file %d %s %s %.8s base %d device %d push %d", r.Seq, r.FileID, r.Op, r.Path, r.Hash,
+				r.Base, r.DeviceID, r.PushID)
+		}
+	}
+	return out
 }
 
 // dump lists device d's index and agreed rows, and its status, for a

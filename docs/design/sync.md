@@ -100,9 +100,11 @@ else records pending changes, so a crash or an outage loses none
    still has its agreed hash and path, apply it (create, overwrite, move
    or delete) and advance the agreed state and the cursor in one `Tx`;
    otherwise push the local change first and take the answer. A head
-   whose path another file still holds here, that file's own head being
-   later in the pull, waits for it: the cursor stays below the waiting
-   head while the rest of the pull applies.
+   whose path an unchanged copy of another file still holds here parks
+   that copy beside it first, and the copy's own head, later in the pull,
+   moves it on; so does a pushed file a later answer of the same push
+   moves. A swap or a ring of moves never waits on itself, and the hub
+   orders one push's moves the same way.
 
 Applying (`vault.Apply`) compares instead of merging: the file must still
 hold the expected hash, checked again just before the rename, or nothing
@@ -240,7 +242,11 @@ window the comparison before each rename narrows but cannot close. A
 failing seed, reduced to the steps that still fail, is a plan in
 `internal/synctest/testdata/regressions`, which `make test` replays with
 a few hundred seeded steps; `make sync-sim` runs M2's 10,000 over a hub
-and three devices
+and three devices. Scenario tests drive a world by script, naming paths
+while the oracle keeps its books (`script.go`), and run profiles: op
+weights with checks of their own, among them ops the default plans never
+pick, such as swaps, case-only renames, attachments over 10 MB,
+revocations and rejoins from an older copy (`profile.go`)
 ([ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)).
 
 ## Operational notes

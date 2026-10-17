@@ -43,6 +43,9 @@ func (w *World) Check() error {
 			return err
 		}
 	}
+	if p := w.o.Profile; p != nil && p.Check != nil {
+		return p.Check(w)
+	}
 	return nil
 }
 
@@ -317,6 +320,30 @@ func (w *World) explain(d *Node, want, got map[string]string) string {
 		for _, f := range all {
 			if f.Path == p {
 				out += fmt.Sprintf("\n    the hub's file: %d, seq %d, head %d, deleted %v, hash %.8s", f.File, f.Seq, f.Revision, f.Deleted, f.Hash)
+			}
+		}
+	}
+	if _, revs, err := w.hubLog(ctx); err == nil {
+		for _, p := range diff[:min(2, len(diff))] {
+			files := map[int64]bool{}
+			for _, r := range revs {
+				if strings.EqualFold(r.Path, p) {
+					files[r.FileID] = true
+				}
+			}
+			for _, r := range revs {
+				if files[r.FileID] {
+					out += fmt.Sprintf("\n  hub rev %d file %d %s %s %.8s base %d device %d push %d", r.Seq, r.FileID, r.Op, r.Path,
+						r.Hash, r.Base, r.DeviceID, r.PushID)
+				}
+			}
+		}
+	}
+	if ps, err := d.Srv.DB.Pushes(ctx, d.Vault); err == nil {
+		for _, lp := range ps {
+			if slices.ContainsFunc(diff[:min(2, len(diff))], func(p string) bool { return strings.EqualFold(p, lp.Path) }) {
+				out += fmt.Sprintf("\n  %s push %d file %d hub %d base %d %s %.8s: %s %s", d.Name, lp.PushID, lp.FileID, lp.HubFile,
+					lp.Base, lp.Path, lp.Hash, lp.Status, lp.Reason)
 			}
 		}
 	}
