@@ -8,8 +8,10 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -68,7 +70,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	d := &DB{db: sqlDB, Now: time.Now}
 	if err := d.migrate(ctx); err != nil {
 		_ = sqlDB.Close()
-		return nil, err
+		return nil, fmt.Errorf("open database %s: %w", path, err)
 	}
 	return d, nil
 }
@@ -84,9 +86,10 @@ func (d *DB) SchemaVersion(ctx context.Context) (int, error) {
 }
 
 type migration struct {
-	version int
-	name    string
-	sql     string
+	version  int
+	name     string
+	sql      string
+	checksum string // lowercase hex SHA-256 of sql
 }
 
 func loadMigrations() ([]migration, error) {
@@ -105,7 +108,8 @@ func loadMigrations() ([]migration, error) {
 		if err != nil {
 			return nil, err
 		}
-		ms = append(ms, migration{v, e.Name(), string(body)})
+		sum := sha256.Sum256(body)
+		ms = append(ms, migration{v, e.Name(), string(body), hex.EncodeToString(sum[:])})
 	}
 	slices.SortFunc(ms, func(a, b migration) int { return a.version - b.version })
 	for i, m := range ms {
@@ -116,15 +120,21 @@ func loadMigrations() ([]migration, error) {
 	return ms, nil
 }
 
+// migrate checks that the migrations the database applied are this
+// notesd's, byte for byte, and applies the pending ones. Pre-release,
+// 0001_init.sql is edited in place, so a database that applied an earlier
+// text of it lacks what the code expects: Open refuses it.
 func (d *DB) migrate(ctx context.Context) error {
-	d.writeMu.Lock()
-	defer d.writeMu.Unlock()
 	ms, err := loadMigrations()
 	if err != nil {
 		return err
 	}
-	if _, err := d.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL) STRICT`); err != nil {
+	if err := d.Tx(ctx, func(tx *Tx) error {
+		_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+			version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL,
+			checksum TEXT NOT NULL) STRICT`)
+		return err
+	}); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	current, err := d.SchemaVersion(ctx)
@@ -134,25 +144,138 @@ func (d *DB) migrate(ctx context.Context) error {
 	if current > len(ms) {
 		return fmt.Errorf("migrate: database schema %d is newer than this notesd (%d)", current, len(ms))
 	}
+	if err := d.adoptChecksums(ctx, ms[:current]); err != nil {
+		return err
+	}
+	if err := d.checkChecksums(ctx, ms); err != nil {
+		return err
+	}
 	for _, m := range ms[current:] {
-		tx, err := d.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("migrate %s: %w", m.name, err)
-		}
-		if _, err := tx.ExecContext(ctx, m.sql); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migrate %s: %w", m.name, err)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
-			m.version, m.name, FormatTime(d.Now())); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migrate %s: %w", m.name, err)
-		}
-		if err := tx.Commit(); err != nil {
+		if err := d.Tx(ctx, func(tx *Tx) error {
+			if _, err := tx.ExecContext(ctx, m.sql); err != nil {
+				return err
+			}
+			_, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, applied_at, checksum)
+				VALUES (?, ?, ?, ?)`, m.version, m.name, FormatTime(d.Now()), m.checksum)
+			return err
+		}); err != nil {
 			return fmt.Errorf("migrate %s: %w", m.name, err)
 		}
 	}
 	return nil
+}
+
+// checkChecksums refuses a database that applied a migration whose SQL is
+// not this notesd's.
+func (d *DB) checkChecksums(ctx context.Context, ms []migration) error {
+	rows, err := d.db.QueryContext(ctx, `SELECT version, checksum FROM schema_migrations ORDER BY version`)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var v int
+		var sum string
+		if err := rows.Scan(&v, &sum); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		if v < 1 || v > len(ms) {
+			return fmt.Errorf("migrate: database records unknown migration %d", v)
+		}
+		if m := ms[v-1]; sum != m.checksum {
+			return errStaleSchema("migration " + m.name + " differs from the one this database applied")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	return nil
+}
+
+// adoptChecksums records the checksums of applied in a database from before
+// schema_migrations kept them, once its schema proves to be what applied
+// creates today.
+func (d *DB) adoptChecksums(ctx context.Context, applied []migration) error {
+	var n int
+	if err := d.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM pragma_table_info('schema_migrations') WHERE name = 'checksum'`).Scan(&n); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if len(applied) > 0 {
+		got, err := schemaOf(ctx, d.db)
+		if err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		want, err := freshSchema(ctx, applied)
+		if err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		if !slices.Equal(got, want) {
+			return errStaleSchema("its schema is not what migrations through " + applied[len(applied)-1].name + " create")
+		}
+	}
+	err := d.Tx(ctx, func(tx *Tx) error {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+		for _, m := range applied {
+			if _, err := tx.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`,
+				m.checksum, m.version); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("migrate: record checksums: %w", err)
+	}
+	return nil
+}
+
+// freshSchema is the schema ms create in an empty database.
+func freshSchema(ctx context.Context, ms []migration) ([]string, error) {
+	mem, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = mem.Close() }()
+	mem.SetMaxOpenConns(1) // each connection would be a database of its own
+	for _, m := range ms {
+		if _, err := mem.ExecContext(ctx, m.sql); err != nil {
+			return nil, fmt.Errorf("%s: %w", m.name, err)
+		}
+	}
+	return schemaOf(ctx, mem)
+}
+
+// schemaOf lists the tables, indexes, triggers and views of db as SQLite
+// stores their SQL, leaving out schema_migrations and SQLite's own objects.
+func schemaOf(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT type || ' ' || name || ' ' || COALESCE(sql, '') FROM sqlite_schema
+		WHERE tbl_name != 'schema_migrations' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
+		ORDER BY type, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var schema []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		schema = append(schema, s)
+	}
+	return schema, rows.Err()
+}
+
+// errStaleSchema explains why Open refuses a database and what to do.
+func errStaleSchema(why string) error {
+	return fmt.Errorf("%s: the database predates an in-place edit of the schema; "+
+		"move it aside, with any -wal and -shm files, and restart notesd to create a new one", why)
 }
 
 // Tx is a write transaction. Emit records events delivered after commit.
