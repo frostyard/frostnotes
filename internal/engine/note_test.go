@@ -30,7 +30,13 @@ type apiVault struct {
 // openVault registers dir and waits for its first scan to end.
 func openVault(t *testing.T, dir string) *apiVault {
 	t.Helper()
-	srv := rpctest.StartWith(t, rpctest.Options{Vault: vault.Config{Debounce: 20 * time.Millisecond}})
+	return openVaultWith(t, dir, vault.Config{Debounce: 20 * time.Millisecond})
+}
+
+// openVaultWith is openVault with the vaults' actors tuned by cfg.
+func openVaultWith(t *testing.T, dir string, cfg vault.Config) *apiVault {
+	t.Helper()
+	srv := rpctest.StartWith(t, rpctest.Options{Vault: cfg})
 	c := srv.Dial(t)
 	if _, err := c.Events().Subscribe(t.Context(), &api.EventsSubscribeParams{}); err != nil {
 		t.Fatal(err)

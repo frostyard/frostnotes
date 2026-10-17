@@ -57,6 +57,18 @@ obsidian-links: ## Check links against Obsidian's dump (FROSTNOTES_OBSIDIAN_LINK
 vault-it: ## Kill notesd during writes and scans, and check every restart
 	go test -tags integration -run '^TestIKillNotesd$$' -count=1 -v -timeout 30m ./internal/vault
 
+# M1's exit evidence 1 to 4 (docs/plans/0003-m1-headless-vault.md, Phase 7):
+# Obsidian's link dump, the user's vault indexed cold (read only), a vim save
+# searchable within 1 s, and the kill -9 harness. Set TMPDIR to put the test
+# data directories on the file system notesd's data directory lives on.
+.PHONY: m1-evidence
+m1-evidence: ## Record M1's exit evidence 1-4 (FROSTNOTES_OBSIDIAN_LINKS, FROSTNOTES_OBSIDIAN_VAULT)
+	@test -n "$$FROSTNOTES_OBSIDIAN_LINKS" -a -n "$$FROSTNOTES_OBSIDIAN_VAULT" || { \
+		echo "set FROSTNOTES_OBSIDIAN_LINKS to the dump and FROSTNOTES_OBSIDIAN_VAULT to the vault"; exit 2; }
+	go test -tags integration -count=1 -v -run '^TestI(ObsidianLinkDump|ColdIndexOfObsidianVault)$$' ./internal/markdown ./internal/vault
+	go test -tags integration -count=1 -v -run '^TestIVimSaveIsSearchable$$' ./internal/engine
+	$(MAKE) --no-print-directory vault-it
+
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
 # detector.

@@ -10,6 +10,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/markdown"
@@ -146,11 +148,12 @@ func (v *Vault) scan(ctx context.Context, reindex bool) (Listing, error) {
 	gone = append(gone, indexed[i:]...)
 
 	total := int64(len(files))
-	done := total - int64(len(cands))
-	v.setStatus(func(s *api.ScanStatus) { s.Done, s.Total = done, total }, true)
+	var done atomic.Int64
+	done.Store(total - int64(len(cands)))
+	v.setStatus(func(s *api.ScanStatus) { s.Done, s.Total = done.Load(), total }, true)
 	items, err := v.plan(ctx, r, cands, gone, func() {
-		done++
-		v.setStatus(func(s *api.ScanStatus) { s.Done = done }, false)
+		n := done.Add(1)
+		v.setStatus(func(s *api.ScanStatus) { s.Done = max(s.Done, n) }, false)
 	})
 	if err != nil {
 		return Listing{}, err
@@ -204,19 +207,32 @@ func (v *Vault) scanPaths(ctx context.Context, paths []string) error {
 	return v.applyAll(ctx, r, items, false)
 }
 
-// plan reads the candidates and pairs each new file with a missing file of
-// the same kind and content as a move, in path order. A file that cannot
-// be read keeps its index rows. progress, when set, runs after each read.
+// plan reads the candidates, several at once, and pairs each new file with
+// a missing file of the same kind and content as a move, in path order. A
+// file that cannot be read keeps its index rows. progress, when set, runs
+// after each read, concurrently with others.
 func (v *Vault) plan(ctx context.Context, r *os.Root, cands []candidate, gone []store.File, progress func()) ([]item, error) {
-	var items []item
-	for _, c := range cands {
+	type result struct {
+		cur content
+		err error
+	}
+	results := make([]result, len(cands))
+	each(len(cands), func(i int) {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			results[i].err = err
+			return
 		}
-		cur, err := read(r, c.path)
+		results[i].cur, results[i].err = read(r, cands[i].path)
 		if progress != nil {
 			progress()
 		}
+	})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var items []item
+	for i, c := range cands {
+		cur, err := results[i].cur, results[i].err
 		switch {
 		case isGone(err):
 			if c.prev != nil {
@@ -306,21 +322,35 @@ func (v *Vault) applyLocked(ctx context.Context, r *os.Root, batch []item, reind
 		if err != nil {
 			return err
 		}
-		if !ok {
-			continue
+		if ok {
+			ops = append(ops, o)
 		}
+	}
+	// Each blob is stored, fsync included, before the transaction that
+	// names it; storing several at once lets the file system batch them.
+	errs := make([]error, len(ops))
+	each(len(ops), func(i int) {
+		o := &ops[i]
 		if o.kind == opContent {
-			if err := v.storeBlob(ctx, r, o.path, o.cur); errors.Is(err, errUnstable) {
-				continue // it changed again; its next event or scan reads it
-			} else if err != nil {
-				return err
+			if errs[i] = v.storeBlob(ctx, r, o.path, o.cur); errs[i] != nil {
+				return
 			}
 		}
 		if (o.kind == opContent || o.kind == opReindex) && kindOf(o.path) == store.FileNote && o.cur.data != nil {
 			o.doc = markdown.Parse(o.cur.data)
 		}
-		ops = append(ops, o)
+	})
+	kept := ops[:0]
+	for i, o := range ops {
+		switch {
+		case errors.Is(errs[i], errUnstable):
+			continue // it changed again; its next event or scan reads it
+		case errs[i] != nil:
+			return errs[i]
+		}
+		kept = append(kept, o)
 	}
+	ops = kept
 	if len(ops) == 0 {
 		return nil
 	}
@@ -507,6 +537,26 @@ func exactName(r *os.Root, p string) bool {
 		dir = path.Join(dir, seg)
 	}
 	return true
+}
+
+// workers is how many files a scan reads, or stores, at once: on a network
+// share each read waits on the server, and the data directory's file
+// system batches fsyncs made together.
+const workers = 8
+
+// each runs fn(0) to fn(n-1), at most workers at a time, and returns when
+// all have returned.
+func each(n int, fn func(i int)) {
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	for i := range n {
+		sem <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			fn(i)
+		})
+	}
+	wg.Wait()
 }
 
 // row returns the index's row at p, or nil when there is none.

@@ -74,7 +74,9 @@ in the vault except the settings in `.frostnotes/`.
 - **Open:** walk the vault; compare each file's size and mtime with the
   index; read and hash those that differ; parse and index changed notes;
   treat a missing file and a new file of the same kind with the same hash
-  as a move (paired in path order), keeping the file's ID. Changes commit
+  as a move (paired in path order), keeping the file's ID. Reads, and the
+  blobs they store, run 8 files at a time: on a network share each read
+  waits on the server, and fsyncs made together cost less. Changes commit
   in batches of at most 200 files per `Tx`, each checked against the disk
   and the index again under the vault's lock, so a write that ran since
   the walk is never undone and `kill -9` leaves an index the next scan
@@ -102,6 +104,7 @@ in the vault except the settings in `.frostnotes/`.
   Measured in M0 on the user's vault over SMB 3 (97 folders, 666 notes,
   2.2 MiB): a walk with stat takes about 85 ms, and reading every note 7 ms
   cached or 674 ms cold, so a rescan that reads only changed files is cheap.
+  A whole cold index of it takes 0.73 s (M1, Phase 7).
 
 - An outside change is indexed like any write: a version is kept and a
   durable `note.changed` event is emitted.

@@ -51,7 +51,9 @@ T-0004 to T-0023, the engine and the MCP server
   crash after the rename and before the `Tx` loses only the attribution:
   the next scan finds the new bytes as an outside version.
 - **Scans commit in batches** of at most 200 files per `Tx`, so `kill -9`
-  mid-index leaves a consistent index that the next scan continues. A
+  mid-index leaves a consistent index that the next scan continues. They
+  read, and store blobs, 8 files at a time (Phase 7): on SMB each read
+  waits on the server. A
   missing file and a new file with the same hash are a move, keeping the
   file's ID.
 - **Watching** uses fsnotify (already in the module, made direct) on every
@@ -413,6 +415,32 @@ are merged.
      undoes it.
 - Also: a one-note test vault in the user's Obsidian answers the open
   question on links in comments and suffix ties, and the spec follows it.
+- `make m1-evidence` records evidence 1 to 4 (`TestIObsidianLinkDump`,
+  `TestIColdIndexOfObsidianVault`, `TestIVimSaveIsSearchable`,
+  `TestIKillNotesd`); evidence 5 and the test vault are the user's runs.
+- **Result so far (2026-10-16): 1 to 4 hold.** The user's vault moved that
+  day to another SMB 3 share, with the same 666 notes, 8 attachments and
+  97 folders; every run uses the new location, read only.
+  1. Cold, from an empty data directory on btrfs, with the vault's files
+     evicted from the page cache first: 0.73 s, the network file system
+     detected, and every file's size and mtime unchanged. The first cold
+     run, before scans read and stored files concurrently, took 4.49 s with
+     the data directory on tmpfs; most of it was the server reading its
+     disk, which a client cannot flush. Reading and storing 8 files at a
+     time took the run on btrfs from 1.7 s to 0.7 s.
+  2. `Parse` finds Obsidian's links in 43 of 43 notes (179 of 179), and
+     `Resolve` agrees on all 179, at the new location.
+  3. Ten notes of a generated 666-note vault, each saved by a real vim
+     (`vim -es`), were found by `note.search` 104 to 114 ms after vim
+     exited, the watcher's 100 ms debounce included. The vault was on
+     local disk; spike 3 showed local edits on SMB raise events at once.
+  4. `make vault-it` on the current code: 100 kills during writes and 100
+     during scans, each restart consistent and equal to a fresh rebuild
+     (117 s).
+
+  Still open: evidence 5 (Claude Code through `notesctl mcp` on the
+  user's vault, which writes to it) and the Obsidian test vault, both the
+  user's to run.
 
 ## Later / ideas
 
