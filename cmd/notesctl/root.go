@@ -29,6 +29,8 @@ func newRootCmd() *cobra.Command {
 		newHelloCmd(opts),
 		newVaultCmd(opts),
 		newHubCmd(opts),
+		newSyncCmd(opts),
+		newHistoryCmd(opts),
 		newLsCmd(opts),
 		newCatCmd(opts),
 		newSearchCmd(opts),
