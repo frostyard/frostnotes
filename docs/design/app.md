@@ -1,0 +1,314 @@
+# Design: the app
+
+Living document. Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
+[ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md) (the
+editor and the reading view),
+[ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
+(the look and the layout),
+[ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)
+(the workspace and preferences),
+[ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)
+(saves and merges),
+[ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
+(attachments).
+Contracts: [specs/ui.md](../specs/ui.md), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
+[specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
+(the syntax both parsers read).
+
+**Status: M0's shell is built** ([plan 0001](../plans/0001-m0-foundations.md#phase-4--app-shell)):
+the transports, the mock, `Session`, the vault store, the title bar, the
+status bar, and the CodeMirror spike (`app/src/spike`). Everything else
+here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
+rewritten as each phase lands.
+
+## Overview
+
+The app is a Tauri v2 window running a React UI, a thin client of notesd
+like `notesctl` and MCP. It holds no notes of its own: it lists a vault's
+files from notesd, edits a note's exact text in CodeMirror, saves it with
+its base, and shows what notesd renders. The same UI runs in a browser
+against the dev gateway now and the hub in M4.
+
+```
+ features/ (presentational) ◄── app/ (containers, layout) ◄── workspace/ (tabs, splits, sidebars)
+                                     │
+                                     ├── editor/  documents, saves, merges, live preview, merge view
+                                     ├── reading/ notesd's HTML, sanitized again, embeds, math
+                                     ├── commands/ the command registry and the window's keys
+                                     ▼
+                       data/ (Session, stores) ◄── Client (rpc/gen/api.ts)
+                                                     │ Transport: tauri (bridge.rs ⇄ notesd.sock)
+                                                     │            ws (devgw; the hub in M4), mock
+ <img src="notesblob://localhost/<sha256>.png"> ◄── protocol.rs ◄── notesd's blobs/
+```
+
+## Source layout (`app/src`)
+
+| Path | What | Owner |
+| --- | --- | --- |
+| `main.tsx` | picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, else Tauri), renders `App` | planner |
+| `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/tauri.ts`, `transport/ws.ts`, `gen/api.ts` (generated) | planner |
+| `rpc/mock/` | `MockTransport`: an in-memory notesd with notesd's semantics and a vault of made-up notes | planner |
+| `data/` | `Session`, the stores (vaults, files, sync, settings), the document registry | planner |
+| `workspace/` | the workspace model: its tree, operations, validation and persistence | planner |
+| `editor/` | documents and saves, the editor's extensions, the live-preview framework, the merge view | planner |
+| `editor/syntax/` | Lezer extensions for Obsidian's syntax, one per file, against the shared fixtures | cards |
+| `editor/widgets/` | live-preview widgets, one kind per file | cards |
+| `reading/` | the reading view: notesd's HTML, DOMPurify, links, embeds, math | planner |
+| `commands/` | the command registry and the window's key listener | planner |
+| `app/` | `App`, the layout and splitters, containers that connect features to data | planner |
+| `features/<area>/` | presentational components and their tests: `chrome`, `workspace`, `explorer`, `search`, `links`, `outline`, `properties`, `tags`, `switcher`, `palette`, `status`, `settings`, `history`, `menu`, `notice` | cards |
+| `lib/` | pure helpers: the keymap, fuzzy matching, the file tree, the outline, formatting | cards |
+| `styles/` | `tokens.css` (the spec's tokens), `app.css` (Tailwind entry), `editor.css` (the editor's and the reading view's styles) | planner |
+| `testing/` | Testing Library setup and render helpers | planner |
+| `spike/` | M0's CodeMirror spike, kept for `make spike-cm6` until the editor's own harness replaces it | planner |
+
+Presentational components take data and callbacks as props, hold only
+transient state (hover, an open menu, a field being typed), and import
+nothing from `data/`, `rpc/`, `workspace/` or `editor/` except types.
+Containers in `app/` connect them. Rust stays small: `bridge.rs` moves
+lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
+
+## Data
+
+- **Connection.** `Session` connects, calls `rpc.hello`, subscribes to
+  events from the last durable sequence number the app applied
+  ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)),
+  loads the stores, and reconnects every second when the connection
+  ends. On reconnect it reloads the stores and reads each open document
+  again, applying any difference as another writer's change.
+- **One vault per window.** The window shows one vault; the switcher at
+  the bottom of the left sidebar changes it, and the app remembers the
+  last one.
+- **Files:** `note.files` lists a vault's files and folders (path, kind,
+  hash, size, modification time) once, and `note.changed`, `note.moved`
+  and `note.removed` keep the list current. It feeds the file tree, the
+  quick switcher, link suggestions and attachments' hashes. 666 notes is
+  about 100 KB of JSON.
+- **Sync:** `sync.status` per vault, kept current by `sync.changed`.
+- **Settings:** the vault's settings (`vault.settings`, changed with
+  `vault.configure`) and the app's preferences (local storage), both per
+  [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md).
+- **Documents:** the registry of open notes (below).
+
+## Workspace
+
+- **Model** (`workspace/`): a tree of splits (`row` or `column`, child
+  sizes as fractions) and tab groups; a tab group holds tabs and the
+  index of its active one; a tab holds a view state and its back and
+  forward stacks (at most 50 each). View states: `empty`, `note` (path,
+  mode `edit` or `read`, scroll and cursor), `history` (path), `merge`
+  (path and the other side), `file` (an attachment's path). The left and
+  right sidebars are tab groups of panes, with a width and an open flag.
+  One tab group is active, and its active tab is the active tab.
+- **Operations** are pure functions from a workspace to a workspace, so
+  each is a unit test: open (here, in a new tab, to the right, below),
+  close, close others, reopen the last closed (the last 20), activate,
+  next and previous, the nth, move a tab within or between groups or to a
+  group's edge (a new split), split, resize, back and forward, pin, apply
+  a move or a delete, and validate. Empty splits collapse; the last tab of
+  the last group becomes an empty tab rather than closing.
+- **Opening links** follows Obsidian: a click opens in the current tab,
+  or in a new tab when the current one is pinned; Ctrl+click opens in a
+  new tab; Ctrl+Alt+click opens to the right; middle click opens in a new
+  tab. A new tab goes right after the active one.
+- **Persistence** ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)):
+  local storage, one document per vault, written 500 ms after the last
+  change; recently opened files (the last 50) ride along.
+
+## Editor
+
+### Documents, saves and merges
+
+Per [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md),
+the document registry (`editor/documents.ts`) holds one `NoteDoc` per
+vault and path while any tab shows it:
+
+- `base`, the hash notesd last confirmed, and `baseText`, the text it
+  names; the `EditorState` of its primary view, other views kept in step
+  by forwarding each transaction with an annotation that stops it coming
+  back.
+- **States:** clean (the text is `baseText`), dirty, saving (one write in
+  flight, holding the text it sent). A change marks it dirty and arms the
+  timers: 1 s after the last change, 10 s after the first. Ctrl+S, blur,
+  closing or leaving the tab, a move, a delete and the window's close save
+  at once.
+- **An answer** sets `base` and `baseText`. A merged answer's content
+  differs from what was sent: the registry diffs the two
+  (`@codemirror/merge`'s diff, with a time budget), maps the change over
+  the edits made since the send, and dispatches it to every view with
+  `addToHistory: false` and the `remote` annotation. With conflicts, the
+  document records a notice for its tabs, naming the writer and the
+  conflict version.
+- **Events:** `note.changed` with a hash it does not know reads the note
+  (clean) or saves at once (dirty); `note.moved` renames the document and
+  its tabs; `note.removed` creates it again with unsaved edits, else marks
+  its tabs deleted.
+- **Errors:** a base notesd refuses opens the merge view against the
+  editor's text; a write that fails otherwise keeps the document dirty,
+  retries after 2, 4, 8 … 60 s, and shows the error in the tab; nothing
+  is dropped while the window is open, and closing it with unsaved text
+  asks first.
+
+### Extensions
+
+- **Syntax:** `@lezer/markdown` with GFM and Frostnotes' extensions for
+  Obsidian's syntax ([specs/markdown.md](../specs/markdown.md)):
+  wikilinks and embeds, tags, highlights, comments, callouts, block IDs,
+  inline and display math, footnotes. Where the two parsers must agree
+  (what is a link or a tag, and where code hides them), Vitest runs the
+  spec's `F` fixtures through Lezer as Go runs them through goldmark.
+- **Keys:** CodeMirror's default keymap without the bindings Obsidian
+  removes (Alt+↑ and Alt+↓ with and without Shift, Alt+L, Alt+V, Ctrl+M)
+  and without any key the app's keymap binds (CodeMirror's Ctrl+D,
+  Ctrl+I, Ctrl+Enter and Ctrl+/ would otherwise run first), its history
+  keymap, Tab and Shift+Tab to indent, and its search panel restyled. The
+  app's commands (Ctrl+B, Ctrl+L, …) are commands, not editor keymaps
+  ([Commands and keys](#commands-and-keys)).
+- **Completion:** `@codemirror/autocomplete` suggests notes, aliases,
+  headings (`[[note#`) and blocks (`[[note#^`) after `[[`, and tags after
+  `#`, ranked by `lib/fuzzy.ts`.
+- **Links in the editor:** `note.resolve` resolves the links of the
+  visible lines from the note's folder, as notesd's index does, in one
+  batched call cached until a file is added, moved or removed; unresolved
+  links show dimmed, and following one creates the note.
+- **Modes:** live preview (the default), source mode (the same editor
+  without the preview decorations) and the reading view. Ctrl+E switches
+  between editing and reading; source and live preview are a preference
+  and a command.
+
+### Live preview
+
+Live preview is decoration over the source, never a transformation
+([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
+The framework (`editor/preview/`) owns:
+
+- **Providers.** A widget kind is a provider: the syntax nodes it
+  handles, whether it is inline or block, and a function from a node and
+  a context (the document, link resolution, blob URLs, preferences) to
+  decorations. Inline providers run over the visible ranges in a view
+  plugin; block providers, which replace line breaks, run in a state
+  field over the whole document, incrementally by changed ranges.
+- **The reveal rule.** Syntax shows as typed on every line a selection
+  touches; a block widget (a callout, a table, an embed, display math, the
+  properties block) shows its source when a selection enters its range.
+- **Events.** A widget's clicks go to its provider, which answers with a
+  transaction (a checkbox toggles one character) or a command (follow a
+  link, open an embed).
+- **Caching.** Widgets compare equal by their source text and inputs, so
+  a keystroke elsewhere redraws nothing.
+
+M0's spike (`app/src/spike/livePreview.ts`) is its first draft: hidden
+marks, headings, links, wikilinks and checkboxes, measured at 9 ms at p95
+a keystroke on a 10,000-line note. The framework keeps that budget with
+every provider on: providers are measured together in the exit evidence.
+
+### Properties
+
+The note's frontmatter shows in live preview as the properties block (a
+block widget): a row per key, its type's icon and its value, editable.
+An edit there is a transaction on the YAML text that changes only that
+key's value and keeps every other byte, as MCP's property edits do in Go
+([specs/mcp.md](../specs/mcp.md)). Source mode shows the YAML.
+
+## Reading view
+
+notesd renders a note (`note.render`, from the document's text when it
+is open) with goldmark and the Obsidian extension, then sanitizes it by
+an allowlist (`internal/render`, the planner's): no script, event
+handler, form, frame, `style` or `javascript:` URL; raw HTML in a note
+keeps listed elements and attributes only. In the HTML, an internal link
+is `a.internal-link` with `data-href` (as written) and `data-path` (the
+file it resolves to, absent when unresolved); a vault file is an `img`,
+`audio`, `video` or `a.file-embed` with `data-blob` (its hash and
+extension) instead of a URL; an embedded note is `div.embed` with its
+rendered content, three levels deep at most; a callout is
+`div.callout[data-callout]`; math is `span.math` or `div.math` with
+`data-tex`; a tag is `a.tag[data-tag]`; a task's checkbox carries
+`data-line`.
+
+The app sanitizes again with DOMPurify and the same allowlist, sets each
+`data-blob` element's `src` to its blob URL, renders math with KaTeX, and
+inserts the result into the view's element, styled by `editor.css`.
+Clicks on links and tags become commands; a checkbox toggles its line in
+the document, as live preview does. The CSP forbids inline script
+([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
+
+## Attachments
+
+Per [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md),
+`blobURL(hash, ext)` gives a file's URL for the transport in use:
+`notesblob://localhost/…` in Tauri, the dev gateway's `/blobs/…` in a
+browser, a `data:` URL from the mock. Images, audio and video show
+inline in live preview, in the reading view and in a `file` tab; a PDF
+shows as a chip that opens it with the system's application. Pasting or
+dropping an image calls `note.upload` and inserts `![[name]]`.
+
+## History and merges
+
+- **History** (a `history` tab): the file's versions from
+  `note.versions`, each readable with `note.readVersion`, and for a
+  synced vault the hub's revisions from `sync.history`. Selecting one
+  shows it, or its difference from the current text; Restore is
+  `note.revert` with the current base.
+- **Merge** (a `merge` tab): `@codemirror/merge`'s side-by-side view,
+  the document on the left, editable, and the other version on the
+  right. It opens from a conflict notice, from the history, and from the
+  status bar's conflicts (`sync.conflicts`). Done calls `sync.resolve`
+  when the file is flagged on the hub.
+
+## Commands and keys
+
+- **The registry** (`commands/`) lists every command once: its ID
+  (Obsidian's, where Obsidian has the command: `switcher:open`,
+  `editor:toggle-bold`), its name, when it applies (an editor is
+  active, a note is open, a sidebar exists) and what it does. The command
+  palette, the menus and the keys all run commands through it.
+- **The window has one key listener,** in the bubble phase, so
+  CodeMirror and fields handle their own keys first. It skips events
+  already handled, maps the rest with `lib/keymap.ts` (Obsidian's default
+  hotkeys, [specs/ui.md](../specs/ui.md#keyboard-map)), and runs the
+  command when it applies. In a text field outside the editor, only
+  presses with Ctrl or Alt, and F1 and F2, reach it.
+
+## Window
+
+- Undecorated. The title bar row holds the sidebar toggles, the
+  sidebars' pane tabs and the top row of tab strips; its empty space
+  drags the window, and a double click toggles maximize. The capability
+  file grants the window permissions the controls use and the app's own
+  commands.
+- The webview's own context menu is off; the app draws its own menus.
+- Links to the web open in the system browser (`http`, `https`, `mailto`
+  only); the webview never navigates away from the app.
+
+## Dev and test
+
+- `VITE_MOCK=1` runs the UI against `MockTransport` and its made-up
+  vault in any browser; `make ui-dev` runs a real notesd (`-devgw`) and
+  Vite, and the same UI in a browser on the host.
+- `make ui-check`: Biome, the TypeScript check and Vitest (happy-dom,
+  Testing Library). Editor logic is tested on `EditorState` without a view
+  where it can be; views run in happy-dom where a test needs one.
+- App tests drive the built app in WebKitGTK through `WebKitWebDriver`,
+  as spike 1 did (`app/src/spike/measure.ts`, `make spike-cm6`): typing
+  latency in the real editor on a generated 10,000-line note, saves and
+  merges against a real notesd, and the default shortcuts.
+
+## Operational notes
+
+- Local storage holds `frostnotes.workspace.v1:<vault path>`,
+  `frostnotes.prefs.v1` and `frostnotes.seq`. The command Reset workspace
+  layout clears the current vault's; clearing the app's site data clears
+  them all, and no note is lost.
+- If notesd is not running, the window shows the connection state and
+  keeps retrying; a notesd started later is picked up.
+- A note whose document cannot save keeps its text in the window and
+  shows why; closing the window then asks before discarding it.
+
+## References
+
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); frostmail's `docs/design/app.md`, which this copies
+- Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts)
+- Contracts: [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
+- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))

@@ -36,6 +36,12 @@
   --avatar-5: #ff375f;
   --avatar-6: #bf5af2;
   --avatar-7: #8e8e93;
+  /* Frostnotes' own (docs/specs/ui.md, Tokens). */
+  --bg-code: #f5f5f7;
+  --bg-highlight: rgb(255 204 0 / 0.4);
+  --bg-tag: rgb(0 122 255 / 0.1);
+  --callout-cyan: #30b0c7;
+  --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -64,5 +70,10 @@
     --quote-1: #5aa0f0;
     --quote-2: #4cc76a;
     --quote-3: #f0884a;
+    --bg-code: #2a2a2c;
+    --bg-highlight: rgb(255 214 10 / 0.3);
+    --bg-tag: rgb(10 132 255 / 0.2);
+    --callout-cyan: #40c8e0;
+    --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
   }
 }

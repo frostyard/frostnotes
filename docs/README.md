@@ -39,12 +39,16 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0018 — Move blobs over HTTP, named by their hash](adr/0018-move-blobs-over-http-named-by-their-hash.md)
 - [0019 — Keep every revision's record, and thin the content by age](adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md)
 - [0020 — Test sync with a seeded simulation of a hub and devices](adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
+- [0021 — Keep the workspace and app preferences on each device](adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)
+- [0022 — The editor saves as you type and applies merges as remote changes](adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)
+- [0023 — The app shows files by their hash and uploads them through notesd](adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
 
 ### Design
 
 - [Overview](design/overview.md) — notesd, its two roles, the clients, the planned layout
 - [Vault](design/vault.md) — scan, watch, parse, index, link resolution, writes, versions
 - [Sync](design/sync.md) — the hub's revision log, pairing, push and pull, blobs, merges, conflicts, retention, the simulation
+- [App](design/app.md) — the desktop and web UI: data, workspace, editor, saves and merges, live preview, reading view, keys
 - [Agent workflow](design/agent-workflow.md) — planner, executor and taskrun; a card's life; sizing
 
 
@@ -56,6 +60,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [MCP tools](specs/mcp.md) — what `notesctl mcp` offers an agent: tools, inputs, outputs, edits
 - [Sync protocol](specs/sync-protocol.md) — the hub's endpoints, pairing, pushes and pulls, applying, joining, limits
 - [Three-way merge](specs/merge.md) — how `internal/merge` merges text and notes, with its golden fixtures
+- [UI](specs/ui.md) — the main window: tokens, type, Obsidian's layout in frostmail's look, panes, prompts, the keyboard map
 
 
 ### Plans
@@ -64,6 +69,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0002 — Roadmap to replacing Obsidian](plans/0002-roadmap.md)
 - [0003 — M1 headless vault](plans/0003-m1-headless-vault.md)
 - [0004 — M2 sync](plans/0004-m2-sync.md)
+- [0005 — M3 desktop app](plans/0005-m3-desktop-app.md)
 
 ## Conventions
 

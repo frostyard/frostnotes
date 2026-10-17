@@ -666,5 +666,5 @@ b]] are not links, nor is \[[Escaped]] or [Single].
 ## References
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (invalid UTF-8), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) (comments, ties)
-- Context: [design/vault.md](../design/vault.md) (parse, index, link resolution)
+- Context: [design/vault.md](../design/vault.md) (parse, index, link resolution), [design/app.md](../design/app.md#extensions) (the editor's parser runs the same fixtures)
 - Built in: [plan 0003](../plans/0003-m1-headless-vault.md); evidence from [plan 0001, spike 4](../plans/0001-m0-foundations.md#phase-5--spikes-go-or-no-go)

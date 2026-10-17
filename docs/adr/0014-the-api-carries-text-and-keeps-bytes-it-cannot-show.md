@@ -71,4 +71,5 @@ attachments are the same problem in full: a PNG is not text at all.
 
 - Shapes: [design/vault.md](../design/vault.md#writes), [specs/rpc-api.md](../specs/rpc-api.md) (`note.read`, `note.write`), [specs/markdown.md](../specs/markdown.md#notes-and-files), [specs/merge.md](../specs/merge.md)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0006](0006-every-write-names-the-version-it-changes.md), [ADR-0008](0008-generate-the-rpc-contract-from-a-yaml-idl.md)
+- Extended by: [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (`note.upload`, binary attachments' one base64 field)
 - Built in: [plan 0003, Phase 4](../plans/0003-m1-headless-vault.md#phase-4--engine-planner-alongside-phase-5)

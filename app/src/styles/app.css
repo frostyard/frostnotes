@@ -1,7 +1,8 @@
 /* Tailwind entry, from frostmail's (ADR-0011). The theme exposes the tokens
    (tokens.css) and type roles as utilities: bg-sidebar, text-secondary,
    border-separator, text-sidebar-row, and so on. Mail's list, reader and
-   compose roles are left out. */
+   compose roles are left out; tabs, badges, code, highlights, tags and
+   popovers are Frostnotes' own (docs/specs/ui.md). */
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 @import "./tokens.css";
@@ -42,6 +43,11 @@
   --color-avatar-5: var(--avatar-5);
   --color-avatar-6: var(--avatar-6);
   --color-avatar-7: var(--avatar-7);
+  --color-code: var(--bg-code);
+  --color-highlight: var(--bg-highlight);
+  --color-tag: var(--bg-tag);
+  --color-callout-cyan: var(--callout-cyan);
+  --shadow-popover: var(--popover-shadow);
 }
 
 @theme {
@@ -59,6 +65,11 @@
   --text-status--line-height: 14px;
   --text-empty: 15px;
   --text-empty--line-height: 20px;
+  --text-tab: 13px;
+  --text-tab--line-height: 16px;
+  --text-badge: 10px;
+  --text-badge--line-height: 12px;
+  --text-badge--font-weight: 600;
 }
 
 @layer base {

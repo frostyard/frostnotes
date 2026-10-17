@@ -56,7 +56,9 @@ a thin client.
   desktop, a WebSocket in the browser, and a mock in tests. The editor is
   CodeMirror 6 with live preview
   ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md),
-  [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)).
+  [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md));
+  it saves as the user types and takes merges as remote changes, and shows
+  files by their hash ([app.md](app.md), [specs/ui.md](../specs/ui.md)).
 - **MCP** tools are hand-written adapters over the engine, served over stdio
   by `notesctl mcp` and over HTTP by the hub
   ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)).
@@ -129,6 +131,6 @@ database must be on a local file system; vaults may be anywhere.
 ## References
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
-- Details: [vault.md](vault.md), [sync.md](sync.md)
+- Details: [vault.md](vault.md), [sync.md](sync.md), [app.md](app.md)
 - Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
 - Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md)

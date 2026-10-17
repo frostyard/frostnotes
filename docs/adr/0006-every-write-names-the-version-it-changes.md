@@ -54,6 +54,7 @@ landing on a note changed a second earlier, vim saving over a merge.
 
 ## References
 
-- Shapes: [design/vault.md](../design/vault.md), [design/sync.md](../design/sync.md), [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
+- Shapes: [design/vault.md](../design/vault.md), [design/sync.md](../design/sync.md), [design/app.md](../design/app.md#editor) (the editor's saves), [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
+- Extended by: [ADR-0022](0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md) (how the editor saves and applies merges)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
-- Built in: [roadmap — M1](../plans/0002-roadmap.md)
+- Built in: [roadmap — M1](../plans/0002-roadmap.md); the editor in [plan 0005](../plans/0005-m3-desktop-app.md)

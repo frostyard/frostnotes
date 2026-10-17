@@ -56,6 +56,7 @@ v1's answer on phones.
 
 - Icon extension: [ADR-0013](0013-use-a-sibling-frostyard-notebook-icon.md),
   [overview — application icon](../design/overview.md#application-icon)
-- Shapes: the app design doc and UI spec (M3)
+- Shapes: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md)
+- Extended by: [ADR-0021](0021-keep-the-workspace-and-app-preferences-on-each-device.md) (where the workspace and preferences live)
 - Builds on: frostmail ADR-0009; [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](0007-edit-in-codemirror-6-with-live-preview.md)
-- Built in: [roadmap — M3, M4](../plans/0002-roadmap.md)
+- Built in: [roadmap — M3, M4](../plans/0002-roadmap.md), [plan 0005](../plans/0005-m3-desktop-app.md)

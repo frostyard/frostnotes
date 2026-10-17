@@ -9,7 +9,9 @@ for content that is not UTF-8, and
 [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) for
 comments, and
 [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
-for what sync changes in writes.
+for what sync changes in writes, and
+[ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md) for settings the app
+changes.
 Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated), [specs/mcp.md](../specs/mcp.md) (agents' writes).
 
 **Status: built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md),
@@ -47,7 +49,10 @@ in the vault except the settings in `.frostnotes/`.
   `types.json`, and writes `.frostnotes/` only when a setting changes, so
   registering a vault writes nothing to it. M1 has no method that changes
   a setting, so it only reads them (`vault.LoadSettings`), at each scan
-  and each `note.daily`:
+  and each `note.daily`. M3 adds `vault.configure`, which writes
+  `vault.yaml` atomically, and the settings the app's Files and links
+  section needs, read from `.obsidian/app.json` while unset ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md);
+  [plan 0005](../plans/0005-m3-desktop-app.md), Phase 4):
 
   ```yaml
   # .frostnotes/vault.yaml; every key is optional
@@ -290,7 +295,7 @@ long-term history ([sync.md](sync.md)).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
-- Related: [overview.md](overview.md), [sync.md](sync.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)
+- Related: [overview.md](overview.md), [sync.md](sync.md), [app.md](app.md) (the editor as a writer)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
-- Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md) ([roadmap](../plans/0002-roadmap.md))
+- Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md); written settings in [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
