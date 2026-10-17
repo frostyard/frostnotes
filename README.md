@@ -18,7 +18,22 @@ markdown files with YAML frontmatter, in a folder you own
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties.
 
-Pre-release: M0 (foundations) is done; the vault engine (M1) is next.
+Pre-release: M0 (foundations) is done, and M1, the headless vault, is
+nearly done: notesd indexes, watches and writes vaults, and `notesctl` and
+`notesctl mcp` drive it. The app comes in M3.
+
+## Try it
+
+```sh
+make build                              # build/notesd and build/notesctl
+build/notesd &                          # the daemon; one per user
+build/notesctl vault add ~/Notes        # registering never writes to the vault
+build/notesctl search quince
+claude mcp add frostnotes -- "$PWD/build/notesctl" mcp   # or: mcp --read-only
+```
+
+Every write, an agent's included, is kept as a version for 30 days:
+`notesctl versions PATH` lists them and `notesctl revert` undoes one.
 
 ## Develop
 
