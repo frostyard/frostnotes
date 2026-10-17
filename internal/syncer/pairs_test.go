@@ -301,6 +301,42 @@ func TestRevocationStopsSync(t *testing.T) {
 }
 
 // waitState waits for a device's sync.changed event with state.
+func TestPairingAgainResumesSync(t *testing.T) {
+	// A revoked device keeps its edit; once it pairs again, the hub knows
+	// it as a new device, and it joins anew and pushes what it kept.
+	h, a, b := twoDevices(t, map[string]string{"n.md": fiveLines})
+	ctx := t.Context()
+	ds, err := h.c.Hub().Devices(ctx, &api.HubDevicesParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range ds {
+		if d.Name == "b" {
+			if err := h.c.Hub().Revoke(ctx, &api.HubRevokeParams{Device: d.ID}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	b.write("n.md", fiveLines+"six\n")
+	waitState(t, b.node, api.SyncStateRevoked)
+	name := "b"
+	p, err := b.c.Sync().Pair(ctx, &api.SyncPairParams{URL: h.srv.HubURL, Name: &name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.c.Hub().Approve(ctx, &api.HubApproveParams{Code: p.Code}); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := b.c.Sync().Paired(ctx, &api.SyncPairedParams{Pairing: p.Pairing}); err != nil || r.State != api.PairingStateApproved {
+		t.Fatalf("Paired = %+v, %v", r, err)
+	}
+	b.srv.Syncer.Kick(b.vault)
+	settle(t, h, a.node, b.node)
+	if got := same(t, h, a.node, b.node); got["n.md"] != fiveLines+"six\n" {
+		t.Fatalf("after pairing again, n.md = %q; want b's edit everywhere", got["n.md"])
+	}
+}
+
 func waitState(t *testing.T, n *node, state api.SyncState) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)

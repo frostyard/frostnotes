@@ -209,6 +209,13 @@ On a hub, `hub` (caller `local`):
   `hub/<hub ID>/token` and nowhere else. A 401 on any request marks every
   vault synced with that hub `revoked`, and sync with it stops until the
   device pairs again.
+- A device that pairs again is a new device to the hub, and its old
+  replicas are not its own. At each connection a device checks its
+  replica (`log.pushes` with no pushes); answered `notFound`, it calls
+  `log.join` and keeps the new replica, its agreed state and its cursor.
+  A push still without an answer goes again under the new replica, whose
+  push IDs the hub has not seen: it applies it anew, and a state the head
+  already holds changes nothing.
 - The hub records a device's last request time, at most once a minute.
 
 ### Pending changes

@@ -168,6 +168,16 @@ func (t *Tx) DeleteRemote(ctx context.Context, vaultID int64) error {
 	return hubReadError("delete remote", err)
 }
 
+// SetReplica records replicaID as vault vaultID's replica on its hub: a
+// device that paired again joins anew, keeping its agreed state and
+// cursor. ErrNotFound without a remote.
+func (t *Tx) SetReplica(ctx context.Context, vaultID, replicaID int64) error {
+	var id int64
+	err := t.QueryRowContext(ctx, `UPDATE remotes SET replica_id = ? WHERE vault_id = ? RETURNING vault_id`,
+		replicaID, vaultID).Scan(&id)
+	return hubReadError("set replica", err)
+}
+
 // SetCursor sets vault vaultID's cursor, and its hub_seq to the larger of
 // the stored one and hubSeq; ErrNotFound without a remote. Task card T-0027.
 func (t *Tx) SetCursor(ctx context.Context, vaultID, cursor, hubSeq int64) error {

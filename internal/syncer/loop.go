@@ -225,6 +225,9 @@ func (l *loop) serve(ctx context.Context, sess *session) error {
 	if served < 0 {
 		return errReset
 	}
+	if err := l.ownReplica(ctx, sess, remote); err != nil {
+		return err
+	}
 	l.setHubSeq(vaults[served].Seq)
 	l.setState(api.SyncStateSyncing, nil)
 	for {
@@ -279,6 +282,24 @@ func (l *loop) serve(ctx context.Context, sess *session) error {
 		timer.Stop()
 		l.setState(api.SyncStateSyncing, nil)
 	}
+}
+
+// ownReplica makes sure the remote's replica is this device's: after the
+// device paired again, the hub knows it as a new device, which joins anew
+// and keeps its agreed state and cursor (docs/specs/sync-protocol.md, URLs
+// and tokens).
+func (l *loop) ownReplica(ctx context.Context, sess *session, remote store.Remote) error {
+	_, err := sess.client.Log().Pushes(ctx, &api.LogPushesParams{Vault: remote.SyncID, Replica: remote.ReplicaID, Pushes: []int64{}})
+	var ae *api.Error
+	if err == nil || !errors.As(err, &ae) || ae.Code != api.CodeNotFound {
+		return err
+	}
+	rep, err := sess.client.Log().Join(ctx, &api.LogJoinParams{Vault: remote.SyncID})
+	if err != nil {
+		return err
+	}
+	l.s.cfg.Log.Info("joined the hub's vault again after pairing", "vault", l.vaultID, "replica", rep.ID)
+	return l.s.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return tx.SetReplica(ctx, l.vaultID, rep.ID) })
 }
 
 // noteAppended takes the hub's sequence number from a log.appended.
