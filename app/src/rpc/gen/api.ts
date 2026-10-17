@@ -252,6 +252,12 @@ export interface PushItem {
   author: string;
   /** When the device recorded the change. */
   at: string /* RFC 3339 */;
+  /**
+   * The content lost conflicting hunks in a merge on the device (a writer
+   * with a stale base); the hub keeps it as a conflict revision of the file,
+   * which flags it.
+   */
+  conflict?: boolean;
 }
 
 /** A file's state in the log. */
@@ -312,8 +318,8 @@ export interface MatchQuery {
 }
 
 /**
- * The newest revision with a hash of the file last at a path, live or
- * deleted.
+ * The revision a copy at a path with a hash is agreed at, of the file last at
+ * the path, live or deleted (docs/specs/sync-protocol.md, Joining).
  */
 export interface LogMatch {
   path: string;
@@ -322,6 +328,11 @@ export interface LogMatch {
   file?: number;
   /** Absent when no revision of that file has the hash. */
   revision?: number;
+  /**
+   * The revision's content hash, with revision: not hash when the copy has a
+   * later revision's content at an earlier path.
+   */
+  revisionHash?: string;
 }
 
 /** An entry in a hub vault's log (ADR-0017). */
@@ -977,7 +988,9 @@ export interface SyncStatus {
   cursor: number;
   /** The hub log's latest sequence number, as last seen. */
   hubSeq: number;
-  /** Files with a change to push. */
+  /**
+   * Files with a change to push, and local conflict versions not yet pushed.
+   */
   pending: number;
   /** Flagged files. */
   conflicts: number;

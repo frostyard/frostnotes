@@ -14,6 +14,14 @@ import (
 	"github.com/frostyard/frostnotes/internal/store"
 )
 
+// ErrCrashed is what a change returns when Config.Crash stopped it after
+// its rename and before its transaction, as a crash would: the simulation
+// then restarts the notesd (ADR-0020).
+var ErrCrashed = errors.New("vault: crashed for the simulation")
+
+// crashed asks Config.Crash whether to stop at point.
+func (v *Vault) crashed(point string) bool { return v.cfg.Crash != nil && v.cfg.Crash(point) }
+
 // ErrChanged means a file is not in the state a change expected: it
 // changed since, on disk or in the index. Sync pushes the local change
 // first and applies the hub's answer (ADR-0017).
@@ -165,6 +173,9 @@ func (v *Vault) putBlob(ctx context.Context, r *os.Root, p, want, hash string, i
 	} else if err != nil {
 		return store.File{}, err
 	}
+	if v.crashed("renamed") {
+		return store.File{}, ErrCrashed
+	}
 	// The file holds the new content: record it whatever the caller does.
 	ctx = context.WithoutCancel(ctx)
 	var data []byte
@@ -217,6 +228,9 @@ func (v *Vault) relocate(ctx context.Context, r *os.Root, from, want, to string,
 	} else if err != nil {
 		return store.File{}, err
 	}
+	if v.crashed("renamed") {
+		return store.File{}, ErrCrashed
+	}
 	ctx = context.WithoutCancel(ctx)
 	var doc markdown.Doc
 	var data []byte
@@ -267,6 +281,9 @@ func (v *Vault) removeFile(ctx context.Context, r *os.Root, p, want string, who 
 	}
 	if err := v.settled(remove(r, p)); err != nil {
 		return store.File{}, err
+	}
+	if v.crashed("renamed") {
+		return store.File{}, ErrCrashed
 	}
 	ctx = context.WithoutCancel(ctx)
 	err = v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {

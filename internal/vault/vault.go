@@ -35,6 +35,11 @@ type Config struct {
 	// Keep is how long versions are kept [30 days]; PruneEvery is the
 	// interval of the pass that prunes them [24h].
 	Keep, PruneEvery time.Duration
+	// Crash, when set, is asked at each point a crash could fall (only
+	// "renamed": after a change's rename, before its transaction); true
+	// stops the change there with ErrCrashed. The simulation sets it
+	// (ADR-0020); notesd never does.
+	Crash func(point string) bool
 }
 
 func (c Config) withDefaults() Config {

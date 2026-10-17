@@ -65,6 +65,8 @@ file a step names before writing its frostnotes counterpart.
   sync loops and the `sync` domain; `internal/blobxfer`: blobs over HTTP
   by hash; `internal/secrets`: device tokens in the Secret Service
   ([docs/specs/sync-protocol.md](docs/specs/sync-protocol.md)).
+  `internal/synctest`: sync's seeded simulation of a hub and devices
+  (`make sync-sim`; reduced failures in its `testdata/regressions`).
 - `internal/mcpserver`: the MCP tools `notesctl mcp` serves
   ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
   only package that imports the MCP SDK.

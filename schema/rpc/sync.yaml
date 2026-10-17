@@ -56,7 +56,7 @@ types:
       - {name: state, type: SyncState}
       - {name: cursor, type: int, doc: "The highest sequence number whose heads the device applied."}
       - {name: hubSeq, type: int, doc: "The hub log's latest sequence number, as last seen."}
-      - {name: pending, type: int, doc: "Files with a change to push."}
+      - {name: pending, type: int, doc: "Files with a change to push, and local conflict versions not yet pushed."}
       - {name: conflicts, type: int, doc: "Flagged files."}
       - {name: refused, type: "[]SyncRefusal"}
       - {name: skipped, type: "[]string", doc: "Pulled paths this device ignores or cannot hold."}

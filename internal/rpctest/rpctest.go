@@ -49,8 +49,13 @@ type Options struct {
 	// Blobs, Log, Publish and, when Now is set, Now are filled in.
 	Vault vault.Config
 	// HubListen serves the hub's endpoints on a loopback port, at
-	// Server.HubURL, as notesd --hub does.
+	// Server.HubURL, as notesd --hub does; HubAddr, when set, is the
+	// address, so a restarted hub keeps its URL.
 	HubListen bool
+	HubAddr   string
+	// Crash is the simulation's crash points (vault.Config.Crash and its
+	// syncer and hub counterparts).
+	Crash func(point string) bool
 	// Syncer tunes the device's sync loops (quiet periods, backoff, the
 	// device's name); its stores, broker, secrets, log and, when Now is
 	// set, Now are filled in.
@@ -105,6 +110,7 @@ func StartWith(t testing.TB, o Options) *Server {
 	srv := &Server{DB: db, Blobs: blobs.New(filepath.Join(data, "blobs")), Broker: broker}
 	vc := o.Vault
 	vc.DB, vc.Blobs, vc.Log, vc.Publish = db, srv.Blobs, log, broker.Publish
+	vc.Crash = o.Crash
 	if o.Now != nil {
 		vc.Now = o.Now
 	}
@@ -131,10 +137,14 @@ func StartWith(t testing.TB, o Options) *Server {
 	if err := os.MkdirAll(parts, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	hc := hub.Config{DB: db, Blobs: srv.Blobs, Vaults: srv.Vaults, RPC: rpc, Log: log, Now: o.Now}
+	hc := hub.Config{DB: db, Blobs: srv.Blobs, Vaults: srv.Vaults, RPC: rpc, Log: log, Now: o.Now, Crash: o.Crash}
 	var hubLn net.Listener
 	if o.HubListen {
-		if hubLn, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+		addr := o.HubAddr
+		if addr == "" {
+			addr = "127.0.0.1:0"
+		}
+		if hubLn, err = net.Listen("tcp", addr); err != nil {
 			t.Fatal(err)
 		}
 		hc.Listen = hubLn.Addr().String()
@@ -144,6 +154,7 @@ func StartWith(t testing.TB, o Options) *Server {
 	sc := o.Syncer
 	sc.DB, sc.Blobs, sc.Vaults, sc.Secrets, sc.Broker, sc.Publish, sc.Log = db, srv.Blobs, srv.Vaults, srv.Secrets, broker, broker.Publish, log
 	sc.PartDir = parts
+	sc.Crash = o.Crash
 	if o.Now != nil {
 		sc.Now = o.Now
 	}

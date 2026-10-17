@@ -181,6 +181,14 @@ func TestMatch(t *testing.T) {
 	ht.add(4, api.RevisionOpCreate, "c.md", "h6")   // 8
 	ht.add(4, api.RevisionOpPut, "c.md", "h7")      // 9
 	ht.add(4, api.RevisionOpPut, "c.md", "h6")      // 10: back to h6
+	ht.add(5, api.RevisionOpCreate, "f.md", "h8")   // 11
+	ht.add(5, api.RevisionOpMove, "g.md", "h8")     // 12
+	ht.add(5, api.RevisionOpPut, "g.md", "h9")      // 13
+	ht.add(5, api.RevisionOpMove, "f.md", "h9")     // 14: back at f.md
+	ht.add(5, api.RevisionOpMove, "h.md", "h9")     // 15
+	ht.add(6, api.RevisionOpCreate, "k.md", "h10")  // 16
+	ht.add(6, api.RevisionOpMove, "m.md", "h10")    // 17
+	ht.add(6, api.RevisionOpPut, "m.md", "h11")     // 18: a push into the moved file
 
 	qs := []api.MatchQuery{
 		{Path: "a.md", Hash: fakeHash("h1")}, // the file last at a.md is file 2, which never had h1
@@ -191,6 +199,13 @@ func TestMatch(t *testing.T) {
 		{Path: "e.md", Hash: fakeHash("h5")},
 		{Path: "c.md", Hash: fakeHash("h6")}, // the newest revision with the hash
 		{Path: "nowhere.md", Hash: fakeHash("h1")},
+		// h9 is newest at h.md, but a copy at f.md is the one before the
+		// move away from it: the pull brings it the move.
+		{Path: "f.md", Hash: fakeHash("h9")},
+		{Path: "f.md", Hash: fakeHash("h8")}, // the create, not the move away
+		// The head's content at the path the file left: a put from the
+		// create, whose answer moves it.
+		{Path: "k.md", Hash: fakeHash("h11")},
 	}
 	got, err := ht.d.Match(ctx, ht.vault.VaultID, qs)
 	if err != nil {
@@ -205,7 +220,14 @@ func TestMatch(t *testing.T) {
 		{},
 		{File: ptr(4), Revision: ptr(10)},
 		{},
+		{File: ptr(5), Revision: ptr(14)},
+		{File: ptr(5), Revision: ptr(11)},
+		{File: ptr(6), Revision: ptr(16)},
 	}
+	// The matched revisions' contents: the query's hash, but for the copy
+	// with a later revision's content at an earlier path.
+	wantHash := []string{"", fakeHash("h3"), fakeHash("h2"), fakeHash("h1"), fakeHash("h4"), "", fakeHash("h6"), "",
+		fakeHash("h9"), fakeHash("h8"), fakeHash("h10")}
 	if len(got) != len(want) {
 		t.Fatalf("Match gave %d answers for %d queries", len(got), len(qs))
 	}
@@ -216,6 +238,9 @@ func TestMatch(t *testing.T) {
 		return fmt.Sprint(*p)
 	}
 	for i := range want {
+		if want[i].Revision != nil && (got[i].RevisionHash == nil || *got[i].RevisionHash != wantHash[i]) {
+			t.Errorf("Match(%s, %s) gives revision hash %v; want %s", qs[i].Path, qs[i].Hash[:2], got[i].RevisionHash, wantHash[i][:2])
+		}
 		if got[i].Path != qs[i].Path || got[i].Hash != qs[i].Hash ||
 			show(got[i].File) != show(want[i].File) || show(got[i].Revision) != show(want[i].Revision) {
 			t.Errorf("Match(%s, %s) = file %s, revision %s; want %s, %s", qs[i].Path, qs[i].Hash[:2],

@@ -122,8 +122,12 @@ func (s *Syncer) join(ctx context.Context, vaultID int64, h store.SyncHub, name 
 		for j, m := range ms {
 			if m.File != nil && m.Revision != nil {
 				f := batch[j]
+				hash := f.Hash
+				if m.RevisionHash != nil {
+					hash = *m.RevisionHash // the copy differs from it: a put to push
+				}
 				agreed = append(agreed, store.Agreed{VaultID: vaultID, HubFile: *m.File, FileID: f.ID, Seq: *m.Revision,
-					Revision: *m.Revision, Path: f.Path, Hash: f.Hash})
+					Revision: *m.Revision, Path: f.Path, Hash: hash})
 			}
 		}
 	}

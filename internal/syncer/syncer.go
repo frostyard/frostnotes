@@ -60,6 +60,11 @@ type Config struct {
 	// Backoff is the first wait before reconnecting, doubling to MaxBackoff
 	// [1s, 60s].
 	Backoff, MaxBackoff time.Duration
+	// Crash, when set, is asked at each point a crash could fall in a push
+	// ("uploaded": after the uploads, before the push; "answered": after
+	// the hub's answers, before they are applied); true ends the session
+	// with ErrCrashed. The simulation sets it (ADR-0020).
+	Crash func(point string) bool
 }
 
 func (c Config) withDefaults() Config {
@@ -208,6 +213,11 @@ func (s *Syncer) WaitIdle(ctx context.Context, vaultID int64) error {
 	}
 	return l.waitIdle(ctx)
 }
+
+// ErrCrashed ends a session that Config.Crash stopped.
+var ErrCrashed = errors.New("syncer: crashed for the simulation")
+
+func (s *Syncer) crashed(point string) bool { return s.cfg.Crash != nil && s.cfg.Crash(point) }
 
 // errRevoked means a hub refused this device's token.
 var errRevoked = errors.New("the hub refused this device's token: pair again")

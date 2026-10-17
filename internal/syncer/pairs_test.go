@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/rpctest"
 	"github.com/frostyard/frostnotes/internal/store"
 )
 
@@ -383,5 +384,108 @@ func TestVerifyAndHistory(t *testing.T) {
 	rep, err := b.c.Sync().Verify(ctx, &api.SyncVerifyParams{VaultID: b.vault})
 	if err != nil || rep.Ok || len(rep.Differing) != 1 {
 		t.Fatalf("verify of a differing vault = %+v, %v", rep, err)
+	}
+}
+
+// lossyHub starts a hub that, once armed, loses its answer to a push and
+// cuts the pushing device off, as a dropped connection would.
+func lossyHub(t *testing.T, files map[string]string) (*node, func(*device) <-chan struct{}) {
+	t.Helper()
+	var mu sync.Mutex
+	var d *device
+	var fired chan struct{}
+	h := start(t, rpctest.Options{HubListen: true, Crash: func(point string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		if point != "pushed" || fired == nil {
+			return false
+		}
+		d.net.cut()
+		close(fired)
+		fired = nil
+		return true
+	}}, vaultDir(t, files))
+	if _, err := h.c.Hub().Serve(t.Context(), &api.HubServeParams{VaultID: h.vault}); err != nil {
+		t.Fatal(err)
+	}
+	arm := func(of *device) <-chan struct{} {
+		mu.Lock()
+		defer mu.Unlock()
+		d, fired = of, make(chan struct{})
+		return fired
+	}
+	return h, arm
+}
+
+// lose has device d push its changes to a hub armed by lossyHub, and
+// returns once the hub has lost the answer.
+func lose(t *testing.T, d *device, fired <-chan struct{}) {
+	t.Helper()
+	d.net.heal()
+	d.srv.Syncer.Kick(d.vault)
+	select {
+	case <-fired:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the device never pushed")
+	}
+}
+
+func TestALostAnswerAndAMoveMakeOneFile(t *testing.T) {
+	// The hub loses its answer to a's create; a moves the file before it
+	// hears again. The retry is answered first, and the move follows it:
+	// one file on the hub, not a second create at the new path.
+	h, arm := lossyHub(t, nil)
+	a := newPartitioned(t, h, "a", nil)
+	settle(t, h, a.node)
+	a.net.cut()
+	a.write("new.md", "a new note\n")
+	lose(t, a, arm(a))
+	a.move("new.md", "moved.md")
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	settle(t, h, a.node)
+	got := same(t, h, a.node)
+	if len(got) != 1 || got["moved.md"] != "a new note\n" {
+		t.Fatalf("a lost answer and a move = %q, want one file at moved.md", got)
+	}
+}
+
+func TestAMergedCreateThatMovedMakesOneFile(t *testing.T) {
+	// The hub merges a's create into its own note at the path, and loses
+	// the answer; a moves the note before it hears again. The merge
+	// applies where the note now is, and the move follows.
+	h, arm := lossyHub(t, nil)
+	a := newPartitioned(t, h, "a", nil)
+	settle(t, h, a.node)
+	a.net.cut()
+	h.write("2026-10-17.md", "# 2026-10-17\n## Tasks\n- [ ] hub task\n## Notes\n")
+	a.write("2026-10-17.md", "# 2026-10-17\n## Tasks\n## Notes\nmet Ana\n")
+	lose(t, a, arm(a))
+	a.move("2026-10-17.md", "days/2026-10-17.md")
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	settle(t, h, a.node)
+	got := same(t, h, a.node)
+	if len(got) != 1 || got["days/2026-10-17.md"] != "# 2026-10-17\n## Tasks\n- [ ] hub task\n## Notes\nmet Ana\n" {
+		t.Fatalf("a merged create that moved = %q, want one merged note at days/2026-10-17.md", got)
+	}
+}
+
+func TestANewFileWaitsForTheOneLeavingItsPath(t *testing.T) {
+	// While a is away, the hub moves plan.md to old.md, makes a new
+	// plan.md, then edits old.md: the new file comes first in a's pull,
+	// while a's copy of the old one still holds the path. It waits for
+	// the old one's move, rather than being skipped.
+	h, a, _ := twoDevices(t, map[string]string{"plan.md": "the old plan\n"})
+	a.net.cut()
+	h.move("plan.md", "old.md")
+	h.write("plan.md", "a new plan\n")
+	h.write("old.md", "the old plan\nkept\n")
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	settle(t, h, a.node)
+	got := same(t, h, a.node)
+	if len(got) != 2 || got["plan.md"] != "a new plan\n" || got["old.md"] != "the old plan\nkept\n" {
+		t.Fatalf("a's vault = %q, want the new plan.md and the edited old.md", got)
 	}
 }

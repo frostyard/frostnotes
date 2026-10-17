@@ -382,9 +382,19 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 	if err != nil {
 		return false, 0, err
 	}
+	// A file with a push in flight waits for its answer before it is
+	// pushed again: a second create of one file would make two on the hub,
+	// and a second change is pushed from the state the answer agrees.
+	inFlight := map[int64]bool{}
+	for _, p := range sends {
+		inFlight[p.FileID] = true
+	}
 	now := l.s.cfg.Now()
 	var held time.Duration
 	for _, c := range changes {
+		if inFlight[c.FileID] {
+			continue
+		}
 		paths := []string{c.Path}
 		if c.Agreed != nil {
 			paths = append(paths, c.Agreed.Path)
@@ -395,15 +405,32 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 			}
 			continue
 		}
-		if slices.ContainsFunc(sends, func(p store.LocalPush) bool {
-			return p.FileID == c.FileID && p.Path == c.Path && p.Hash == c.Hash
-		}) {
-			continue // the same change waits for its answer already
-		}
 		p := store.LocalPush{VaultID: l.vaultID, FileID: c.FileID, Path: c.Path, Hash: c.Hash}
 		if c.Agreed != nil {
 			p.HubFile, p.Base = c.Agreed.HubFile, c.Agreed.Revision
 		}
+		if err := db.Tx(ctx, func(tx *store.Tx) error {
+			var err error
+			p, err = tx.AddPush(ctx, p)
+			return err
+		}); err != nil {
+			return false, 0, err
+		}
+		sends = append(sends, p)
+	}
+	// A writer's content that lost a merge on this device goes to the
+	// hub's log as a conflict revision, so it reaches every device's
+	// history and flags the file there too.
+	lost, err := db.PendingConflicts(ctx, l.vaultID)
+	if err != nil {
+		return false, 0, err
+	}
+	for _, c := range lost {
+		if inFlight[c.FileID] || slices.ContainsFunc(sends, func(p store.LocalPush) bool { return p.FileID == c.FileID && p.Hash == c.Hash }) {
+			continue
+		}
+		p := store.LocalPush{VaultID: l.vaultID, FileID: c.FileID, HubFile: c.Agreed.HubFile, Base: c.Agreed.Revision,
+			Path: c.Agreed.Path, Hash: c.Hash, Conflict: true}
 		if err := db.Tx(ctx, func(tx *store.Tx) error {
 			var err error
 			p, err = tx.AddPush(ctx, p)
@@ -419,6 +446,9 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 	if err := l.upload(ctx, sess, remote, sends); err != nil {
 		return false, 0, err
 	}
+	if l.s.crashed("uploaded") {
+		return false, 0, ErrCrashed
+	}
 	for batch := range slices.Chunk(sends, pushBatch) {
 		items, send, err := l.items(ctx, batch)
 		if err != nil {
@@ -433,6 +463,9 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 		}
 		if len(answers) != len(send) {
 			return false, 0, fmt.Errorf("the hub answered %d of %d pushes", len(answers), len(send))
+		}
+		if l.s.crashed("answered") {
+			return false, 0, ErrCrashed
 		}
 		for i, a := range answers {
 			if err := l.answer(ctx, sess, remote, send[i], a); err != nil {
@@ -489,6 +522,9 @@ func (l *loop) items(ctx context.Context, batch []store.LocalPush) ([]api.PushIt
 		}
 		if p.HubFile != 0 {
 			a, err := db.AgreedByHubFile(ctx, l.vaultID, p.HubFile)
+			if err == nil && p.Conflict {
+				p.Base = a.Revision // a conflict item adds to the file whatever its head
+			}
 			if err != nil || a.Revision != p.Base {
 				if err := db.Tx(ctx, func(tx *store.Tx) error {
 					return tx.AnswerPush(ctx, l.vaultID, p.PushID, api.PushStatusRefused, api.RefuseReasonBase)
@@ -498,7 +534,11 @@ func (l *loop) items(ctx context.Context, batch []store.LocalPush) ([]api.PushIt
 				continue
 			}
 			file := p.HubFile
-			it.File, it.BaseHash = &file, a.Hash
+			it.File, it.Base, it.BaseHash = &file, p.Base, a.Hash
+		}
+		if p.Conflict {
+			conflict := true
+			it.Conflict = &conflict
 		}
 		if p.Hash == "" {
 			deleted := true
@@ -543,6 +583,20 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		})
 	}
 	l.clean(p.Path)
+	if p.Conflict {
+		// A conflict item changes the file's flag, not its head.
+		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
+			if err := tx.AnswerPush(ctx, l.vaultID, p.PushID, a.Status, reason); err != nil {
+				return err
+			}
+			if prev, err := tx.AgreedByHubFileTx(ctx, l.vaultID, p.HubFile); err == nil && a.File != nil &&
+				prev.Revision == a.File.Revision {
+				prev.Seq, prev.Conflicted = a.File.Seq, a.File.Conflicted
+				return tx.PutAgreed(ctx, prev)
+			}
+			return nil
+		})
+	}
 	if a.File == nil || (a.Status == api.PushStatusRefused && reason != api.RefuseReasonEdited) {
 		var drop int64
 		if reason == api.RefuseReasonBase || reason == api.RefuseReasonUnknown {
@@ -586,6 +640,16 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return rec(ctx, tx, store.File{}) })
 	}
 	_, err = v.Apply(ctx, exp, head, fromHub(f.Author, f.DeviceName), rec)
+	if errors.Is(err, vault.ErrChanged) && p.HubFile == 0 && !f.Deleted {
+		// A create the hub merged, whose file moved since without changing:
+		// the merge applies where the file is now, and the move is pushed
+		// next. Without an agreed state, it would be pushed as a second
+		// create.
+		if local, lerr := db.FileByID(ctx, p.FileID); lerr == nil && local.Hash == p.Hash && local.Path != p.Path {
+			_, err = v.Apply(ctx, vault.Expect{Path: local.Path, Hash: p.Hash}, vault.Head{Path: local.Path, Hash: f.Hash},
+				fromHub(f.Author, f.DeviceName), rec)
+		}
+	}
 	if errors.Is(err, vault.ErrChanged) {
 		// The file changed again since it was pushed: keep the agreed state,
 		// so the next push, from the same base, merges again on the hub. A
@@ -633,18 +697,21 @@ func (l *loop) download(ctx context.Context, sess *session, hash string) error {
 }
 
 // pull applies the heads after the cursor, page by page. It reports
-// whether it applied any, and whether a file waits for its local change to
-// be pushed first, which holds the cursor where it is.
+// whether it applied any, and whether a file waits: for its local change
+// to be pushed first, or for another file's head to free its path. A file
+// that waits holds the cursor below it, and the pages after it are still
+// applied, since the head it waits for may be among them.
 func (l *loop) pull(ctx context.Context, sess *session) (bool, bool, error) {
 	db := l.s.cfg.DB
+	remote, err := db.Remote(ctx, l.vaultID)
+	if err != nil {
+		return false, false, err
+	}
+	after, hold := remote.Cursor, int64(-1)
 	pulled := false
 	for {
-		remote, err := db.Remote(ctx, l.vaultID)
-		if err != nil {
-			return false, false, err
-		}
 		limit := int64(pullPage)
-		page, err := sess.client.Log().Pull(ctx, &api.LogPullParams{Vault: remote.SyncID, After: remote.Cursor, Limit: &limit})
+		page, err := sess.client.Log().Pull(ctx, &api.LogPullParams{Vault: remote.SyncID, After: after, Limit: &limit})
 		if err != nil {
 			return false, false, err
 		}
@@ -652,28 +719,31 @@ func (l *loop) pull(ctx context.Context, sess *session) (bool, bool, error) {
 		if err != nil {
 			return false, false, err
 		}
-		blocked := false
 		for _, f := range page.Files {
 			applied, wait, err := l.applyHead(ctx, sess, f, pending)
 			if err != nil {
 				return false, false, err
 			}
 			pulled = pulled || applied
-			blocked = blocked || wait
-		}
-		if blocked {
-			return pulled, true, nil
+			if wait && hold < 0 {
+				hold = f.Seq - 1
+			}
 		}
 		l.setHubSeq(page.Next)
 		l.mu.Lock()
 		hubSeq := l.status.HubSeq
 		l.mu.Unlock()
-		if err := db.Tx(ctx, func(tx *store.Tx) error { return tx.SetCursor(ctx, l.vaultID, page.Next, hubSeq) }); err != nil {
+		cursor := page.Next
+		if hold >= 0 {
+			cursor = hold
+		}
+		if err := db.Tx(ctx, func(tx *store.Tx) error { return tx.SetCursor(ctx, l.vaultID, cursor, hubSeq) }); err != nil {
 			return false, false, err
 		}
 		if !page.More {
-			return pulled, false, nil
+			return pulled, hold >= 0, nil
 		}
+		after = page.Next
 	}
 }
 
@@ -732,6 +802,11 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 			return false, false, nil // a file this device never had
 		}
 		if local, err := db.FileByPath(ctx, l.vaultID, f.Path); err == nil {
+			if _, err := db.AgreedByFile(ctx, local.ID); err == nil && !pending[local.ID] {
+				// Another hub file's copy, unchanged, holds the path: that
+				// file's own head, later in the pull, moves or deletes it.
+				return false, true, nil
+			}
 			return false, l.waitOrSkip(local.ID, f.Path, pending), nil
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return false, false, err
@@ -794,6 +869,10 @@ func (l *loop) refreshStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	lost, err := db.PendingConflicts(ctx, l.vaultID)
+	if err != nil {
+		return err
+	}
 	rows, err := db.AgreedRows(ctx, l.vaultID)
 	if err != nil {
 		return err
@@ -815,7 +894,7 @@ func (l *loop) refreshStatus(ctx context.Context) error {
 	l.mu.Lock()
 	l.status.URL, l.status.HubVault, l.status.Cursor = h.URL, remote.Name, remote.Cursor
 	l.status.HubSeq = max(l.status.HubSeq, remote.HubSeq)
-	l.status.Pending, l.status.Conflicts, l.status.Refused = int64(len(changes)), int64(conflicts), refused
+	l.status.Pending, l.status.Conflicts, l.status.Refused = int64(len(changes)+len(lost)), int64(conflicts), refused
 	l.status.Skipped = l.status.Skipped[:0]
 	for p := range l.skipped {
 		l.status.Skipped = append(l.status.Skipped, p)

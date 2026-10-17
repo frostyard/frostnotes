@@ -11,12 +11,13 @@ Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md) and
 [specs/merge.md](../specs/merge.md), written in
 [plan 0004](../plans/0004-m2-sync.md)'s Phase 2.
 
-**Status: built** through [plan 0004](../plans/0004-m2-sync.md)'s Phase 4:
+**Status: built** through [plan 0004](../plans/0004-m2-sync.md)'s Phase 5:
 `internal/hub` (pairing, the token check, the `/sync` WebSocket, pushes
 as writes through the vault's actor), `internal/syncer` (the device's
-loop), `internal/blobxfer`, and `vault.Apply` and `vault.Push`. The
-simulation (Phase 5) and the exit evidence (Phase 7) are next. The specs
-are the contract.
+loop), `internal/blobxfer`, `vault.Apply` and `vault.Push`, and the
+seeded simulation, `internal/synctest` ([Testing](#testing)). Scenario
+cards (Phase 6) and the exit evidence (Phase 7) are next. The specs are
+the contract.
 
 ## Overview
 
@@ -84,16 +85,24 @@ else records pending changes, so a crash or an outage loses none
    each changed file. The hub answers each with `accepted`, `merged`,
    `conflicted` or `refused`, and the head that results. A repeated push
    ID gets the first answer, so a push whose answer was lost is retried
-   safely.
+   safely, and until it is answered no new change of its file is pushed:
+   two creates of one file in flight would make two files on the hub. A
+   writer's content that lost a merge on the device goes too, as a
+   conflict item, so the hub's log keeps it.
 4. **Apply the answer.** The device writes the head (the merged content,
    or the head that refused its delete), expecting the state it pushed,
-   and records the head as agreed. If the user typed meanwhile, that is a
-   new local change based on the head.
+   and records the head as agreed. If the file changed meanwhile, nothing
+   is written and the agreed state stays, so the next push, from the same
+   base, merges again on the hub; a create the hub merged whose file only
+   moved meanwhile takes the merge where it now is.
 5. **Pull** heads after the cursor, when the hub announces new revisions
    on the WebSocket and at every reconnect. For each head, if the file
    still has its agreed hash and path, apply it (create, overwrite, move
    or delete) and advance the agreed state and the cursor in one `Tx`;
-   otherwise push the local change first and take the answer.
+   otherwise push the local change first and take the answer. A head
+   whose path another file still holds here, that file's own head being
+   later in the pull, waits for it: the cursor stays below the waiting
+   head while the rest of the pull applies.
 
 Applying (`vault.Apply`) compares instead of merging: the file must still
 hold the expected hash, checked again just before the rename, or nothing
@@ -224,10 +233,14 @@ inserts a unique token. At each quiet point, the checks are:
 - every device's agreed state is the hub's heads, and its index equals a
   rebuild.
 
-Stepwise runs replay a seed exactly; concurrent runs find races. A
-failing seed, reduced, is a regression test. `make test` runs a few
-hundred steps; `make sync-sim` runs M2's 10,000 over a hub and three
-devices
+Stepwise runs replay a seed exactly; concurrent runs find races.
+Concurrent runs edit on disk only files they create: another program's
+edit of a file a pull is writing loses whichever renames first, a
+window the comparison before each rename narrows but cannot close. A
+failing seed, reduced to the steps that still fail, is a plan in
+`internal/synctest/testdata/regressions`, which `make test` replays with
+a few hundred seeded steps; `make sync-sim` runs M2's 10,000 over a hub
+and three devices
 ([ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)).
 
 ## Operational notes

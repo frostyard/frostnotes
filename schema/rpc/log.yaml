@@ -59,6 +59,7 @@ types:
       - {name: source, type: VersionSource, doc: "Who changed it on the device: editor, agent or outside."}
       - {name: author, type: string, doc: "The writer's name on the device; empty for an outside edit."}
       - {name: at, type: time, doc: "When the device recorded the change."}
+      - {name: conflict, type: bool, optional: true, doc: "The content lost conflicting hunks in a merge on the device (a writer with a stale base); the hub keeps it as a conflict revision of the file, which flags it."}
   - name: LogFile
     doc: A file's state in the log.
     fields:
@@ -93,12 +94,13 @@ types:
       - {name: path, type: string}
       - {name: hash, type: string}
   - name: LogMatch
-    doc: The newest revision with a hash of the file last at a path, live or deleted.
+    doc: The revision a copy at a path with a hash is agreed at, of the file last at the path, live or deleted (docs/specs/sync-protocol.md, Joining).
     fields:
       - {name: path, type: string}
       - {name: hash, type: string}
       - {name: file, type: int, optional: true, doc: "Absent when no file was at the path."}
       - {name: revision, type: int, optional: true, doc: "Absent when no revision of that file has the hash."}
+      - {name: revisionHash, type: string, optional: true, doc: "The revision's content hash, with revision: not hash when the copy has a later revision's content at an earlier path."}
   - name: Revision
     doc: An entry in a hub vault's log (ADR-0017).
     fields:

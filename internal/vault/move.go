@@ -69,6 +69,9 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 	} else if err != nil {
 		return nil, err
 	}
+	if v.crashed("renamed") {
+		return nil, ErrCrashed
+	}
 	// The file has moved: record it, and rewrite its links, whatever the
 	// client does now.
 	ctx = context.WithoutCancel(ctx)

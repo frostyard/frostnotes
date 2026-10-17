@@ -26,6 +26,9 @@ type PushChange struct {
 	Path     string
 	Hash     string // "" when Deleted
 	Deleted  bool
+	// Conflict: Hash lost conflicting hunks in a merge on the device; the
+	// hub keeps it as a conflict revision of the file.
+	Conflict bool
 }
 
 // PushOutcome is what the hub did with a PushChange.
@@ -75,6 +78,9 @@ func (v *Vault) Push(ctx context.Context, c PushChange, who Author) (PushOutcome
 		}
 	}
 	if c.FileID == 0 {
+		if c.Conflict {
+			return refuse(api.RefuseReasonInvalid), nil
+		}
 		return v.pushCreate(ctx, r, c, who)
 	}
 	if _, err := v.cfg.DB.HubFile(ctx, v.id, c.FileID); errors.Is(err, store.ErrNotFound) {
@@ -99,6 +105,9 @@ func (v *Vault) Push(ctx context.Context, c PushChange, who Author) (PushOutcome
 		return PushOutcome{}, err
 	}
 	row, err := v.cfg.DB.FileByID(ctx, c.FileID)
+	if c.Conflict {
+		return v.pushConflict(ctx, c, row, err, who)
+	}
 	switch {
 	case errors.Is(err, store.ErrNotFound) && c.Deleted:
 		return PushOutcome{Status: api.PushStatusAccepted, FileID: c.FileID}, nil
@@ -118,6 +127,29 @@ func (v *Vault) Push(ctx context.Context, c PushChange, who Author) (PushOutcome
 		return PushOutcome{Status: api.PushStatusAccepted, FileID: c.FileID}, nil
 	}
 	return v.pushPut(ctx, r, c, base, row, who)
+}
+
+// pushConflict keeps a device's local conflict version as a conflict
+// revision of the file, live or deleted, which flags it. v.mu must be held.
+func (v *Vault) pushConflict(ctx context.Context, c PushChange, row store.File, rowErr error, who Author) (PushOutcome, error) {
+	if rowErr != nil && !errors.Is(rowErr, store.ErrNotFound) {
+		return PushOutcome{}, rowErr
+	}
+	if rowErr != nil {
+		f, err := v.cfg.DB.LogFile(ctx, v.id, c.FileID)
+		if err != nil {
+			return PushOutcome{}, err
+		}
+		row = store.File{ID: c.FileID, VaultID: v.id, Path: f.Path}
+	}
+	size, err := v.cfg.Blobs.Size(c.Hash)
+	if err != nil {
+		return PushOutcome{}, err
+	}
+	if err := v.flagConflict(ctx, row, c.Hash, size, who); err != nil {
+		return PushOutcome{}, err
+	}
+	return PushOutcome{Status: api.PushStatusAccepted, FileID: c.FileID}, nil
 }
 
 // pushCreate applies a create: a new file at a free path, or a merge as

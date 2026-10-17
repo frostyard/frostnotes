@@ -122,8 +122,13 @@ func (d *DB) PushRecords(ctx context.Context, vaultID, replicaID int64, pushes [
 // Match answers log.match for vault vaultID, in the order of qs: for each
 // query, File is the file last at q.Path (the file of the newest revision
 // whose path is q.Path, other than a conflict or resolve), and Revision is
-// that file's newest create, put or move with hash q.Hash. Either is nil
-// when there is none. Task card T-0025.
+// the revision a copy with hash q.Hash at q.Path is agreed at: that
+// file's newest create, put or move at q.Path no later than its newest
+// create, put or move with hash q.Hash, or that one when the file was not
+// at q.Path before it; RevisionHash is that revision's content. So a copy
+// that has a later revision's content but not its path is a put from the
+// revision before the file left the path, and the hub's answer brings it
+// the head's path. Either is nil when there is none. Task card T-0025.
 func (d *DB) Match(ctx context.Context, vaultID int64, qs []api.MatchQuery) ([]api.LogMatch, error) {
 	out := make([]api.LogMatch, 0, len(qs))
 	for _, q := range qs {
@@ -135,6 +140,23 @@ func (d *DB) Match(ctx context.Context, vaultID int64, qs []api.MatchQuery) ([]a
 			ORDER BY f.seq DESC LIMIT 1`, q.Hash, vaultID, q.Path).Scan(&m.File, &m.Revision)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, hubReadError("match log", err)
+		}
+		if m.Revision != nil {
+			var at sql.NullInt64
+			if err := d.db.QueryRowContext(ctx, `SELECT MAX(seq) FROM revisions WHERE vault_id = ? AND file_id = ?
+				AND op IN ('create', 'put', 'move') AND path = ? AND seq <= ?`,
+				vaultID, *m.File, q.Path, *m.Revision).Scan(&at); err != nil {
+				return nil, hubReadError("match log", err)
+			}
+			if at.Valid {
+				m.Revision = &at.Int64
+			}
+			var hash string
+			if err := d.db.QueryRowContext(ctx, `SELECT hash FROM revisions WHERE vault_id = ? AND seq = ?`,
+				vaultID, *m.Revision).Scan(&hash); err != nil {
+				return nil, hubReadError("match log", err)
+			}
+			m.RevisionHash = &hash
 		}
 		out = append(out, m)
 	}

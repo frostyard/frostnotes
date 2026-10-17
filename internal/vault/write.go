@@ -193,6 +193,9 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 	} else if err != nil {
 		return nil, err
 	}
+	if v.crashed("renamed") {
+		return nil, ErrCrashed
+	}
 	// The file is on disk: index it even if the client has gone.
 	ctx = context.WithoutCancel(ctx)
 	err = v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
@@ -350,6 +353,9 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 		if err := v.settled(st.commit(false)); err != nil {
 			return nil, err
 		}
+		if v.crashed("renamed") {
+			return nil, ErrCrashed
+		}
 		// The file holds the new content: index it even if the client
 		// has gone, or the next scan would take it for another program's.
 		ctx := context.WithoutCancel(ctx)
@@ -447,6 +453,9 @@ func (v *Vault) Delete(ctx context.Context, p, base string, who Author) error {
 	}
 	if err := v.settled(remove(r, p)); err != nil {
 		return err
+	}
+	if v.crashed("renamed") {
+		return ErrCrashed
 	}
 	ctx = context.WithoutCancel(ctx) // the file is gone: record it whatever the client does
 	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return v.deleteRow(ctx, tx, row, who) })

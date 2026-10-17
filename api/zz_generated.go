@@ -524,6 +524,10 @@ type PushItem struct {
 	Author string `json:"author"`
 	// When the device recorded the change.
 	At time.Time `json:"at"`
+	// The content lost conflicting hunks in a merge on the device (a writer with
+	// a stale base); the hub keeps it as a conflict revision of the file, which
+	// flags it.
+	Conflict *bool `json:"conflict,omitzero"`
 }
 
 // LogFile: A file's state in the log.
@@ -577,8 +581,9 @@ type MatchQuery struct {
 	Hash string `json:"hash"`
 }
 
-// LogMatch: The newest revision with a hash of the file last at a path, live
-// or deleted.
+// LogMatch: The revision a copy at a path with a hash is agreed at, of the
+// file last at the path, live or deleted (docs/specs/sync-protocol.md,
+// Joining).
 type LogMatch struct {
 	Path string `json:"path"`
 	Hash string `json:"hash"`
@@ -586,6 +591,9 @@ type LogMatch struct {
 	File *int64 `json:"file,omitzero"`
 	// Absent when no revision of that file has the hash.
 	Revision *int64 `json:"revision,omitzero"`
+	// The revision's content hash, with revision: not hash when the copy has a
+	// later revision's content at an earlier path.
+	RevisionHash *string `json:"revisionHash,omitzero"`
 }
 
 // Revision: An entry in a hub vault's log (ADR-0017).
@@ -1612,7 +1620,7 @@ type SyncStatus struct {
 	Cursor int64 `json:"cursor"`
 	// The hub log's latest sequence number, as last seen.
 	HubSeq int64 `json:"hubSeq"`
-	// Files with a change to push.
+	// Files with a change to push, and local conflict versions not yet pushed.
 	Pending int64 `json:"pending"`
 	// Flagged files.
 	Conflicts int64         `json:"conflicts"`

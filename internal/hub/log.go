@@ -138,6 +138,10 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 		}
 		out = append(out, a)
 	}
+	if s.h.cfg.Crash != nil && s.h.cfg.Crash("pushed") {
+		s.h.disconnect(d.ID)
+		return nil, errors.New("hub: the answer was lost, for the simulation")
+	}
 	return out, nil
 }
 
@@ -166,6 +170,9 @@ func (s logService) pushOne(ctx context.Context, v *vault.Vault, hv store.HubVau
 		}
 		if it.Deleted != nil {
 			c.Deleted = *it.Deleted
+		}
+		if it.Conflict != nil {
+			c.Conflict = *it.Conflict
 		}
 		who := vault.Author{Source: pushSource(it.Source), Name: it.Author,
 			Push: &vault.Push{DeviceID: d.ID, ReplicaID: rep.ID, PushID: it.Push, Base: it.Base}}

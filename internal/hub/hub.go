@@ -47,6 +47,11 @@ type Config struct {
 	Listen string
 	// MaxBlob is the largest blob a device may upload [blobxfer.DefaultMaxSize].
 	MaxBlob int64
+	// Crash, when set, is asked after a push is applied and recorded and
+	// before its answer ("pushed"); true drops the device's connection
+	// instead of answering, as a crash or a lost link would. The simulation
+	// sets it (ADR-0020).
+	Crash func(point string) bool
 }
 
 // Hub serves devices. Its router, set with SetRouter, serves their

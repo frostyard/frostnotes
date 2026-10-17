@@ -325,6 +325,7 @@ A file's whole new state on a device, and the revision it was based on.
 | `source` | `VersionSource` | Who changed it on the device: editor, agent or outside. |
 | `author` | `string` | The writer's name on the device; empty for an outside edit. |
 | `at` | `time` | When the device recorded the change. |
+| `conflict` | `bool` (optional) | The content lost conflicting hunks in a merge on the device (a writer with a stale base); the hub keeps it as a conflict revision of the file, which flags it. |
 
 ### Type `LogFile`
 
@@ -377,7 +378,7 @@ A device's file, to find among a hub vault's revisions.
 
 ### Type `LogMatch`
 
-The newest revision with a hash of the file last at a path, live or deleted.
+The revision a copy at a path with a hash is agreed at, of the file last at the path, live or deleted (docs/specs/sync-protocol.md, Joining).
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -385,6 +386,7 @@ The newest revision with a hash of the file last at a path, live or deleted.
 | `hash` | `string` |  |
 | `file` | `int` (optional) | Absent when no file was at the path. |
 | `revision` | `int` (optional) | Absent when no revision of that file has the hash. |
+| `revisionHash` | `string` (optional) | The revision's content hash, with revision: not hash when the copy has a later revision's content at an earlier path. |
 
 ### Type `Revision`
 
@@ -1011,7 +1013,7 @@ A synced vault's state.
 | `state` | `SyncState` |  |
 | `cursor` | `int` | The highest sequence number whose heads the device applied. |
 | `hubSeq` | `int` | The hub log's latest sequence number, as last seen. |
-| `pending` | `int` | Files with a change to push. |
+| `pending` | `int` | Files with a change to push, and local conflict versions not yet pushed. |
 | `conflicts` | `int` | Flagged files. |
 | `refused` | `[]SyncRefusal` |  |
 | `skipped` | `[]string` | Pulled paths this device ignores or cannot hold. |

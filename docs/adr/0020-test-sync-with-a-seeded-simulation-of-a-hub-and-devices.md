@@ -53,8 +53,9 @@ drive it through `rpctest`, and `make vault-it` kills a child notesd.
   and committed with its mode and step count as a regression test.
 - **Cost:** `make test` runs a few hundred steps on fixed seeds; `make
   sync-sim`, an integration test, runs 10,000 steps over a hub and three
-  devices and is M2's exit evidence. A fake clock drives quiet periods
-  and retention; timeouts use real time.
+  devices and is M2's exit evidence. Quiet periods shrink to a few
+  milliseconds of real time; retention, which runs on days, has its own
+  tests with a fake clock.
 - **The harness and the oracle are the planner's;** scenario profiles over
   them can be task cards
   ([ADR-0010](0010-claude-plans-and-codex-runs-task-cards.md)).

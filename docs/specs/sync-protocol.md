@@ -107,7 +107,7 @@ must be one of the connection's device (`notFound` otherwise).
 | `log.missing` | `vault`, `hashes` (at most 1,000) | `[]string`: the hashes the hub has no content for |
 | `log.push` | `vault`, `replica`, `items []PushItem` (at most 100) | `[]PushAnswer`, one per item, in order |
 | `log.pull` | `vault`, `after`, `limit` (default 500, at most 1,000) | `LogPage` `{files []LogFile, next, more}` |
-| `log.match` | `vault`, `files []MatchQuery` `{path, hash}` (at most 1,000) | `[]LogMatch` `{path, hash, file?, revision?}` |
+| `log.match` | `vault`, `files []MatchQuery` `{path, hash}` (at most 1,000) | `[]LogMatch` `{path, hash, file?, revision?, revisionHash?}` |
 | `log.history` | `vault`, `file`, `before?`, `limit` (default 50, at most 200) | `[]Revision`, newest first, below `before` |
 | `log.pushes` | `vault`, `replica`, `pushes []int` (at most 1,000) | `[]PushRecord` `{push, revisions []Revision}` |
 | `log.resolve` | `vault`, `file`, `seq` | `LogFile`: the conflict flag cleared |
@@ -126,6 +126,7 @@ Event `log.appended {vault, seq}` (transient): the vault's log grew to
 | `path` | string | yes | the file's path on the device |
 | `hash` | string | no | its content's hash; absent when `deleted` |
 | `deleted` | bool | no | the device deleted the file |
+| `conflict` | bool | no | `hash` is a local conflict version: a writer's content that lost hunks in a merge on the device, for the hub's log ([Pending changes](#pending-changes)) |
 | `source` | `VersionSource` | yes | who changed it on the device (editor, agent, outside) |
 | `author` | string | yes | the writer's name there; empty for an outside edit |
 | `at` | time | yes | when the device recorded the change |
@@ -228,6 +229,17 @@ A device has a change to push for a file when, comparing its index
   state that was refused; `sync.status` lists it.
 - Items go out deletes first, then puts, then creates, so a path a file
   leaves is free before another file takes it; within a group, by path.
+- A push without an answer (its connection dropped) is sent again, with
+  the same push ID, before anything else of its file: no new change of a
+  file is pushed until the answer to its last push is applied. A second
+  create of one file would make two files on the hub, and a second change
+  is pushed from the state the answer agrees.
+- A local conflict version of a file with an agreed row (content a writer
+  with a stale base lost in a merge on the device,
+  [vault.md](../design/vault.md#writes)) that no push has carried is
+  pushed as a `conflict` item: base the agreed revision, path the agreed
+  path, hash the version's. So every device's history keeps it, and the
+  file is flagged on the hub too.
 
 ### A push, on the hub
 
@@ -279,7 +291,11 @@ revision in the same `Tx` as the hub's version.
    its earlier revision.
 9. A push that changes path and content appends a `move` and then a
    `put`.
-10. Each appended revision emits `log.appended` after its `Tx` commits.
+10. **Conflict item:** a `conflict` item appends a `conflict` revision
+    holding the pushed content to its file, live or deleted, whatever the
+    head (`lostTo` the head), and flags the file; `accepted`. It changes
+    no head. A conflict item without `file` is refused, `invalid`.
+11. Each appended revision emits `log.appended` after its `Tx` commits.
 
 ### The hub's own writers
 
@@ -320,15 +336,28 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   agreed with (a create merged into a file that moved onto its path), the
   local file at the head's path keeps it, and the other is deleted if it
   still holds its agreed content, or pushed first if not.
+- An answer is applied like a pulled head, expecting the pushed path and
+  hash. If the file changed since it was pushed, nothing is written and
+  the agreed state stays (none, for a create), so the next push, from the
+  same base, merges again on the hub. One exception: the answer to a
+  create the hub merged, whose file has since moved without changing, is
+  applied at the file's new path, and the move is pushed next; without an
+  agreed state it would go out as a second create.
 
 ### Joining
 
 `sync.join` calls `log.vaults` and `log.join`, records the remote, then
 matches every file of the local vault by `log.match`: a file whose hash is
 a revision of the file last at its path on the hub, live or deleted, is
-agreed at that revision. Then the loop runs as always: unmatched files are
-pushed as creates, and the pull from 0 brings the hub's heads, so a matched
-older copy takes the head, and a file the hub deleted is deleted.
+agreed at that file's newest create, put or move at its path no later
+than the newest revision with its hash, or at that revision when the file
+was not at the path before it, with that revision's content
+(`revisionHash`). Then the loop runs as always: unmatched files are pushed
+as creates, and the pull from 0 brings the hub's heads, so a matched older
+copy takes the head, and a file the hub deleted is deleted. A copy with a
+later revision's content at the path its file left differs from its
+agreed revision, so it is pushed as a put from it, and the answer brings
+the head's path.
 `sync.reset` drops the remote, its agreed rows and its push records, and
 joins again with a new replica.
 

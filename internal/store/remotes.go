@@ -65,16 +65,17 @@ type Change struct {
 
 // LocalPush is a sync_pushes row: a push this device made.
 type LocalPush struct {
-	VaultID int64
-	PushID  int64
-	FileID  int64
-	HubFile int64 // 0 for a create
-	Base    int64
-	Path    string
-	Hash    string // "" for a delete
-	At      time.Time
-	Status  api.PushStatus   // "" until answered
-	Reason  api.RefuseReason // "" unless refused
+	VaultID  int64
+	PushID   int64
+	FileID   int64
+	HubFile  int64 // 0 for a create
+	Base     int64
+	Path     string
+	Hash     string // "" for a delete
+	At       time.Time
+	Status   api.PushStatus   // "" until answered
+	Reason   api.RefuseReason // "" unless refused
+	Conflict bool             // a local conflict version, for the hub's log
 }
 
 // PutSyncHub records a pairing with h.PairedAt = t.Now(): a new row, or,
@@ -195,7 +196,7 @@ func (t *Tx) PutAgreed(ctx context.Context, a Agreed) error {
 		path = excluded.path, hash = excluded.hash, conflicted = excluded.conflicted`,
 		a.VaultID, a.HubFile, a.FileID, a.Seq, a.Revision, a.Path, a.Hash, a.Conflicted)
 	if IsUniqueViolation(err) {
-		return fmt.Errorf("put agreed: %w", ErrConflict)
+		return fmt.Errorf("put agreed: hub file %d at %s as local file %d: %w", a.HubFile, a.Path, a.FileID, ErrConflict)
 	}
 	if IsForeignKeyViolation(err) {
 		return fmt.Errorf("put agreed: %w", ErrNotFound)
@@ -302,6 +303,13 @@ func (t *Tx) AddPush(ctx context.Context, p LocalPush) (LocalPush, error) {
 		SELECT ?, COALESCE(MAX(push_id), 0) + 1, ?, NULLIF(?, 0), ?, ?, ?, ?, NULL, ''
 		FROM sync_pushes WHERE vault_id = ? RETURNING `+localPushColumns,
 		p.VaultID, p.FileID, p.HubFile, p.Base, p.Path, p.Hash, FormatTime(t.Now()), p.VaultID))
+	if err == nil && p.Conflict {
+		if _, err := t.ExecContext(ctx, `UPDATE sync_pushes SET conflict = 1 WHERE vault_id = ? AND push_id = ?`,
+			stored.VaultID, stored.PushID); err != nil {
+			return LocalPush{}, err
+		}
+		stored.Conflict = true
+	}
 	if IsForeignKeyViolation(err) {
 		return LocalPush{}, fmt.Errorf("add push: %w", ErrNotFound)
 	}
@@ -332,7 +340,7 @@ func (d *DB) Pushes(ctx context.Context, vaultID int64) ([]LocalPush, error) {
 const syncHubColumns = `id, hub_id, url, device_id, paired_at`
 const remoteColumns = `vault_id, hub, sync_id, name, replica_id, cursor, hub_seq, joined_at, synced_at`
 const agreedColumns = `vault_id, hub_file, file_id, seq, revision, path, hash, conflicted`
-const localPushColumns = `vault_id, push_id, file_id, COALESCE(hub_file, 0), base, path, hash, at, COALESCE(status, ''), reason`
+const localPushColumns = `vault_id, push_id, file_id, COALESCE(hub_file, 0), base, path, hash, at, COALESCE(status, ''), reason, conflict`
 
 func scanSyncHub(sc interface{ Scan(...any) error }) (SyncHub, error) {
 	var h SyncHub
@@ -374,7 +382,7 @@ func scanLocalPush(sc interface{ Scan(...any) error }) (LocalPush, error) {
 	var p LocalPush
 	var at string
 	if err := sc.Scan(&p.VaultID, &p.PushID, &p.FileID, &p.HubFile, &p.Base,
-		&p.Path, &p.Hash, &at, &p.Status, &p.Reason); err != nil {
+		&p.Path, &p.Hash, &at, &p.Status, &p.Reason, &p.Conflict); err != nil {
 		return LocalPush{}, hubReadError("read local push", err)
 	}
 	var err error
@@ -398,4 +406,52 @@ func (d *DB) localPushes(ctx context.Context, vaultID int64, answered bool) ([]L
 		out = append(out, p)
 	}
 	return out, hubReadError("list local pushes", rows.Err())
+}
+
+// LostLocally is a conflict version of a synced file that no push has
+// carried to the hub yet: content a writer with a stale base lost in a
+// merge on this device.
+type LostLocally struct {
+	FileID int64
+	Agreed Agreed
+	Path   string
+	Hash   string
+}
+
+// PendingConflicts returns vault vaultID's local conflict versions of
+// files it agrees with the hub on, that no push has carried, by version.
+// The device pushes each as a conflict item, so the hub's log keeps it
+// and flags the file (docs/specs/sync-protocol.md, Pending changes).
+func (d *DB) PendingConflicts(ctx context.Context, vaultID int64) ([]LostLocally, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT v.file_id, v.path, v.hash, `+agreedColumnsOf("a")+`
+		FROM versions v JOIN sync_files a ON a.file_id = v.file_id AND a.vault_id = ?
+		WHERE v.vault_id = ? AND v.conflict = 1 AND v.hash != ''
+		AND NOT EXISTS (SELECT 1 FROM sync_pushes p WHERE p.vault_id = ? AND p.file_id = v.file_id AND p.hash = v.hash)
+		ORDER BY v.id`, vaultID, vaultID, vaultID)
+	if err != nil {
+		return nil, fmt.Errorf("list pending conflicts: %w", err)
+	}
+	defer rows.Close()
+	out := []LostLocally{}
+	for rows.Next() {
+		var l LostLocally
+		a := &l.Agreed
+		if err := rows.Scan(&l.FileID, &l.Path, &l.Hash, &a.VaultID, &a.HubFile, &a.FileID, &a.Seq, &a.Revision,
+			&a.Path, &a.Hash, &a.Conflicted); err != nil {
+			return nil, fmt.Errorf("read pending conflict: %w", err)
+		}
+		out = append(out, l)
+	}
+	return out, hubReadError("list pending conflicts", rows.Err())
+}
+
+func agreedColumnsOf(alias string) string {
+	return alias + ".vault_id, " + alias + ".hub_file, " + alias + ".file_id, " + alias + ".seq, " + alias + ".revision, " +
+		alias + ".path, " + alias + ".hash, " + alias + ".conflicted"
+}
+
+// AgreedByHubFileTx is AgreedByHubFile as this transaction sees it.
+func (t *Tx) AgreedByHubFileTx(ctx context.Context, vaultID, hubFile int64) (Agreed, error) {
+	return scanAgreed(t.QueryRowContext(ctx, `SELECT `+agreedColumns+` FROM sync_files WHERE vault_id = ? AND hub_file = ?`,
+		vaultID, hubFile))
 }

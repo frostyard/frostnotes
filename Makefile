@@ -57,6 +57,15 @@ obsidian-links: ## Check links against Obsidian's dump (FROSTNOTES_OBSIDIAN_LINK
 vault-it: ## Kill notesd during writes and scans, and check every restart
 	go test -tags integration -run '^TestIKillNotesd$$' -count=1 -v -timeout 30m ./internal/vault
 
+# Sync's seeded simulation (docs/plans/0004-m2-sync.md, Phase 5; ADR-0020):
+# SIM_SEEDS seeds (default 10) of SIM_STEPS steps (default 10,000) over a hub
+# and three devices, stepwise and concurrent (SIM_MODE picks one), then the
+# reduced regression plans in internal/synctest/testdata. SIM_REDUCE=1
+# reduces a failure and prints its plan.
+.PHONY: sync-sim
+sync-sim: ## Run sync's seeded simulation (SIM_SEEDS, SIM_STEPS, SIM_MODE)
+	go test -tags integration -run '^TestI(Simulation|Regressions)$$' -count=1 -v -timeout 4h ./internal/synctest
+
 # M1's exit evidence 1 to 4 (docs/plans/0003-m1-headless-vault.md, Phase 7):
 # Obsidian's link dump, the user's vault indexed cold (read only), a vim save
 # searchable within 1 s, and the kill -9 harness. Set TMPDIR to put the test

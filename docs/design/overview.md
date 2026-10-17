@@ -95,6 +95,7 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/render` | goldmark rendering and the HTML sanitizer |
 | `internal/syncer`, `internal/hub` | the device's sync loops; the hub's endpoints, pairing and log domain |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
+| `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
 | `app/` | Tauri v2 + React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
 | `tools/rpcgen`, `tools/taskrun`, `tools/vaultgen` | the contract generator, the task-card runner, generated test vaults |
