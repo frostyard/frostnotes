@@ -5,7 +5,9 @@ Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
 for deletes and conflict versions, and
 [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
-for content that is not UTF-8.
+for content that is not UTF-8, and
+[ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) for
+comments.
 Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated), [specs/mcp.md](../specs/mcp.md) (agents' writes).
 
 **Status: built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md),
@@ -120,8 +122,11 @@ and inline, nested `#a/b`), links (wikilinks, property links and markdown
 links to vault files: target, subpath `#heading` or `#^block`, alias,
 embed flag, position), headings, block IDs, tasks (status character and
 line) and word count. Comments are found after goldmark parses, so a
-comment may span blocks; what lies inside one is dropped. The title is the
-file name without `.md`, as in Obsidian.
+comment may span blocks. They hide text when a note is rendered, not from
+the index: what lies inside one is indexed like the rest, as Obsidian
+indexes it, and only the word count leaves it out
+([ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)). The
+title is the file name without `.md`, as in Obsidian.
 
 ### Index
 
@@ -267,7 +272,7 @@ long-term history ([sync.md](sync.md)).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))

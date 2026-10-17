@@ -9,10 +9,10 @@ from `notesctl` and from an agent through `notesctl mcp`. It follows
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the spec, the schema, scan and watch, the write path, merges
 and the MCP surface; the executor owns cards T-0004 onward.
-Status: **Phases 1 to 6 done** (2026-10-16): this plan,
+Status: **done** (2026-10-16): this plan,
 [specs/markdown.md](../specs/markdown.md), the index contracts, cards
-T-0004 to T-0023, the engine and the MCP server
-([specs/mcp.md](../specs/mcp.md)). Phase 7, the exit evidence, is next.
+T-0004 to T-0023, the engine, the MCP server
+([specs/mcp.md](../specs/mcp.md)) and the exit evidence (Phase 7).
 
 ## Decisions taken for M1
 
@@ -23,8 +23,9 @@ T-0004 to T-0023, the engine and the MCP server
   fallback for `./` and `../`, and no alias resolution
   ([spec](../specs/markdown.md#link-resolution)). A reference resolver
   written from the spec agreed with all 179 on 2026-10-16. The tie order
-  beyond "in the source's folder" has no example in the dump and is the
-  spec's choice.
+  beyond "in the source's folder" has no example in the dump; a test vault
+  in Phase 7 confirmed the spec's order
+  ([ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)).
 - **Aliases do not resolve links.** They name a note in search and link
   suggestions, as in Obsidian; [vault.md](../design/vault.md#link-resolution)
   said otherwise and is corrected.
@@ -419,7 +420,7 @@ are merged.
   `TestIColdIndexOfObsidianVault`, `TestIVimSaveIsSearchable`,
   `TestIKillNotesd`); evidence 5 writes to the user's vault, and the test
   vault needs the user's Obsidian.
-- **Result so far (2026-10-16): 1 to 5 hold.** The user's vault moved that
+- **Result (2026-10-16): done; 1 to 5 hold.** The user's vault moved that
   day to another SMB 3 share, with the same 666 notes, 8 attachments and
   97 folders; every run uses the new location, read only.
   1. Cold, from an empty data directory on btrfs, with the vault's files
@@ -451,7 +452,15 @@ are merged.
      Afterwards every file and folder of the vault had its size and mtime
      of before, but the root folder's mtime.
 
-  Still open: the Obsidian test vault, the user's to run in Obsidian.
+  The open question is answered too. A test vault of made-up notes, with a
+  read-only console snippet the user ran in Obsidian, showed that Obsidian
+  indexes the links inside `%%…%%` comments, which the spec had dropped,
+  and that its four ties go as the spec's order says
+  ([ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)).
+  The parser now keeps links, tags, headings, block IDs and tasks inside
+  comments, and only `Words` leaves them out. `make obsidian-links` on the
+  test vault: `Parse` finds Obsidian's links in 2 of 2 notes (7 of 7), and
+  `Resolve` agrees on all 7. The user's 179 links are unchanged.
 
 ## Later / ideas
 
@@ -469,11 +478,12 @@ are merged.
 
 ## Open questions
 
-- **Links in comments, and ties beyond the source folder:** does Obsidian
-  index `[[x]]` inside `%%…%%`, and which of several suffix matches does it
-  pick? A one-note test vault in the user's Obsidian answers both; it
-  needs the user's Obsidian, so it was not run in Phase 4 and moves to
-  Phase 7. Until then the spec's choices stand.
+- *Resolved in Phase 7 by
+  [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md):*
+  **links in comments, and ties beyond the source folder.** A test vault
+  in the user's Obsidian showed that Obsidian indexes the links inside
+  `%%…%%`, so the index now keeps what comments hide, and that every tie
+  goes as the spec's order says.
 
 ## References
 

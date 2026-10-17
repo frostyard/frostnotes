@@ -44,7 +44,8 @@ func TestParseMarkdownLinks(t *testing.T) {
 			[]string{"[full][r]", "[collapsed][]", "[r]"}},
 		{"external links are not indexed", "[a](https://x.test/a.md) [b](mailto:w@x.test) [c](//host/c.md) <https://x.test> https://x.test/d.md [e](C:x.md)", nil, nil},
 		{"an empty destination is not a link", "[a]() [b](<>)", nil, nil},
-		{"not in code or comments", "`[a](a.md)` %%[b](b.md)%% [c](c.md)", []Link{{Target: "c.md", Alias: "c", Start: 26}}, []string{"[c](c.md)"}},
+		{"not in code, but in comments", "`[a](a.md)` %%[b](b.md)%% [c](c.md)",
+			[]Link{{Target: "b.md", Alias: "b", Start: 14}, {Target: "c.md", Alias: "c", Start: 26}}, []string{"[b](b.md)", "[c](c.md)"}},
 		{"after frontmatter", "---\nk: v\n---\n[a](a.md)", []Link{{Target: "a.md", Alias: "a", Start: 13}}, []string{"[a](a.md)"}},
 		{"a wikilink is not a markdown link", "[[a.md]] ![[b.png]]", nil, nil},
 	} {
@@ -101,7 +102,7 @@ func TestParseHeadings(t *testing.T) {
 		{"in a quote and a list", "> # Q\n- ## L", []Heading{{1, "Q", 1}, {2, "L", 2}}},
 		{"crlf", "# A\r\nB\r\n---\r\n", []Heading{{1, "A", 1}, {2, "B", 2}}},
 		{"after frontmatter", "---\nk: v\n---\n# A", []Heading{{1, "A", 4}}},
-		{"not in code or comments", "```\n# no\n```\n%%\n# no\n%%\n# yes", []Heading{{1, "yes", 7}}},
+		{"not in code, but in comments", "```\n# code\n```\n%%\n# comment\n%%\n# yes", []Heading{{1, "comment", 5}, {1, "yes", 7}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Parse([]byte(tc.note)).Headings; fmt.Sprint(got) != fmt.Sprint(tc.want) {
@@ -125,7 +126,7 @@ func TestParseTasks(t *testing.T) {
 		{"in a quote", "> - [ ] q", []Task{{" ", "q", 1}}},
 		{"crlf", "- [ ] a\r\n- [x] b\r\n", []Task{{" ", "a", 1}, {"x", "b", 2}}},
 		{"after frontmatter", "---\nk: v\n---\n- [ ] a", []Task{{" ", "a", 4}}},
-		{"not in code or comments", "```\n- [ ] no\n```\n%% - [ ] no %%\n- [ ] yes", []Task{{" ", "yes", 5}}},
+		{"not in code, but in comments", "```\n- [ ] code\n```\n%%\n- [ ] comment\n%%\n- [ ] yes", []Task{{" ", "comment", 5}, {" ", "yes", 7}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Parse([]byte(tc.note)).Tasks; fmt.Sprint(got) != fmt.Sprint(tc.want) {
@@ -150,7 +151,7 @@ func TestParseBlockIDs(t *testing.T) {
 		{"trailing spaces", "Text ^tr  \n", []Block{{"tr", 1}}},
 		{"not ids", "a ^not here\nb^no\nc ^a_b\nd `^code`\n", nil},
 		{"after frontmatter", "---\nk: v\n---\nx ^f", []Block{{"f", 4}}},
-		{"not in code or comments", "```\nx ^c\n```\n\nx %%^m%%\n\ny ^yes", []Block{{"yes", 7}}},
+		{"not in code, but in comments", "```\nx ^c\n```\n\n%%\n\nx ^m\n\n%%\n\ny ^yes", []Block{{"m", 7}, {"yes", 11}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Parse([]byte(tc.note)).Blocks; fmt.Sprint(got) != fmt.Sprint(tc.want) {

@@ -105,7 +105,8 @@ type source struct {
 	newlines []int  // offsets of '\n' in note
 
 	// comments are the %%…%% ranges, in note offsets, sorted; findComments
-	// sets them before the collectors run.
+	// sets them before the collectors run. Only Words leaves them out: the
+	// index keeps what they hide, as Obsidian's does (ADR-0015).
 	comments [][2]int
 	// linkEnds holds the body offset just past each markdown link and
 	// image, which goldmark does not record.

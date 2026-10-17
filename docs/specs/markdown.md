@@ -15,6 +15,10 @@ it fits: [design/vault.md](../design/vault.md#parse). Built in
   vault (179 links from 43 notes, [plan 0001, spike 4](../plans/0001-m0-foundations.md#phase-5--spikes-go-or-no-go)).
   The dump stays outside the repository; `TestIObsidianLinkDump` checks it
   locally ([plan 0003](../plans/0003-m1-headless-vault.md)).
+- **test vault**: Obsidian's answers, recorded on 2026-10-16 with the same
+  read-only snippet, for a vault of made-up notes built to settle what the
+  user's vault does not show: links inside comments, and ties beyond the
+  source's folder ([ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)).
 - **CommonMark** (0.31.2) and **GFM** (tables, strikethrough, autolinks,
   task list items).
 - **Obsidian docs**: Obsidian's help on internal links, embeds, tags,
@@ -82,15 +86,23 @@ boundary):
   a single `$` opens only before a character that is not a space and
   closes only after one. A math block starts at a line beginning with
   `$$` and ends at the next line holding `$$`. (Obsidian docs)
-- comments: `%%…%%`, within a line or across lines and blocks; an unclosed
-  `%%` runs to the end of the note. A `%%` in code, math or HTML opens no
-  comment; inside a comment, the next `%%` closes it wherever it is.
-  (choice: Obsidian hides comments; whether it indexes links inside them
-  is unconfirmed, and the user's vault has none.)
 - HTML blocks and inline HTML; link destinations, autolinks and bare URLs;
   link reference definitions.
 - a character escaped with a backslash: `\[[x]]` is not a link, `\#x` is
   not a tag. (choice)
+
+### Comments
+
+- A comment is `%%…%%`, within a line or across lines and blocks; an
+  unclosed `%%` runs to the end of the note. A `%%` in code, math or HTML
+  opens no comment; inside a comment, the next `%%` closes it wherever it
+  is. (Obsidian docs)
+- Comments hide text when a note is rendered, not from the index: links
+  inside them are indexed like any other (test vault: Obsidian indexed
+  the links in an inline comment and in a comment block, 2026-10-16), and
+  so are tags, headings, block IDs and tasks (choice, by analogy;
+  [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)).
+  Only `Words` leaves comments out.
 
 ### Wikilinks and embeds
 
@@ -128,8 +140,8 @@ boundary):
   combining marks), digits, `_`, `-` or `/`; the tag ends at the first
   other character. All digits (`#123`) is not a tag; `#2026-10` is.
   (Obsidian docs; T-0002; the block's start is CommonMark's)
-- Tags count in headings, list items, quotes and table cells, never inside
-  a link, code, math, a comment or a URL.
+- Tags count in headings, list items, quotes, table cells and comments,
+  never inside a link, code, math or a URL.
 - A note lists each tag once, compared ignoring case, with the spelling
   seen first; frontmatter tags come before inline ones.
 
@@ -228,8 +240,11 @@ resolved)
 case; the one equal in case wins, then the first in byte order. Within step
 6 the order is: a file in the source's folder; a file whose matched part
 equals the name in case; the fewest folders; the first in byte order.
-(choice beyond the source's folder: the dump has no tie that reaches the
-other keys)
+(test vault: from a note in folder `Z`, `[[Shared]]` with matches one, two
+and three folders deep went to the one-folder match; `[[Same]]` with two
+matches one folder deep, to the first in byte order, though the other was
+created first; `[[Root]]` to `Root.md` over `K/Root.md`; `[[x/Deep]]` to
+the shallower of two suffix matches)
 
 `files(name)` is the caller's lookup: every vault path whose last segment,
 lower-cased, equals `name`, which is a cleaned name's last segment,
@@ -611,9 +626,11 @@ A block comment with [[Hidden]]
 {
   "links": [
     {"target": "Plan", "line": 1},
+    {"target": "Secret", "line": 2},
+    {"target": "Hidden", "line": 4},
     {"target": "Orchard/North Block/Soil", "line": 7}
   ],
-  "tags": [{"name": "watering", "line": 7}],
+  "tags": [{"name": "secret", "line": 2}, {"name": "watering", "line": 7}],
   "words": 13
 }
 ```
@@ -648,6 +665,6 @@ b]] are not links, nor is \[[Escaped]] or [Single].
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (invalid UTF-8)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (invalid UTF-8), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) (comments, ties)
 - Context: [design/vault.md](../design/vault.md) (parse, index, link resolution)
 - Built in: [plan 0003](../plans/0003-m1-headless-vault.md); evidence from [plan 0001, spike 4](../plans/0001-m0-foundations.md#phase-5--spikes-go-or-no-go)
