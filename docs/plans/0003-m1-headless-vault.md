@@ -417,8 +417,9 @@ are merged.
   question on links in comments and suffix ties, and the spec follows it.
 - `make m1-evidence` records evidence 1 to 4 (`TestIObsidianLinkDump`,
   `TestIColdIndexOfObsidianVault`, `TestIVimSaveIsSearchable`,
-  `TestIKillNotesd`); evidence 5 and the test vault are the user's runs.
-- **Result so far (2026-10-16): 1 to 4 hold.** The user's vault moved that
+  `TestIKillNotesd`); evidence 5 writes to the user's vault, and the test
+  vault needs the user's Obsidian.
+- **Result so far (2026-10-16): 1 to 5 hold.** The user's vault moved that
   day to another SMB 3 share, with the same 666 notes, 8 attachments and
   97 folders; every run uses the new location, read only.
   1. Cold, from an empty data directory on btrfs, with the vault's files
@@ -438,9 +439,19 @@ are merged.
      during scans, each restart consistent and equal to a fresh rebuild
      (117 s).
 
-  Still open: evidence 5 (Claude Code through `notesctl mcp` on the
-  user's vault, which writes to it) and the Obsidian test vault, both the
-  user's to run.
+  5. With the user's go-ahead, a notesd built from this branch, on a
+     scratch data directory, indexed the user's vault, and Claude Code
+     (2.1.300, headless, given only the frostnotes server and its
+     `search_notes`, `read_note` and `append_to_daily_note` tools) searched
+     it, read the first hit and appended a line to today's daily note,
+     which the call created at the vault root (the vault has no daily-note
+     settings). `notesctl versions` listed both versions as `agent`,
+     author `claude-code`; `notesctl revert` to the creation version undid
+     the append, and `notesctl rm` removed the note the check had made.
+     Afterwards every file and folder of the vault had its size and mtime
+     of before, but the root folder's mtime.
+
+  Still open: the Obsidian test vault, the user's to run in Obsidian.
 
 ## Later / ideas
 
