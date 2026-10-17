@@ -250,7 +250,9 @@ type Note struct {
 	Hash string `json:"hash"`
 	// The file's modification time.
 	ModifiedAt time.Time `json:"modifiedAt"`
-	// The file's text, byte for byte; invalid UTF-8 reads as U+FFFD.
+	// The file's text, byte for byte, except that each sequence of bytes that is
+	// not UTF-8 reads as U+FFFD; note.write keeps those bytes where a write
+	// leaves them be (ADR-0014).
 	Content string `json:"content"`
 	// The frontmatter as a JSON object; {} without one or when it is not a YAML
 	// mapping.
@@ -355,7 +357,7 @@ type DailyNote struct {
 // NoteListParams holds the params of note.list.
 type NoteListParams struct {
 	VaultID int64 `json:"vaultId"`
-	// Only notes in this folder or below it.
+	// Only notes in this folder or below it; "/" is the whole vault.
 	Folder *string `json:"folder,omitzero"`
 	// Only notes with this tag or one nested under it (tag/…), ignoring case; a
 	// leading '#' is ignored.
@@ -491,7 +493,10 @@ type NoteService interface {
 	// Write implements note.write. Replace a file's content. base is the hash the
 	// writer started from. If the file changed since, notesd merges: frontmatter
 	// by key, then the body by line and word (ADR-0005). A base notesd has no
-	// version of (pruned after 30 days) is refused with conflict: read again.
+	// version of (pruned after 30 days) is refused with conflict: read again, as
+	// is a stale base of a file that is not text, which does not merge. Bytes of
+	// the base that are not UTF-8, which note.read showed as U+FFFD, are kept
+	// wherever content leaves the words around them as they were (ADR-0014).
 	Write(ctx context.Context, p *NoteWriteParams) (*WriteResult, error)
 	// Move implements note.move. Rename or move a note or attachment, creating
 	// missing folders. The file keeps its versions. With updateLinks, every link

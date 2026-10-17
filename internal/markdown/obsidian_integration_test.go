@@ -4,20 +4,24 @@ package markdown
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// TestIObsidianLinkDump checks Resolve against Obsidian's own answers for a
-// real vault (plan 0003, Phase 2). FROSTNOTES_OBSIDIAN_LINKS names a JSON
-// dump of {source, link, dest} records made in Obsidian's developer
-// console, and FROSTNOTES_OBSIDIAN_VAULT the vault, which is only walked
-// for file names. Neither ever enters the repository; run it with
-// make obsidian-links.
+// TestIObsidianLinkDump checks Parse and Resolve against Obsidian's own
+// answers for a real vault (plan 0003, Phases 2 and 4): Parse must find in
+// each dumped note exactly the links Obsidian found there, and Resolve
+// must resolve each as Obsidian did. FROSTNOTES_OBSIDIAN_LINKS names a
+// JSON dump of {source, link, dest} records made in Obsidian's developer
+// console, and FROSTNOTES_OBSIDIAN_VAULT the vault, which is walked for
+// file names and read for the dumped notes, never written. Neither ever
+// enters the repository; run it with make obsidian-links.
 func TestIObsidianLinkDump(t *testing.T) {
 	dumpPath, root := os.Getenv("FROSTNOTES_OBSIDIAN_LINKS"), os.Getenv("FROSTNOTES_OBSIDIAN_VAULT")
 	if dumpPath == "" || root == "" {
@@ -92,4 +96,47 @@ func TestIObsidianLinkDump(t *testing.T) {
 			strings.Contains(target, "/"), strings.HasPrefix(target, "./") || strings.HasPrefix(target, "../"))
 	}
 	t.Logf("%d links from Obsidian (%d resolved); %d disagree", len(dump), resolved, wrong)
+
+	// Parse finds the links Obsidian found, note by note. Obsidian's dump
+	// leaves out frontmatter links, so property links are not compared.
+	bySource := map[string][]string{}
+	for _, e := range dump {
+		bySource[e.Source] = append(bySource[e.Source], e.Link)
+	}
+	notes, found, differ := 0, 0, 0
+	for source, want := range bySource {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(source)))
+		if err != nil {
+			t.Errorf("a dumped note cannot be read: %v", errors.Unwrap(err))
+			continue
+		}
+		notes++
+		var got []string
+		for _, l := range Parse(data).Links {
+			if l.Kind != LinkProperty {
+				got = append(got, l.Target+l.Subpath)
+			}
+		}
+		slices.Sort(want)
+		slices.Sort(got)
+		if slices.Equal(got, want) {
+			found += len(want)
+			continue
+		}
+		differ++
+		missing, extra := 0, 0
+		for _, w := range want {
+			if !slices.Contains(got, w) {
+				missing++
+			}
+		}
+		for _, g := range got {
+			if !slices.Contains(want, g) {
+				extra++
+			}
+		}
+		t.Errorf("note %d of the dump: Parse found %d links where Obsidian found %d (%d missing, %d extra)",
+			differ, len(got), len(want), missing, extra)
+	}
+	t.Logf("Parse finds Obsidian's links in %d of %d notes (%d of %d links)", notes-differ, notes, found, len(dump))
 }

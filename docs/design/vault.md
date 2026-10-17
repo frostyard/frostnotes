@@ -1,12 +1,17 @@
 # Design: vault
 
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
-[ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), and
+[ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md),
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
-for deletes and conflict versions.
+for deletes and conflict versions, and
+[ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
+for content that is not UTF-8.
 Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated).
 
-**Status: being built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md)).
+**Status: built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md),
+Phases 3 to 5): `internal/vault` scans, watches and writes, and
+`internal/engine` serves the `note` and `vault` domains over it. MCP
+(Phase 6) is next.
 
 ## Overview
 
@@ -36,19 +41,64 @@ in the vault except the settings in `.frostnotes/`.
 - **An Obsidian vault's settings:** while `.frostnotes/` lacks a setting,
   notesd reads it from `.obsidian/daily-notes.json`, `templates.json` or
   `types.json`, and writes `.frostnotes/` only when a setting changes, so
-  registering a vault writes nothing to it.
+  registering a vault writes nothing to it. M1 has no method that changes
+  a setting, so it only reads them (`vault.LoadSettings`), at each scan
+  and each `note.daily`:
+
+  ```yaml
+  # .frostnotes/vault.yaml; every key is optional
+  daily:
+    folder: Journal          # "" or absent: the vault root
+    format: YYYY-MM-DD       # moment.js; may contain "/" to name subfolders
+    template: Templates/Daily  # a note's path, ".md" optional
+  templates:
+    folder: Templates
+    dateFormat: YYYY-MM-DD   # {{date}} in templates
+    timeFormat: HH:mm        # {{time}}
+  ignore: ["Archive/", "*.tmp"]  # gitignore-style; no negation
+  ```
+
+  A `vault.yaml` that does not parse fails the scan, as an unreadable
+  folder does; an Obsidian file that does not parse is skipped, since it
+  only gives defaults.
 
 ### Scan and watch
 
+- **One actor per vault.** notesd opens every registered vault at start
+  (`vault.Manager`; `vault.add` and `vault.remove` reload it, one at a
+  time). Each vault has a goroutine that scans and watches it, and one lock
+  that every change to the vault takes: a write, a scan's batch, the
+  watcher's paths. Reads of the index take no lock. A vault being removed
+  finishes the changes it is making and refuses new ones before its row
+  goes.
 - **Open:** walk the vault; compare each file's size and mtime with the
-  index; hash those that differ; parse and index changed notes; treat a
-  missing file and a new file with the same hash as a move.
-- **Watch:** fsnotify on every directory, debounced 100 ms per path. A
-  periodic rescan catches what the watcher misses: every 5 minutes, or
-  every 10 seconds when the vault is on a network file system (detected
-  with `statfs`; SMB2 is `0xfe534d42`), where edits from other machines
-  raise no events. Edits made on this machine do raise events there. If the
-  inotify watch limit is reached, notesd logs it and falls back to rescans.
+  index; read and hash those that differ; parse and index changed notes;
+  treat a missing file and a new file of the same kind with the same hash
+  as a move (paired in path order), keeping the file's ID. Changes commit
+  in batches of at most 200 files per `Tx`, each checked against the disk
+  and the index again under the vault's lock, so a write that ran since
+  the walk is never undone and `kill -9` leaves an index the next scan
+  continues. A file that cannot be read keeps its rows; a folder that
+  cannot be read fails the scan before anything changes, and so does a
+  vault folder with no files while the index has some, which is what a
+  network share that is not mounted looks like. A row whose file the walk
+  leaves out although the disk has it (ignored by the settings now, or
+  spelled otherwise on a file system that ignores case) leaves the index.
+  A scan also removes the temporary files of writes a crash left behind
+  (`.frostnotes-<16 hex digits>.tmp`). Its walk's folders are watched
+  before it reads a file.
+- **Watch:** fsnotify on every directory, debounced 100 ms per path; the
+  paths due within half that window are handled together, so a rename's
+  two paths are seen as one move. A path an event names is read and hashed
+  whatever its stat says, since two edits of one size within the clock's
+  granularity share an mtime. A folder created or moved in, a folder moved
+  or deleted, a change under `.frostnotes/`, or an overflow of the event
+  queue starts a scan instead. A periodic rescan catches what the watcher
+  misses: every 5 minutes, or every 10 seconds when the vault is on a
+  network file system (detected with `statfs`: SMB2 `0xfe534d42`, CIFS,
+  SMB, NFS, 9p, Ceph and AFS), where edits from other machines raise no
+  events. Edits made on this machine do raise events there. If the inotify
+  watch limit is reached, notesd logs it and falls back to rescans.
   Measured in M0 on the user's vault over SMB 3 (97 folders, 666 notes,
   2.2 MiB): a walk with stat takes about 85 ms, and reading every note 7 ms
   cached or 674 ms cold, so a rescan that reads only changed files is cheap.
@@ -103,18 +153,38 @@ the app and the graph show them.
 `note.write(path, base, content)` and every other write:
 
 `base` is the SHA-256 of the content the writer started from (`note.read`
-returns it); M2 adds sync's revisions. A vault's writes run one at a time.
+returns it); M2 adds sync's revisions. A vault's writes run one at a time,
+under the vault's lock. Paths pass the guard first: vault-relative and
+slash-separated, no empty, `.` or `..` segment, no hidden segment, and no
+symlink on the way (every file operation goes through an `os.Root` of the
+vault, and each parent is checked with `lstat`). The note domain also
+refuses `.frostnotes/`, which holds settings, not notes, and paths the
+settings ignore. A path spelled otherwise than the file on a file system
+that ignores case is not a second file.
 
-1. Compare `base` with the indexed version. If it differs, merge three ways
-   (`internal/merge`) with the base's content from `blobs/`. A base whose
-   content is gone (pruned) is refused, and the writer reads again.
-2. Re-read the file. If it changed since the last scan, merge that change
-   in too.
+1. Re-read the file. If it changed since the last scan, index it first as
+   an outside version, so it becomes the head the write merges into.
+   `note.read` does the same, so the hash it returns is always a version.
+2. Compare `base` with the indexed version. If it differs, merge three ways
+   (`internal/merge`: `merge.Note` for a note, `merge.Text` for other
+   text) with the base's content from `blobs/`. A base that is no version
+   of the file, or whose content is gone (pruned), is refused, and the
+   writer reads again; so is a stale base of a file that is not text. A
+   base that is not valid UTF-8 first gets its stray bytes back where the
+   writer left the words around them alone (ADR-0014). When the merge
+   conflicts, the content the writer sent is kept as a conflict version
+   at once, in a `Tx` of its own, before the file changes.
 3. Put the result in `blobs/`, then write a temporary dot-file in the same
-   directory (so scans skip it), fsync, rename, fsync the directory.
+   directory (so scans skip it), keeping the file's mode, and fsync it.
+   Read the file once more just before the rename: if it changed, discard
+   the temporary file and start again from step 1, so the edit is merged.
+   Then rename and fsync the directory. A create renames with
+   `RENAME_NOREPLACE` where the file system has it (SMB does not; there it
+   checks first).
 4. In one `Tx`: index the new content, append a version, emit
-   `note.changed`.
-5. Return the new revision and, if a merge happened, the merged content.
+   `note.changed`. Once the file has changed, this runs to the end even if
+   the client has gone away.
+5. Return the new hash and, if a merge happened, the merged content.
 
 A write records its version's source (`editor` for a client, `agent` for
 MCP) and author (the client's name, or the MCP client's). When a merge
@@ -122,14 +192,24 @@ leaves a conflicting hunk, the file's newer side stands and the content
 the writer sent is kept as a conflict version, so nothing typed is lost.
 
 Moves (`note.move`) rename the file and, when asked, rewrite links in every
-note that points at it (Obsidian's "update internal links"). Each rewrite is
-an ordinary write with a base.
+note that points at it (Obsidian's "update internal links"), and the moved
+note's own links that the move would point elsewhere, such as `./` links.
+Each link gets the shortest target that resolves to its file, as
+Obsidian's "shortest path when possible" writes it: the file name, else
+the vault path, else the path from the root; a wikilink leaves out `.md`, a
+markdown link keeps it, percent-encoded. Subpath, alias and embed mark stay.
+Each rewrite replaces only the link's target, so links that nest, as a
+clickable image's do, are rewritten both, and is an ordinary write with a
+base. A move emits `note.moved`; the file keeps its ID and versions, and a
+note's title follows its new name.
 
 Deletes (`note.delete`) name their base too. A note changed since is not
 deleted (an edit beats a delete, as on the hub). Otherwise notesd removes
-the file, never moving it to `.trash/`, and records a deletion version;
+the file, never moving it to `.trash/`, after reading it once more, and
+records a deletion version;
 the file's versions stay, so `note.revert` brings it back with its ID at
-its last path.
+its last path. A file deleted by another program is recorded the same way,
+as an outside deletion.
 
 A crash after the rename and before the `Tx` loses only the attribution:
 the next scan indexes the new bytes as an outside version.
@@ -144,16 +224,23 @@ date formatted with `internal/moment`; a format may contain `/` and so
 name subfolders. A missing daily note is created from the template, whose
 `{{title}}`, `{{date}}`, `{{time}}`, `{{date:FORMAT}}` and offsets such as
 `{{date-1d:YYYY-MM-DD}}` are expanded as Obsidian does
-(`internal/templates`). MCP's `append_to_daily_note` creates it
-that way, then appends with a base like any write.
+(`internal/templates`): `{{title}}` is the note's name, `{{date}}` the date
+in the daily-note format, and the date carries the time of day it is now.
+A template that cannot be read gives an empty note, as in Obsidian. MCP's
+`append_to_daily_note` creates it that way, then appends with a base like
+any write.
 
 ### Versions
 
 Every version notesd writes or scans is kept in `blobs/`, and listed in
 `versions` with its source (editor, outside, agent, sync) and author, for
 30 days by default; a deletion is a version too. A file's newest version
-is kept however old, as the base of its next merge. A daily pass prunes
-older versions and removes the blobs no version or file names. `note.versions` and
+is kept however old, as the base of its next merge, and so is the version
+holding a file's current content when a conflict version is newer. A daily
+pass prunes
+older versions and removes the blobs no version or file names, those a
+crash left unnamed included, with every vault's lock held so no write can
+name a blob it removes. `note.versions` and
 `note.revert` expose them; on a synced vault, the hub's log holds the
 long-term history ([sync.md](sync.md)).
 
@@ -164,7 +251,12 @@ long-term history ([sync.md](sync.md)).
 - Byte-exact writes: notesd never normalizes line endings, BOMs or trailing
   newlines.
 - Symlinks are not followed out of the vault.
-- A note too large to index usefully (over 10 MB) is indexed by name only.
+- A note too large to index usefully (over 10 MB) is indexed by name only,
+  and the API neither reads nor writes a file that large.
+- `make vault-it` kills a child notesd at random points of writes and of
+  scans over a generated vault, 100 times each, and checks after each
+  restart that every file holds a complete version notesd knows and that
+  the index equals a fresh rebuild (`store.IndexSnapshot`).
 - `vault.reindex` reads every file again and rebuilds the index, keeping
   file IDs and versions; nothing is lost. Deleting `notesd.db` itself also loses local versions and sync
   state: the vault re-syncs from its hub, and `blobs/` is pruned on the
@@ -172,7 +264,7 @@ long-term history ([sync.md](sync.md)).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))

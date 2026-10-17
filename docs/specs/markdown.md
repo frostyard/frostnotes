@@ -32,7 +32,8 @@ it fits: [design/vault.md](../design/vault.md#parse). Built in
   an ordinary property. (Obsidian docs)
 - Notes are read as bytes. A BOM, CRLF line endings, a missing final newline
   (384 of the user's 666 notes) and invalid UTF-8 are kept on disk exactly;
-  the index sees invalid UTF-8 as U+FFFD.
+  the index and the API see invalid UTF-8 as U+FFFD, and writes keep the
+  bytes ([ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)).
 - **Positions:** `Start` and `End` are byte offsets in the whole note,
   frontmatter included; `Line` is the 1-based line of `Start`, counting
   `\n` bytes.
@@ -647,6 +648,6 @@ b]] are not links, nor is \[[Escaped]] or [Single].
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (invalid UTF-8)
 - Context: [design/vault.md](../design/vault.md) (parse, index, link resolution)
 - Built in: [plan 0003](../plans/0003-m1-headless-vault.md); evidence from [plan 0001, spike 4](../plans/0001-m0-foundations.md#phase-5--spikes-go-or-no-go)

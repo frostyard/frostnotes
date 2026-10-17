@@ -97,6 +97,41 @@ func (d *DB) GetVersion(ctx context.Context, id int64) (Version, error) {
 	return v, nil
 }
 
+// HasVersion reports whether file fileID has a version with content hash,
+// a conflict version included, a deletion not: whether hash may be the
+// base of a write.
+func (d *DB) HasVersion(ctx context.Context, fileID int64, hash string) (bool, error) {
+	var ok bool
+	err := d.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM versions WHERE file_id = ? AND hash = ? AND hash != '')`,
+		fileID, hash).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("find version %s of file %d: %w", hash, fileID, err)
+	}
+	return ok, nil
+}
+
+// UsedHashes returns every hash a version or a file names, in every vault:
+// the blobs that must stay.
+func (d *DB) UsedHashes(ctx context.Context) (map[string]bool, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT hash FROM versions WHERE hash != '' UNION SELECT hash FROM files`)
+	if err != nil {
+		return nil, fmt.Errorf("list used hashes: %w", err)
+	}
+	defer rows.Close()
+	used := map[string]bool{}
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, fmt.Errorf("list used hashes: %w", err)
+		}
+		used[hash] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list used hashes: %w", err)
+	}
+	return used, nil
+}
+
 // LastFileAt returns the ID of the file whose newest version was recorded
 // at path in vault, the way to a deleted file's versions, or ErrNotFound.
 // Task card T-0018.
@@ -114,13 +149,15 @@ func (d *DB) LastFileAt(ctx context.Context, vaultID int64, path string) (int64,
 }
 
 // PruneVersions deletes the versions made before before, except the newest
-// version of each file that still exists, and returns, sorted, the hashes
-// that no version and no file names any more: the blobs that may go. Task
-// card T-0018.
+// version of each file that still exists and the versions holding a
+// file's current content (a conflict version can be newer), and returns,
+// sorted, the hashes that no version and no file names any more: the blobs
+// that may go. Task card T-0018.
 func (t *Tx) PruneVersions(ctx context.Context, before time.Time) ([]string, error) {
 	rows, err := t.QueryContext(ctx, `DELETE FROM versions WHERE at < ? AND id NOT IN (
 		SELECT MAX(v.id) FROM versions v JOIN files f ON f.id = v.file_id GROUP BY v.file_id
-	) RETURNING hash`, FormatTime(before))
+	) AND NOT EXISTS (SELECT 1 FROM files f WHERE f.id = versions.file_id AND f.hash = versions.hash)
+	RETURNING hash`, FormatTime(before))
 	if err != nil {
 		return nil, fmt.Errorf("prune versions: %w", err)
 	}

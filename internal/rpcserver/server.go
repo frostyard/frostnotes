@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
@@ -101,8 +102,9 @@ type conn struct {
 	sem    chan struct{}
 	ctx    context.Context
 
-	wmu   sync.Mutex
-	ready atomic.Bool
+	wmu    sync.Mutex
+	ready  atomic.Bool
+	client atomic.Pointer[string] // the name given to rpc.hello
 
 	mu      sync.Mutex
 	sub     *events.Subscription
@@ -164,11 +166,23 @@ func (c *conn) serve(parent context.Context) {
 }
 
 func (c *conn) dispatch(ctx context.Context, m api.Frame) {
-	res, err := c.r.Dispatch(ctx, m.Method, m.Params)
+	res, err := c.call(ctx, m)
 	c.reply(m.ID, res, err)
 	if err == nil && m.Method == "events.subscribe" {
 		c.startEvents() // only after the subscribe result is on the wire
 	}
+}
+
+// call runs one request. A handler that panics answers internal and is
+// logged, rather than ending notesd for every client.
+func (c *conn) call(ctx context.Context, m api.Frame) (res any, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			c.s.opts.Logger.Error("request panicked", "method", m.Method, "panic", p, "stack", string(debug.Stack()))
+			res, err = nil, api.Internal("%s failed", m.Method)
+		}
+	}()
+	return c.r.Dispatch(ctx, m.Method, m.Params)
 }
 
 func (c *conn) reply(id jsontext.Value, result any, err error) {
@@ -220,6 +234,14 @@ func (c *conn) Notify(ev api.Event) error {
 // Done implements api.Conn.
 func (c *conn) Done() <-chan struct{} { return c.ctx.Done() }
 
+// Client implements api.Conn: "" until rpc.hello succeeds.
+func (c *conn) Client() string {
+	if name := c.client.Load(); name != nil {
+		return *name
+	}
+	return ""
+}
+
 var _ api.Conn = (*conn)(nil)
 
 func (c *conn) startEvents() {
@@ -251,6 +273,7 @@ func (s *Server) Hello(ctx context.Context, p *api.RPCHelloParams) (*api.Hello, 
 		return nil, api.ProtocolMismatch("notesd speaks protocol %d, not %d", api.Protocol, p.Protocol)
 	}
 	if c := connFrom(ctx); c != nil {
+		c.client.Store(&p.Client)
 		c.ready.Store(true)
 		s.opts.Logger.Debug("client connected", "client", p.Client, "caller", c.caller)
 	}

@@ -1,5 +1,6 @@
-// Package rpctest runs a real notesd API server (store, broker, engine and
-// rpcserver) on a temporary socket, for tests of clients such as notesctl.
+// Package rpctest runs a real notesd API server (store, blobs, broker,
+// vaults, engine and rpcserver) on a temporary socket, for tests of
+// clients such as notesctl.
 package rpctest
 
 import (
@@ -11,10 +12,12 @@ import (
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/engine"
 	"github.com/frostyard/frostnotes/internal/events"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
 	"github.com/frostyard/frostnotes/internal/store"
+	"github.com/frostyard/frostnotes/internal/vault"
 )
 
 // Name is what the test server reports from rpc.hello.
@@ -32,13 +35,18 @@ type Options struct {
 	// Note, when set, serves the note domain in place of the engine's, so
 	// a client's tests can run against a fake.
 	Note api.NoteService
+	// Vault tunes the vaults' actors (intervals, batch size); its DB,
+	// Blobs, Log, Publish and, when Now is set, Now are filled in.
+	Vault vault.Config
 }
 
 // Server is a running test server; it stops when the test ends.
 type Server struct {
 	Socket string
 	DB     *store.DB
+	Blobs  *blobs.Store
 	Broker *events.Broker
+	Vaults *vault.Manager
 	RPC    *rpcserver.Server
 	// Router serves every domain; pass it to RPC.ServeConn to test a
 	// connection of another caller kind.
@@ -71,7 +79,18 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	broker := events.NewBroker(db)
 	db.OnCommit = broker.Publish
-	srv := &Server{DB: db, Broker: broker}
+	srv := &Server{DB: db, Blobs: blobs.New(filepath.Join(data, "blobs")), Broker: broker}
+	vc := o.Vault
+	vc.DB, vc.Blobs, vc.Log, vc.Publish = db, srv.Blobs, log, broker.Publish
+	if o.Now != nil {
+		vc.Now = o.Now
+	}
+	srv.Vaults = vault.NewManager(vc)
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := srv.Vaults.Start(ctx); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
 
 	socket, cleanup, err := SocketPath()
 	if err != nil {
@@ -84,7 +103,7 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log})
 	srv.RPC = rpc
-	eng := engine.New(db)
+	eng := engine.New(db, srv.Vaults)
 	note := o.Note
 	if note == nil {
 		note = eng.Notes()
@@ -94,7 +113,6 @@ func StartWith(t testing.TB, o Options) *Server {
 		t.Fatal(err)
 	}
 	srv.Router = router
-	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- rpc.Serve(ctx, ln, router) }()
 	srv.stop = sync.OnceFunc(func() {
@@ -107,6 +125,7 @@ func StartWith(t testing.TB, o Options) *Server {
 		case <-time.After(5 * time.Second):
 			t.Error("Serve did not stop")
 		}
+		srv.Vaults.Wait()
 		_ = db.Close()
 		cleanup()
 	})

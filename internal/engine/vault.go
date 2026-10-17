@@ -9,9 +9,13 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/store"
+	"github.com/frostyard/frostnotes/internal/vault"
 )
 
-type vaults struct{ db *store.DB }
+type vaults struct {
+	db *store.DB
+	m  *vault.Manager
+}
 
 func (v vaults) List(ctx context.Context, _ *api.VaultListParams) ([]api.Vault, error) {
 	list, err := v.db.ListVaults(ctx)
@@ -64,21 +68,36 @@ func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, err
 	if err != nil {
 		return nil, apiError(err, "vault "+path)
 	}
+	if err := v.m.Reload(ctx); err != nil { // scan and watch it
+		return nil, err
+	}
 	r := out.API()
 	return &r, nil
 }
 
 func (v vaults) Remove(ctx context.Context, p *api.VaultRemoveParams) error {
-	err := v.db.Tx(ctx, func(tx *store.Tx) error { return tx.DeleteVault(ctx, p.ID) })
+	err := v.m.Remove(ctx, p.ID, func() error {
+		return v.db.Tx(ctx, func(tx *store.Tx) error { return tx.DeleteVault(ctx, p.ID) })
+	})
 	return apiError(err, fmt.Sprintf("vault %d", p.ID))
 }
 
-func (v vaults) Status(context.Context, *api.VaultStatusParams) (*api.ScanStatus, error) {
-	return nil, notYet("vault.status")
+func (v vaults) Status(ctx context.Context, p *api.VaultStatusParams) (*api.ScanStatus, error) {
+	actor, err := v.m.Vault(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	s, err := actor.Status(ctx)
+	return &s, err
 }
 
-func (v vaults) Reindex(context.Context, *api.VaultReindexParams) (*api.ScanStatus, error) {
-	return nil, notYet("vault.reindex")
+func (v vaults) Reindex(ctx context.Context, p *api.VaultReindexParams) (*api.ScanStatus, error) {
+	actor, err := v.m.Vault(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	s, err := actor.Reindex(ctx)
+	return &s, err
 }
 
 // within reports whether path is dir or lies inside it.

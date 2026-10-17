@@ -16,7 +16,7 @@ import (
 // NoteFilter selects notes for ListNotes. A zero field selects every note;
 // a note must match every field that is set.
 type NoteFilter struct {
-	Folder   string // a vault-relative folder: notes in it or below it
+	Folder   string // a vault-relative folder: notes in it or below it; "/" is the whole vault
 	Tag      string // a tag, or the parent of nested tags, without '#'; case is ignored
 	Property string // a frontmatter key the note has
 	Value    string // with Property: the key's value, or an item of its list; case is ignored
@@ -51,8 +51,8 @@ func (d *DB) ListNotes(ctx context.Context, vaultID int64, f NoteFilter) ([]api.
 func noteConditions(vaultID int64, f NoteFilter) (string, []any) {
 	where := "files.vault_id = ?"
 	args := []any{vaultID}
-	if f.Folder != "" {
-		folder := strings.Trim(f.Folder, "/")
+	// "/" and "" are the vault's root folder: every note is in it.
+	if folder := strings.Trim(f.Folder, "/"); folder != "" {
 		where += " AND files.path >= ? AND files.path < ?"
 		args = append(args, folder+"/", folder+"0")
 	}

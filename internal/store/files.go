@@ -73,10 +73,33 @@ func (t *Tx) PutFile(ctx context.Context, f File) (File, error) {
 	return stored, nil
 }
 
+// RestoreFile records f, which DeleteFile removed, again with its ID, so
+// its versions name it once more: note.revert bringing a deleted file back.
+// It returns ErrConflict when vault f.VaultID has a file at f.Path or a
+// file with f.ID. Like PutFile's insert, it re-resolves the vault's links
+// that could name it.
+func (t *Tx) RestoreFile(ctx context.Context, f File) (File, error) {
+	row := t.QueryRowContext(ctx, `INSERT INTO files (id, vault_id, path, name, kind, size, mtime, hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING `+fileColumns,
+		f.ID, f.VaultID, f.Path, FileName(f.Path), string(f.Kind()), f.Size, f.ModTime.UnixNano(), f.Hash)
+	stored, err := scanFile(row)
+	if IsUniqueViolation(err) {
+		return File{}, fmt.Errorf("restore file %d at %s: %w", f.ID, f.Path, ErrConflict)
+	}
+	if err != nil {
+		return File{}, fmt.Errorf("restore file %d at %s: %w", f.ID, f.Path, err)
+	}
+	if err := t.resolveFileLinks(ctx, stored.VaultID, stored.Path, stored.Path, 0); err != nil {
+		return File{}, err
+	}
+	return stored, nil
+}
+
 // MoveFile gives file id the path to, keeping its ID, its index rows and
 // its versions. It returns ErrNotFound when there is no file id and
 // ErrConflict when to is taken. The links that could name the file by its
-// old or new name, and a moved note's own links, are re-resolved.
+// old or new name, and a moved note's own links, are re-resolved, and a
+// renamed note's title follows its name.
 // Task card T-0014.
 func (t *Tx) MoveFile(ctx context.Context, id int64, to string) (File, error) {
 	f, err := scanFile(t.QueryRowContext(ctx, `SELECT `+fileColumns+` FROM files WHERE id = ?`, id))
@@ -101,6 +124,16 @@ func (t *Tx) MoveFile(ctx context.Context, id int64, to string) (File, error) {
 			return File{}, fmt.Errorf("delete note index %d: %w", id, err)
 		}
 	}
+	// A note's title is its file name, as IndexNote sets it.
+	if title := strings.TrimSuffix(path.Base(to), ".md"); old.Kind() == FileNote && f.Kind() == FileNote &&
+		title != strings.TrimSuffix(path.Base(old.Path), ".md") {
+		if _, err := t.ExecContext(ctx, `UPDATE notes SET title = ? WHERE file_id = ?`, title, id); err != nil {
+			return File{}, fmt.Errorf("retitle note %d: %w", id, err)
+		}
+		if _, err := t.ExecContext(ctx, `UPDATE notes_fts SET title = ? WHERE rowid = ?`, title, id); err != nil {
+			return File{}, fmt.Errorf("retitle note %d: %w", id, err)
+		}
+	}
 	if err := t.resolveFileLinks(ctx, f.VaultID, old.Path, to, id); err != nil {
 		return File{}, err
 	}
@@ -119,6 +152,18 @@ func (t *Tx) DeleteFile(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete file %d: %w", id, err)
 	}
 	return t.resolveFileLinks(ctx, f.VaultID, f.Path, f.Path, 0)
+}
+
+// FileByID returns file id, or ErrNotFound.
+func (d *DB) FileByID(ctx context.Context, id int64) (File, error) {
+	f, err := scanFile(d.db.QueryRowContext(ctx, `SELECT `+fileColumns+` FROM files WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return File{}, fmt.Errorf("file %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return File{}, fmt.Errorf("get file %d: %w", id, err)
+	}
+	return f, nil
 }
 
 // FileByPath returns vault's file at path, or ErrNotFound. Task card
@@ -153,6 +198,12 @@ func (d *DB) Files(ctx context.Context, vaultID int64) ([]File, error) {
 		return nil, fmt.Errorf("list files: %w", err)
 	}
 	return files, nil
+}
+
+// FilesNamed returns the paths of vault's files whose FileName is name:
+// markdown.Resolve's files(name), outside a transaction.
+func (d *DB) FilesNamed(ctx context.Context, vaultID int64, name string) ([]string, error) {
+	return filePathsByName(ctx, d.db, vaultID, name)
 }
 
 // FileCounts returns how many notes and attachments vault has. Task card
@@ -222,7 +273,13 @@ func fileByPath(ctx context.Context, q interface {
 }
 
 func (t *Tx) filePathsByName(ctx context.Context, vaultID int64, name string) ([]string, error) {
-	rows, err := t.QueryContext(ctx, `SELECT path FROM files WHERE vault_id = ? AND name = ?`, vaultID, name)
+	return filePathsByName(ctx, t, vaultID, name)
+}
+
+func filePathsByName(ctx context.Context, q interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, vaultID int64, name string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT path FROM files WHERE vault_id = ? AND name = ? ORDER BY path`, vaultID, name)
 	if err != nil {
 		return nil, fmt.Errorf("find files named %s: %w", name, err)
 	}

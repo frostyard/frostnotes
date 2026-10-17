@@ -9,9 +9,9 @@ from `notesctl` and from an agent through `notesctl mcp`. It follows
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the spec, the schema, scan and watch, the write path, merges
 and the MCP surface; the executor owns cards T-0004 onward.
-Status: **Phases 1, 2, 3 and 5 done** (2026-10-16): this plan,
-[specs/markdown.md](../specs/markdown.md), the index contracts, and cards
-T-0004 to T-0020 merged. Phase 4 (the engine) and Phase 6 (MCP) are next.
+Status: **Phases 1 to 5 done** (2026-10-16): this plan,
+[specs/markdown.md](../specs/markdown.md), the index contracts, cards
+T-0004 to T-0020, and the engine. Phase 6 (MCP) is next.
 
 ## Decisions taken for M1
 
@@ -81,6 +81,14 @@ T-0004 to T-0020 merged. Phase 4 (the engine) and Phase 6 (MCP) are next.
   ([ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
   as the hub does in [sync.md](../design/sync.md#hub)). These follow from
   ADR-0003, ADR-0005 and ADR-0006, so no new ADR records them.
+- **The API carries text, and keeps the bytes it cannot show**
+  ([ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)).
+  `note.read` shows bytes that are not UTF-8 as U+FFFD; a write puts them
+  back wherever the writer's text leaves the words around them as they
+  were, by a word merge whose winning side is the writer's. Neither an
+  error (a note with one stray byte could no longer be edited) nor base64
+  (every text field doubled for a case the user's vault does not have).
+  Binary attachments wait for M3's upload method.
 - **`notesctl write` reads stdin, or `--file`, and `--base` is required.**
   A `--base` that defaulted to the indexed hash would make the write blind:
   it would overwrite whatever changed since the person last read the note.
@@ -231,6 +239,74 @@ T-0004 to T-0020 merged. Phase 4 (the engine) and Phase 6 (MCP) are next.
   resolved to the manifest's file and none of its decoys.
 - **Done when:** those tests pass, and `TestIObsidianLinkDump` also checks
   that `Parse` finds each note's links in the dump.
+- **Result (2026-10-16): done.** `internal/vault` runs one actor per vault
+  (`vault.Manager`, started by notesd and `rpctest`; `vault.add` and
+  `vault.remove` reload it): the scan (walk, size and mtime, hash, parse,
+  batches of at most 200 files per `Tx`, each checked again under the
+  vault's lock, moves by hash and kind), the watcher (fsnotify on every
+  folder, 100 ms per path, a rename's two paths together; folders, settings
+  and overflows start a scan) with rescans every 5 minutes or 10 seconds on
+  a network file system, the path guard (`os.Root` and `lstat` of every
+  parent), atomic writes, the write path of [vault.md](../design/vault.md#writes)
+  with the disk compared again just before the rename, `note.move`'s link
+  rewriting to Obsidian's shortest target, settings from
+  `.frostnotes/vault.yaml` or Obsidian's files, daily notes, and the daily
+  prune of versions and of freed and orphaned blobs under every vault's
+  lock. `internal/engine` serves all twelve `note` methods, `vault.status`
+  and `vault.reindex`; `api.Conn` gives the client name, the default
+  author. The store gained `RestoreFile`, `FileByID`, `FilesNamed`,
+  `HasVersion`, `UsedHashes` and `IndexSnapshot`.
+
+  Tests: ADR-0006's local pairs (a write against an outside edit no scan
+  has seen, against an edit made while the write was staged, and two and
+  three writers on one base, the third keeping a conflict version), with
+  creates, deletes, reverts, moves, daily notes, pruning, symlinks and the
+  watcher; a 150-note generated vault whose index holds exactly its
+  manifest's links, each resolved to `Want`, and none of its decoys;
+  `make vault-it`, which killed a child notesd 100 times during writes and
+  100 times during scans (cold and reindex) and found every file a
+  complete version notesd knows and the index equal to a fresh rebuild
+  after each restart (101 s). Checked by mutation: a build whose writes
+  truncate and rewrite the file in place failed the harness on run 17 of
+  100 with a torn note. The mutation also found a hole, now fixed: a child
+  that failed by itself passed, since killing an exited child that is not
+  yet reaped succeeds, so the harness now requires the child's wait status
+  to be the kill. `make obsidian-links` now checks `Parse`
+  too: it finds Obsidian's links in 43 of 43 notes (179 of 179), and
+  `Resolve` agrees on all 179.
+
+  Phase 5's two review findings are resolved: content that is not UTF-8
+  by ADR-0014, and `ListNotes` with the folder `/` (and `""` or `.` in the
+  API) lists the whole vault. Building found two more: a path the watcher
+  reports must be read whatever its stat says, since two edits of one
+  size within the clock's granularity share an mtime; and a scan's first
+  status event reported idle before it began, so a test that waited for
+  the scan returned early. `repocheck` caught two more test names starting
+  with `TestI`.
+
+  An independent review of the engine found eleven issues, each fixed
+  with a test: `note.move` panicked on nested links such as a clickable
+  image's (and since no handler recovered, any client could end notesd;
+  `rpcserver` now answers a handler's panic with internal); a client that
+  went away after the rename lost the write's version and its conflict
+  version; a renamed note kept its old title; rows the walk leaves out
+  (newly ignored, or another spelling on a file system that ignores case)
+  never left, and the API could create ignored files; an empty folder, as
+  an unmounted share leaves, read as every file deleted; concurrent
+  `vault.add` and `vault.remove` could leave the actors wrong, and a
+  removed vault's actor could still rename files; creates, moves and
+  deletes checked before renaming (now `RENAME_NOREPLACE` where the file
+  system has it, and a read just before a delete); the prune pass stalled
+  every request; an empty base and a file that kept changing answered
+  internal; folders were watched only after the first scan; and pruning
+  could drop the version holding a file's content behind a newer conflict
+  version. The harness's moves now change names too, and `make vault-it`
+  passed again (96 s).
+
+  Ahead of Phase 7, a read-only run of notesd on the user's vault (a
+  scratch data directory) indexed its 666 notes and 8 attachments over SMB
+  3 in 1.28 s, detected the network file system, and left every file's
+  size and mtime as they were.
 
 ## Phase 5 — Executor batch 2
 
@@ -270,9 +346,11 @@ are merged.
   - the API carries note content as a JSON string, so a note with invalid
     UTF-8 cannot be written through `note.write` (encoding rejects it);
     the spec allows such notes on disk. Phase 4 decides (an error, or
-    bytes as base64).
+    bytes as base64). *Resolved in Phase 4 by
+    [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md).*
   - `ListNotes` with the folder `/` matches nothing; `notesctl ls /`
-    should list the whole vault. A one-line fix in Phase 4.
+    should list the whole vault. A one-line fix in Phase 4. *Fixed in
+    Phase 4.*
 
 ## Phase 6 — MCP
 
@@ -300,24 +378,33 @@ are merged.
      a note and appends to today's daily note; the append is in
      `notesctl versions`, attributed to the client, and `notesctl revert`
      undoes it.
+- Also: a one-note test vault in the user's Obsidian answers the open
+  question on links in comments and suffix ties, and the spec follows it.
 
 ## Later / ideas
 
 - Checking that a heading or block subpath exists, for M3's link styling.
 - Rewriting links when a folder moves (`note.move` handles files in M1).
 - Substring search (FTS5 trigram) if prefix search proves too narrow.
+- `{{yesterday}}` and `{{tomorrow}}` in daily-note templates, which
+  Obsidian's daily notes also expand; `internal/templates` does not yet.
+- A `vault.settings` method that changes a setting, and so writes
+  `.frostnotes/vault.yaml`; M1 only reads settings.
+- An upload method for binary attachments (M3), which the text API of
+  ADR-0014 leaves out.
 
 ## Open questions
 
 - **Links in comments, and ties beyond the source folder:** does Obsidian
   index `[[x]]` inside `%%…%%`, and which of several suffix matches does it
-  pick? A one-note test vault in the user's Obsidian answers both, by
-  Phase 4; until then the spec's choices stand.
+  pick? A one-note test vault in the user's Obsidian answers both; it
+  needs the user's Obsidian, so it was not run in Phase 4 and moves to
+  Phase 7. Until then the spec's choices stand.
 
 ## References
 
-- Implements: [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault`); [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
-- Cards: [T-0009 to T-0020](../tasks/todo/)
+- Implements: [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault`); [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
+- Cards: [T-0004 to T-0020](../tasks/done/)
 - Evidence: [plan 0001, spikes 2–4](0001-m0-foundations.md#phase-5--spikes-go-or-no-go)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)

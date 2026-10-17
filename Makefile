@@ -50,6 +50,13 @@ obsidian-links: ## Check links against Obsidian's dump (FROSTNOTES_OBSIDIAN_LINK
 		echo "set FROSTNOTES_OBSIDIAN_LINKS to the dump and FROSTNOTES_OBSIDIAN_VAULT to the vault"; exit 2; }
 	go test -tags integration -run '^TestIObsidianLinkDump$$' -count=1 -v ./internal/markdown
 
+# The kill -9 harness (docs/plans/0003-m1-headless-vault.md, Phase 4): a
+# child notesd is killed at random points of writes and scans over a
+# generated vault, FROSTNOTES_KILL_RUNS times each (default 100).
+.PHONY: vault-it
+vault-it: ## Kill notesd during writes and scans, and check every restart
+	go test -tags integration -run '^TestIKillNotesd$$' -count=1 -v -timeout 30m ./internal/vault
+
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
 # detector.
