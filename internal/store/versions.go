@@ -111,10 +111,11 @@ func (d *DB) HasVersion(ctx context.Context, fileID int64, hash string) (bool, e
 }
 
 // UsedHashes returns every hash a version, a file or a hub revision whose
-// content is kept names, in every vault: the blobs that must stay.
+// content is kept (a create, put, move or conflict not yet pruned) names,
+// in every vault: the blobs that must stay.
 func (d *DB) UsedHashes(ctx context.Context) (map[string]bool, error) {
 	rows, err := d.db.QueryContext(ctx, `SELECT hash FROM versions WHERE hash != '' UNION SELECT hash FROM files
-		UNION SELECT hash FROM revisions WHERE hash != '' AND pruned = 0`)
+		UNION SELECT hash FROM revisions WHERE op IN ('create', 'put', 'move', 'conflict') AND pruned = 0`)
 	if err != nil {
 		return nil, fmt.Errorf("list used hashes: %w", err)
 	}
@@ -184,7 +185,8 @@ func (t *Tx) PruneVersions(ctx context.Context, before time.Time) ([]string, err
 		var used bool
 		if err := t.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM versions WHERE hash = ?)
 			OR EXISTS (SELECT 1 FROM files WHERE hash = ?)
-			OR EXISTS (SELECT 1 FROM revisions WHERE hash = ? AND pruned = 0)`, hash, hash, hash).Scan(&used); err != nil {
+			OR EXISTS (SELECT 1 FROM revisions WHERE hash = ? AND op IN ('create', 'put', 'move', 'conflict') AND pruned = 0)`,
+			hash, hash, hash).Scan(&used); err != nil {
 			return nil, fmt.Errorf("check pruned hash %s: %w", hash, err)
 		}
 		if !used {

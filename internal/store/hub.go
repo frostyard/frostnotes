@@ -156,8 +156,10 @@ func (d *DB) Pull(ctx context.Context, vaultID, after int64, limit int) (api.Log
 	return api.LogPage{}, errors.New("store.Pull is not implemented yet (T-0024)")
 }
 
-// HasContent reports whether a revision of a served vault that is not
-// pruned names hash: the blobs /sync/blobs hands out. Task card T-0024.
+// HasContent reports whether a create, put, move or conflict revision of a
+// served vault that is not pruned names hash: the blobs /sync/blobs hands
+// out. A delete or resolve revision holds no content of its own. Task card
+// T-0024.
 func (d *DB) HasContent(ctx context.Context, hash string) (bool, error) {
 	return false, errors.New("store.HasContent is not implemented yet (T-0024)")
 }
