@@ -54,6 +54,6 @@ landing on a note changed a second earlier, vim saving over a merge.
 
 ## References
 
-- Shapes: [design/vault.md](../design/vault.md), [design/sync.md](../design/sync.md)
+- Shapes: [design/vault.md](../design/vault.md), [design/sync.md](../design/sync.md), [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
 - Built in: [roadmap — M1](../plans/0002-roadmap.md)

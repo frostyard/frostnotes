@@ -21,8 +21,10 @@ it fits: [design/overview.md](../design/overview.md).
     only, a token from `FROSTNOTES_DEVGW_TOKEN` as `?token=`, and an
     `Origin` from the Vite dev server; caller `local`, standing in for the
     app's bridge;
-  - the hub's endpoints (M2 and M4): caller `device` or `session`, specified
-    with the hub's authentication.
+  - the hub's `/sync` (M2): caller `device`, authenticated by a device
+    token ([sync-protocol.md](sync-protocol.md));
+  - the hub's browser endpoints (M4): caller `session`, specified with the
+    hub's authentication.
 - Each message is one line: a JSON object followed by `\n`, at most 16 MiB
   (`api.MaxMessageSize`). JSON escapes newlines in strings, so a message is
   never split.
@@ -80,6 +82,10 @@ Clients ignore unknown fields and unknown events.
   than the retained log, ahead of the latest `seq`, or negative, the result
   has `resync: true`, nothing is replayed, and the client must refetch its
   state.
+- An event reaches a connection only when its domain admits the
+  connection's caller (`api.EventAdmits`, generated from each domain's
+  `callers`), as a method does: a device on a hub receives `log` events
+  and none of the hub's `note` or `vault` events.
 - A connection may subscribe once (`conflict` (1002) after that).
 - A subscriber more than 1024 events behind is disconnected; it reconnects
   and resumes with its last `seq`.
@@ -96,6 +102,6 @@ Clients ignore unknown fields and unknown events.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md)
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens)
 - Design: [design/overview.md](../design/overview.md)
 - Generated reference: [rpc-api.md](rpc-api.md)

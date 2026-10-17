@@ -91,7 +91,7 @@ from M4.
 
 ## References
 
-- Shapes: [design/sync.md](../design/sync.md#state), [design/vault.md](../design/vault.md#writes)
+- Shapes: [design/sync.md](../design/sync.md#state), [design/vault.md](../design/vault.md#writes), [specs/sync-protocol.md](../specs/sync-protocol.md)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](0006-every-write-names-the-version-it-changes.md)
 - Related: [ADR-0018](0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](0019-keep-every-revisions-record-and-thin-the-content-by-age.md)
 - Answers: the roadmap's question on empty folders ([plan 0002](../plans/0002-roadmap.md#open-questions))

@@ -153,3 +153,33 @@ func TestRepeatedHello(t *testing.T) {
 		t.Fatalf("repeated hello: %v", err)
 	}
 }
+
+// Events reach a connection only when their domain admits its caller: a
+// device on a hub hears the log's announcements and none of the hub's
+// local note or vault events.
+func TestEventsReachOnlyTheCallersTheirDomainAdmits(t *testing.T) {
+	srv := rpctest.Start(t)
+	server, client := net.Pipe()
+	t.Cleanup(func() { _ = client.Close() })
+	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.CallerDevice)
+	r := &rawConn{t: t, nc: client, sc: bufio.NewScanner(client)}
+	r.send(`{"jsonrpc":"2.0","id":1,"method":"rpc.hello","params":{"protocol":1,"client":"device"}}`)
+	r.recv()
+	r.send(`{"jsonrpc":"2.0","id":2,"method":"events.subscribe"}`)
+	if got := r.recv(); !strings.Contains(got, `"result"`) {
+		t.Fatalf("subscribe as a device = %s", got)
+	}
+	local, err := api.NewEnvelope(0, api.NoteRemoved{VaultID: 1, Path: "secret.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := api.NewEnvelope(0, api.LogAppended{Vault: "0123456789abcdef0123456789abcdef", Seq: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.Broker.Publish([]api.EventEnvelope{local, device})
+	got := r.recv()
+	if !strings.Contains(got, `"event":"log.appended"`) || strings.Contains(got, "secret.md") {
+		t.Fatalf("first event to a device = %s, want log.appended alone", got)
+	}
+}

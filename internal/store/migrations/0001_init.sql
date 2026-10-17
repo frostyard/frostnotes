@@ -1,6 +1,5 @@
 -- 0001_init.sql: the initial notesd schema (docs/design/vault.md).
--- Pre-release, this file is edited in place; from the first daily-driver
--- release on, schema changes are new append-only migrations. Times are UTC
+-- Frozen since 0002 (plan 0004): schema changes are new migrations, appended. Times are UTC
 -- text in the fixed format 2006-01-02T15:04:05.000Z so they sort lexically.
 
 -- The vaults this notesd owns (ADR-0003). Paths are absolute and cleaned;

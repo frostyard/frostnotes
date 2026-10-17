@@ -63,7 +63,7 @@ for 30 days, then daily for a year, and conflicts until resolved.
 
 ## References
 
-- Shapes: [design/sync.md](../design/sync.md#retention)
+- Shapes: [design/sync.md](../design/sync.md#retention), [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Builds on: [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](0006-every-write-names-the-version-it-changes.md), [ADR-0017](0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
 - Answers: the roadmap's question on hub retention ([plan 0002](../plans/0002-roadmap.md#open-questions))
 - Built in: [plan 0004](../plans/0004-m2-sync.md)

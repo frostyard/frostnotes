@@ -2252,6 +2252,31 @@ var Methods = []string{
 	"vault.reindex",
 }
 
+// EventAdmits reports whether the domain of the named event admits
+// caller: the server delivers an event only to connections of the callers
+// its domain admits, as Router.Dispatch does for methods.
+func EventAdmits(name string, caller Caller) bool {
+	switch name {
+	case "log.appended":
+		return caller == CallerDevice
+	case "note.changed":
+		return caller == CallerLocal
+	case "note.moved":
+		return caller == CallerLocal
+	case "note.removed":
+		return caller == CallerLocal
+	case "sync.changed":
+		return caller == CallerLocal
+	case "vault.scan":
+		return caller == CallerLocal
+	case "vault.added":
+		return caller == CallerLocal
+	case "vault.removed":
+		return caller == CallerLocal
+	}
+	return false
+}
+
 // DecodeEvent decodes the data of the named event.
 func DecodeEvent(name string, data jsontext.Value) (Event, error) {
 	switch name {
