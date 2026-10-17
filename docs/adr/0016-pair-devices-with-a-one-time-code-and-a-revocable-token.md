@@ -1,6 +1,6 @@
 # 0016 — Pair devices with a one-time code and a revocable token
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
 
 ## Context

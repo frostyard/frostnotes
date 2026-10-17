@@ -1,6 +1,6 @@
 # 0017 — Revisions number the hub's log, and hashes name content
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
 
 ## Context
