@@ -44,6 +44,414 @@ The state of a new subscription.
 | `seq` | `int` | The latest durable sequence number when the subscription started. |
 | `resync` | `bool` | True when sinceSeq is older than the retained log; the client must refetch all state. |
 
+## hub
+
+On a hub: the vaults it serves and the devices paired with it (docs/specs/sync-protocol.md). Approving and revoking devices happen only here, over the local socket (ADR-0016).
+
+Callers: `local`.
+
+### `hub.status`
+
+This notesd's hub role.
+
+No params.
+
+Result: `HubStatus`.
+
+### `hub.serve`
+
+Serve a registered vault to devices: it gets a sync ID, and each of its files a create revision, by path.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `HubVault`.
+Errors: `notFound`, `conflict`.
+
+### `hub.vaults`
+
+The vaults this hub serves.
+
+No params.
+
+Result: `[]HubVault`.
+
+### `hub.pending`
+
+Pairings waiting for approval, oldest first.
+
+No params.
+
+Result: `[]PendingPairing`.
+
+### `hub.approve`
+
+Approve the pending pairing with this code (case, spaces and '-' ignored).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `code` | `string` |  |
+
+Result: `PendingPairing`.
+Errors: `notFound`.
+
+### `hub.devices`
+
+The paired devices, by ID.
+
+No params.
+
+Result: `[]HubDevice`.
+
+### `hub.revoke`
+
+Revoke a device's token and close its connections; its revisions keep its name.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `device` | `int` |  |
+
+Result: none (`null`).
+Errors: `notFound`.
+
+### Type `HubStatus`
+
+This notesd's hub role.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `hub` | `string` | The hub's ID; empty until it serves a vault. |
+| `listen` | `string` (optional) | The address notesd --hub serves; absent without --hub. |
+| `vaults` | `int` |  |
+| `devices` | `int` | Paired devices that are not revoked. |
+| `connected` | `int` | Devices connected now. |
+
+### Type `HubVault`
+
+A vault the hub serves.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `sync` | `string` | Its sync ID. |
+| `name` | `string` |  |
+| `seq` | `int` | Its log's latest sequence number. |
+| `servedAt` | `time` |  |
+
+### Type `PendingPairing`
+
+A device waiting to pair.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `code` | `string` |  |
+| `name` | `string` | The name the device gave. |
+| `addr` | `string` | The address it asked from, as the hub saw it. |
+| `createdAt` | `time` |  |
+| `expiresAt` | `time` |  |
+| `approved` | `bool` | Approved, and not yet collected. |
+
+### Type `HubDevice`
+
+A paired device.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+| `name` | `string` |  |
+| `pairedAt` | `time` |  |
+| `seenAt` | `time` (optional) | Its last request; absent when it never used its token. |
+| `connected` | `bool` |  |
+| `revoked` | `bool` |  |
+
+## log
+
+A hub vault's revision log, for paired devices over the hub's /sync WebSocket (docs/specs/sync-protocol.md). A vault is named by its sync ID. Devices push changed files with the revision they last agreed on; only the hub merges (ADR-0005, ADR-0017). Contents move over /sync/blobs, never in these messages (ADR-0018).
+
+Callers: `device`.
+
+### `log.vaults`
+
+The vaults this hub serves.
+
+No params.
+
+Result: `[]LogVault`.
+
+### `log.join`
+
+Start a replica of a vault for this device; push IDs count from 1 within it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+
+Result: `Replica`.
+Errors: `notFound`.
+
+### `log.missing`
+
+The hashes whose content the hub lacks, to upload before pushing.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `hashes` | `[]string` | At most 1,000. |
+
+Result: `[]string`.
+Errors: `notFound`, `invalidParams`.
+
+### `log.push`
+
+Apply changed files, one at a time, in order (docs/specs/sync-protocol.md, A push on the hub). A push ID the replica sent before gets its first answer again.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `replica` | `int` |  |
+| `items` | `[]PushItem` | At most 100. |
+
+Result: `[]PushAnswer`.
+Errors: `notFound`, `invalidParams`.
+
+### `log.pull`
+
+The files whose latest revision is after a cursor, with their heads.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `after` | `int` | The cursor: 0 for everything. |
+| `limit` | `int` (optional) | At most this many; default 500, at most 1,000. |
+
+Result: `LogPage`.
+Errors: `notFound`, `invalidParams`.
+
+### `log.match`
+
+For each path and hash, the newest revision with that hash of the file last at the path, as a join matches files.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `files` | `[]MatchQuery` | At most 1,000. |
+
+Result: `[]LogMatch`.
+Errors: `notFound`, `invalidParams`.
+
+### `log.history`
+
+A file's revisions, newest first.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `file` | `int` |  |
+| `before` | `int` (optional) | Only revisions before this sequence number. |
+| `limit` | `int` (optional) | At most this many; default 50, at most 200. |
+
+Result: `[]Revision`.
+Errors: `notFound`, `invalidParams`.
+
+### `log.pushes`
+
+The revisions the hub appended for each of a replica's pushes, for sync.verify.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `replica` | `int` |  |
+| `pushes` | `[]int` | Push IDs; at most 1,000. |
+
+Result: `[]PushRecord`.
+Errors: `notFound`, `invalidParams`.
+
+### `log.resolve`
+
+Clear a file's conflict flag with a resolve revision. seq is the newest conflict revision the user has seen; a newer one is a conflict.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `file` | `int` |  |
+| `seq` | `int` |  |
+
+Result: `LogFile`.
+Errors: `notFound`, `conflict`.
+
+### Event `log.appended` (transient)
+
+A vault's log grew.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` | The vault's sync ID. |
+| `seq` | `int` | Its latest sequence number. |
+
+### Type `LogVault`
+
+A vault the hub serves.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `sync` | `string` | Its sync ID: 32 lowercase hex digits. |
+| `name` | `string` |  |
+| `seq` | `int` | Its log's latest sequence number. |
+
+### Type `Replica`
+
+One device's join of one hub vault; push IDs count within it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+| `vault` | `string` | The vault's sync ID. |
+| `seq` | `int` | The log's latest sequence number when the replica was made. |
+
+### Type `PushItem`
+
+A file's whole new state on a device, and the revision it was based on.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `push` | `int` | The push ID: never reused within the replica. |
+| `file` | `int` (optional) | The hub's file ID; absent for a create. |
+| `base` | `int` | The revision the device last agreed on; 0 for a create. |
+| `baseHash` | `string` | That revision's hash; empty for a create. |
+| `path` | `string` | The file's path on the device. |
+| `hash` | `string` (optional) | The content's hash; absent when deleted. |
+| `deleted` | `bool` (optional) | The device deleted the file. |
+| `source` | `VersionSource` | Who changed it on the device: editor, agent or outside. |
+| `author` | `string` | The writer's name on the device; empty for an outside edit. |
+| `at` | `time` | When the device recorded the change. |
+
+### Type `LogFile`
+
+A file's state in the log.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `file` | `int` |  |
+| `seq` | `int` | Its latest revision of any kind. |
+| `revision` | `int` | Its head: the latest create, put, move or delete. |
+| `path` | `string` |  |
+| `hash` | `string` | The head's content hash; empty when deleted. |
+| `deleted` | `bool` |  |
+| `size` | `int` |  |
+| `conflicted` | `bool` | A conflict revision came after the last resolve. |
+
+### Type `PushAnswer`
+
+What the hub did with one pushed item.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `push` | `int` |  |
+| `status` | `PushStatus` |  |
+| `reason` | `RefuseReason` (optional) | Why, when refused. |
+| `file` | `LogFile` (optional) | The file after the push; absent only for a refused create. |
+| `conflicts` | `int` | Hunks the head won. |
+| `basePruned` | `bool` | The base's content was gone, so the push merged as a create (ADR-0019). |
+
+### Type `LogPage`
+
+Files whose latest revision is after a cursor, in sequence order.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `files` | `[]LogFile` |  |
+| `next` | `int` | The cursor after this page: the last file's seq, or the one asked for when empty. |
+| `more` | `bool` | More files follow; pull again from next. |
+
+### Type `MatchQuery`
+
+A device's file, to find among a hub vault's revisions.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `hash` | `string` |  |
+
+### Type `LogMatch`
+
+The newest revision with a hash of the file last at a path, live or deleted.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `hash` | `string` |  |
+| `file` | `int` (optional) | Absent when no file was at the path. |
+| `revision` | `int` (optional) | Absent when no revision of that file has the hash. |
+
+### Type `Revision`
+
+An entry in a hub vault's log (ADR-0017).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `seq` | `int` |  |
+| `file` | `int` |  |
+| `op` | `RevisionOp` |  |
+| `path` | `string` |  |
+| `hash` | `string` | Empty for a delete. |
+| `size` | `int` |  |
+| `base` | `int` | The revision it was based on; 0 for a create. |
+| `device` | `int` (optional) | The device that pushed it; absent for the hub's own writers. |
+| `deviceName` | `string` | That device's name, or hub. |
+| `source` | `VersionSource` |  |
+| `author` | `string` |  |
+| `at` | `time` |  |
+| `lostTo` | `int` (optional) | For a conflict revision: the revision whose side stood. |
+| `pruned` | `bool` | Its content is gone (ADR-0019). |
+
+### Type `PushRecord`
+
+The revisions the hub appended for one push.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `push` | `int` |  |
+| `revisions` | `[]Revision` | Empty when the hub has no record of the push, or it changed nothing. |
+
+### Enum `PushStatus`
+
+What the hub did with a pushed change.
+
+| Value | Meaning |
+| --- | --- |
+| `accepted` | Applied as pushed, or already there. |
+| `merged` | Merged with changes the device had not seen; file holds the result. |
+| `conflicted` | Merged, but hunks both sides changed differently kept the head's side; the pushed content is a conflict revision and the file is flagged. |
+| `refused` | Not applied; reason says why. |
+
+### Enum `RefuseReason`
+
+Why the hub refused a pushed change.
+
+| Value | Meaning |
+| --- | --- |
+| `invalid` | A path the path guard refuses, a malformed hash, or a create or delete that names what it may not. |
+| `ignored` | The hub's vault settings ignore the path. |
+| `missing` | The hub has no content for the hash: upload it first. |
+| `unknown` | The file ID is not a file of this vault. |
+| `base` | The base is not a revision of the file, or its hash differs. |
+| `collision` | The path differs only by case from another live file's. |
+| `edited` | A delete of a file that changed since its base: an edit beats a delete. |
+
+### Enum `RevisionOp`
+
+What a revision did to its file.
+
+| Value | Meaning |
+| --- | --- |
+| `create` | The file's first revision. |
+| `put` | New content. |
+| `move` | A new path, the same content. |
+| `delete` | The file was deleted. |
+| `conflict` | Content that lost conflicting hunks to the head; never a head itself. |
+| `resolve` | The user cleared the file's conflict flag. |
+
 ## note
 
 The notes and attachments in a vault, and what notesd's index knows of them (docs/design/vault.md). A path is vault-relative and slash-separated, as on disk. Every write names the hash of the content it started from, as note.read returns it (ADR-0006): when the file changed since, notesd merges three ways, writes the result and returns it. Only a create has no base.
@@ -407,6 +815,250 @@ Server identity and the negotiated protocol.
 | --- | --- | --- |
 | `protocol` | `int` | Protocol major version the server speaks. |
 | `server` | `string` | Server name and version, for logs. |
+
+## sync
+
+On a device: pairing with hubs and syncing vaults through them (docs/design/sync.md, docs/specs/sync-protocol.md). The device token stays in notesd's secret store and never crosses this API.
+
+Callers: `local`.
+
+### `sync.pair`
+
+Start pairing with the hub at url; approve the code on the hub, then call sync.paired.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `url` | `string` | https://, or http:// on loopback. |
+| `name` | `string` (optional) | This device's name on the hub; default the host name. |
+
+Result: `Pairing`.
+Errors: `invalidParams`, `unavailable`.
+
+### `sync.paired`
+
+Wait up to 30 seconds for a pairing to be approved or to expire.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `pairing` | `string` |  |
+
+Result: `PairResult`.
+Errors: `notFound`, `unavailable`.
+
+### `sync.hubs`
+
+The hubs this device paired with.
+
+No params.
+
+Result: `[]SyncHub`.
+
+### `sync.join`
+
+Sync a local vault with a hub vault: files the hub has had at the same path match by hash, others are pushed as creates, and the hub's heads are pulled.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `url` | `string` | A paired hub's URL. |
+| `name` | `string` | The hub vault's name. |
+
+Result: `SyncStatus`.
+Errors: `notFound`, `conflict`, `unavailable`.
+
+### `sync.leave`
+
+Stop syncing a vault and drop its sync state; its files stay.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: none (`null`).
+Errors: `notFound`.
+
+### `sync.status`
+
+The synced vaults' states.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` (optional) | Only this vault. |
+
+Result: `[]SyncStatus`.
+Errors: `notFound`.
+
+### `sync.conflicts`
+
+A synced vault's flagged files.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `[]SyncConflict`.
+Errors: `notFound`, `unavailable`.
+
+### `sync.resolve`
+
+Clear a file's conflict flag on the hub, once the user has merged it by hand or kept it as it is.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+
+Result: none (`null`).
+Errors: `notFound`, `conflict`, `unavailable`.
+
+### `sync.reset`
+
+Leave and join again, with a new replica; files match by hash.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `SyncStatus`.
+Errors: `notFound`, `unavailable`.
+
+### `sync.verify`
+
+Compare a synced vault with its hub.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `VerifyReport`.
+Errors: `notFound`, `unavailable`.
+
+### `sync.history`
+
+The hub's revisions of a file, newest first.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `limit` | `int` (optional) | At most this many; default 50, at most 200. |
+
+Result: `[]Revision`.
+Errors: `notFound`, `unavailable`.
+
+### Event `sync.changed` (transient)
+
+A synced vault's state changed.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | `SyncStatus` |  |
+
+### Type `Pairing`
+
+A pairing the device started.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `pairing` | `string` | Its ID, for sync.paired. |
+| `code` | `string` | The one-time code to approve on the hub, as XXXX-XXXX. |
+| `hub` | `string` | The hub's ID. |
+| `url` | `string` |  |
+| `expiresAt` | `time` |  |
+
+### Type `PairResult`
+
+A pairing's state.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `state` | `PairingState` |  |
+| `hub` | `string` | The hub's ID. |
+
+### Type `SyncHub`
+
+A hub this device paired with.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+| `hub` | `string` | The hub's ID. |
+| `url` | `string` |  |
+| `device` | `int` | This device's ID on the hub. |
+| `pairedAt` | `time` |  |
+
+### Type `SyncRefusal`
+
+A local change the hub refused; it is not pushed again until the file changes.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `reason` | `RefuseReason` |  |
+| `at` | `time` |  |
+
+### Type `SyncStatus`
+
+A synced vault's state.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `url` | `string` | The hub's URL. |
+| `hubVault` | `string` | The hub vault's name. |
+| `state` | `SyncState` |  |
+| `cursor` | `int` | The highest sequence number whose heads the device applied. |
+| `hubSeq` | `int` | The hub log's latest sequence number, as last seen. |
+| `pending` | `int` | Files with a change to push. |
+| `conflicts` | `int` | Flagged files. |
+| `refused` | `[]SyncRefusal` |  |
+| `skipped` | `[]string` | Pulled paths this device ignores or cannot hold. |
+| `syncedAt` | `time` (optional) | When the device was last in step with the hub. |
+| `error` | `string` (optional) | The last failure, while offline, revoked or reset. |
+
+### Type `SyncConflict`
+
+A flagged file and the conflict revisions since its last resolve.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `file` | `int` | The hub's file ID. |
+| `revisions` | `[]Revision` |  |
+
+### Type `VerifyReport`
+
+How a synced vault compares with its hub (M2's exit evidence).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `ok` | `bool` | No file differs and every push is on record. |
+| `files` | `int` | Files compared. |
+| `differing` | `[]string` | Paths whose file differs from the hub's head, or that only one side has. |
+| `unrecorded` | `[]int` | Answered pushes the hub has no revision of with the pushed hash. |
+| `conflicts` | `[]string` | Flagged files. |
+
+### Enum `SyncState`
+
+What a vault's sync is doing.
+
+| Value | Meaning |
+| --- | --- |
+| `idle` | In step with the hub as far as the device knows. |
+| `syncing` | Pushing or pulling. |
+| `offline` | The hub cannot be reached; changes wait and sync on reconnect. |
+| `revoked` | The hub refused the device token: pair again. |
+| `reset` | The hub no longer serves the vault as the device knew it: sync.reset. |
+
+### Enum `PairingState`
+
+Where a pairing stands.
+
+| Value | Meaning |
+| --- | --- |
+| `pending` | Waiting for the user to approve the code on the hub. |
+| `approved` | Approved; the device keeps its token. |
+| `expired` | Not approved within 10 minutes. |
 
 ## vault
 

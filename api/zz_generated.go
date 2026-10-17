@@ -182,6 +182,698 @@ func (x EventsClient) Subscribe(ctx context.Context, p *EventsSubscribeParams) (
 	return &r, nil
 }
 
+// ---- hub ----
+
+// HubStatus: This notesd's hub role.
+type HubStatus struct {
+	// The hub's ID; empty until it serves a vault.
+	Hub string `json:"hub"`
+	// The address notesd --hub serves; absent without --hub.
+	Listen *string `json:"listen,omitzero"`
+	Vaults int64   `json:"vaults"`
+	// Paired devices that are not revoked.
+	Devices int64 `json:"devices"`
+	// Devices connected now.
+	Connected int64 `json:"connected"`
+}
+
+// HubVault: A vault the hub serves.
+type HubVault struct {
+	VaultID int64 `json:"vaultId"`
+	// Its sync ID.
+	Sync string `json:"sync"`
+	Name string `json:"name"`
+	// Its log's latest sequence number.
+	Seq      int64     `json:"seq"`
+	ServedAt time.Time `json:"servedAt"`
+}
+
+// PendingPairing: A device waiting to pair.
+type PendingPairing struct {
+	Code string `json:"code"`
+	// The name the device gave.
+	Name string `json:"name"`
+	// The address it asked from, as the hub saw it.
+	Addr      string    `json:"addr"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	// Approved, and not yet collected.
+	Approved bool `json:"approved"`
+}
+
+// HubDevice: A paired device.
+type HubDevice struct {
+	ID       int64     `json:"id"`
+	Name     string    `json:"name"`
+	PairedAt time.Time `json:"pairedAt"`
+	// Its last request; absent when it never used its token.
+	SeenAt    *time.Time `json:"seenAt,omitzero"`
+	Connected bool       `json:"connected"`
+	Revoked   bool       `json:"revoked"`
+}
+
+// HubStatusParams holds the params of hub.status.
+type HubStatusParams struct{}
+
+// HubServeParams holds the params of hub.serve.
+type HubServeParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// HubVaultsParams holds the params of hub.vaults.
+type HubVaultsParams struct{}
+
+// HubPendingParams holds the params of hub.pending.
+type HubPendingParams struct{}
+
+// HubApproveParams holds the params of hub.approve.
+type HubApproveParams struct {
+	Code string `json:"code"`
+}
+
+// HubDevicesParams holds the params of hub.devices.
+type HubDevicesParams struct{}
+
+// HubRevokeParams holds the params of hub.revoke.
+type HubRevokeParams struct {
+	Device int64 `json:"device"`
+}
+
+// HubService: On a hub: the vaults it serves and the devices paired with it
+// (docs/specs/sync-protocol.md). Approving and revoking devices happen only
+// here, over the local socket (ADR-0016).
+type HubService interface {
+	// Status implements hub.status. This notesd's hub role.
+	Status(ctx context.Context, p *HubStatusParams) (*HubStatus, error)
+	// Serve implements hub.serve. Serve a registered vault to devices: it gets a
+	// sync ID, and each of its files a create revision, by path.
+	Serve(ctx context.Context, p *HubServeParams) (*HubVault, error)
+	// Vaults implements hub.vaults. The vaults this hub serves.
+	Vaults(ctx context.Context, p *HubVaultsParams) ([]HubVault, error)
+	// Pending implements hub.pending. Pairings waiting for approval, oldest
+	// first.
+	Pending(ctx context.Context, p *HubPendingParams) ([]PendingPairing, error)
+	// Approve implements hub.approve. Approve the pending pairing with this code
+	// (case, spaces and '-' ignored).
+	Approve(ctx context.Context, p *HubApproveParams) (*PendingPairing, error)
+	// Devices implements hub.devices. The paired devices, by ID.
+	Devices(ctx context.Context, p *HubDevicesParams) ([]HubDevice, error)
+	// Revoke implements hub.revoke. Revoke a device's token and close its
+	// connections; its revisions keep its name.
+	Revoke(ctx context.Context, p *HubRevokeParams) error
+}
+
+func registerHub(r *Router, s HubService) {
+	callers := []Caller{CallerLocal}
+	r.handle("hub.status", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubStatusParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Status(ctx, &p)
+	})
+	r.handle("hub.serve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubServeParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Serve(ctx, &p)
+	})
+	r.handle("hub.vaults", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubVaultsParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Vaults(ctx, &p)
+	})
+	r.handle("hub.pending", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubPendingParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Pending(ctx, &p)
+	})
+	r.handle("hub.approve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubApproveParams
+		if err := decodeParams(raw, &p, []string{"code"}); err != nil {
+			return nil, err
+		}
+		return s.Approve(ctx, &p)
+	})
+	r.handle("hub.devices", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubDevicesParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Devices(ctx, &p)
+	})
+	r.handle("hub.revoke", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubRevokeParams
+		if err := decodeParams(raw, &p, []string{"device"}); err != nil {
+			return nil, err
+		}
+		return nil, s.Revoke(ctx, &p)
+	})
+}
+
+// HubClient calls the hub methods; it implements HubService.
+type HubClient struct{ c *Client }
+
+// Hub returns the hub methods.
+func (c *Client) Hub() HubClient { return HubClient{c} }
+
+var _ HubService = HubClient{}
+
+// Status calls hub.status.
+func (x HubClient) Status(ctx context.Context, p *HubStatusParams) (*HubStatus, error) {
+	var r HubStatus
+	err := x.c.Call(ctx, "hub.status", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Serve calls hub.serve.
+func (x HubClient) Serve(ctx context.Context, p *HubServeParams) (*HubVault, error) {
+	var r HubVault
+	err := x.c.Call(ctx, "hub.serve", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Vaults calls hub.vaults.
+func (x HubClient) Vaults(ctx context.Context, p *HubVaultsParams) ([]HubVault, error) {
+	var r []HubVault
+	err := x.c.Call(ctx, "hub.vaults", p, &r)
+	return r, err
+}
+
+// Pending calls hub.pending.
+func (x HubClient) Pending(ctx context.Context, p *HubPendingParams) ([]PendingPairing, error) {
+	var r []PendingPairing
+	err := x.c.Call(ctx, "hub.pending", p, &r)
+	return r, err
+}
+
+// Approve calls hub.approve.
+func (x HubClient) Approve(ctx context.Context, p *HubApproveParams) (*PendingPairing, error) {
+	var r PendingPairing
+	err := x.c.Call(ctx, "hub.approve", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Devices calls hub.devices.
+func (x HubClient) Devices(ctx context.Context, p *HubDevicesParams) ([]HubDevice, error) {
+	var r []HubDevice
+	err := x.c.Call(ctx, "hub.devices", p, &r)
+	return r, err
+}
+
+// Revoke calls hub.revoke.
+func (x HubClient) Revoke(ctx context.Context, p *HubRevokeParams) error {
+	return x.c.Call(ctx, "hub.revoke", p, nil)
+}
+
+// ---- log ----
+
+// PushStatus: What the hub did with a pushed change.
+type PushStatus string
+
+const (
+	// Applied as pushed, or already there.
+	PushStatusAccepted PushStatus = "accepted"
+	// Merged with changes the device had not seen; file holds the result.
+	PushStatusMerged PushStatus = "merged"
+	// Merged, but hunks both sides changed differently kept the head's side; the
+	// pushed content is a conflict revision and the file is flagged.
+	PushStatusConflicted PushStatus = "conflicted"
+	// Not applied; reason says why.
+	PushStatusRefused PushStatus = "refused"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v PushStatus) Valid() bool {
+	switch v {
+	case PushStatusAccepted, PushStatusMerged, PushStatusConflicted, PushStatusRefused:
+		return true
+	}
+	return false
+}
+
+// RefuseReason: Why the hub refused a pushed change.
+type RefuseReason string
+
+const (
+	// A path the path guard refuses, a malformed hash, or a create or delete that
+	// names what it may not.
+	RefuseReasonInvalid RefuseReason = "invalid"
+	// The hub's vault settings ignore the path.
+	RefuseReasonIgnored RefuseReason = "ignored"
+	// The hub has no content for the hash: upload it first.
+	RefuseReasonMissing RefuseReason = "missing"
+	// The file ID is not a file of this vault.
+	RefuseReasonUnknown RefuseReason = "unknown"
+	// The base is not a revision of the file, or its hash differs.
+	RefuseReasonBase RefuseReason = "base"
+	// The path differs only by case from another live file's.
+	RefuseReasonCollision RefuseReason = "collision"
+	// A delete of a file that changed since its base: an edit beats a delete.
+	RefuseReasonEdited RefuseReason = "edited"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v RefuseReason) Valid() bool {
+	switch v {
+	case RefuseReasonInvalid, RefuseReasonIgnored, RefuseReasonMissing, RefuseReasonUnknown, RefuseReasonBase, RefuseReasonCollision, RefuseReasonEdited:
+		return true
+	}
+	return false
+}
+
+// RevisionOp: What a revision did to its file.
+type RevisionOp string
+
+const (
+	// The file's first revision.
+	RevisionOpCreate RevisionOp = "create"
+	// New content.
+	RevisionOpPut RevisionOp = "put"
+	// A new path, the same content.
+	RevisionOpMove RevisionOp = "move"
+	// The file was deleted.
+	RevisionOpDelete RevisionOp = "delete"
+	// Content that lost conflicting hunks to the head; never a head itself.
+	RevisionOpConflict RevisionOp = "conflict"
+	// The user cleared the file's conflict flag.
+	RevisionOpResolve RevisionOp = "resolve"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v RevisionOp) Valid() bool {
+	switch v {
+	case RevisionOpCreate, RevisionOpPut, RevisionOpMove, RevisionOpDelete, RevisionOpConflict, RevisionOpResolve:
+		return true
+	}
+	return false
+}
+
+// LogVault: A vault the hub serves.
+type LogVault struct {
+	// Its sync ID: 32 lowercase hex digits.
+	Sync string `json:"sync"`
+	Name string `json:"name"`
+	// Its log's latest sequence number.
+	Seq int64 `json:"seq"`
+}
+
+// Replica: One device's join of one hub vault; push IDs count within it.
+type Replica struct {
+	ID int64 `json:"id"`
+	// The vault's sync ID.
+	Vault string `json:"vault"`
+	// The log's latest sequence number when the replica was made.
+	Seq int64 `json:"seq"`
+}
+
+// PushItem: A file's whole new state on a device, and the revision it was
+// based on.
+type PushItem struct {
+	// The push ID: never reused within the replica.
+	Push int64 `json:"push"`
+	// The hub's file ID; absent for a create.
+	File *int64 `json:"file,omitzero"`
+	// The revision the device last agreed on; 0 for a create.
+	Base int64 `json:"base"`
+	// That revision's hash; empty for a create.
+	BaseHash string `json:"baseHash"`
+	// The file's path on the device.
+	Path string `json:"path"`
+	// The content's hash; absent when deleted.
+	Hash *string `json:"hash,omitzero"`
+	// The device deleted the file.
+	Deleted *bool `json:"deleted,omitzero"`
+	// Who changed it on the device: editor, agent or outside.
+	Source VersionSource `json:"source"`
+	// The writer's name on the device; empty for an outside edit.
+	Author string `json:"author"`
+	// When the device recorded the change.
+	At time.Time `json:"at"`
+}
+
+// LogFile: A file's state in the log.
+type LogFile struct {
+	File int64 `json:"file"`
+	// Its latest revision of any kind.
+	Seq int64 `json:"seq"`
+	// Its head: the latest create, put, move or delete.
+	Revision int64  `json:"revision"`
+	Path     string `json:"path"`
+	// The head's content hash; empty when deleted.
+	Hash    string `json:"hash"`
+	Deleted bool   `json:"deleted"`
+	Size    int64  `json:"size"`
+	// A conflict revision came after the last resolve.
+	Conflicted bool `json:"conflicted"`
+}
+
+// PushAnswer: What the hub did with one pushed item.
+type PushAnswer struct {
+	Push   int64      `json:"push"`
+	Status PushStatus `json:"status"`
+	// Why, when refused.
+	Reason *RefuseReason `json:"reason,omitzero"`
+	// The file after the push; absent only for a refused create.
+	File *LogFile `json:"file,omitzero"`
+	// Hunks the head won.
+	Conflicts int64 `json:"conflicts"`
+	// The base's content was gone, so the push merged as a create (ADR-0019).
+	BasePruned bool `json:"basePruned"`
+}
+
+// LogPage: Files whose latest revision is after a cursor, in sequence order.
+type LogPage struct {
+	Files []LogFile `json:"files"`
+	// The cursor after this page: the last file's seq, or the one asked for when
+	// empty.
+	Next int64 `json:"next"`
+	// More files follow; pull again from next.
+	More bool `json:"more"`
+}
+
+// MatchQuery: A device's file, to find among a hub vault's revisions.
+type MatchQuery struct {
+	Path string `json:"path"`
+	Hash string `json:"hash"`
+}
+
+// LogMatch: The newest revision with a hash of the file last at a path, live
+// or deleted.
+type LogMatch struct {
+	Path string `json:"path"`
+	Hash string `json:"hash"`
+	// Absent when no file was at the path.
+	File *int64 `json:"file,omitzero"`
+	// Absent when no revision of that file has the hash.
+	Revision *int64 `json:"revision,omitzero"`
+}
+
+// Revision: An entry in a hub vault's log (ADR-0017).
+type Revision struct {
+	Seq  int64      `json:"seq"`
+	File int64      `json:"file"`
+	Op   RevisionOp `json:"op"`
+	Path string     `json:"path"`
+	// Empty for a delete.
+	Hash string `json:"hash"`
+	Size int64  `json:"size"`
+	// The revision it was based on; 0 for a create.
+	Base int64 `json:"base"`
+	// The device that pushed it; absent for the hub's own writers.
+	Device *int64 `json:"device,omitzero"`
+	// That device's name, or hub.
+	DeviceName string        `json:"deviceName"`
+	Source     VersionSource `json:"source"`
+	Author     string        `json:"author"`
+	At         time.Time     `json:"at"`
+	// For a conflict revision: the revision whose side stood.
+	LostTo *int64 `json:"lostTo,omitzero"`
+	// Its content is gone (ADR-0019).
+	Pruned bool `json:"pruned"`
+}
+
+// PushRecord: The revisions the hub appended for one push.
+type PushRecord struct {
+	Push int64 `json:"push"`
+	// Empty when the hub has no record of the push, or it changed nothing.
+	Revisions []Revision `json:"revisions"`
+}
+
+// LogVaultsParams holds the params of log.vaults.
+type LogVaultsParams struct{}
+
+// LogJoinParams holds the params of log.join.
+type LogJoinParams struct {
+	Vault string `json:"vault"`
+}
+
+// LogMissingParams holds the params of log.missing.
+type LogMissingParams struct {
+	Vault string `json:"vault"`
+	// At most 1,000.
+	Hashes []string `json:"hashes"`
+}
+
+// LogPushParams holds the params of log.push.
+type LogPushParams struct {
+	Vault   string `json:"vault"`
+	Replica int64  `json:"replica"`
+	// At most 100.
+	Items []PushItem `json:"items"`
+}
+
+// LogPullParams holds the params of log.pull.
+type LogPullParams struct {
+	Vault string `json:"vault"`
+	// The cursor: 0 for everything.
+	After int64 `json:"after"`
+	// At most this many; default 500, at most 1,000.
+	Limit *int64 `json:"limit,omitzero"`
+}
+
+// LogMatchParams holds the params of log.match.
+type LogMatchParams struct {
+	Vault string `json:"vault"`
+	// At most 1,000.
+	Files []MatchQuery `json:"files"`
+}
+
+// LogHistoryParams holds the params of log.history.
+type LogHistoryParams struct {
+	Vault string `json:"vault"`
+	File  int64  `json:"file"`
+	// Only revisions before this sequence number.
+	Before *int64 `json:"before,omitzero"`
+	// At most this many; default 50, at most 200.
+	Limit *int64 `json:"limit,omitzero"`
+}
+
+// LogPushesParams holds the params of log.pushes.
+type LogPushesParams struct {
+	Vault   string `json:"vault"`
+	Replica int64  `json:"replica"`
+	// Push IDs; at most 1,000.
+	Pushes []int64 `json:"pushes"`
+}
+
+// LogResolveParams holds the params of log.resolve.
+type LogResolveParams struct {
+	Vault string `json:"vault"`
+	File  int64  `json:"file"`
+	Seq   int64  `json:"seq"`
+}
+
+// LogService: A hub vault's revision log, for paired devices over the hub's
+// /sync WebSocket (docs/specs/sync-protocol.md). A vault is named by its sync
+// ID. Devices push changed files with the revision they last agreed on; only
+// the hub merges (ADR-0005, ADR-0017). Contents move over /sync/blobs, never
+// in these messages (ADR-0018).
+type LogService interface {
+	// Vaults implements log.vaults. The vaults this hub serves.
+	Vaults(ctx context.Context, p *LogVaultsParams) ([]LogVault, error)
+	// Join implements log.join. Start a replica of a vault for this device; push
+	// IDs count from 1 within it.
+	Join(ctx context.Context, p *LogJoinParams) (*Replica, error)
+	// Missing implements log.missing. The hashes whose content the hub lacks, to
+	// upload before pushing.
+	Missing(ctx context.Context, p *LogMissingParams) ([]string, error)
+	// Push implements log.push. Apply changed files, one at a time, in order
+	// (docs/specs/sync-protocol.md, A push on the hub). A push ID the replica
+	// sent before gets its first answer again.
+	Push(ctx context.Context, p *LogPushParams) ([]PushAnswer, error)
+	// Pull implements log.pull. The files whose latest revision is after a
+	// cursor, with their heads.
+	Pull(ctx context.Context, p *LogPullParams) (*LogPage, error)
+	// Match implements log.match. For each path and hash, the newest revision
+	// with that hash of the file last at the path, as a join matches files.
+	Match(ctx context.Context, p *LogMatchParams) ([]LogMatch, error)
+	// History implements log.history. A file's revisions, newest first.
+	History(ctx context.Context, p *LogHistoryParams) ([]Revision, error)
+	// Pushes implements log.pushes. The revisions the hub appended for each of a
+	// replica's pushes, for sync.verify.
+	Pushes(ctx context.Context, p *LogPushesParams) ([]PushRecord, error)
+	// Resolve implements log.resolve. Clear a file's conflict flag with a resolve
+	// revision. seq is the newest conflict revision the user has seen; a newer
+	// one is a conflict.
+	Resolve(ctx context.Context, p *LogResolveParams) (*LogFile, error)
+}
+
+func registerLog(r *Router, s LogService) {
+	callers := []Caller{CallerDevice}
+	r.handle("log.vaults", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogVaultsParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Vaults(ctx, &p)
+	})
+	r.handle("log.join", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogJoinParams
+		if err := decodeParams(raw, &p, []string{"vault"}); err != nil {
+			return nil, err
+		}
+		return s.Join(ctx, &p)
+	})
+	r.handle("log.missing", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogMissingParams
+		if err := decodeParams(raw, &p, []string{"vault", "hashes"}); err != nil {
+			return nil, err
+		}
+		return s.Missing(ctx, &p)
+	})
+	r.handle("log.push", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogPushParams
+		if err := decodeParams(raw, &p, []string{"vault", "replica", "items"}); err != nil {
+			return nil, err
+		}
+		return s.Push(ctx, &p)
+	})
+	r.handle("log.pull", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogPullParams
+		if err := decodeParams(raw, &p, []string{"vault", "after"}); err != nil {
+			return nil, err
+		}
+		return s.Pull(ctx, &p)
+	})
+	r.handle("log.match", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogMatchParams
+		if err := decodeParams(raw, &p, []string{"vault", "files"}); err != nil {
+			return nil, err
+		}
+		return s.Match(ctx, &p)
+	})
+	r.handle("log.history", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogHistoryParams
+		if err := decodeParams(raw, &p, []string{"vault", "file"}); err != nil {
+			return nil, err
+		}
+		return s.History(ctx, &p)
+	})
+	r.handle("log.pushes", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogPushesParams
+		if err := decodeParams(raw, &p, []string{"vault", "replica", "pushes"}); err != nil {
+			return nil, err
+		}
+		return s.Pushes(ctx, &p)
+	})
+	r.handle("log.resolve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogResolveParams
+		if err := decodeParams(raw, &p, []string{"vault", "file", "seq"}); err != nil {
+			return nil, err
+		}
+		return s.Resolve(ctx, &p)
+	})
+}
+
+// LogClient calls the log methods; it implements LogService.
+type LogClient struct{ c *Client }
+
+// Log returns the log methods.
+func (c *Client) Log() LogClient { return LogClient{c} }
+
+var _ LogService = LogClient{}
+
+// Vaults calls log.vaults.
+func (x LogClient) Vaults(ctx context.Context, p *LogVaultsParams) ([]LogVault, error) {
+	var r []LogVault
+	err := x.c.Call(ctx, "log.vaults", p, &r)
+	return r, err
+}
+
+// Join calls log.join.
+func (x LogClient) Join(ctx context.Context, p *LogJoinParams) (*Replica, error) {
+	var r Replica
+	err := x.c.Call(ctx, "log.join", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Missing calls log.missing.
+func (x LogClient) Missing(ctx context.Context, p *LogMissingParams) ([]string, error) {
+	var r []string
+	err := x.c.Call(ctx, "log.missing", p, &r)
+	return r, err
+}
+
+// Push calls log.push.
+func (x LogClient) Push(ctx context.Context, p *LogPushParams) ([]PushAnswer, error) {
+	var r []PushAnswer
+	err := x.c.Call(ctx, "log.push", p, &r)
+	return r, err
+}
+
+// Pull calls log.pull.
+func (x LogClient) Pull(ctx context.Context, p *LogPullParams) (*LogPage, error) {
+	var r LogPage
+	err := x.c.Call(ctx, "log.pull", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Match calls log.match.
+func (x LogClient) Match(ctx context.Context, p *LogMatchParams) ([]LogMatch, error) {
+	var r []LogMatch
+	err := x.c.Call(ctx, "log.match", p, &r)
+	return r, err
+}
+
+// History calls log.history.
+func (x LogClient) History(ctx context.Context, p *LogHistoryParams) ([]Revision, error) {
+	var r []Revision
+	err := x.c.Call(ctx, "log.history", p, &r)
+	return r, err
+}
+
+// Pushes calls log.pushes.
+func (x LogClient) Pushes(ctx context.Context, p *LogPushesParams) ([]PushRecord, error) {
+	var r []PushRecord
+	err := x.c.Call(ctx, "log.pushes", p, &r)
+	return r, err
+}
+
+// Resolve calls log.resolve.
+func (x LogClient) Resolve(ctx context.Context, p *LogResolveParams) (*LogFile, error) {
+	var r LogFile
+	err := x.c.Call(ctx, "log.resolve", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// LogAppended: A vault's log grew.
+type LogAppended struct {
+	// The vault's sync ID.
+	Vault string `json:"vault"`
+	// Its latest sequence number.
+	Seq int64 `json:"seq"`
+}
+
+// EventName is the wire name of LogAppended.
+func (LogAppended) EventName() string { return "log.appended" }
+
+// Durable reports whether LogAppended is kept in the changes log.
+func (LogAppended) Durable() bool { return false }
+
 // ---- note ----
 
 // LinkKind: Where a link is written (docs/specs/markdown.md).
@@ -817,6 +1509,430 @@ func (x RPCClient) Hello(ctx context.Context, p *RPCHelloParams) (*Hello, error)
 	return &r, nil
 }
 
+// ---- sync ----
+
+// SyncState: What a vault's sync is doing.
+type SyncState string
+
+const (
+	// In step with the hub as far as the device knows.
+	SyncStateIdle SyncState = "idle"
+	// Pushing or pulling.
+	SyncStateSyncing SyncState = "syncing"
+	// The hub cannot be reached; changes wait and sync on reconnect.
+	SyncStateOffline SyncState = "offline"
+	// The hub refused the device token: pair again.
+	SyncStateRevoked SyncState = "revoked"
+	// The hub no longer serves the vault as the device knew it: sync.reset.
+	SyncStateReset SyncState = "reset"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v SyncState) Valid() bool {
+	switch v {
+	case SyncStateIdle, SyncStateSyncing, SyncStateOffline, SyncStateRevoked, SyncStateReset:
+		return true
+	}
+	return false
+}
+
+// PairingState: Where a pairing stands.
+type PairingState string
+
+const (
+	// Waiting for the user to approve the code on the hub.
+	PairingStatePending PairingState = "pending"
+	// Approved; the device keeps its token.
+	PairingStateApproved PairingState = "approved"
+	// Not approved within 10 minutes.
+	PairingStateExpired PairingState = "expired"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v PairingState) Valid() bool {
+	switch v {
+	case PairingStatePending, PairingStateApproved, PairingStateExpired:
+		return true
+	}
+	return false
+}
+
+// Pairing: A pairing the device started.
+type Pairing struct {
+	// Its ID, for sync.paired.
+	Pairing string `json:"pairing"`
+	// The one-time code to approve on the hub, as XXXX-XXXX.
+	Code string `json:"code"`
+	// The hub's ID.
+	Hub       string    `json:"hub"`
+	URL       string    `json:"url"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// PairResult: A pairing's state.
+type PairResult struct {
+	State PairingState `json:"state"`
+	// The hub's ID.
+	Hub string `json:"hub"`
+}
+
+// SyncHub: A hub this device paired with.
+type SyncHub struct {
+	ID int64 `json:"id"`
+	// The hub's ID.
+	Hub string `json:"hub"`
+	URL string `json:"url"`
+	// This device's ID on the hub.
+	Device   int64     `json:"device"`
+	PairedAt time.Time `json:"pairedAt"`
+}
+
+// SyncRefusal: A local change the hub refused; it is not pushed again until
+// the file changes.
+type SyncRefusal struct {
+	Path   string       `json:"path"`
+	Reason RefuseReason `json:"reason"`
+	At     time.Time    `json:"at"`
+}
+
+// SyncStatus: A synced vault's state.
+type SyncStatus struct {
+	VaultID int64 `json:"vaultId"`
+	// The hub's URL.
+	URL string `json:"url"`
+	// The hub vault's name.
+	HubVault string    `json:"hubVault"`
+	State    SyncState `json:"state"`
+	// The highest sequence number whose heads the device applied.
+	Cursor int64 `json:"cursor"`
+	// The hub log's latest sequence number, as last seen.
+	HubSeq int64 `json:"hubSeq"`
+	// Files with a change to push.
+	Pending int64 `json:"pending"`
+	// Flagged files.
+	Conflicts int64         `json:"conflicts"`
+	Refused   []SyncRefusal `json:"refused"`
+	// Pulled paths this device ignores or cannot hold.
+	Skipped []string `json:"skipped"`
+	// When the device was last in step with the hub.
+	SyncedAt *time.Time `json:"syncedAt,omitzero"`
+	// The last failure, while offline, revoked or reset.
+	Error *string `json:"error,omitzero"`
+}
+
+// SyncConflict: A flagged file and the conflict revisions since its last
+// resolve.
+type SyncConflict struct {
+	Path string `json:"path"`
+	// The hub's file ID.
+	File      int64      `json:"file"`
+	Revisions []Revision `json:"revisions"`
+}
+
+// VerifyReport: How a synced vault compares with its hub (M2's exit
+// evidence).
+type VerifyReport struct {
+	// No file differs and every push is on record.
+	Ok bool `json:"ok"`
+	// Files compared.
+	Files int64 `json:"files"`
+	// Paths whose file differs from the hub's head, or that only one side has.
+	Differing []string `json:"differing"`
+	// Answered pushes the hub has no revision of with the pushed hash.
+	Unrecorded []int64 `json:"unrecorded"`
+	// Flagged files.
+	Conflicts []string `json:"conflicts"`
+}
+
+// SyncPairParams holds the params of sync.pair.
+type SyncPairParams struct {
+	// https://, or http:// on loopback.
+	URL string `json:"url"`
+	// This device's name on the hub; default the host name.
+	Name *string `json:"name,omitzero"`
+}
+
+// SyncPairedParams holds the params of sync.paired.
+type SyncPairedParams struct {
+	Pairing string `json:"pairing"`
+}
+
+// SyncHubsParams holds the params of sync.hubs.
+type SyncHubsParams struct{}
+
+// SyncJoinParams holds the params of sync.join.
+type SyncJoinParams struct {
+	VaultID int64 `json:"vaultId"`
+	// A paired hub's URL.
+	URL string `json:"url"`
+	// The hub vault's name.
+	Name string `json:"name"`
+}
+
+// SyncLeaveParams holds the params of sync.leave.
+type SyncLeaveParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// SyncStatusParams holds the params of sync.status.
+type SyncStatusParams struct {
+	// Only this vault.
+	VaultID *int64 `json:"vaultId,omitzero"`
+}
+
+// SyncConflictsParams holds the params of sync.conflicts.
+type SyncConflictsParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// SyncResolveParams holds the params of sync.resolve.
+type SyncResolveParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+}
+
+// SyncResetParams holds the params of sync.reset.
+type SyncResetParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// SyncVerifyParams holds the params of sync.verify.
+type SyncVerifyParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// SyncHistoryParams holds the params of sync.history.
+type SyncHistoryParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// At most this many; default 50, at most 200.
+	Limit *int64 `json:"limit,omitzero"`
+}
+
+// SyncService: On a device: pairing with hubs and syncing vaults through them
+// (docs/design/sync.md, docs/specs/sync-protocol.md). The device token stays
+// in notesd's secret store and never crosses this API.
+type SyncService interface {
+	// Pair implements sync.pair. Start pairing with the hub at url; approve the
+	// code on the hub, then call sync.paired.
+	Pair(ctx context.Context, p *SyncPairParams) (*Pairing, error)
+	// Paired implements sync.paired. Wait up to 30 seconds for a pairing to be
+	// approved or to expire.
+	Paired(ctx context.Context, p *SyncPairedParams) (*PairResult, error)
+	// Hubs implements sync.hubs. The hubs this device paired with.
+	Hubs(ctx context.Context, p *SyncHubsParams) ([]SyncHub, error)
+	// Join implements sync.join. Sync a local vault with a hub vault: files the
+	// hub has had at the same path match by hash, others are pushed as creates,
+	// and the hub's heads are pulled.
+	Join(ctx context.Context, p *SyncJoinParams) (*SyncStatus, error)
+	// Leave implements sync.leave. Stop syncing a vault and drop its sync state;
+	// its files stay.
+	Leave(ctx context.Context, p *SyncLeaveParams) error
+	// Status implements sync.status. The synced vaults' states.
+	Status(ctx context.Context, p *SyncStatusParams) ([]SyncStatus, error)
+	// Conflicts implements sync.conflicts. A synced vault's flagged files.
+	Conflicts(ctx context.Context, p *SyncConflictsParams) ([]SyncConflict, error)
+	// Resolve implements sync.resolve. Clear a file's conflict flag on the hub,
+	// once the user has merged it by hand or kept it as it is.
+	Resolve(ctx context.Context, p *SyncResolveParams) error
+	// Reset implements sync.reset. Leave and join again, with a new replica;
+	// files match by hash.
+	Reset(ctx context.Context, p *SyncResetParams) (*SyncStatus, error)
+	// Verify implements sync.verify. Compare a synced vault with its hub.
+	Verify(ctx context.Context, p *SyncVerifyParams) (*VerifyReport, error)
+	// History implements sync.history. The hub's revisions of a file, newest
+	// first.
+	History(ctx context.Context, p *SyncHistoryParams) ([]Revision, error)
+}
+
+func registerSync(r *Router, s SyncService) {
+	callers := []Caller{CallerLocal}
+	r.handle("sync.pair", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncPairParams
+		if err := decodeParams(raw, &p, []string{"url"}); err != nil {
+			return nil, err
+		}
+		return s.Pair(ctx, &p)
+	})
+	r.handle("sync.paired", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncPairedParams
+		if err := decodeParams(raw, &p, []string{"pairing"}); err != nil {
+			return nil, err
+		}
+		return s.Paired(ctx, &p)
+	})
+	r.handle("sync.hubs", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncHubsParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Hubs(ctx, &p)
+	})
+	r.handle("sync.join", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncJoinParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "url", "name"}); err != nil {
+			return nil, err
+		}
+		return s.Join(ctx, &p)
+	})
+	r.handle("sync.leave", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncLeaveParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return nil, s.Leave(ctx, &p)
+	})
+	r.handle("sync.status", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncStatusParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Status(ctx, &p)
+	})
+	r.handle("sync.conflicts", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncConflictsParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Conflicts(ctx, &p)
+	})
+	r.handle("sync.resolve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncResolveParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return nil, s.Resolve(ctx, &p)
+	})
+	r.handle("sync.reset", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncResetParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Reset(ctx, &p)
+	})
+	r.handle("sync.verify", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncVerifyParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Verify(ctx, &p)
+	})
+	r.handle("sync.history", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncHistoryParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return s.History(ctx, &p)
+	})
+}
+
+// SyncClient calls the sync methods; it implements SyncService.
+type SyncClient struct{ c *Client }
+
+// Sync returns the sync methods.
+func (c *Client) Sync() SyncClient { return SyncClient{c} }
+
+var _ SyncService = SyncClient{}
+
+// Pair calls sync.pair.
+func (x SyncClient) Pair(ctx context.Context, p *SyncPairParams) (*Pairing, error) {
+	var r Pairing
+	err := x.c.Call(ctx, "sync.pair", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Paired calls sync.paired.
+func (x SyncClient) Paired(ctx context.Context, p *SyncPairedParams) (*PairResult, error) {
+	var r PairResult
+	err := x.c.Call(ctx, "sync.paired", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Hubs calls sync.hubs.
+func (x SyncClient) Hubs(ctx context.Context, p *SyncHubsParams) ([]SyncHub, error) {
+	var r []SyncHub
+	err := x.c.Call(ctx, "sync.hubs", p, &r)
+	return r, err
+}
+
+// Join calls sync.join.
+func (x SyncClient) Join(ctx context.Context, p *SyncJoinParams) (*SyncStatus, error) {
+	var r SyncStatus
+	err := x.c.Call(ctx, "sync.join", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Leave calls sync.leave.
+func (x SyncClient) Leave(ctx context.Context, p *SyncLeaveParams) error {
+	return x.c.Call(ctx, "sync.leave", p, nil)
+}
+
+// Status calls sync.status.
+func (x SyncClient) Status(ctx context.Context, p *SyncStatusParams) ([]SyncStatus, error) {
+	var r []SyncStatus
+	err := x.c.Call(ctx, "sync.status", p, &r)
+	return r, err
+}
+
+// Conflicts calls sync.conflicts.
+func (x SyncClient) Conflicts(ctx context.Context, p *SyncConflictsParams) ([]SyncConflict, error) {
+	var r []SyncConflict
+	err := x.c.Call(ctx, "sync.conflicts", p, &r)
+	return r, err
+}
+
+// Resolve calls sync.resolve.
+func (x SyncClient) Resolve(ctx context.Context, p *SyncResolveParams) error {
+	return x.c.Call(ctx, "sync.resolve", p, nil)
+}
+
+// Reset calls sync.reset.
+func (x SyncClient) Reset(ctx context.Context, p *SyncResetParams) (*SyncStatus, error) {
+	var r SyncStatus
+	err := x.c.Call(ctx, "sync.reset", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Verify calls sync.verify.
+func (x SyncClient) Verify(ctx context.Context, p *SyncVerifyParams) (*VerifyReport, error) {
+	var r VerifyReport
+	err := x.c.Call(ctx, "sync.verify", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// History calls sync.history.
+func (x SyncClient) History(ctx context.Context, p *SyncHistoryParams) ([]Revision, error) {
+	var r []Revision
+	err := x.c.Call(ctx, "sync.history", p, &r)
+	return r, err
+}
+
+// SyncChanged: A synced vault's state changed.
+type SyncChanged struct {
+	Status SyncStatus `json:"status"`
+}
+
+// EventName is the wire name of SyncChanged.
+func (SyncChanged) EventName() string { return "sync.changed" }
+
+// Durable reports whether SyncChanged is kept in the changes log.
+func (SyncChanged) Durable() bool { return false }
+
 // ---- vault ----
 
 // ScanState: What a vault's scanner is doing.
@@ -1046,8 +2162,11 @@ func (VaultRemoved) Durable() bool { return true }
 // Services is one implementation per domain, for NewRouter.
 type Services struct {
 	Events EventsService
+	Hub    HubService
+	Log    LogService
 	Note   NoteService
 	RPC    RPCService
+	Sync   SyncService
 	Vault  VaultService
 }
 
@@ -1056,6 +2175,14 @@ func (s Services) register(r *Router) error {
 		return errors.New("api: Services.Events is nil")
 	}
 	registerEvents(r, s.Events)
+	if s.Hub == nil {
+		return errors.New("api: Services.Hub is nil")
+	}
+	registerHub(r, s.Hub)
+	if s.Log == nil {
+		return errors.New("api: Services.Log is nil")
+	}
+	registerLog(r, s.Log)
 	if s.Note == nil {
 		return errors.New("api: Services.Note is nil")
 	}
@@ -1064,6 +2191,10 @@ func (s Services) register(r *Router) error {
 		return errors.New("api: Services.RPC is nil")
 	}
 	registerRPC(r, s.RPC)
+	if s.Sync == nil {
+		return errors.New("api: Services.Sync is nil")
+	}
+	registerSync(r, s.Sync)
 	if s.Vault == nil {
 		return errors.New("api: Services.Vault is nil")
 	}
@@ -1074,6 +2205,22 @@ func (s Services) register(r *Router) error {
 // Methods is every method's wire name, in schema order.
 var Methods = []string{
 	"events.subscribe",
+	"hub.status",
+	"hub.serve",
+	"hub.vaults",
+	"hub.pending",
+	"hub.approve",
+	"hub.devices",
+	"hub.revoke",
+	"log.vaults",
+	"log.join",
+	"log.missing",
+	"log.push",
+	"log.pull",
+	"log.match",
+	"log.history",
+	"log.pushes",
+	"log.resolve",
 	"note.list",
 	"note.read",
 	"note.search",
@@ -1087,6 +2234,17 @@ var Methods = []string{
 	"note.revert",
 	"note.daily",
 	"rpc.hello",
+	"sync.pair",
+	"sync.paired",
+	"sync.hubs",
+	"sync.join",
+	"sync.leave",
+	"sync.status",
+	"sync.conflicts",
+	"sync.resolve",
+	"sync.reset",
+	"sync.verify",
+	"sync.history",
 	"vault.list",
 	"vault.add",
 	"vault.remove",
@@ -1097,6 +2255,12 @@ var Methods = []string{
 // DecodeEvent decodes the data of the named event.
 func DecodeEvent(name string, data jsontext.Value) (Event, error) {
 	switch name {
+	case "log.appended":
+		var e LogAppended
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
 	case "note.changed":
 		var e NoteChanged
 		if err := json.Unmarshal(data, &e); err != nil {
@@ -1111,6 +2275,12 @@ func DecodeEvent(name string, data jsontext.Value) (Event, error) {
 		return e, nil
 	case "note.removed":
 		var e NoteRemoved
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
+	case "sync.changed":
+		var e SyncChanged
 		if err := json.Unmarshal(data, &e); err != nil {
 			return nil, fmt.Errorf("decode event %s: %w", name, err)
 		}

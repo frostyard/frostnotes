@@ -35,6 +35,11 @@ type Options struct {
 	// Note, when set, serves the note domain in place of the engine's, so
 	// a client's tests can run against a fake.
 	Note api.NoteService
+	// Hub, Sync and LogDomain, when set, serve the hub, sync and log
+	// domains in place of the engine's, as Note does.
+	Hub       api.HubService
+	Sync      api.SyncService
+	LogDomain api.LogService
 	// Vault tunes the vaults' actors (intervals, batch size); its DB,
 	// Blobs, Log, Publish and, when Now is set, Now are filled in.
 	Vault vault.Config
@@ -108,7 +113,18 @@ func StartWith(t testing.TB, o Options) *Server {
 	if note == nil {
 		note = eng.Notes()
 	}
-	router, err := api.NewRouter(api.Services{RPC: rpc, Events: rpc, Vault: eng.Vaults(), Note: note})
+	services := api.Services{RPC: rpc, Events: rpc, Vault: eng.Vaults(), Note: note,
+		Hub: eng.Hub(), Sync: eng.Sync(), Log: eng.Log()}
+	if o.Hub != nil {
+		services.Hub = o.Hub
+	}
+	if o.Sync != nil {
+		services.Sync = o.Sync
+	}
+	if o.LogDomain != nil {
+		services.Log = o.LogDomain
+	}
+	router, err := api.NewRouter(services)
 	if err != nil {
 		t.Fatal(err)
 	}

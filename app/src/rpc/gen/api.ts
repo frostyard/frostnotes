@@ -78,6 +78,406 @@ function eventsClient(t: Transport): EventsClient {
   };
 }
 
+// ---- hub ----
+
+/** This notesd's hub role. */
+export interface HubStatus {
+  /** The hub's ID; empty until it serves a vault. */
+  hub: string;
+  /** The address notesd --hub serves; absent without --hub. */
+  listen?: string;
+  vaults: number;
+  /** Paired devices that are not revoked. */
+  devices: number;
+  /** Devices connected now. */
+  connected: number;
+}
+
+/** A vault the hub serves. */
+export interface HubVault {
+  vaultId: number;
+  /** Its sync ID. */
+  sync: string;
+  name: string;
+  /** Its log's latest sequence number. */
+  seq: number;
+  servedAt: string /* RFC 3339 */;
+}
+
+/** A device waiting to pair. */
+export interface PendingPairing {
+  code: string;
+  /** The name the device gave. */
+  name: string;
+  /** The address it asked from, as the hub saw it. */
+  addr: string;
+  createdAt: string /* RFC 3339 */;
+  expiresAt: string /* RFC 3339 */;
+  /** Approved, and not yet collected. */
+  approved: boolean;
+}
+
+/** A paired device. */
+export interface HubDevice {
+  id: number;
+  name: string;
+  pairedAt: string /* RFC 3339 */;
+  /** Its last request; absent when it never used its token. */
+  seenAt?: string /* RFC 3339 */;
+  connected: boolean;
+  revoked: boolean;
+}
+
+/** Params of hub.status. */
+export type HubStatusParams = Record<string, never>;
+
+/** Params of hub.serve. */
+export interface HubServeParams {
+  vaultId: number;
+}
+
+/** Params of hub.vaults. */
+export type HubVaultsParams = Record<string, never>;
+
+/** Params of hub.pending. */
+export type HubPendingParams = Record<string, never>;
+
+/** Params of hub.approve. */
+export interface HubApproveParams {
+  code: string;
+}
+
+/** Params of hub.devices. */
+export type HubDevicesParams = Record<string, never>;
+
+/** Params of hub.revoke. */
+export interface HubRevokeParams {
+  device: number;
+}
+
+/**
+ * On a hub: the vaults it serves and the devices paired with it
+ * (docs/specs/sync-protocol.md). Approving and revoking devices happen only
+ * here, over the local socket (ADR-0016).
+ */
+export interface HubClient {
+  /** This notesd's hub role. */
+  status(params?: HubStatusParams): Promise<HubStatus>;
+  /**
+   * Serve a registered vault to devices: it gets a sync ID, and each of its
+   * files a create revision, by path.
+   */
+  serve(params: HubServeParams): Promise<HubVault>;
+  /** The vaults this hub serves. */
+  vaults(params?: HubVaultsParams): Promise<HubVault[]>;
+  /** Pairings waiting for approval, oldest first. */
+  pending(params?: HubPendingParams): Promise<PendingPairing[]>;
+  /**
+   * Approve the pending pairing with this code (case, spaces and '-'
+   * ignored).
+   */
+  approve(params: HubApproveParams): Promise<PendingPairing>;
+  /** The paired devices, by ID. */
+  devices(params?: HubDevicesParams): Promise<HubDevice[]>;
+  /**
+   * Revoke a device's token and close its connections; its revisions keep its
+   * name.
+   */
+  revoke(params: HubRevokeParams): Promise<void>;
+}
+
+function hubClient(t: Transport): HubClient {
+  return {
+    status: (params = {}) => t.call<HubStatus>("hub.status", params),
+    serve: (params) => t.call<HubVault>("hub.serve", params),
+    vaults: (params = {}) => t.call<HubVault[]>("hub.vaults", params),
+    pending: (params = {}) => t.call<PendingPairing[]>("hub.pending", params),
+    approve: (params) => t.call<PendingPairing>("hub.approve", params),
+    devices: (params = {}) => t.call<HubDevice[]>("hub.devices", params),
+    revoke: (params) => t.call<null>("hub.revoke", params).then(() => undefined),
+  };
+}
+
+// ---- log ----
+
+/** What the hub did with a pushed change. */
+export type PushStatus = "accepted" | "merged" | "conflicted" | "refused";
+export const PushStatusValues: readonly PushStatus[] = ["accepted", "merged", "conflicted", "refused"];
+
+/** Why the hub refused a pushed change. */
+export type RefuseReason = "invalid" | "ignored" | "missing" | "unknown" | "base" | "collision" | "edited";
+export const RefuseReasonValues: readonly RefuseReason[] = ["invalid", "ignored", "missing", "unknown", "base", "collision", "edited"];
+
+/** What a revision did to its file. */
+export type RevisionOp = "create" | "put" | "move" | "delete" | "conflict" | "resolve";
+export const RevisionOpValues: readonly RevisionOp[] = ["create", "put", "move", "delete", "conflict", "resolve"];
+
+/** A vault the hub serves. */
+export interface LogVault {
+  /** Its sync ID: 32 lowercase hex digits. */
+  sync: string;
+  name: string;
+  /** Its log's latest sequence number. */
+  seq: number;
+}
+
+/** One device's join of one hub vault; push IDs count within it. */
+export interface Replica {
+  id: number;
+  /** The vault's sync ID. */
+  vault: string;
+  /** The log's latest sequence number when the replica was made. */
+  seq: number;
+}
+
+/** A file's whole new state on a device, and the revision it was based on. */
+export interface PushItem {
+  /** The push ID: never reused within the replica. */
+  push: number;
+  /** The hub's file ID; absent for a create. */
+  file?: number;
+  /** The revision the device last agreed on; 0 for a create. */
+  base: number;
+  /** That revision's hash; empty for a create. */
+  baseHash: string;
+  /** The file's path on the device. */
+  path: string;
+  /** The content's hash; absent when deleted. */
+  hash?: string;
+  /** The device deleted the file. */
+  deleted?: boolean;
+  /** Who changed it on the device: editor, agent or outside. */
+  source: VersionSource;
+  /** The writer's name on the device; empty for an outside edit. */
+  author: string;
+  /** When the device recorded the change. */
+  at: string /* RFC 3339 */;
+}
+
+/** A file's state in the log. */
+export interface LogFile {
+  file: number;
+  /** Its latest revision of any kind. */
+  seq: number;
+  /** Its head: the latest create, put, move or delete. */
+  revision: number;
+  path: string;
+  /** The head's content hash; empty when deleted. */
+  hash: string;
+  deleted: boolean;
+  size: number;
+  /** A conflict revision came after the last resolve. */
+  conflicted: boolean;
+}
+
+/** What the hub did with one pushed item. */
+export interface PushAnswer {
+  push: number;
+  status: PushStatus;
+  /** Why, when refused. */
+  reason?: RefuseReason;
+  /** The file after the push; absent only for a refused create. */
+  file?: LogFile;
+  /** Hunks the head won. */
+  conflicts: number;
+  /**
+   * The base's content was gone, so the push merged as a create (ADR-0019).
+   */
+  basePruned: boolean;
+}
+
+/** Files whose latest revision is after a cursor, in sequence order. */
+export interface LogPage {
+  files: LogFile[];
+  /**
+   * The cursor after this page: the last file's seq, or the one asked for
+   * when empty.
+   */
+  next: number;
+  /** More files follow; pull again from next. */
+  more: boolean;
+}
+
+/** A device's file, to find among a hub vault's revisions. */
+export interface MatchQuery {
+  path: string;
+  hash: string;
+}
+
+/**
+ * The newest revision with a hash of the file last at a path, live or
+ * deleted.
+ */
+export interface LogMatch {
+  path: string;
+  hash: string;
+  /** Absent when no file was at the path. */
+  file?: number;
+  /** Absent when no revision of that file has the hash. */
+  revision?: number;
+}
+
+/** An entry in a hub vault's log (ADR-0017). */
+export interface Revision {
+  seq: number;
+  file: number;
+  op: RevisionOp;
+  path: string;
+  /** Empty for a delete. */
+  hash: string;
+  size: number;
+  /** The revision it was based on; 0 for a create. */
+  base: number;
+  /** The device that pushed it; absent for the hub's own writers. */
+  device?: number;
+  /** That device's name, or hub. */
+  deviceName: string;
+  source: VersionSource;
+  author: string;
+  at: string /* RFC 3339 */;
+  /** For a conflict revision: the revision whose side stood. */
+  lostTo?: number;
+  /** Its content is gone (ADR-0019). */
+  pruned: boolean;
+}
+
+/** The revisions the hub appended for one push. */
+export interface PushRecord {
+  push: number;
+  /** Empty when the hub has no record of the push, or it changed nothing. */
+  revisions: Revision[];
+}
+
+/** Params of log.vaults. */
+export type LogVaultsParams = Record<string, never>;
+
+/** Params of log.join. */
+export interface LogJoinParams {
+  vault: string;
+}
+
+/** Params of log.missing. */
+export interface LogMissingParams {
+  vault: string;
+  /** At most 1,000. */
+  hashes: string[];
+}
+
+/** Params of log.push. */
+export interface LogPushParams {
+  vault: string;
+  replica: number;
+  /** At most 100. */
+  items: PushItem[];
+}
+
+/** Params of log.pull. */
+export interface LogPullParams {
+  vault: string;
+  /** The cursor: 0 for everything. */
+  after: number;
+  /** At most this many; default 500, at most 1,000. */
+  limit?: number;
+}
+
+/** Params of log.match. */
+export interface LogMatchParams {
+  vault: string;
+  /** At most 1,000. */
+  files: MatchQuery[];
+}
+
+/** Params of log.history. */
+export interface LogHistoryParams {
+  vault: string;
+  file: number;
+  /** Only revisions before this sequence number. */
+  before?: number;
+  /** At most this many; default 50, at most 200. */
+  limit?: number;
+}
+
+/** Params of log.pushes. */
+export interface LogPushesParams {
+  vault: string;
+  replica: number;
+  /** Push IDs; at most 1,000. */
+  pushes: number[];
+}
+
+/** Params of log.resolve. */
+export interface LogResolveParams {
+  vault: string;
+  file: number;
+  seq: number;
+}
+
+/** A vault's log grew. */
+export interface LogAppended {
+  /** The vault's sync ID. */
+  vault: string;
+  /** Its latest sequence number. */
+  seq: number;
+}
+
+/**
+ * A hub vault's revision log, for paired devices over the hub's /sync
+ * WebSocket (docs/specs/sync-protocol.md). A vault is named by its sync ID.
+ * Devices push changed files with the revision they last agreed on; only the
+ * hub merges (ADR-0005, ADR-0017). Contents move over /sync/blobs, never in
+ * these messages (ADR-0018).
+ */
+export interface LogClient {
+  /** The vaults this hub serves. */
+  vaults(params?: LogVaultsParams): Promise<LogVault[]>;
+  /**
+   * Start a replica of a vault for this device; push IDs count from 1 within
+   * it.
+   */
+  join(params: LogJoinParams): Promise<Replica>;
+  /** The hashes whose content the hub lacks, to upload before pushing. */
+  missing(params: LogMissingParams): Promise<string[]>;
+  /**
+   * Apply changed files, one at a time, in order
+   * (docs/specs/sync-protocol.md, A push on the hub). A push ID the replica
+   * sent before gets its first answer again.
+   */
+  push(params: LogPushParams): Promise<PushAnswer[]>;
+  /** The files whose latest revision is after a cursor, with their heads. */
+  pull(params: LogPullParams): Promise<LogPage>;
+  /**
+   * For each path and hash, the newest revision with that hash of the file
+   * last at the path, as a join matches files.
+   */
+  match(params: LogMatchParams): Promise<LogMatch[]>;
+  /** A file's revisions, newest first. */
+  history(params: LogHistoryParams): Promise<Revision[]>;
+  /**
+   * The revisions the hub appended for each of a replica's pushes, for
+   * sync.verify.
+   */
+  pushes(params: LogPushesParams): Promise<PushRecord[]>;
+  /**
+   * Clear a file's conflict flag with a resolve revision. seq is the newest
+   * conflict revision the user has seen; a newer one is a conflict.
+   */
+  resolve(params: LogResolveParams): Promise<LogFile>;
+}
+
+function logClient(t: Transport): LogClient {
+  return {
+    vaults: (params = {}) => t.call<LogVault[]>("log.vaults", params),
+    join: (params) => t.call<Replica>("log.join", params),
+    missing: (params) => t.call<string[]>("log.missing", params),
+    push: (params) => t.call<PushAnswer[]>("log.push", params),
+    pull: (params) => t.call<LogPage>("log.pull", params),
+    match: (params) => t.call<LogMatch[]>("log.match", params),
+    history: (params) => t.call<Revision[]>("log.history", params),
+    pushes: (params) => t.call<PushRecord[]>("log.pushes", params),
+    resolve: (params) => t.call<LogFile>("log.resolve", params),
+  };
+}
+
 // ---- note ----
 
 /** Where a link is written (docs/specs/markdown.md). */
@@ -508,6 +908,231 @@ function rpcClient(t: Transport): RPCClient {
   };
 }
 
+// ---- sync ----
+
+/** What a vault's sync is doing. */
+export type SyncState = "idle" | "syncing" | "offline" | "revoked" | "reset";
+export const SyncStateValues: readonly SyncState[] = ["idle", "syncing", "offline", "revoked", "reset"];
+
+/** Where a pairing stands. */
+export type PairingState = "pending" | "approved" | "expired";
+export const PairingStateValues: readonly PairingState[] = ["pending", "approved", "expired"];
+
+/** A pairing the device started. */
+export interface Pairing {
+  /** Its ID, for sync.paired. */
+  pairing: string;
+  /** The one-time code to approve on the hub, as XXXX-XXXX. */
+  code: string;
+  /** The hub's ID. */
+  hub: string;
+  url: string;
+  expiresAt: string /* RFC 3339 */;
+}
+
+/** A pairing's state. */
+export interface PairResult {
+  state: PairingState;
+  /** The hub's ID. */
+  hub: string;
+}
+
+/** A hub this device paired with. */
+export interface SyncHub {
+  id: number;
+  /** The hub's ID. */
+  hub: string;
+  url: string;
+  /** This device's ID on the hub. */
+  device: number;
+  pairedAt: string /* RFC 3339 */;
+}
+
+/**
+ * A local change the hub refused; it is not pushed again until the file
+ * changes.
+ */
+export interface SyncRefusal {
+  path: string;
+  reason: RefuseReason;
+  at: string /* RFC 3339 */;
+}
+
+/** A synced vault's state. */
+export interface SyncStatus {
+  vaultId: number;
+  /** The hub's URL. */
+  url: string;
+  /** The hub vault's name. */
+  hubVault: string;
+  state: SyncState;
+  /** The highest sequence number whose heads the device applied. */
+  cursor: number;
+  /** The hub log's latest sequence number, as last seen. */
+  hubSeq: number;
+  /** Files with a change to push. */
+  pending: number;
+  /** Flagged files. */
+  conflicts: number;
+  refused: SyncRefusal[];
+  /** Pulled paths this device ignores or cannot hold. */
+  skipped: string[];
+  /** When the device was last in step with the hub. */
+  syncedAt?: string /* RFC 3339 */;
+  /** The last failure, while offline, revoked or reset. */
+  error?: string;
+}
+
+/** A flagged file and the conflict revisions since its last resolve. */
+export interface SyncConflict {
+  path: string;
+  /** The hub's file ID. */
+  file: number;
+  revisions: Revision[];
+}
+
+/** How a synced vault compares with its hub (M2's exit evidence). */
+export interface VerifyReport {
+  /** No file differs and every push is on record. */
+  ok: boolean;
+  /** Files compared. */
+  files: number;
+  /**
+   * Paths whose file differs from the hub's head, or that only one side has.
+   */
+  differing: string[];
+  /** Answered pushes the hub has no revision of with the pushed hash. */
+  unrecorded: number[];
+  /** Flagged files. */
+  conflicts: string[];
+}
+
+/** Params of sync.pair. */
+export interface SyncPairParams {
+  /** https://, or http:// on loopback. */
+  url: string;
+  /** This device's name on the hub; default the host name. */
+  name?: string;
+}
+
+/** Params of sync.paired. */
+export interface SyncPairedParams {
+  pairing: string;
+}
+
+/** Params of sync.hubs. */
+export type SyncHubsParams = Record<string, never>;
+
+/** Params of sync.join. */
+export interface SyncJoinParams {
+  vaultId: number;
+  /** A paired hub's URL. */
+  url: string;
+  /** The hub vault's name. */
+  name: string;
+}
+
+/** Params of sync.leave. */
+export interface SyncLeaveParams {
+  vaultId: number;
+}
+
+/** Params of sync.status. */
+export interface SyncStatusParams {
+  /** Only this vault. */
+  vaultId?: number;
+}
+
+/** Params of sync.conflicts. */
+export interface SyncConflictsParams {
+  vaultId: number;
+}
+
+/** Params of sync.resolve. */
+export interface SyncResolveParams {
+  vaultId: number;
+  path: string;
+}
+
+/** Params of sync.reset. */
+export interface SyncResetParams {
+  vaultId: number;
+}
+
+/** Params of sync.verify. */
+export interface SyncVerifyParams {
+  vaultId: number;
+}
+
+/** Params of sync.history. */
+export interface SyncHistoryParams {
+  vaultId: number;
+  path: string;
+  /** At most this many; default 50, at most 200. */
+  limit?: number;
+}
+
+/** A synced vault's state changed. */
+export interface SyncChanged {
+  status: SyncStatus;
+}
+
+/**
+ * On a device: pairing with hubs and syncing vaults through them
+ * (docs/design/sync.md, docs/specs/sync-protocol.md). The device token stays
+ * in notesd's secret store and never crosses this API.
+ */
+export interface SyncClient {
+  /**
+   * Start pairing with the hub at url; approve the code on the hub, then call
+   * sync.paired.
+   */
+  pair(params: SyncPairParams): Promise<Pairing>;
+  /** Wait up to 30 seconds for a pairing to be approved or to expire. */
+  paired(params: SyncPairedParams): Promise<PairResult>;
+  /** The hubs this device paired with. */
+  hubs(params?: SyncHubsParams): Promise<SyncHub[]>;
+  /**
+   * Sync a local vault with a hub vault: files the hub has had at the same
+   * path match by hash, others are pushed as creates, and the hub's heads are
+   * pulled.
+   */
+  join(params: SyncJoinParams): Promise<SyncStatus>;
+  /** Stop syncing a vault and drop its sync state; its files stay. */
+  leave(params: SyncLeaveParams): Promise<void>;
+  /** The synced vaults' states. */
+  status(params?: SyncStatusParams): Promise<SyncStatus[]>;
+  /** A synced vault's flagged files. */
+  conflicts(params: SyncConflictsParams): Promise<SyncConflict[]>;
+  /**
+   * Clear a file's conflict flag on the hub, once the user has merged it by
+   * hand or kept it as it is.
+   */
+  resolve(params: SyncResolveParams): Promise<void>;
+  /** Leave and join again, with a new replica; files match by hash. */
+  reset(params: SyncResetParams): Promise<SyncStatus>;
+  /** Compare a synced vault with its hub. */
+  verify(params: SyncVerifyParams): Promise<VerifyReport>;
+  /** The hub's revisions of a file, newest first. */
+  history(params: SyncHistoryParams): Promise<Revision[]>;
+}
+
+function syncClient(t: Transport): SyncClient {
+  return {
+    pair: (params) => t.call<Pairing>("sync.pair", params),
+    paired: (params) => t.call<PairResult>("sync.paired", params),
+    hubs: (params = {}) => t.call<SyncHub[]>("sync.hubs", params),
+    join: (params) => t.call<SyncStatus>("sync.join", params),
+    leave: (params) => t.call<null>("sync.leave", params).then(() => undefined),
+    status: (params = {}) => t.call<SyncStatus[]>("sync.status", params),
+    conflicts: (params) => t.call<SyncConflict[]>("sync.conflicts", params),
+    resolve: (params) => t.call<null>("sync.resolve", params).then(() => undefined),
+    reset: (params) => t.call<SyncStatus>("sync.reset", params),
+    verify: (params) => t.call<VerifyReport>("sync.verify", params),
+    history: (params) => t.call<Revision[]>("sync.history", params),
+  };
+}
+
 // ---- vault ----
 
 /** What a vault's scanner is doing. */
@@ -628,9 +1253,11 @@ function vaultClient(t: Transport): VaultClient {
 
 /** A server notification. Durable events carry seq. */
 export type Event =
+  | { event: "log.appended"; seq?: number; data: LogAppended }
   | { event: "note.changed"; seq?: number; data: NoteChanged }
   | { event: "note.moved"; seq?: number; data: NoteMoved }
   | { event: "note.removed"; seq?: number; data: NoteRemoved }
+  | { event: "sync.changed"; seq?: number; data: SyncChanged }
   | { event: "vault.scan"; seq?: number; data: VaultScan }
   | { event: "vault.added"; seq?: number; data: VaultAdded }
   | { event: "vault.removed"; seq?: number; data: VaultRemoved }
@@ -639,6 +1266,22 @@ export type Event =
 /** Every method's wire name, in schema order. */
 export const METHODS = [
   "events.subscribe",
+  "hub.status",
+  "hub.serve",
+  "hub.vaults",
+  "hub.pending",
+  "hub.approve",
+  "hub.devices",
+  "hub.revoke",
+  "log.vaults",
+  "log.join",
+  "log.missing",
+  "log.push",
+  "log.pull",
+  "log.match",
+  "log.history",
+  "log.pushes",
+  "log.resolve",
   "note.list",
   "note.read",
   "note.search",
@@ -652,6 +1295,17 @@ export const METHODS = [
   "note.revert",
   "note.daily",
   "rpc.hello",
+  "sync.pair",
+  "sync.paired",
+  "sync.hubs",
+  "sync.join",
+  "sync.leave",
+  "sync.status",
+  "sync.conflicts",
+  "sync.resolve",
+  "sync.reset",
+  "sync.verify",
+  "sync.history",
   "vault.list",
   "vault.add",
   "vault.remove",
@@ -662,14 +1316,20 @@ export const METHODS = [
 /** The typed notesd API over a Transport. */
 export class Client {
   readonly events: EventsClient;
+  readonly hub: HubClient;
+  readonly log: LogClient;
   readonly note: NoteClient;
   readonly rpc: RPCClient;
+  readonly sync: SyncClient;
   readonly vault: VaultClient;
 
   constructor(readonly transport: Transport) {
     this.events = eventsClient(transport);
+    this.hub = hubClient(transport);
+    this.log = logClient(transport);
     this.note = noteClient(transport);
     this.rpc = rpcClient(transport);
+    this.sync = syncClient(transport);
     this.vault = vaultClient(transport);
   }
 }
