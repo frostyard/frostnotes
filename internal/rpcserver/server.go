@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
@@ -165,11 +166,23 @@ func (c *conn) serve(parent context.Context) {
 }
 
 func (c *conn) dispatch(ctx context.Context, m api.Frame) {
-	res, err := c.r.Dispatch(ctx, m.Method, m.Params)
+	res, err := c.call(ctx, m)
 	c.reply(m.ID, res, err)
 	if err == nil && m.Method == "events.subscribe" {
 		c.startEvents() // only after the subscribe result is on the wire
 	}
+}
+
+// call runs one request. A handler that panics answers internal and is
+// logged, rather than ending notesd for every client.
+func (c *conn) call(ctx context.Context, m api.Frame) (res any, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			c.s.opts.Logger.Error("request panicked", "method", m.Method, "panic", p, "stack", string(debug.Stack()))
+			res, err = nil, api.Internal("%s failed", m.Method)
+		}
+	}()
+	return c.r.Dispatch(ctx, m.Method, m.Params)
 }
 
 func (c *conn) reply(id jsontext.Value, result any, err error) {

@@ -79,10 +79,17 @@ type Vault struct {
 	// ignore is the vault's ignore patterns as the last scan read them;
 	// mu guards it.
 	ignore *Ignore
+	// removed is set, under mu, before the vault's row is deleted: no
+	// change may start on a vault that is going away.
+	removed bool
 
 	smu      sync.Mutex
 	status   api.ScanStatus
 	lastSent time.Time
+
+	// walked, when set, gets the folders each scan's walk found: the
+	// actor watches them before the scan reads a file.
+	walked func(dirs []string)
 
 	// staged, when set, runs in a write after its content is staged and
 	// before the disk is compared and the rename: tests edit the file
@@ -116,8 +123,27 @@ func (v *Vault) start(ctx context.Context) {
 }
 
 func (v *Vault) stop() {
+	v.setRemoved(true)
 	v.cancel()
 	<-v.done
+}
+
+// lock takes mu for a change, or refuses one on a vault being removed.
+func (v *Vault) lock() error {
+	v.mu.Lock()
+	if v.removed {
+		v.mu.Unlock()
+		return api.NotFound("vault %d does not exist", v.id)
+	}
+	return nil
+}
+
+// setRemoved marks the vault as going away, once the changes running now
+// have finished, or not, when its removal failed.
+func (v *Vault) setRemoved(removed bool) {
+	v.mu.Lock()
+	v.removed = removed
+	v.mu.Unlock()
 }
 
 // open returns an os.Root of the vault's folder: every file operation

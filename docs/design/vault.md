@@ -65,10 +65,12 @@ in the vault except the settings in `.frostnotes/`.
 ### Scan and watch
 
 - **One actor per vault.** notesd opens every registered vault at start
-  (`vault.Manager`; `vault.add` and `vault.remove` reload it). Each vault
-  has a goroutine that scans and watches it, and one lock that every change
-  to the vault takes: a write, a scan's batch, the watcher's paths. Reads
-  of the index take no lock.
+  (`vault.Manager`; `vault.add` and `vault.remove` reload it, one at a
+  time). Each vault has a goroutine that scans and watches it, and one lock
+  that every change to the vault takes: a write, a scan's batch, the
+  watcher's paths. Reads of the index take no lock. A vault being removed
+  finishes the changes it is making and refuses new ones before its row
+  goes.
 - **Open:** walk the vault; compare each file's size and mtime with the
   index; read and hash those that differ; parse and index changed notes;
   treat a missing file and a new file of the same kind with the same hash
@@ -77,9 +79,14 @@ in the vault except the settings in `.frostnotes/`.
   and the index again under the vault's lock, so a write that ran since
   the walk is never undone and `kill -9` leaves an index the next scan
   continues. A file that cannot be read keeps its rows; a folder that
-  cannot be read fails the scan before anything changes. A scan also
-  removes the temporary files of writes a crash left behind
-  (`.frostnotes-<16 hex digits>.tmp`).
+  cannot be read fails the scan before anything changes, and so does a
+  vault folder with no files while the index has some, which is what a
+  network share that is not mounted looks like. A row whose file the walk
+  leaves out although the disk has it (ignored by the settings now, or
+  spelled otherwise on a file system that ignores case) leaves the index.
+  A scan also removes the temporary files of writes a crash left behind
+  (`.frostnotes-<16 hex digits>.tmp`). Its walk's folders are watched
+  before it reads a file.
 - **Watch:** fsnotify on every directory, debounced 100 ms per path; the
   paths due within half that window are handled together, so a rename's
   two paths are seen as one move. A path an event names is read and hashed
@@ -151,7 +158,9 @@ under the vault's lock. Paths pass the guard first: vault-relative and
 slash-separated, no empty, `.` or `..` segment, no hidden segment, and no
 symlink on the way (every file operation goes through an `os.Root` of the
 vault, and each parent is checked with `lstat`). The note domain also
-refuses `.frostnotes/`, which holds settings, not notes.
+refuses `.frostnotes/`, which holds settings, not notes, and paths the
+settings ignore. A path spelled otherwise than the file on a file system
+that ignores case is not a second file.
 
 1. Re-read the file. If it changed since the last scan, index it first as
    an outside version, so it becomes the head the write merges into.
@@ -162,14 +171,19 @@ refuses `.frostnotes/`, which holds settings, not notes.
    of the file, or whose content is gone (pruned), is refused, and the
    writer reads again; so is a stale base of a file that is not text. A
    base that is not valid UTF-8 first gets its stray bytes back where the
-   writer left the words around them alone (ADR-0014).
+   writer left the words around them alone (ADR-0014). When the merge
+   conflicts, the content the writer sent is kept as a conflict version
+   at once, in a `Tx` of its own, before the file changes.
 3. Put the result in `blobs/`, then write a temporary dot-file in the same
    directory (so scans skip it), keeping the file's mode, and fsync it.
    Read the file once more just before the rename: if it changed, discard
    the temporary file and start again from step 1, so the edit is merged.
-   Then rename and fsync the directory.
+   Then rename and fsync the directory. A create renames with
+   `RENAME_NOREPLACE` where the file system has it (SMB does not; there it
+   checks first).
 4. In one `Tx`: index the new content, append a version, emit
-   `note.changed`.
+   `note.changed`. Once the file has changed, this runs to the end even if
+   the client has gone away.
 5. Return the new hash and, if a merge happened, the merged content.
 
 A write records its version's source (`editor` for a client, `agent` for
@@ -184,12 +198,15 @@ Each link gets the shortest target that resolves to its file, as
 Obsidian's "shortest path when possible" writes it: the file name, else
 the vault path, else the path from the root; a wikilink leaves out `.md`, a
 markdown link keeps it, percent-encoded. Subpath, alias and embed mark stay.
-Each rewrite is an ordinary write with a base. A move emits `note.moved`;
-the file keeps its ID and versions.
+Each rewrite replaces only the link's target, so links that nest, as a
+clickable image's do, are rewritten both, and is an ordinary write with a
+base. A move emits `note.moved`; the file keeps its ID and versions, and a
+note's title follows its new name.
 
 Deletes (`note.delete`) name their base too. A note changed since is not
 deleted (an edit beats a delete, as on the hub). Otherwise notesd removes
-the file, never moving it to `.trash/`, and records a deletion version;
+the file, never moving it to `.trash/`, after reading it once more, and
+records a deletion version;
 the file's versions stay, so `note.revert` brings it back with its ID at
 its last path. A file deleted by another program is recorded the same way,
 as an outside deletion.
@@ -218,7 +235,9 @@ any write.
 Every version notesd writes or scans is kept in `blobs/`, and listed in
 `versions` with its source (editor, outside, agent, sync) and author, for
 30 days by default; a deletion is a version too. A file's newest version
-is kept however old, as the base of its next merge. A daily pass prunes
+is kept however old, as the base of its next merge, and so is the version
+holding a file's current content when a conflict version is newer. A daily
+pass prunes
 older versions and removes the blobs no version or file names, those a
 crash left unnamed included, with every vault's lock held so no write can
 name a blob it removes. `note.versions` and

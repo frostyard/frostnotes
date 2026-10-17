@@ -234,3 +234,97 @@ func TestReindexKeepsIDsAndVersions(t *testing.T) {
 		t.Errorf("reindex of unchanged files emitted %q", got)
 	}
 }
+
+// equalsRebuild fails unless tv's index is what a fresh scan of its folder
+// builds.
+func (tv *testVault) equalsRebuild() {
+	tv.t.Helper()
+	got, err := tv.db.IndexSnapshot(tv.t.Context(), tv.v.id)
+	if err != nil {
+		tv.t.Fatal(err)
+	}
+	fresh := openTestVault(tv.t, tv.dir, tv.t.TempDir(), nil)
+	fresh.scan()
+	want, err := fresh.db.IndexSnapshot(tv.t.Context(), fresh.v.id)
+	if err != nil {
+		tv.t.Fatal(err)
+	}
+	if !slices.Equal(got, want) {
+		tv.t.Fatalf("the index differs from a rebuild:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A note that moves to a new name takes it as its title, in the index and
+// in search, whoever moved it.
+func TestMovesRetitleNotes(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"A.md": "a", "B.md": "[[A]]"}, nil)
+	tv.scan()
+	if _, err := tv.v.Move(t.Context(), "A.md", "Sub/Renamed.md", true, editor); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(tv.dir, "B.md"), filepath.Join(tv.dir, "C.md")); err != nil {
+		t.Fatal(err)
+	}
+	tv.scan()
+	if n := tv.read("Sub/Renamed.md"); n.Title != "Renamed" {
+		t.Errorf("title after a move = %q", n.Title)
+	}
+	tv.equalsRebuild()
+}
+
+// Files the settings come to ignore leave the index, and the API does not
+// let them in again.
+func TestFilesTheSettingsIgnoreLeaveTheIndex(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"A.md": "[[x]]", "Archive/x.md": "old"}, nil)
+	tv.scan()
+	tv.edit(".frostnotes/vault.yaml", "ignore: [\"Archive/\"]\n")
+	tv.scan()
+	if tv.row("Archive/x.md").ID != 0 {
+		t.Fatal("an ignored note is still indexed")
+	}
+	if _, err := tv.v.Create(t.Context(), "Archive/new.md", []byte("x"), editor); !errors.Is(err, api.ErrInvalidParams) {
+		t.Errorf("Create in an ignored folder = %v, want invalidParams", err)
+	}
+	if _, err := tv.v.Read(t.Context(), "Archive/x.md"); !errors.Is(err, api.ErrInvalidParams) {
+		t.Errorf("Read of an ignored note = %v, want invalidParams", err)
+	}
+	if _, err := tv.v.Move(t.Context(), "A.md", "Archive/A.md", false, editor); !errors.Is(err, api.ErrInvalidParams) {
+		t.Errorf("Move into an ignored folder = %v, want invalidParams", err)
+	}
+	tv.equalsRebuild()
+}
+
+// On a file system that ignores case, a path spelled otherwise than the
+// file is not a second file. Checked with a stand-in: exactName refuses
+// a spelling the folder does not list.
+func TestExactName(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"Notes/Plan.md": "plan"}, nil)
+	r, err := tv.v.open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	for p, want := range map[string]bool{"Notes/Plan.md": true, "Notes/plan.md": false, "notes/Plan.md": false, "Notes/None.md": false} {
+		if got := exactName(r, p); got != want {
+			t.Errorf("exactName(%s) = %v, want %v", p, got, want)
+		}
+	}
+}
+
+// An empty vault folder, as an unmounted share leaves, is not every file
+// deleted.
+func TestScanOfAnEmptyFolderRemovesNothing(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"A.md": "a", "sub/B.md": "b"}, nil)
+	tv.scan()
+	for _, p := range []string{"A.md", "sub/B.md"} {
+		if err := os.Remove(filepath.Join(tv.dir, p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := tv.v.runScan(t.Context(), false); err == nil || !strings.Contains(err.Error(), "mounted") {
+		t.Fatalf("a scan of an empty folder = %v, want an error asking whether it is mounted", err)
+	}
+	if tv.row("A.md").ID == 0 || tv.row("sub/B.md").ID == 0 {
+		t.Error("a scan of an empty folder removed notes")
+	}
+}

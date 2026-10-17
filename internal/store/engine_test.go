@@ -143,3 +143,41 @@ func TestSnapshotOfAnIndexIgnoresIDs(t *testing.T) {
 		t.Errorf("no resolved link row in\n%s", strings.Join(a, "\n"))
 	}
 }
+
+// A conflict version can be a file's newest while an older version holds
+// its content; pruning keeps that one, which a write's base must name.
+func TestPruneKeepsTheCurrentContent(t *testing.T) {
+	ft := newFileTest(t)
+	ctx := t.Context()
+	var f File
+	ft.tx(func(tx *Tx) {
+		f = ft.put(tx, "Plan.md") // hash "h"
+		for _, v := range []Version{
+			{VaultID: ft.vault, FileID: f.ID, Path: f.Path, Hash: "older", Source: api.VersionSourceOutside},
+			{VaultID: ft.vault, FileID: f.ID, Path: f.Path, Hash: "h", Source: api.VersionSourceEditor},
+			{VaultID: ft.vault, FileID: f.ID, Path: f.Path, Hash: "lost", Source: api.VersionSourceAgent, Conflict: true},
+		} {
+			if _, err := tx.AddVersion(ctx, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	var freed []string
+	ft.tx(func(tx *Tx) {
+		var err error
+		if freed, err = tx.PruneVersions(ctx, testNow.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	})
+	vs, err := ft.d.Versions(ctx, f.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kept []string
+	for _, v := range vs {
+		kept = append(kept, v.Hash)
+	}
+	if fmt.Sprint(kept) != "[lost h]" || fmt.Sprint(freed) != "[older]" {
+		t.Errorf("after the prune: kept %v, freed %v; want the newest and the current content kept", kept, freed)
+	}
+}

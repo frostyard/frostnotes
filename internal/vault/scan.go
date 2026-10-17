@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
+	"slices"
+	"strings"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/markdown"
@@ -74,7 +77,8 @@ func (v *Vault) runScan(ctx context.Context, reindex bool) (Listing, error) {
 // of at most Config.Batch files, each in one transaction, so a crash
 // leaves an index that the next scan continues. A reindex reads every file
 // and rebuilds its rows. A folder that cannot be read fails the scan
-// before anything changes.
+// before anything changes, and so does a folder that holds no files when
+// the index has some.
 func (v *Vault) scan(ctx context.Context, reindex bool) (Listing, error) {
 	settings, err := LoadSettings(v.root)
 	if err != nil {
@@ -87,6 +91,9 @@ func (v *Vault) scan(ctx context.Context, reindex bool) (Listing, error) {
 	listing, err := Walk(ctx, v.root, ignore)
 	if err != nil {
 		return Listing{}, err
+	}
+	if v.walked != nil {
+		v.walked(listing.Dirs)
 	}
 	r, err := v.open()
 	if err != nil {
@@ -113,6 +120,13 @@ func (v *Vault) scan(ctx context.Context, reindex bool) (Listing, error) {
 		if e.Kind != KindSettings {
 			files = append(files, e)
 		}
+	}
+	if len(files) == 0 && len(indexed) > 0 {
+		// A network share that is not mounted leaves an empty folder:
+		// taking that for every file deleted would lose their IDs and
+		// history. Files deleted one by one still leave through events.
+		return Listing{}, fmt.Errorf("the vault's folder %s holds no files, but the index has %d: is it mounted? Nothing was removed",
+			v.root, len(indexed))
 	}
 	i := 0
 	for _, e := range files {
@@ -250,7 +264,9 @@ func (v *Vault) plan(ctx context.Context, r *os.Root, cands []candidate, gone []
 func (v *Vault) applyAll(ctx context.Context, r *os.Root, items []item, reindex bool) error {
 	for len(items) > 0 {
 		n := min(len(items), v.cfg.Batch)
-		v.mu.Lock()
+		if err := v.lock(); err != nil {
+			return err
+		}
 		err := v.applyLocked(ctx, r, items[:n], reindex)
 		v.mu.Unlock()
 		if err != nil {
@@ -334,7 +350,14 @@ func (v *Vault) decide(ctx context.Context, r *os.Root, it item, reindex bool) (
 		return op{}, false, nil
 	}
 	if it.cur == nil {
-		return op{}, false, nil // planned as gone, but it is back: its next event or scan reads it
+		// Planned as gone, yet the disk has it: a walk leaves out what the
+		// settings ignore, and on a file system that ignores case, a row
+		// spelled otherwise than the file. Those rows go; a file that came
+		// back is read by its next event or scan.
+		if v.ignored(it.path) || !exactName(r, it.path) {
+			return op{kind: opGone, path: it.path, row: row}, row != nil, nil
+		}
+		return op{}, false, nil
 	}
 	cur := it.cur
 	if !cur.sameStat(fi) {
@@ -452,6 +475,40 @@ func (v *Vault) storeBlob(ctx context.Context, r *os.Root, p string, c *content)
 	return nil
 }
 
+// ignored reports whether the vault's settings leave p out. v.mu must be
+// held. Before the first scan has read the settings, it reads them.
+func (v *Vault) ignored(p string) bool {
+	if v.ignore == nil {
+		s, err := LoadSettings(v.root)
+		if err != nil {
+			return false // the scan fails on it, and says why
+		}
+		if v.ignore, err = NewIgnore(s.Ignore); err != nil {
+			return false
+		}
+	}
+	return v.ignore.Match(p, false)
+}
+
+// exactName reports whether every segment of p is spelled as its folder
+// lists it, which a file system that ignores case does not ensure.
+func exactName(r *os.Root, p string) bool {
+	dir := "."
+	for seg := range strings.SplitSeq(p, "/") {
+		f, err := r.Open(dir)
+		if err != nil {
+			return false
+		}
+		names, err := f.Readdirnames(-1)
+		_ = f.Close()
+		if err != nil || !slices.Contains(names, seg) {
+			return false
+		}
+		dir = path.Join(dir, seg)
+	}
+	return true
+}
+
 // row returns the index's row at p, or nil when there is none.
 func (v *Vault) row(ctx context.Context, p string) (*store.File, error) {
 	f, err := v.cfg.DB.FileByPath(ctx, v.id, p)
@@ -486,6 +543,11 @@ func (v *Vault) refresh(ctx context.Context, r *os.Root, p string) (store.File, 
 		}
 		if err != nil {
 			return store.File{}, content{}, err
+		}
+		if row == nil && (v.ignored(p) || !exactName(r, p)) {
+			// Not a vault file the index lacks: ignored, or the same file
+			// as another path on a file system that ignores case.
+			return store.File{}, content{}, fmt.Errorf("%s: %w", p, fs.ErrNotExist)
 		}
 		if row != nil && row.Hash == cur.hash && sameStat(row, cur.info) {
 			return *row, cur, nil

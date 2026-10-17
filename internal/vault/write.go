@@ -36,6 +36,17 @@ func checkNotePath(p string) error {
 	return nil
 }
 
+// checkIgnored refuses a path the vault's settings ignore: it is not a
+// vault file, so the index would never see it. v.mu must be held.
+func (v *Vault) checkIgnored(paths ...string) error {
+	for _, p := range paths {
+		if v.ignored(p) {
+			return api.InvalidParams("%s is ignored by the vault's settings (%s)", p, SettingsFile)
+		}
+	}
+	return nil
+}
+
 // apiError maps a file error to the API's: a path the guard refuses is
 // invalidParams, a missing file notFound.
 func apiError(p string, err error) error {
@@ -49,6 +60,8 @@ func apiError(p string, err error) error {
 		return api.NotFound("%s does not exist", p)
 	case errors.Is(err, ErrPath):
 		return api.InvalidParams("%v", err)
+	case errors.Is(err, errUnstable):
+		return api.Conflict("%s kept changing on disk while it was read: read it again", p)
 	}
 	return err
 }
@@ -94,8 +107,13 @@ func (v *Vault) Read(ctx context.Context, p string) (*api.Note, error) {
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	v.mu.Lock()
+	if err := v.lock(); err != nil {
+		return nil, err
+	}
 	defer v.mu.Unlock()
+	if err := v.checkIgnored(p); err != nil {
+		return nil, err
+	}
 	return v.read(ctx, r, p)
 }
 
@@ -134,8 +152,13 @@ func (v *Vault) Create(ctx context.Context, p string, content []byte, who Author
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	v.mu.Lock()
+	if err := v.lock(); err != nil {
+		return nil, err
+	}
 	defer v.mu.Unlock()
+	if err := v.checkIgnored(p); err != nil {
+		return nil, err
+	}
 	return v.create(ctx, r, p, content, who, 0)
 }
 
@@ -150,7 +173,8 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 		return nil, apiError(p, err)
 	}
 	if _, err := r.Lstat(p); err == nil {
-		return nil, api.Conflict("%s exists and is not a regular file", p)
+		// A folder, a symlink, or the same file under another case.
+		return nil, api.Conflict("%s exists", p)
 	}
 	if err := mkdirs(r, p); err != nil {
 		return nil, apiError(p, err)
@@ -159,17 +183,17 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 	if err != nil {
 		return nil, err
 	}
-	st, err := stage(r, p, content, nil)
+	st, err := stage(r, v.root, p, content, nil)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.Lstat(p); err == nil {
-		st.discard()
+	if err := v.settled(st.commit(true)); errors.Is(err, fs.ErrExist) {
 		return nil, api.Conflict("%s exists", p)
-	}
-	if err := st.commit(); err != nil {
+	} else if err != nil {
 		return nil, err
 	}
+	// The file is on disk: index it even if the client has gone.
+	ctx = context.WithoutCancel(ctx)
 	err = v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
 		f := store.File{ID: id, VaultID: v.id, Path: p, Size: st.info.Size(), ModTime: st.info.ModTime(), Hash: hash}
 		var err error
@@ -183,10 +207,23 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 		}
 		return v.indexWrite(ctx, tx, f, content, who)
 	})
+	if errors.Is(err, store.ErrConflict) {
+		return nil, api.Conflict("%s: its file ID is taken", p) // a scan's move won the race
+	}
 	if err != nil {
 		return nil, err
 	}
 	return &api.WriteResult{Path: p, Hash: hash}, nil
+}
+
+// settled passes err on, except errNotSynced: the change happened, so the
+// caller records it, and the log says it may not survive a power cut.
+func (v *Vault) settled(err error) error {
+	if errors.Is(err, errNotSynced) {
+		v.log.Warn("a change is on disk but not yet durable", "err", err)
+		return nil
+	}
+	return err
 }
 
 // indexWrite indexes a written file's new content, appends its version and
@@ -226,8 +263,13 @@ func (v *Vault) Write(ctx context.Context, p, base string, text []byte, who Auth
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	v.mu.Lock()
+	if err := v.lock(); err != nil {
+		return nil, err
+	}
 	defer v.mu.Unlock()
+	if err := v.checkIgnored(p); err != nil {
+		return nil, err
+	}
 	return v.write(ctx, r, p, base, text, true, who)
 }
 
@@ -235,6 +277,7 @@ func (v *Vault) Write(ctx context.Context, p, base string, text []byte, who Auth
 // bytes to write as they are (a revert's version, a link rewrite). v.mu
 // must be held.
 func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming []byte, isText bool, who Author) (*api.WriteResult, error) {
+	kept := "" // the conflict version kept by an earlier attempt
 	for range 5 {
 		row, cur, err := v.refresh(ctx, r, p)
 		if err != nil {
@@ -271,43 +314,42 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 		if hash == row.Hash && conflicts == 0 {
 			return wr, nil // the file already holds it
 		}
+		// What the writer sent and lost in a conflict is kept first, in a
+		// transaction of its own, so neither a crash nor a client that
+		// goes away loses it once the file has changed.
+		if conflicts > 0 && kept != blobs.ID(in) {
+			if err := v.keepConflict(ctx, row, in, who); err != nil {
+				return nil, err
+			}
+			kept = blobs.ID(in)
+		}
+		if hash == row.Hash {
+			return wr, nil // the file's side stood everywhere
+		}
 		if _, err := v.cfg.Blobs.Put(ctx, bytes.NewReader(result)); err != nil {
 			return nil, err
 		}
-		if conflicts > 0 {
-			if _, err := v.cfg.Blobs.Put(ctx, bytes.NewReader(in)); err != nil {
-				return nil, err
-			}
+		st, err := stage(r, v.root, p, result, cur.info)
+		if err != nil {
+			return nil, err
 		}
-		var st *staged
-		if hash != row.Hash {
-			if st, err = stage(r, p, result, cur.info); err != nil {
-				return nil, err
-			}
-			if v.staged != nil {
-				v.staged(p)
-			}
-			// The disk is compared just before the rename (ADR-0006): an
-			// edit made since refresh read the file is merged in, not lost.
-			now, err := read(r, p)
-			if err != nil || now.hash != row.Hash || !now.sameStat(cur.info) {
-				st.discard()
-				continue
-			}
-			if err := st.commit(); err != nil {
-				return nil, err
-			}
+		if v.staged != nil {
+			v.staged(p)
 		}
+		// The disk is compared just before the rename (ADR-0006): an edit
+		// made since refresh read the file is merged in, not lost.
+		now, err := read(r, p)
+		if err != nil || now.hash != row.Hash || !now.sameStat(cur.info) {
+			st.discard()
+			continue
+		}
+		if err := v.settled(st.commit(false)); err != nil {
+			return nil, err
+		}
+		// The file holds the new content: index it even if the client
+		// has gone, or the next scan would take it for another program's.
+		ctx := context.WithoutCancel(ctx)
 		err = v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
-			if conflicts > 0 {
-				if _, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: p, Hash: blobs.ID(in),
-					Size: int64(len(in)), Source: who.Source, Author: who.Name, Conflict: true}); err != nil {
-					return err
-				}
-			}
-			if st == nil {
-				return nil
-			}
 			f, err := tx.PutFile(ctx, store.File{VaultID: v.id, Path: p, Size: st.info.Size(), ModTime: st.info.ModTime(), Hash: hash})
 			if err != nil {
 				return err
@@ -322,10 +364,27 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 	return nil, api.Conflict("%s kept changing on disk while it was written; read it again", p)
 }
 
+// keepConflict stores content, a writer's text that lost a conflicting
+// hunk, as a conflict version of file row (ADR-0005).
+func (v *Vault) keepConflict(ctx context.Context, row store.File, content []byte, who Author) error {
+	hash, err := v.cfg.Blobs.Put(ctx, bytes.NewReader(content))
+	if err != nil {
+		return err
+	}
+	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
+		_, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: row.Path, Hash: hash,
+			Size: int64(len(content)), Source: who.Source, Author: who.Name, Conflict: true})
+		return err
+	})
+}
+
 // baseContent returns the content whose hash is base, a version of file
 // row; a base notesd has no version of, or whose content was pruned, is a
 // conflict: the writer reads again.
 func (v *Vault) baseContent(ctx context.Context, row store.File, base string) ([]byte, error) {
+	if base == "" {
+		return nil, api.Conflict("%s exists: name the hash it had when it was read as the base", row.Path)
+	}
 	ok, err := v.cfg.DB.HasVersion(ctx, row.ID, base)
 	if err != nil {
 		return nil, err
@@ -352,8 +411,13 @@ func (v *Vault) Delete(ctx context.Context, p, base string, who Author) error {
 		return err
 	}
 	defer func() { _ = r.Close() }()
-	v.mu.Lock()
+	if err := v.lock(); err != nil {
+		return err
+	}
 	defer v.mu.Unlock()
+	if err := v.checkIgnored(p); err != nil {
+		return err
+	}
 	row, _, err := v.refresh(ctx, r, p)
 	if err != nil {
 		return apiError(p, err)
@@ -361,9 +425,13 @@ func (v *Vault) Delete(ctx context.Context, p, base string, who Author) error {
 	if base != row.Hash {
 		return api.Conflict("%s changed since %q, and an edit beats a delete: read it again", p, base)
 	}
-	if err := remove(r, p); err != nil {
+	if now, err := read(r, p); err != nil || now.hash != row.Hash {
+		return api.Conflict("%s changed while it was deleted, and an edit beats a delete: read it again", p)
+	}
+	if err := v.settled(remove(r, p)); err != nil {
 		return err
 	}
+	ctx = context.WithoutCancel(ctx) // the file is gone: record it whatever the client does
 	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return v.deleteRow(ctx, tx, row, who.Source, who.Name) })
 }
 
@@ -378,8 +446,13 @@ func (v *Vault) Revert(ctx context.Context, p string, id int64, base string, who
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	v.mu.Lock()
+	if err := v.lock(); err != nil {
+		return nil, err
+	}
 	defer v.mu.Unlock()
+	if err := v.checkIgnored(p); err != nil {
+		return nil, err
+	}
 	ver, err := v.cfg.DB.GetVersion(ctx, id)
 	if errors.Is(err, store.ErrNotFound) || (err == nil && ver.VaultID != v.id) {
 		return nil, api.NotFound("version %d does not exist", id)

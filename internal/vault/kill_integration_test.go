@@ -168,10 +168,12 @@ func TestIKillChild(t *testing.T) {
 			n := created[rng.IntN(len(created))]
 			err = tv.v.Delete(ctx, n.Path, n.Hash, editor)
 		case op == 3:
+			// Moves change the folder and the name, so a note's title
+			// changes too.
 			n := created[rng.IntN(len(created))]
-			to := "Kill/moved/" + path.Base(n.Path)
+			to := "Kill/moved/moved-" + strings.TrimPrefix(path.Base(n.Path), "new-")
 			if strings.HasPrefix(n.Path, "Kill/moved/") {
-				to = "Kill/" + path.Base(n.Path)
+				to = "Kill/new-" + strings.TrimPrefix(path.Base(n.Path), "moved-")
 			}
 			_, err = tv.v.Move(ctx, n.Path, to, false, editor)
 		default:

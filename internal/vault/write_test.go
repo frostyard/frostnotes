@@ -2,6 +2,7 @@ package vault
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -400,5 +401,60 @@ func TestWriteKeepsTheFileMode(t *testing.T) {
 	tv.write("Private.md", tv.row("Private.md").Hash, "still secret\n", editor)
 	if fi, err := os.Stat(full); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("mode after a write = %v, %v; want 0600", fi.Mode().Perm(), err)
+	}
+}
+
+// Links can nest: a clickable image is a link around an image, and both
+// name the file. A move rewrites both.
+func TestMoveRewritesNestedLinks(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"N.md": "[![p](pic.png)](pic.png) and [see [[Plan]]](Plan.md)\n", "pic.png": "\x89PNG", "Plan.md": "plan"}, nil)
+	tv.scan()
+	for from, to := range map[string]string{"pic.png": "img/pic2.png", "Plan.md": "Notes/Plan 2.md"} {
+		if _, err := tv.v.Move(t.Context(), from, to, true, editor); err != nil {
+			t.Fatalf("Move(%s): %v", from, err)
+		}
+	}
+	if got, want := tv.disk("N.md"), "[![p](pic2.png)](pic2.png) and [see [[Plan 2]]](Plan%202.md)\n"; got != want {
+		t.Errorf("N.md = %q, want %q", got, want)
+	}
+}
+
+// A client that goes away once its write is staged changes nothing: the
+// file, its version and the writer's losing text are all recorded.
+func TestWriteSurvivesACancelledClient(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"Plan.md": three}, nil)
+	tv.scan()
+	base := tv.read("Plan.md").Hash
+	tv.write("Plan.md", base, "one, first\ntwo\nthree\n", editor)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancelled := false
+	tv.v.staged = func(string) { cancel(); cancelled = true }
+	res, err := tv.v.Write(ctx, "Plan.md", base, []byte("one, second\ntwo\nthree, second\n"), agent)
+	if err != nil || !cancelled {
+		t.Fatalf("a write whose client went away after staging = %+v, %v (staged: %v)", res, err, cancelled)
+	}
+	want := "one, first\ntwo\nthree, second\n"
+	if res.Conflicts != 1 || tv.disk("Plan.md") != want || res.Hash != tv.row("Plan.md").Hash {
+		t.Fatalf("Write = %+v; file %q, index %s", res, tv.disk("Plan.md"), tv.row("Plan.md").Hash)
+	}
+	if got := sources(tv.versions(tv.row("Plan.md").ID)); got != "agent agent(conflict) editor outside" {
+		t.Fatalf("versions = %s, want the merge and the losing text kept", got)
+	}
+}
+
+// A vault being removed refuses changes before its row goes, so no write
+// lands on disk that its index could not record.
+func TestRemovedVaultRefusesChanges(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"Plan.md": "plan"}, nil)
+	tv.scan()
+	tv.v.setRemoved(true)
+	if _, err := tv.v.Create(t.Context(), "New.md", []byte("x"), editor); !errors.Is(err, api.ErrNotFound) {
+		t.Errorf("Create on a removed vault = %v, want notFound", err)
+	}
+	if _, err := tv.v.Write(t.Context(), "Plan.md", tv.row("Plan.md").Hash, []byte("x"), editor); !errors.Is(err, api.ErrNotFound) {
+		t.Errorf("Write on a removed vault = %v, want notFound", err)
+	}
+	if tv.exists("New.md") || tv.disk("Plan.md") != "plan" {
+		t.Error("a removed vault's files changed")
 	}
 }

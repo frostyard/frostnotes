@@ -284,6 +284,25 @@ T-0004 to T-0020, and the engine. Phase 6 (MCP) is next.
   the scan returned early. `repocheck` caught two more test names starting
   with `TestI`.
 
+  An independent review of the engine found eleven issues, each fixed
+  with a test: `note.move` panicked on nested links such as a clickable
+  image's (and since no handler recovered, any client could end notesd;
+  `rpcserver` now answers a handler's panic with internal); a client that
+  went away after the rename lost the write's version and its conflict
+  version; a renamed note kept its old title; rows the walk leaves out
+  (newly ignored, or another spelling on a file system that ignores case)
+  never left, and the API could create ignored files; an empty folder, as
+  an unmounted share leaves, read as every file deleted; concurrent
+  `vault.add` and `vault.remove` could leave the actors wrong, and a
+  removed vault's actor could still rename files; creates, moves and
+  deletes checked before renaming (now `RENAME_NOREPLACE` where the file
+  system has it, and a read just before a delete); the prune pass stalled
+  every request; an empty base and a file that kept changing answered
+  internal; folders were watched only after the first scan; and pruning
+  could drop the version holding a file's content behind a newer conflict
+  version. The harness's moves now change names too, and `make vault-it`
+  passed again (96 s).
+
   Ahead of Phase 7, a read-only run of notesd on the user's vault (a
   scratch data directory) indexed its 666 notes and 8 attachments over SMB
   3 in 1.28 s, detected the network file system, and left every file's

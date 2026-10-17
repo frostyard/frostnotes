@@ -19,6 +19,10 @@ import (
 type Manager struct {
 	cfg Config
 
+	// reloadMu serializes Reload, Remove and Prune, so actors start and
+	// stop one change at a time and none starts while Prune runs.
+	reloadMu sync.Mutex
+
 	mu     sync.Mutex
 	ctx    context.Context
 	vaults map[int64]*Vault
@@ -68,6 +72,33 @@ func (m *Manager) Wait() {
 // Reload starts an actor for each registered vault without one and stops
 // the actors of vaults that are gone: vault.add and vault.remove call it.
 func (m *Manager) Reload(ctx context.Context) error {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	return m.reload(ctx)
+}
+
+// Remove forgets vault id: forget deletes its row, and the vault's actor
+// first finishes the changes it is making and refuses new ones, so none
+// writes a file the index can no longer record.
+func (m *Manager) Remove(ctx context.Context, id int64, forget func() error) error {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	m.mu.Lock()
+	v := m.vaults[id]
+	m.mu.Unlock()
+	if v != nil {
+		v.setRemoved(true)
+	}
+	if err := forget(); err != nil {
+		if v != nil {
+			v.setRemoved(false)
+		}
+		return err
+	}
+	return m.reload(ctx)
+}
+
+func (m *Manager) reload(ctx context.Context) error {
 	list, err := m.cfg.DB.ListVaults(ctx)
 	if err != nil {
 		return fmt.Errorf("reload vaults: %w", err)
@@ -113,12 +144,14 @@ func (m *Manager) Vault(id int64) (*Vault, error) {
 // Prune deletes the versions older than Config.Keep, except each file's
 // newest, and the blobs that no version or file names any more, with
 // every vault's changes held off, and no vault starting, so none can name
-// a blob it removes (docs/design/vault.md#versions). Temporary blobs older
-// than an hour go too.
+// a blob it removes (docs/design/vault.md#versions); requests that only
+// read the index go on. Temporary blobs older than an hour go too.
 func (m *Manager) Prune(ctx context.Context) error {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	vaults := slices.SortedFunc(maps.Values(m.vaults), func(a, b *Vault) int { return cmp.Compare(a.id, b.id) })
+	m.mu.Unlock()
 	for _, v := range vaults {
 		v.mu.Lock()
 		defer v.mu.Unlock()

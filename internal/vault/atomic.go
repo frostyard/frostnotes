@@ -36,19 +36,25 @@ func tempName() string {
 	return tempPrefix + hex.EncodeToString(b[:]) + tempSuffix
 }
 
+// errNotSynced means a change is on disk but its folder could not be
+// fsynced: it is not yet durable, yet it happened, so the index must
+// record it.
+var errNotSynced = errors.New("the change is made, but its folder could not be synced")
+
 // staged is new content written to a temporary file beside its path, not
 // yet renamed over it.
 type staged struct {
 	r    *os.Root
+	root string // the vault's folder, for renameNoReplace
 	tmp  string
 	path string
 	info fs.FileInfo // the temporary file's stat once synced: the file's after the rename
 }
 
-// stage writes data to a temporary dot-file in p's folder and fsyncs it.
-// perm is the mode a new file gets before the umask; an existing file's
-// mode is kept.
-func stage(r *os.Root, p string, data []byte, existing fs.FileInfo) (*staged, error) {
+// stage writes data to a temporary dot-file in p's folder under r, the
+// vault at root, and fsyncs it. A new file gets mode 0666 before the
+// umask; an existing file's mode is kept.
+func stage(r *os.Root, root, p string, data []byte, existing fs.FileInfo) (*staged, error) {
 	tmp := path.Join(path.Dir(p), tempName())
 	perm := fs.FileMode(0o666)
 	if existing != nil {
@@ -58,7 +64,7 @@ func stage(r *os.Root, p string, data []byte, existing fs.FileInfo) (*staged, er
 	if err != nil {
 		return nil, fmt.Errorf("write %s: %w", p, err)
 	}
-	s := &staged{r: r, tmp: tmp, path: p}
+	s := &staged{r: r, root: root, tmp: tmp, path: p}
 	err = func() error {
 		if existing != nil {
 			if err := f.Chmod(perm); err != nil {
@@ -85,42 +91,69 @@ func stage(r *os.Root, p string, data []byte, existing fs.FileInfo) (*staged, er
 	return s, nil
 }
 
-// commit renames the temporary file over its path and fsyncs the folder,
-// so the new content survives a crash once commit returns.
-func (s *staged) commit() error {
-	if err := s.r.Rename(s.tmp, s.path); err != nil {
+// commit renames the temporary file over its path, or with create onto a
+// path that must not exist (an error matching fs.ErrExist otherwise), and
+// fsyncs the folder, so the new content survives a crash once commit
+// returns nil. An error matching errNotSynced follows a rename that
+// happened.
+func (s *staged) commit(create bool) error {
+	var err error
+	if create {
+		err = renameNoReplace(s.r, s.root, s.tmp, s.path)
+	} else {
+		err = s.r.Rename(s.tmp, s.path)
+	}
+	if err != nil {
 		s.discard()
 		return fmt.Errorf("write %s: %w", s.path, err)
 	}
-	return syncDir(s.r, path.Dir(s.path))
+	if err := syncDir(s.r, path.Dir(s.path)); err != nil {
+		return fmt.Errorf("%w: %w", errNotSynced, err)
+	}
+	return nil
 }
 
 // discard removes the temporary file.
 func (s *staged) discard() { _ = s.r.Remove(s.tmp) }
 
-// remove deletes p and fsyncs its folder.
+// remove deletes p and fsyncs its folder; an error matching errNotSynced
+// follows a deletion that happened.
 func remove(r *os.Root, p string) error {
 	if err := r.Remove(p); err != nil {
 		return fmt.Errorf("delete %s: %w", p, err)
 	}
-	return syncDir(r, path.Dir(p))
-}
-
-// rename moves from to to, which must not exist, and fsyncs both folders.
-func rename(r *os.Root, from, to string) error {
-	if _, err := r.Lstat(to); err == nil {
-		return fmt.Errorf("move %s: %s %w", from, to, fs.ErrExist)
-	}
-	if err := r.Rename(from, to); err != nil {
-		return fmt.Errorf("move %s: %w", from, err)
-	}
-	if err := syncDir(r, path.Dir(to)); err != nil {
-		return err
-	}
-	if path.Dir(from) != path.Dir(to) {
-		return syncDir(r, path.Dir(from))
+	if err := syncDir(r, path.Dir(p)); err != nil {
+		return fmt.Errorf("%w: %w", errNotSynced, err)
 	}
 	return nil
+}
+
+// rename moves from to to, which must not exist (an error matching
+// fs.ErrExist otherwise), and fsyncs both folders; an error matching
+// errNotSynced follows a move that happened.
+func rename(r *os.Root, root, from, to string) error {
+	if err := renameNoReplace(r, root, from, to); err != nil {
+		return fmt.Errorf("move %s: %w", from, err)
+	}
+	dirs := []string{path.Dir(to)}
+	if path.Dir(from) != path.Dir(to) {
+		dirs = append(dirs, path.Dir(from))
+	}
+	for _, d := range dirs {
+		if err := syncDir(r, d); err != nil {
+			return fmt.Errorf("%w: %w", errNotSynced, err)
+		}
+	}
+	return nil
+}
+
+// checkedRename is renameNoReplace where the file system cannot refuse to
+// replace: it checks first, leaving a window of microseconds.
+func checkedRename(r *os.Root, from, to string) error {
+	if _, err := r.Lstat(to); err == nil {
+		return fmt.Errorf("%s: %w", to, fs.ErrExist)
+	}
+	return r.Rename(from, to)
 }
 
 func syncDir(r *os.Root, dir string) error {

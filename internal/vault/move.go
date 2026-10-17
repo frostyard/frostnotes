@@ -36,8 +36,13 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	v.mu.Lock()
+	if err := v.lock(); err != nil {
+		return nil, err
+	}
 	defer v.mu.Unlock()
+	if err := v.checkIgnored(from, to); err != nil {
+		return nil, err
+	}
 	row, _, err := v.refresh(ctx, r, from)
 	if err != nil {
 		return nil, apiError(from, err)
@@ -59,12 +64,14 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 	if err := mkdirs(r, to); err != nil {
 		return nil, apiError(to, err)
 	}
-	if err := rename(r, from, to); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			return nil, api.Conflict("%s exists", to)
-		}
+	if err := v.settled(rename(r, v.root, from, to)); errors.Is(err, fs.ErrExist) {
+		return nil, api.Conflict("%s exists", to)
+	} else if err != nil {
 		return nil, err
 	}
+	// The file has moved: record it, and rewrite its links, whatever the
+	// client does now.
+	ctx = context.WithoutCancel(ctx)
 	var doc markdown.Doc
 	var data []byte
 	becameNote := kindOf(to) == store.FileNote && row.Kind() != store.FileNote
@@ -180,11 +187,16 @@ func (v *Vault) planRewrites(ctx context.Context, r *os.Root, moved store.File, 
 }
 
 // rewriteLinks returns plan's note, now at source, with each link that no
-// longer resolves to its file retargeted, and whether any was.
+// longer resolves to its file retargeted, and whether any was. Each
+// rewrite replaces only the link's target, so links that nest, as a
+// clickable image's do, are rewritten both.
 func (v *Vault) rewriteLinks(ctx context.Context, source string, plan rewritePlan) ([]byte, bool, error) {
 	lookup := v.lookup(ctx)
-	var out []byte
-	last, changed := 0, false
+	type edit struct {
+		start, end int
+		text       string
+	}
+	var edits []edit
 	for _, rt := range plan.links {
 		l := rt.link
 		if markdown.Resolve(source, l.Target, lookup) == rt.want {
@@ -194,16 +206,25 @@ func (v *Vault) rewriteLinks(ctx context.Context, source string, plan rewritePla
 		if !ok {
 			continue
 		}
-		text, ok := retargetText(string(plan.data[l.Start:l.End]), l.Kind, target)
+		start, end, text, ok := targetSpan(string(plan.data[l.Start:l.End]), l.Kind, target)
 		if !ok {
 			continue
 		}
-		out = append(out, plan.data[last:l.Start]...)
-		out = append(out, text...)
-		last, changed = l.End, true
+		edits = append(edits, edit{l.Start + start, l.Start + end, text})
+	}
+	slices.SortFunc(edits, func(a, b edit) int { return a.start - b.start })
+	var out []byte
+	last := 0
+	for _, e := range edits {
+		if e.start < last {
+			continue // overlaps an edit made already; never for well-formed links
+		}
+		out = append(out, plan.data[last:e.start]...)
+		out = append(out, e.text...)
+		last = e.end
 	}
 	out = append(out, plan.data[last:]...)
-	return out, changed, nil
+	return out, last > 0, nil
 }
 
 // shortestTarget is how a link from source names want, as Obsidian's
@@ -223,18 +244,28 @@ func shortestTarget(source, want string, kind markdown.LinkKind, files func(stri
 	return "", false
 }
 
-// retargetText replaces the target in a link's text, keeping its subpath,
-// alias and embed mark.
+// retargetText is raw, a link's text, with its target replaced, keeping
+// its subpath, alias and embed mark.
 func retargetText(raw string, kind markdown.LinkKind, target string) (string, bool) {
+	start, end, text, ok := targetSpan(raw, kind, target)
+	if !ok {
+		return "", false
+	}
+	return raw[:start] + text + raw[end:], true
+}
+
+// targetSpan returns the byte range of the target in raw, a link's text,
+// and what replaces it to name target.
+func targetSpan(raw string, kind markdown.LinkKind, target string) (start, end int, text string, ok bool) {
 	if kind != markdown.LinkMarkdown {
 		if strings.ContainsAny(target, "[]|#^") {
-			return "", false
+			return 0, 0, "", false
 		}
-		open, end := strings.Index(raw, "[["), strings.LastIndex(raw, "]]")
-		if open < 0 || end < open+2 {
-			return "", false
+		open, closing := strings.Index(raw, "[["), strings.LastIndex(raw, "]]")
+		if open < 0 || closing < open+2 {
+			return 0, 0, "", false
 		}
-		inner := raw[open+2 : end]
+		inner := raw[open+2 : closing]
 		cut := len(inner)
 		if i := strings.IndexByte(inner, '|'); i >= 0 {
 			cut = i
@@ -245,40 +276,39 @@ func retargetText(raw string, kind markdown.LinkKind, target string) (string, bo
 		if i := strings.IndexByte(inner[:cut], '#'); i >= 0 {
 			cut = i
 		}
-		return raw[:open+2] + target + inner[cut:] + raw[end:], true
+		return open + 2, open + 2 + cut, target, true
 	}
 	i := strings.LastIndex(raw, "](")
 	if i < 0 || !strings.HasSuffix(raw, ")") {
-		return "", false // a reference link: its definition names the file
+		return 0, 0, "", false // a reference link: its definition names the file
 	}
-	inside := raw[i+2 : len(raw)-1]
+	start = i + 2
+	inside := raw[start : len(raw)-1]
 	rest := strings.TrimLeft(inside, " \t")
-	lead := inside[:len(inside)-len(rest)]
-	angle := strings.HasPrefix(rest, "<")
+	start += len(inside) - len(rest)
 	var dest string
-	if angle {
+	if strings.HasPrefix(rest, "<") {
 		end := strings.IndexByte(rest, '>')
 		if end < 0 || strings.ContainsAny(target, "<>") {
-			return "", false
+			return 0, 0, "", false
 		}
 		dest = rest[1:end]
-		rest = rest[end+1:]
-	} else {
-		end := strings.IndexAny(rest, " \t")
-		if end < 0 {
-			end = len(rest)
+		sub := ""
+		if j := strings.IndexByte(dest, '#'); j >= 0 {
+			sub = dest[j:]
 		}
-		dest, rest = rest[:end], rest[end:]
+		return start, start + end + 1, "<" + target + sub + ">", true
 	}
+	end = strings.IndexAny(rest, " \t")
+	if end < 0 {
+		end = len(rest)
+	}
+	dest = rest[:end]
 	sub := ""
 	if j := strings.IndexByte(dest, '#'); j >= 0 {
 		sub = dest[j:]
 	}
-	newDest := escapePath(target) + sub
-	if angle {
-		newDest = "<" + target + sub + ">"
-	}
-	return raw[:i+2] + lead + newDest + rest + ")", true
+	return start, start + end, escapePath(target) + sub, true
 }
 
 // escapePath percent-encodes each segment of a vault path for a markdown

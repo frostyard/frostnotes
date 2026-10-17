@@ -22,6 +22,7 @@ func (v *Vault) run(ctx context.Context) {
 	if w != nil {
 		defer w.close()
 		go w.read(ctx)
+		v.walked = w.watchDirs // before a long cold scan reads its files
 	}
 	v.requestScan()
 	rescan := time.NewTimer(time.Hour)
@@ -37,12 +38,8 @@ func (v *Vault) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-v.scanReq:
-			listing, err := v.runScan(ctx, v.reindex.Swap(false))
-			if ctx.Err() != nil {
-				return
-			}
-			if err == nil && w != nil {
-				w.watchDirs(listing.Dirs)
+			if _, _ = v.runScan(ctx, v.reindex.Swap(false)); ctx.Err() != nil {
+				return // runScan logs a failure and keeps it in the status
 			}
 			interval := v.cfg.Rescan
 			if s, _ := v.Status(ctx); s.Network {

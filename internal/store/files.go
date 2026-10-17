@@ -98,7 +98,8 @@ func (t *Tx) RestoreFile(ctx context.Context, f File) (File, error) {
 // MoveFile gives file id the path to, keeping its ID, its index rows and
 // its versions. It returns ErrNotFound when there is no file id and
 // ErrConflict when to is taken. The links that could name the file by its
-// old or new name, and a moved note's own links, are re-resolved.
+// old or new name, and a moved note's own links, are re-resolved, and a
+// renamed note's title follows its name.
 // Task card T-0014.
 func (t *Tx) MoveFile(ctx context.Context, id int64, to string) (File, error) {
 	f, err := scanFile(t.QueryRowContext(ctx, `SELECT `+fileColumns+` FROM files WHERE id = ?`, id))
@@ -121,6 +122,16 @@ func (t *Tx) MoveFile(ctx context.Context, id int64, to string) (File, error) {
 	if old.Kind() == FileNote && f.Kind() == FileAttachment {
 		if _, err := t.ExecContext(ctx, `DELETE FROM notes WHERE file_id = ?`, id); err != nil {
 			return File{}, fmt.Errorf("delete note index %d: %w", id, err)
+		}
+	}
+	// A note's title is its file name, as IndexNote sets it.
+	if title := strings.TrimSuffix(path.Base(to), ".md"); old.Kind() == FileNote && f.Kind() == FileNote &&
+		title != strings.TrimSuffix(path.Base(old.Path), ".md") {
+		if _, err := t.ExecContext(ctx, `UPDATE notes SET title = ? WHERE file_id = ?`, title, id); err != nil {
+			return File{}, fmt.Errorf("retitle note %d: %w", id, err)
+		}
+		if _, err := t.ExecContext(ctx, `UPDATE notes_fts SET title = ? WHERE rowid = ?`, title, id); err != nil {
+			return File{}, fmt.Errorf("retitle note %d: %w", id, err)
 		}
 	}
 	if err := t.resolveFileLinks(ctx, f.VaultID, old.Path, to, id); err != nil {

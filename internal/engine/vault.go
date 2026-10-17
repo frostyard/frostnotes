@@ -76,11 +76,10 @@ func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, err
 }
 
 func (v vaults) Remove(ctx context.Context, p *api.VaultRemoveParams) error {
-	err := v.db.Tx(ctx, func(tx *store.Tx) error { return tx.DeleteVault(ctx, p.ID) })
-	if err != nil {
-		return apiError(err, fmt.Sprintf("vault %d", p.ID))
-	}
-	return v.m.Reload(ctx) // stop its actor
+	err := v.m.Remove(ctx, p.ID, func() error {
+		return v.db.Tx(ctx, func(tx *store.Tx) error { return tx.DeleteVault(ctx, p.ID) })
+	})
+	return apiError(err, fmt.Sprintf("vault %d", p.ID))
 }
 
 func (v vaults) Status(ctx context.Context, p *api.VaultStatusParams) (*api.ScanStatus, error) {
