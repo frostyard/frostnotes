@@ -96,7 +96,9 @@ more than one, is an error.
   one at its start. Values are written as YAML with two-space indentation
   (`yaml.v3`), so a string with a wikilink is quoted. Every other byte of
   the note stays as it was. A note whose frontmatter is not a YAML mapping
-  is an error, and so is a result that would not be one.
+  is an error, and so is one written as a single flow mapping
+  (`{a: 1, b: 2}`, every key on one line), and a result that would not be
+  a mapping.
 
 ## Rules
 

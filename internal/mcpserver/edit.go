@@ -155,6 +155,11 @@ func propertyUnits(front string, lines []string) (map[string]propertyUnit, error
 		return units, nil
 	}
 	root := document.Content[0]
+	if root.Style&yaml.FlowStyle != 0 {
+		// {a: 1, b: 2} holds every key on one line: editing one would
+		// rewrite the others.
+		return nil, fmt.Errorf("the frontmatter is one flow mapping ({...}); write it as block YAML to set its properties")
+	}
 	for i := 0; i < len(root.Content); i += 2 {
 		key := root.Content[i]
 		start := key.Line - 1
