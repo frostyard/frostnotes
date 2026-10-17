@@ -64,7 +64,7 @@ vault-it: ## Kill notesd during writes and scans, and check every restart
 # reduces a failure and prints its plan.
 .PHONY: sync-sim
 sync-sim: ## Run sync's seeded simulation (SIM_SEEDS, SIM_STEPS, SIM_MODE)
-	go test -tags integration -run '^TestI(Simulation|Regressions)$$' -count=1 -v -timeout 4h ./internal/synctest
+	go test -tags integration -run '^(TestISimulation|TestRegressions)$$' -count=1 -v -timeout 4h ./internal/synctest
 
 # M1's exit evidence 1 to 4 (docs/plans/0003-m1-headless-vault.md, Phase 7):
 # Obsidian's link dump, the user's vault indexed cold (read only), a vim save
