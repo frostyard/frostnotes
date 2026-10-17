@@ -6,8 +6,8 @@
 // conflict revision. Merges are deterministic and byte-exact: no input is
 // normalized, and text that only one side touched keeps its bytes.
 //
-// This is the M0 shape (plan 0001, Phase 5); M2's specs/merge.md is the
-// contract.
+// docs/specs/merge.md is the contract, and its fixtures are this
+// package's golden tests (fixtures_test.go).
 package merge
 
 import (

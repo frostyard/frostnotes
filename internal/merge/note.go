@@ -39,11 +39,15 @@ func Note(base, head, incoming []byte) Result {
 }
 
 // Create merges two files created at the same path with no common
-// revision, using the lines they share as the base. Two notes with nothing
-// in common conflict as a whole, and the head stands.
+// revision, using the lines they share as the base. An empty side takes
+// the other's content; two notes with nothing else in common conflict as
+// a whole, and the head stands.
 func Create(head, incoming []byte) Result {
-	if string(head) == string(incoming) {
+	switch {
+	case string(head) == string(incoming), len(incoming) == 0:
 		return Result{Text: head}
+	case len(head) == 0:
+		return Result{Text: incoming}
 	}
 	hl, il := lines(string(head)), lines(string(incoming))
 	var common strings.Builder
@@ -145,6 +149,8 @@ func frontmatter(b, h, in note) (units []string, conflicts []Conflict) {
 			v, keep = iv, pi
 		case (pb && pi && iv == bv) || (!pb && !pi): // the incoming side left it alone
 			v, keep = hv, ph
+		case ph && pi && pb && mergeList(bv, hv, iv) != "": // both changed a flow list
+			v, keep = mergeList(bv, hv, iv), true
 		case ph && pi && pb: // both changed it
 			var sub merger
 			sub.text(bv, hv, iv)
@@ -169,4 +175,110 @@ func frontmatter(b, h, in note) (units []string, conflicts []Conflict) {
 		}
 	}
 	return units, conflicts
+}
+
+// mergeList merges a key whose three units are each one line holding a
+// flow sequence of scalars ("tags: [a, b]"), as Obsidian writes tags and
+// aliases: the head's items, then the incoming side's additions, without
+// the items the incoming side removed. It returns "" when a unit is not
+// such a line, and the key merges as text.
+func mergeList(base, head, incoming string) string {
+	b, okb := flowList(base)
+	h, okh := flowList(head)
+	in, oki := flowList(incoming)
+	if !okb || !okh || !oki {
+		return ""
+	}
+	has := func(items []string, x string) bool {
+		for _, it := range items {
+			if it == x {
+				return true
+			}
+		}
+		return false
+	}
+	var items []string
+	for _, x := range h.items {
+		if !has(b.items, x) || has(in.items, x) {
+			items = append(items, x)
+		}
+	}
+	for _, x := range in.items {
+		if !has(b.items, x) && !has(items, x) {
+			items = append(items, x)
+		}
+	}
+	if strings.Join(items, "\x00") == strings.Join(h.items, "\x00") {
+		return head
+	}
+	return h.prefix + "[" + strings.Join(items, ", ") + "]" + h.suffix
+}
+
+type list struct {
+	prefix, suffix string // the line before "[" and after "]"
+	items          []string
+}
+
+// flowList parses a one-line unit "key: [item, item]" whose items are
+// plain or quoted scalars; items are kept as written, trimmed of spaces.
+func flowList(unit string) (list, bool) {
+	line := strings.TrimRight(unit, "\r\n")
+	if strings.Contains(line, "\n") || strings.Count(unit, "\n") > 1 {
+		return list{}, false
+	}
+	k, ok := topKey(unit)
+	if !ok {
+		return list{}, false
+	}
+	rest := line[len(k)+1:]
+	trimmed := strings.TrimLeft(rest, " ")
+	if !strings.HasPrefix(trimmed, "[") {
+		return list{}, false
+	}
+	open := len(line) - len(trimmed)
+	end := strings.TrimRight(line, " \t")
+	if !strings.HasSuffix(end, "]") {
+		return list{}, false
+	}
+	inner := line[open+1 : len(end)-1]
+	l := list{prefix: line[:open], suffix: unit[len(end):]}
+	var item strings.Builder
+	quote := byte(0)
+	flush := func() bool {
+		x := strings.TrimSpace(item.String())
+		item.Reset()
+		if x == "" || strings.ContainsAny(x[:1], "[{") {
+			return false
+		}
+		l.items = append(l.items, x)
+		return true
+	}
+	for i := 0; i < len(inner); i++ {
+		c := inner[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '[' || c == ']' || c == '{' || c == '}':
+			return list{}, false
+		case c == ',':
+			if !flush() {
+				return list{}, false
+			}
+			continue
+		}
+		item.WriteByte(c)
+	}
+	if quote != 0 {
+		return list{}, false
+	}
+	if strings.TrimSpace(item.String()) != "" || len(l.items) > 0 {
+		if !flush() {
+			return list{}, false
+		}
+	}
+	return l, true
 }

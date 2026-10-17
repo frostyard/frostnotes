@@ -7,8 +7,9 @@ Living document. Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revis
 [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md) (blobs),
 [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md) (retention),
 [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md) (the simulation).
-Contracts: `specs/sync-protocol.md` and `specs/merge.md`, written in
-[plan 0004](../plans/0004-m2-sync.md)'s Phase 2.
+Contracts: [specs/merge.md](../specs/merge.md) and
+`specs/sync-protocol.md`, written in [plan 0004](../plans/0004-m2-sync.md)'s
+Phase 2.
 
 **Status: designed, not built** (M2, [plan 0004](../plans/0004-m2-sync.md)).
 This is the design; the M2 specs will be the contract.
@@ -129,9 +130,9 @@ append revisions the same way.
 
 ### Merge
 
-`internal/merge` (planner-owned; 30 golden cases from the M0 spike in
-`merge_test.go`, which become `specs/merge.md`'s fixtures, and a seeded
-property test):
+`internal/merge` (planner-owned; [specs/merge.md](../specs/merge.md) is
+the contract, and its 44 fixtures, M0's 30 among them, are the golden
+tests, with a seeded property test):
 
 - **Text files** (`.md` and other UTF-8 text such as `.base`) merge. Other
   files do not: the later push wins and the other stays in the log.
@@ -142,7 +143,10 @@ property test):
 - **Body:** diff3 by line. Where both sides only inserted lines at the same
   place, both insertions are kept, the head's first; this is what lets two
   daily notes made offline from one template, or two tag lists each grown
-  by one tag, merge cleanly. A hunk both sides changed differently merges
+  by one tag, merge cleanly. A flow list both sides changed
+  (`tags: [a, b]`, as Obsidian writes tags) merges as a list: the head's
+  items, without those the incoming side removed, then its additions. A
+  hunk both sides changed differently merges
   again by word (words and the whitespace between them); insertions at the
   same place conflict at that level, since interleaved words read worse
   than a conflict revision. Whatever still conflicts takes the head's side.
@@ -243,4 +247,5 @@ devices
 
 - Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
 - Related: [overview.md](overview.md), [vault.md](vault.md)
+- Contracts: [specs/merge.md](../specs/merge.md)
 - Built in: [plan 0004](../plans/0004-m2-sync.md) ([roadmap — M2](../plans/0002-roadmap.md))
