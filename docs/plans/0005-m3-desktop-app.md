@@ -14,11 +14,12 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-17): **Phase 1 done**, and the user accepted ADRs 0021
-to 0023 as written: this plan, the ADRs (accepted),
+Status (2026-10-17): **Phases 1 and 2 done**, and the user accepted
+ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
-T-0042, each checked against a reference.
+T-0042, which Codex passed and which are merged. Phase 3, the contracts,
+is next.
 
 ## Decisions taken for M3
 
@@ -161,11 +162,11 @@ does, so the plan records them without ADRs:
 
 | Card | Size | File | What |
 | --- | --- | --- | --- |
-| [T-0038](../tasks/todo/0038-keymap.md) | S | `app/src/lib/keymap.ts` | Obsidian's default hotkeys: a key press to a command ID, a command's hotkeys, and their display |
-| [T-0039](../tasks/todo/0039-fuzzy-search.md) | S | `app/src/lib/fuzzy.ts` | Obsidian's fuzzy search for the quick switcher, the palette and link suggestions: scores and matched ranges |
-| [T-0040](../tasks/todo/0040-file-tree.md) | M | `app/src/lib/fileTree.ts` | the Files pane's rows: folders and files nested, sorted as Obsidian sorts, filtered by type, flattened by what is open |
-| [T-0041](../tasks/todo/0041-outline.md) | S | `app/src/lib/outline.ts` | the Outline pane's tree of headings, its visible rows, and the heading a position is under |
-| [T-0042](../tasks/todo/0042-tab-strip.md) | M | `app/src/features/workspace/TabStrip.tsx` | a tab group's strip: tabs, close, new tab, the tab list, keys, and the commands it sends |
+| [T-0038](../tasks/done/0038-keymap.md) | S | `app/src/lib/keymap.ts` | Obsidian's default hotkeys: a key press to a command ID, a command's hotkeys, and their display |
+| [T-0039](../tasks/done/0039-fuzzy-search.md) | S | `app/src/lib/fuzzy.ts` | Obsidian's fuzzy search for the quick switcher, the palette and link suggestions: scores and matched ranges |
+| [T-0040](../tasks/done/0040-file-tree.md) | M | `app/src/lib/fileTree.ts` | the Files pane's rows: folders and files nested, sorted as Obsidian sorts, filtered by type, flattened by what is open |
+| [T-0041](../tasks/done/0041-outline.md) | S | `app/src/lib/outline.ts` | the Outline pane's tree of headings, its visible rows, and the heading a position is under |
+| [T-0042](../tasks/done/0042-tab-strip.md) | M | `app/src/features/workspace/TabStrip.tsx` | a tab group's strip: tabs, close, new tab, the tab list, keys, and the commands it sends |
 
 - They implement [specs/ui.md](../specs/ui.md)'s keyboard map, Prompts,
   Files pane, Outline and Tab strip, and
@@ -174,6 +175,26 @@ does, so the plan records them without ADRs:
   they may run in any order, in two executor worktrees at once
   ([agent workflow](../design/agent-workflow.md#batching-cards)).
 - **Done when:** every card is merged and `make ui-check` is green.
+- **Result (2026-10-17): done.** Codex (codex-cli 0.161, the user's
+  default model) passed all five cards on the first attempt, the app's
+  first cards, in two executor worktrees at once (`exec-m3`: T-0038,
+  T-0039, T-0041; `exec-m3b`: T-0040, T-0042), each in one to two and a
+  half minutes; the planner reviewed each before merging it into
+  `m3/cards`. On the merge, `make ui-check` (14 files, 98 tests) and `make
+  verify` are green. Each card's given tests were checked by mutation
+  against Codex's code, and each mutation failed them: letters matched
+  by case (T-0038), a character inside a word right after the last one
+  counted (T-0039), folders sorted in reverse with the files (T-0040),
+  headings of one level nested (T-0041), and focus left behind after a
+  key activated a tab (T-0042).
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0038 keymap | 1 | 2 m 0 s | matches the spec; builds its key-name table per call, harmless |
+  | T-0039 fuzzy search | 1 | 1 m 10 s | matches Obsidian's rules; its classes held the characters themselves, some invisible, so the planner wrote them as the card's escapes (the same code points) |
+  | T-0040 file tree | 1 | 2 m 18 s | correct, linear grouping; two files whose names differ only in case and extension order by the whole name a step before the card's plain order would, deterministic either way |
+  | T-0041 outline | 1 | 54 s | correct |
+  | T-0042 tab strip | 1 | 1 m 32 s | correct; un-hides the pin's name for assistive technology and drops a pending focus whose tab is gone |
 
 ## Phase 3 — Contracts (planner)
 
@@ -342,6 +363,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/todo/)
+- Cards: [T-0038 to T-0042](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
