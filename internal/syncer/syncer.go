@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -45,7 +46,12 @@ type Config struct {
 	Client string
 	// PartDir holds partial downloads; it must exist.
 	PartDir string
-	// HTTP sends pairing and blob requests [a client with timeouts].
+	// Dial opens every connection to a hub, for HTTP and the WebSocket
+	// alike, so a test can cut a device off [a TCP dial with a 15 s
+	// timeout].
+	Dial func(ctx context.Context, addr string) (net.Conn, error)
+	// HTTP sends pairing and blob requests [a client with timeouts, over
+	// Dial].
 	HTTP *http.Client
 	// Quiet is how long a changed file waits for quiet before it is pushed,
 	// and MaxQuiet the longest it waits [2s, 30s]. Idle is how often a loop
@@ -72,9 +78,15 @@ func (c Config) withDefaults() Config {
 	if c.Client == "" {
 		c.Client = "notesd"
 	}
+	if c.Dial == nil {
+		d := &net.Dialer{Timeout: 15 * time.Second}
+		c.Dial = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
+	}
 	if c.HTTP == nil {
+		dial := c.Dial
 		c.HTTP = &http.Client{Transport: &http.Transport{ResponseHeaderTimeout: 45 * time.Second,
-			TLSHandshakeTimeout: 15 * time.Second, IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 4}}
+			TLSHandshakeTimeout: 15 * time.Second, IdleConnTimeout: 90 * time.Second, MaxIdleConnsPerHost: 4,
+			DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) { return dial(ctx, addr) }}}
 	}
 	if c.Quiet == 0 {
 		c.Quiet = 2 * time.Second

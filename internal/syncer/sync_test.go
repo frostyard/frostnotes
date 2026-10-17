@@ -44,20 +44,36 @@ func start(t *testing.T, o rpctest.Options, dir string) *node {
 	return n
 }
 
-// waitScanned waits for the vault's first scan.
+// waitScanned waits until the vault's scan has finished, from its
+// vault.scan events.
 func (n *node) waitScanned() {
 	n.t.Helper()
-	for range 500 {
-		st, err := n.c.Vault().Status(n.t.Context(), &api.VaultStatusParams{ID: n.vault})
-		if err != nil {
-			n.t.Fatal(err)
-		}
-		if st.State == api.ScanStateIdle && st.ScannedAt != nil {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(n.t.Context(), time.Minute)
+	defer cancel()
+	c, _, err := api.Dial(ctx, n.srv.Socket, "scan watch")
+	if err != nil {
+		n.t.Fatal(err)
 	}
-	n.t.Fatal("the vault's scan did not finish")
+	defer func() { _ = c.Close() }()
+	if _, err := c.Events().Subscribe(ctx, &api.EventsSubscribeParams{}); err != nil {
+		n.t.Fatal(err)
+	}
+	idle := func(st api.ScanStatus) bool { return st.State == api.ScanStateIdle && st.ScannedAt != nil }
+	if st, err := n.c.Vault().Status(ctx, &api.VaultStatusParams{ID: n.vault}); err == nil && idle(*st) {
+		return
+	}
+	for {
+		select {
+		case ev := <-c.Notifications():
+			if e, err := api.DecodeEvent(ev.Event, ev.Data); err == nil {
+				if sc, ok := e.(api.VaultScan); ok && sc.Status.VaultID == n.vault && idle(sc.Status) {
+					return
+				}
+			}
+		case <-ctx.Done():
+			n.t.Fatal("the vault's scan did not finish")
+		}
+	}
 }
 
 func vaultDir(t *testing.T, files map[string]string) string {
@@ -208,7 +224,7 @@ func (n *node) read(p string) string {
 
 func TestAGeneratedVaultSyncsBothWays(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := vaultgen.Generate(filepath.Join(dir, "v"), vaultgen.Options{Seed: 4, Notes: 666}); err != nil {
+	if _, err := vaultgen.Generate(filepath.Join(dir, "v"), vaultgen.Options{Seed: 4, Notes: generatedNotes}); err != nil {
 		t.Fatal(err)
 	}
 	h := newHub(t, nil)
@@ -216,7 +232,7 @@ func TestAGeneratedVaultSyncsBothWays(t *testing.T) {
 	b := newDevice(t, h, "b", nil)
 	settle(t, h, a2, b)
 	got := same(t, h, a2, b)
-	if len(got) < 666 {
+	if len(got) < generatedNotes {
 		t.Fatalf("%d files synced, want the generated vault's", len(got))
 	}
 	// And back: b edits a note and adds one, a sees both.

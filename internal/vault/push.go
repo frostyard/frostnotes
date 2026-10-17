@@ -107,7 +107,10 @@ func (v *Vault) Push(ctx context.Context, c PushChange, who Author) (PushOutcome
 	case err != nil:
 		return PushOutcome{}, err
 	case c.Deleted && row.Hash != c.BaseHash:
-		return refuse(api.RefuseReasonEdited), nil
+		// The answer carries the head, which the device restores.
+		out := refuse(api.RefuseReasonEdited)
+		out.FileID = c.FileID
+		return out, nil
 	case c.Deleted:
 		if _, err := v.removeFile(ctx, r, row.Path, row.Hash, who, nil); err != nil {
 			return PushOutcome{}, err

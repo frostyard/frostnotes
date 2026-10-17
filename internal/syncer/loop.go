@@ -140,6 +140,7 @@ func (l *loop) run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		l.s.cfg.Log.Info("sync session ended", "vault", l.vaultID, "err", err)
 		var wait <-chan time.Time
 		switch {
 		case errors.Is(err, errRevoked):
@@ -312,7 +313,7 @@ func (l *loop) cycle(ctx context.Context, sess *session) (bool, time.Duration, e
 		if err != nil {
 			return false, 0, err
 		}
-		l.s.cfg.Log.Debug("sync cycle", "vault", l.vaultID, "pushed", pushed, "pulled", pulled, "blocked", blocked, "held", wait)
+		l.s.cfg.Log.Debug("sync cycle", "device", l.s.cfg.Device, "vault", l.vaultID, "pushed", pushed, "pulled", pulled, "blocked", blocked, "held", wait)
 		worked = worked || pushed || pulled
 		if !blocked || (!pushed && wait > 0) {
 			break

@@ -216,7 +216,8 @@ func TestPushDeletesAndRestores(t *testing.T) {
 	old := hv.head(a)
 	hv.push(hv.change(old, "a.md", "edited\n"))
 	stale := PushChange{FileID: a, Base: old.Revision, BaseHash: old.Hash, Path: "a.md", Deleted: true}
-	if out := hv.push(stale); out.Status != api.PushStatusRefused || out.Reason != api.RefuseReasonEdited || !hv.exists("a.md") {
+	if out := hv.push(stale); out.Status != api.PushStatusRefused || out.Reason != api.RefuseReasonEdited || out.FileID != a ||
+		!hv.exists("a.md") {
 		t.Fatalf("a delete of an edited file = %+v; want refused, the edit standing", out)
 	}
 	bh := hv.head(b)

@@ -3,6 +3,7 @@ package syncer
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -204,10 +205,9 @@ func (s *Syncer) dial(ctx context.Context, hubRow int64) (*session, error) {
 		return nil, err
 	}
 	cfg.Header.Set("Authorization", "Bearer "+token)
-	conn, err := cfg.DialContext(ctx)
+	conn, err := s.dialSocket(ctx, cfg, base)
 	if err != nil {
-		var de *websocket.DialError
-		if errors.As(err, &de) && errors.Is(de.Err, websocket.ErrBadStatus) {
+		if errors.Is(err, websocket.ErrBadStatus) {
 			// The upgrade was refused before it began; a bad token is the
 			// likely cause, which a blob request confirms.
 			if probe := s.probe(ctx, base, token); probe != nil {
@@ -246,4 +246,36 @@ func (s *Syncer) probe(ctx context.Context, base *url.URL, token string) error {
 		return errRevoked
 	}
 	return nil
+}
+
+// dialSocket opens the WebSocket over Config.Dial, with TLS for https.
+func (s *Syncer) dialSocket(ctx context.Context, cfg *websocket.Config, base *url.URL) (*websocket.Conn, error) {
+	host := base.Host
+	if base.Port() == "" {
+		host = net.JoinHostPort(base.Hostname(), map[string]string{"https": "443", "http": "80"}[base.Scheme])
+	}
+	nc, err := s.cfg.Dial(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if base.Scheme == "https" {
+		tc := tls.Client(nc, &tls.Config{ServerName: base.Hostname(), MinVersion: tls.VersionTLS12})
+		if err := tc.HandshakeContext(ctx); err != nil {
+			_ = nc.Close()
+			return nil, err
+		}
+		nc = tc
+	}
+	if dl, ok := ctx.Deadline(); ok {
+		_ = nc.SetDeadline(dl)
+	} else {
+		_ = nc.SetDeadline(time.Now().Add(30 * time.Second))
+	}
+	ws, err := websocket.NewClient(cfg, nc)
+	if err != nil {
+		_ = nc.Close()
+		return nil, err
+	}
+	_ = nc.SetDeadline(time.Time{})
+	return ws, nil
 }
