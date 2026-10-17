@@ -6,7 +6,9 @@ import (
 	"errors"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/hub"
 	"github.com/frostyard/frostnotes/internal/store"
+	"github.com/frostyard/frostnotes/internal/syncer"
 	"github.com/frostyard/frostnotes/internal/vault"
 )
 
@@ -14,11 +16,17 @@ import (
 type Engine struct {
 	db     *store.DB
 	vaults *vault.Manager
+	hub    *hub.Hub
+	sync   *syncer.Syncer
 }
 
 // New returns an Engine over db, whose vaults the manager runs; it must
-// have started.
-func New(db *store.DB, vaults *vault.Manager) *Engine { return &Engine{db: db, vaults: vaults} }
+// have started. h serves the hub and log domains and s the sync domain
+// (docs/specs/sync-protocol.md); either may be nil, and its domains then
+// answer unavailable.
+func New(db *store.DB, vaults *vault.Manager, h *hub.Hub, s *syncer.Syncer) *Engine {
+	return &Engine{db: db, vaults: vaults, hub: h, sync: s}
+}
 
 // Vaults implements the vault domain.
 func (e *Engine) Vaults() api.VaultService { return vaults{e.db, e.vaults} }

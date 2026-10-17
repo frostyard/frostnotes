@@ -1,0 +1,7 @@
+# The hub loses its answer to a create, and the device moves the file
+# before it hears again: the retry must be answered before the move is
+# pushed. Found concurrently (seed 6); the device pushed a second create,
+# and the hub held two files for one.
+drop answer|0|0|0
+move|0|4|1
+online|0|0|0

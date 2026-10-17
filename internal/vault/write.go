@@ -22,6 +22,7 @@ import (
 type Author struct {
 	Source api.VersionSource // editor or agent
 	Name   string            // the client's name; "" when unknown
+	Push   *Push             // on a hub, the device's push this write is; nil otherwise
 }
 
 // checkNotePath is CheckPath for the note domain, which leaves the
@@ -192,6 +193,9 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 	} else if err != nil {
 		return nil, err
 	}
+	if v.crashed("renamed") {
+		return nil, ErrCrashed
+	}
 	// The file is on disk: index it even if the client has gone.
 	ctx = context.WithoutCancel(ctx)
 	err = v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
@@ -232,7 +236,7 @@ func (v *Vault) indexWrite(ctx context.Context, tx *store.Tx, f store.File, cont
 	if f.Kind() == store.FileNote {
 		var doc markdown.Doc
 		data := content
-		if len(content) <= bigFile {
+		if f.Size <= bigFile {
 			doc = markdown.Parse(content)
 		} else {
 			data = nil // indexed by name only
@@ -243,6 +247,9 @@ func (v *Vault) indexWrite(ctx context.Context, tx *store.Tx, f store.File, cont
 	}
 	if _, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: f.ID, Path: f.Path, Hash: f.Hash,
 		Size: f.Size, Source: who.Source, Author: who.Name}); err != nil {
+		return err
+	}
+	if err := v.logRevision(ctx, tx, api.RevisionOpPut, f.ID, f.Path, f.Hash, f.Size, who); err != nil {
 		return err
 	}
 	return tx.Emit(ctx, api.NoteChanged{VaultID: v.id, Path: f.Path, Hash: f.Hash, Source: who.Source})
@@ -346,6 +353,9 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 		if err := v.settled(st.commit(false)); err != nil {
 			return nil, err
 		}
+		if v.crashed("renamed") {
+			return nil, ErrCrashed
+		}
 		// The file holds the new content: index it even if the client
 		// has gone, or the next scan would take it for another program's.
 		ctx := context.WithoutCancel(ctx)
@@ -371,10 +381,19 @@ func (v *Vault) keepConflict(ctx context.Context, row store.File, content []byte
 	if err != nil {
 		return err
 	}
+	return v.flagConflict(ctx, row, hash, int64(len(content)), who)
+}
+
+// flagConflict records the blob hash, content that lost to file row's
+// head, as a conflict version and, on a hub, a conflict revision, which
+// flags the file.
+func (v *Vault) flagConflict(ctx context.Context, row store.File, hash string, size int64, who Author) error {
 	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
-		_, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: row.Path, Hash: hash,
-			Size: int64(len(content)), Source: who.Source, Author: who.Name, Conflict: true})
-		return err
+		if _, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: row.Path, Hash: hash,
+			Size: size, Source: who.Source, Author: who.Name, Conflict: true}); err != nil {
+			return err
+		}
+		return v.logRevision(ctx, tx, api.RevisionOpConflict, row.ID, row.Path, hash, size, who)
 	})
 }
 
@@ -386,6 +405,10 @@ func (v *Vault) baseContent(ctx context.Context, row store.File, base string) ([
 		return nil, api.Conflict("%s exists: name the hash it had when it was read as the base", row.Path)
 	}
 	ok, err := v.cfg.DB.HasVersion(ctx, row.ID, base)
+	if err == nil && !ok {
+		// A hub keeps content in its log longer than its own versions.
+		ok, err = v.cfg.DB.HasContent(ctx, base)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -431,8 +454,11 @@ func (v *Vault) Delete(ctx context.Context, p, base string, who Author) error {
 	if err := v.settled(remove(r, p)); err != nil {
 		return err
 	}
+	if v.crashed("renamed") {
+		return ErrCrashed
+	}
 	ctx = context.WithoutCancel(ctx) // the file is gone: record it whatever the client does
-	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return v.deleteRow(ctx, tx, row, who.Source, who.Name) })
+	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return v.deleteRow(ctx, tx, row, who) })
 }
 
 // Revert makes p's content that of version id, as a write with base; a

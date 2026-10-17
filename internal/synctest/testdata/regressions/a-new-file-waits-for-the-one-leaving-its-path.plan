@@ -1,0 +1,10 @@
+# A device away while its daily note moves, a new one is made at the old
+# path, and the moved one is edited: the new note comes first in its pull,
+# while its copy of the old one still holds the path. Found concurrently
+# (seed 5); the device skipped the new note for good.
+daily|0|0|0
+offline|1|0|0
+move|0|4|1
+daily|0|0|0
+edit|0|3|65536
+online|1|0|0

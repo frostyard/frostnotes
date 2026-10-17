@@ -1,0 +1,201 @@
+domain: log
+callers: [device]
+doc: >-
+  A hub vault's revision log, for paired devices over the hub's /sync
+  WebSocket (docs/specs/sync-protocol.md). A vault is named by its sync ID.
+  Devices push changed files with the revision they last agreed on; only
+  the hub merges (ADR-0005, ADR-0017). Contents move over /sync/blobs, never
+  in these messages (ADR-0018).
+enums:
+  - name: PushStatus
+    doc: What the hub did with a pushed change.
+    values:
+      - {name: accepted, doc: "Applied as pushed, or already there."}
+      - {name: merged, doc: "Merged with changes the device had not seen; file holds the result."}
+      - {name: conflicted, doc: "Merged, but hunks both sides changed differently kept the head's side; the pushed content is a conflict revision and the file is flagged."}
+      - {name: refused, doc: "Not applied; reason says why."}
+  - name: RefuseReason
+    doc: Why the hub refused a pushed change.
+    values:
+      - {name: invalid, doc: "A path the path guard refuses, a malformed hash, or a create or delete that names what it may not."}
+      - {name: ignored, doc: "The hub's vault settings ignore the path."}
+      - {name: missing, doc: "The hub has no content for the hash: upload it first."}
+      - {name: unknown, doc: "The file ID is not a file of this vault."}
+      - {name: base, doc: "The base is not a revision of the file, or its hash differs."}
+      - {name: collision, doc: "The path differs only by case from another live file's; no longer given, since such a create gets a number."}
+      - {name: edited, doc: "A delete of a file that changed since its base: an edit beats a delete."}
+  - name: RevisionOp
+    doc: What a revision did to its file.
+    values:
+      - {name: create, doc: "The file's first revision."}
+      - {name: put, doc: "New content."}
+      - {name: move, doc: "A new path, the same content."}
+      - {name: delete, doc: "The file was deleted."}
+      - {name: conflict, doc: "Content that lost conflicting hunks to the head; never a head itself."}
+      - {name: resolve, doc: "The user cleared the file's conflict flag."}
+types:
+  - name: LogVault
+    doc: A vault the hub serves.
+    fields:
+      - {name: sync, type: string, doc: "Its sync ID: 32 lowercase hex digits."}
+      - {name: name, type: string}
+      - {name: seq, type: int, doc: "Its log's latest sequence number."}
+  - name: Replica
+    doc: One device's join of one hub vault; push IDs count within it.
+    fields:
+      - {name: id, type: int}
+      - {name: vault, type: string, doc: "The vault's sync ID."}
+      - {name: seq, type: int, doc: "The log's latest sequence number when the replica was made."}
+  - name: PushItem
+    doc: A file's whole new state on a device, and the revision it was based on.
+    fields:
+      - {name: push, type: int, doc: "The push ID: never reused within the replica."}
+      - {name: file, type: int, optional: true, doc: "The hub's file ID; absent for a create."}
+      - {name: base, type: int, doc: "The revision the device last agreed on; 0 for a create."}
+      - {name: baseHash, type: string, doc: "That revision's hash; empty for a create."}
+      - {name: path, type: string, doc: "The file's path on the device."}
+      - {name: hash, type: string, optional: true, doc: "The content's hash; absent when deleted."}
+      - {name: deleted, type: bool, optional: true, doc: "The device deleted the file."}
+      - {name: source, type: VersionSource, doc: "Who changed it on the device: editor, agent or outside."}
+      - {name: author, type: string, doc: "The writer's name on the device; empty for an outside edit."}
+      - {name: at, type: time, doc: "When the device recorded the change."}
+      - {name: conflict, type: bool, optional: true, doc: "The content lost conflicting hunks in a merge on the device (a writer with a stale base); the hub keeps it as a conflict revision of the file, which flags it."}
+  - name: LogFile
+    doc: A file's state in the log.
+    fields:
+      - {name: file, type: int}
+      - {name: seq, type: int, doc: "Its latest revision of any kind."}
+      - {name: revision, type: int, doc: "Its head: the latest create, put, move or delete."}
+      - {name: path, type: string}
+      - {name: hash, type: string, doc: "The head's content hash; empty when deleted."}
+      - {name: deleted, type: bool}
+      - {name: size, type: int}
+      - {name: conflicted, type: bool, doc: "A conflict revision came after the last resolve."}
+      - {name: author, type: string, doc: "Who made the head, on the device or hub that made it; empty for an outside edit."}
+      - {name: deviceName, type: string, doc: "The device that made the head, or hub."}
+  - name: PushAnswer
+    doc: What the hub did with one pushed item.
+    fields:
+      - {name: push, type: int}
+      - {name: status, type: PushStatus}
+      - {name: reason, type: RefuseReason, optional: true, doc: "Why, when refused."}
+      - {name: file, type: LogFile, optional: true, doc: "The file after the push; absent only for a refused create."}
+      - {name: conflicts, type: int, doc: "Hunks the head won."}
+      - {name: basePruned, type: bool, doc: "The base's content was gone, so the push merged as a create (ADR-0019)."}
+  - name: LogPage
+    doc: Files whose latest revision is after a cursor, in sequence order.
+    fields:
+      - {name: files, type: "[]LogFile"}
+      - {name: next, type: int, doc: "The cursor after this page: the last file's seq, or the one asked for when empty."}
+      - {name: more, type: bool, doc: "More files follow; pull again from next."}
+  - name: MatchQuery
+    doc: A device's file, to find among a hub vault's revisions.
+    fields:
+      - {name: path, type: string}
+      - {name: hash, type: string}
+  - name: LogMatch
+    doc: The revision a copy at a path with a hash is agreed at, of the file last at the path, live or deleted (docs/specs/sync-protocol.md, Joining).
+    fields:
+      - {name: path, type: string}
+      - {name: hash, type: string}
+      - {name: file, type: int, optional: true, doc: "Absent when no file was at the path."}
+      - {name: revision, type: int, optional: true, doc: "Absent when no revision of that file has the hash."}
+      - {name: revisionHash, type: string, optional: true, doc: "The revision's content hash, with revision: not hash when the copy has a later revision's content at an earlier path."}
+  - name: Revision
+    doc: An entry in a hub vault's log (ADR-0017).
+    fields:
+      - {name: seq, type: int}
+      - {name: file, type: int}
+      - {name: op, type: RevisionOp}
+      - {name: path, type: string}
+      - {name: hash, type: string, doc: "Empty for a delete."}
+      - {name: size, type: int}
+      - {name: base, type: int, doc: "The revision it was based on; 0 for a create."}
+      - {name: device, type: int, optional: true, doc: "The device that pushed it; absent for the hub's own writers."}
+      - {name: deviceName, type: string, doc: "That device's name, or hub."}
+      - {name: source, type: VersionSource}
+      - {name: author, type: string}
+      - {name: at, type: time}
+      - {name: lostTo, type: int, optional: true, doc: "For a conflict revision: the revision whose side stood."}
+      - {name: pruned, type: bool, doc: "Its content is gone (ADR-0019)."}
+  - name: PushRecord
+    doc: The revisions the hub appended for one push.
+    fields:
+      - {name: push, type: int}
+      - {name: revisions, type: "[]Revision", doc: "Empty when the hub has no record of the push, or it changed nothing."}
+methods:
+  - name: vaults
+    doc: The vaults this hub serves.
+    result: "[]LogVault"
+  - name: join
+    doc: Start a replica of a vault for this device; push IDs count from 1 within it.
+    params:
+      - {name: vault, type: string}
+    result: Replica
+    errors: [notFound]
+  - name: missing
+    doc: The hashes whose content the hub lacks, to upload before pushing.
+    params:
+      - {name: vault, type: string}
+      - {name: hashes, type: "[]string", doc: "At most 1,000."}
+    result: "[]string"
+    errors: [notFound, invalidParams]
+  - name: push
+    doc: >-
+      Apply changed files, one at a time, in order (docs/specs/sync-protocol.md,
+      A push on the hub). A push ID the replica sent before gets its first
+      answer again.
+    params:
+      - {name: vault, type: string}
+      - {name: replica, type: int}
+      - {name: items, type: "[]PushItem", doc: "At most 100."}
+    result: "[]PushAnswer"
+    errors: [notFound, invalidParams]
+  - name: pull
+    doc: The files whose latest revision is after a cursor, with their heads.
+    params:
+      - {name: vault, type: string}
+      - {name: after, type: int, doc: "The cursor: 0 for everything."}
+      - {name: limit, type: int, optional: true, doc: "At most this many; default 500, at most 1,000."}
+    result: LogPage
+    errors: [notFound, invalidParams]
+  - name: match
+    doc: For each path and hash, the newest revision with that hash of the file last at the path, as a join matches files.
+    params:
+      - {name: vault, type: string}
+      - {name: files, type: "[]MatchQuery", doc: "At most 1,000."}
+    result: "[]LogMatch"
+    errors: [notFound, invalidParams]
+  - name: history
+    doc: A file's revisions, newest first.
+    params:
+      - {name: vault, type: string}
+      - {name: file, type: int}
+      - {name: before, type: int, optional: true, doc: "Only revisions before this sequence number."}
+      - {name: limit, type: int, optional: true, doc: "At most this many; default 50, at most 200."}
+    result: "[]Revision"
+    errors: [notFound, invalidParams]
+  - name: pushes
+    doc: The revisions the hub appended for each of a replica's pushes, for sync.verify.
+    params:
+      - {name: vault, type: string}
+      - {name: replica, type: int}
+      - {name: pushes, type: "[]int", doc: "Push IDs; at most 1,000."}
+    result: "[]PushRecord"
+    errors: [notFound, invalidParams]
+  - name: resolve
+    doc: >-
+      Clear a file's conflict flag with a resolve revision. seq is the
+      newest conflict revision the user has seen; a newer one is a conflict.
+    params:
+      - {name: vault, type: string}
+      - {name: file, type: int}
+      - {name: seq, type: int}
+    result: LogFile
+    errors: [notFound, conflict]
+events:
+  - name: appended
+    doc: A vault's log grew.
+    fields:
+      - {name: vault, type: string, doc: "The vault's sync ID."}
+      - {name: seq, type: int, doc: "Its latest sequence number."}

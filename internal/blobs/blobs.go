@@ -103,6 +103,76 @@ func (s *Store) Put(ctx context.Context, r io.Reader) (string, error) {
 	return id, nil
 }
 
+// PutWant is Put for content that must have the ID want, such as an
+// upload or download named by its hash (ADR-0018): it publishes the blob
+// only if it does, and otherwise stores nothing and returns an error
+// matching ErrCorrupt. A malformed want returns ErrInvalidID before
+// reading.
+func (s *Store) PutWant(ctx context.Context, r io.Reader, want string) error {
+	if !validID(want) {
+		return ErrInvalidID
+	}
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+		return fmt.Errorf("blobs: create store dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(s.dir, ".put-*")
+	if err != nil {
+		return fmt.Errorf("blobs: create temp: %w", err)
+	}
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+	}()
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(tmp, h), r); err != nil {
+		return fmt.Errorf("blobs: read content: %w", err)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+		return fmt.Errorf("blobs: content of %s hashes to %s: %w", want, got, ErrCorrupt)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		return fmt.Errorf("blobs: chmod temp: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("blobs: sync temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("blobs: close temp: %w", err)
+	}
+	return s.publish(ctx, tmp.Name(), want)
+}
+
+// Size returns a blob's size in bytes. A missing blob returns an error
+// matching fs.ErrNotExist; a malformed ID returns ErrInvalidID.
+func (s *Store) Size(id string) (int64, error) {
+	p, err := s.path(id)
+	if err != nil {
+		return 0, err
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return 0, fmt.Errorf("blobs: stat %s: %w", id, err)
+	}
+	return fi.Size(), nil
+}
+
+// ModTime returns when a blob was stored. A missing blob returns an error
+// matching fs.ErrNotExist; a malformed ID returns ErrInvalidID.
+func (s *Store) ModTime(id string) (time.Time, error) {
+	p, err := s.path(id)
+	if err != nil {
+		return time.Time{}, err
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("blobs: stat %s: %w", id, err)
+	}
+	return fi.ModTime(), nil
+}
+
 func (s *Store) publish(ctx context.Context, name, id string) error {
 	shard := filepath.Join(s.dir, id[:2])
 	if err := os.MkdirAll(shard, 0o700); err != nil {

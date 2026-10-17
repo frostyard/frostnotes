@@ -110,10 +110,12 @@ func (d *DB) HasVersion(ctx context.Context, fileID int64, hash string) (bool, e
 	return ok, nil
 }
 
-// UsedHashes returns every hash a version or a file names, in every vault:
-// the blobs that must stay.
+// UsedHashes returns every hash a version, a file or a hub revision whose
+// content is kept (a create, put, move or conflict not yet pruned) names,
+// in every vault: the blobs that must stay.
 func (d *DB) UsedHashes(ctx context.Context) (map[string]bool, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT hash FROM versions WHERE hash != '' UNION SELECT hash FROM files`)
+	rows, err := d.db.QueryContext(ctx, `SELECT hash FROM versions WHERE hash != '' UNION SELECT hash FROM files
+		UNION SELECT hash FROM revisions WHERE op IN ('create', 'put', 'move', 'conflict') AND pruned = 0`)
 	if err != nil {
 		return nil, fmt.Errorf("list used hashes: %w", err)
 	}
@@ -151,8 +153,8 @@ func (d *DB) LastFileAt(ctx context.Context, vaultID int64, path string) (int64,
 // PruneVersions deletes the versions made before before, except the newest
 // version of each file that still exists and the versions holding a
 // file's current content (a conflict version can be newer), and returns,
-// sorted, the hashes that no version and no file names any more: the blobs
-// that may go. Task card T-0018.
+// sorted, the hashes that no version, no file and no hub revision whose
+// content is kept names any more: the blobs that may go. Task card T-0018.
 func (t *Tx) PruneVersions(ctx context.Context, before time.Time) ([]string, error) {
 	rows, err := t.QueryContext(ctx, `DELETE FROM versions WHERE at < ? AND id NOT IN (
 		SELECT MAX(v.id) FROM versions v JOIN files f ON f.id = v.file_id GROUP BY v.file_id
@@ -182,7 +184,9 @@ func (t *Tx) PruneVersions(ctx context.Context, before time.Time) ([]string, err
 	for hash := range hashes {
 		var used bool
 		if err := t.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM versions WHERE hash = ?)
-			OR EXISTS (SELECT 1 FROM files WHERE hash = ?)`, hash, hash).Scan(&used); err != nil {
+			OR EXISTS (SELECT 1 FROM files WHERE hash = ?)
+			OR EXISTS (SELECT 1 FROM revisions WHERE hash = ? AND op IN ('create', 'put', 'move', 'conflict') AND pruned = 0)`,
+			hash, hash, hash).Scan(&used); err != nil {
 			return nil, fmt.Errorf("check pruned hash %s: %w", hash, err)
 		}
 		if !used {

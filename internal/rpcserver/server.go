@@ -254,6 +254,9 @@ func (c *conn) startEvents() {
 	sub := c.sub
 	c.wg.Go(func() {
 		err := sub.Run(c.ctx, func(ev api.EventEnvelope) error {
+			if !api.EventAdmits(ev.Event, c.caller) {
+				return nil // another caller's event, as its domain says
+			}
 			params, err := json.Marshal(ev)
 			if err != nil {
 				return err

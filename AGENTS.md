@@ -17,6 +17,7 @@ the canonical paths; keep content tool-agnostic.
 
 M0 (foundations) is done ([plan 0001](docs/plans/0001-m0-foundations.md)),
 and so is M1, the headless vault ([plan 0003](docs/plans/0003-m1-headless-vault.md)).
+M2, sync, is in progress ([plan 0004](docs/plans/0004-m2-sync.md)).
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
@@ -59,6 +60,13 @@ file a step names before writing its frostnotes counterpart.
   moves, settings, daily notes and the daily prune. Every change to a
   vault takes its lock (docs/design/vault.md#scan-and-watch).
   `internal/blobs`: the content-addressed store of every version.
+- `internal/hub`: the hub role (pairing, the token check, the `/sync`
+  WebSocket, the `log` and `hub` domains); `internal/syncer`: a device's
+  sync loops and the `sync` domain; `internal/blobxfer`: blobs over HTTP
+  by hash; `internal/secrets`: device tokens in the Secret Service
+  ([docs/specs/sync-protocol.md](docs/specs/sync-protocol.md)).
+  `internal/synctest`: sync's seeded simulation of a hub and devices
+  (`make sync-sim`; reduced failures in its `testdata/regressions`).
 - `internal/mcpserver`: the MCP tools `notesctl mcp` serves
   ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
   only package that imports the MCP SDK.

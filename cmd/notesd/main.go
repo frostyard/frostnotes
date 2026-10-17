@@ -11,16 +11,21 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
+	"github.com/frostyard/frostnotes/internal/blobxfer"
 	"github.com/frostyard/frostnotes/internal/config"
 	"github.com/frostyard/frostnotes/internal/devgw"
 	"github.com/frostyard/frostnotes/internal/engine"
 	"github.com/frostyard/frostnotes/internal/events"
+	"github.com/frostyard/frostnotes/internal/hub"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
+	"github.com/frostyard/frostnotes/internal/secrets"
 	"github.com/frostyard/frostnotes/internal/store"
+	"github.com/frostyard/frostnotes/internal/syncer"
 	"github.com/frostyard/frostnotes/internal/vault"
 )
 
@@ -45,6 +50,9 @@ func run(ctx context.Context, args []string) error {
 	debug := fs.Bool("debug", false, "log at debug level")
 	devgwAddr := fs.String("devgw", "", "also serve the API over a WebSocket on this loopback address, for UI development "+
 		"in a browser; needs FROSTNOTES_DEVGW_TOKEN (at least 16 characters)")
+	hubAddr := fs.String("hub", "", "also serve the hub's sync endpoints on this address (plain HTTP: put TLS in front "+
+		"for devices on other machines; docs/specs/sync-protocol.md)")
+	maxBlob := fs.Int64("hub-max-blob", blobxfer.DefaultMaxSize, "with -hub, the largest file a device may upload, in bytes")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -89,10 +97,42 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger})
-	eng := engine.New(db, vaults)
-	router, err := api.NewRouter(api.Services{RPC: srv, Events: srv, Vault: eng.Vaults(), Note: eng.Notes()})
+	// The device side of sync runs on every notesd; the hub's listener only
+	// with -hub (docs/design/sync.md).
+	keys, err := secrets.Open(ctx, filepath.Join(paths.DataDir, "secrets.json"), logger)
 	if err != nil {
 		return err
+	}
+	parts := filepath.Join(paths.DataDir, "parts")
+	if err := os.MkdirAll(parts, 0o700); err != nil {
+		return err
+	}
+	blobStore := blobs.New(paths.Blobs)
+	h := hub.New(hub.Config{DB: db, Blobs: blobStore, Vaults: vaults, RPC: srv, Log: logger, Listen: *hubAddr, MaxBlob: *maxBlob})
+	syncs := syncer.New(syncer.Config{DB: db, Blobs: blobStore, Vaults: vaults, Secrets: keys, Broker: broker,
+		Publish: broker.Publish, Log: logger, PartDir: parts, Client: "notesd " + version})
+	eng := engine.New(db, vaults, h, syncs)
+	router, err := api.NewRouter(api.Services{RPC: srv, Events: srv, Vault: eng.Vaults(), Note: eng.Notes(),
+		Hub: eng.Hub(), Sync: eng.Sync(), Log: eng.Log()})
+	if err != nil {
+		return err
+	}
+	h.SetRouter(router)
+	sctx, stopSync := context.WithCancel(ctx)
+	defer func() { stopSync(); syncs.Wait() }()
+	if err := syncs.Start(sctx); err != nil {
+		return err
+	}
+	if *hubAddr != "" {
+		hubLn, err := net.Listen("tcp", *hubAddr)
+		if err != nil {
+			return fmt.Errorf("hub: %w", err)
+		}
+		go func() {
+			if err := h.Serve(ctx, hubLn); err != nil {
+				logger.Error("hub stopped", "err", err)
+			}
+		}()
 	}
 	if *devgwAddr != "" {
 		// The gateway stands in for the app's bridge, so its connections

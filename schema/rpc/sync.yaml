@@ -1,0 +1,154 @@
+domain: sync
+callers: [local]
+doc: >-
+  On a device: pairing with hubs and syncing vaults through them
+  (docs/design/sync.md, docs/specs/sync-protocol.md). The device token
+  stays in notesd's secret store and never crosses this API.
+enums:
+  - name: SyncState
+    doc: What a vault's sync is doing.
+    values:
+      - {name: idle, doc: "In step with the hub as far as the device knows."}
+      - {name: syncing, doc: "Pushing or pulling."}
+      - {name: offline, doc: "The hub cannot be reached; changes wait and sync on reconnect."}
+      - {name: revoked, doc: "The hub refused the device token: pair again."}
+      - {name: reset, doc: "The hub no longer serves the vault as the device knew it: sync.reset."}
+  - name: PairingState
+    doc: Where a pairing stands.
+    values:
+      - {name: pending, doc: "Waiting for the user to approve the code on the hub."}
+      - {name: approved, doc: "Approved; the device keeps its token."}
+      - {name: expired, doc: "Not approved within 10 minutes."}
+types:
+  - name: Pairing
+    doc: A pairing the device started.
+    fields:
+      - {name: pairing, type: string, doc: "Its ID, for sync.paired."}
+      - {name: code, type: string, doc: "The one-time code to approve on the hub, as XXXX-XXXX."}
+      - {name: hub, type: string, doc: "The hub's ID."}
+      - {name: url, type: string}
+      - {name: expiresAt, type: time}
+  - name: PairResult
+    doc: A pairing's state.
+    fields:
+      - {name: state, type: PairingState}
+      - {name: hub, type: string, doc: "The hub's ID."}
+  - name: SyncHub
+    doc: A hub this device paired with.
+    fields:
+      - {name: id, type: int}
+      - {name: hub, type: string, doc: "The hub's ID."}
+      - {name: url, type: string}
+      - {name: device, type: int, doc: "This device's ID on the hub."}
+      - {name: pairedAt, type: time}
+  - name: SyncRefusal
+    doc: A local change the hub refused; it is not pushed again until the file changes.
+    fields:
+      - {name: path, type: string}
+      - {name: reason, type: RefuseReason}
+      - {name: at, type: time}
+  - name: SyncStatus
+    doc: A synced vault's state.
+    fields:
+      - {name: vaultId, type: int}
+      - {name: url, type: string, doc: "The hub's URL."}
+      - {name: hubVault, type: string, doc: "The hub vault's name."}
+      - {name: state, type: SyncState}
+      - {name: cursor, type: int, doc: "The highest sequence number whose heads the device applied."}
+      - {name: hubSeq, type: int, doc: "The hub log's latest sequence number, as last seen."}
+      - {name: pending, type: int, doc: "Files with a change to push, and local conflict versions not yet pushed."}
+      - {name: conflicts, type: int, doc: "Flagged files."}
+      - {name: refused, type: "[]SyncRefusal"}
+      - {name: skipped, type: "[]string", doc: "Pulled paths this device ignores or cannot hold."}
+      - {name: syncedAt, type: time, optional: true, doc: "When the device was last in step with the hub."}
+      - {name: error, type: string, optional: true, doc: "The last failure, while offline, revoked or reset."}
+  - name: SyncConflict
+    doc: A flagged file and the conflict revisions since its last resolve.
+    fields:
+      - {name: path, type: string}
+      - {name: file, type: int, doc: "The hub's file ID."}
+      - {name: revisions, type: "[]Revision"}
+  - name: VerifyReport
+    doc: How a synced vault compares with its hub (M2's exit evidence).
+    fields:
+      - {name: ok, type: bool, doc: "No file differs and every push is on record."}
+      - {name: files, type: int, doc: "Files compared."}
+      - {name: differing, type: "[]string", doc: "Paths whose file differs from the hub's head, or that only one side has."}
+      - {name: unrecorded, type: "[]int", doc: "Answered pushes the hub has no revision of with the pushed hash."}
+      - {name: conflicts, type: "[]string", doc: "Flagged files."}
+methods:
+  - name: pair
+    doc: Start pairing with the hub at url; approve the code on the hub, then call sync.paired.
+    params:
+      - {name: url, type: string, doc: "https://, or http:// on loopback."}
+      - {name: name, type: string, optional: true, doc: "This device's name on the hub; default the host name."}
+    result: Pairing
+    errors: [invalidParams, unavailable]
+  - name: paired
+    doc: Wait up to 30 seconds for a pairing to be approved or to expire.
+    params:
+      - {name: pairing, type: string}
+    result: PairResult
+    errors: [notFound, unavailable]
+  - name: hubs
+    doc: The hubs this device paired with.
+    result: "[]SyncHub"
+  - name: join
+    doc: >-
+      Sync a local vault with a hub vault: files the hub has had at the same
+      path match by hash, others are pushed as creates, and the hub's heads
+      are pulled.
+    params:
+      - {name: vaultId, type: int}
+      - {name: url, type: string, doc: "A paired hub's URL."}
+      - {name: name, type: string, doc: "The hub vault's name."}
+    result: SyncStatus
+    errors: [notFound, conflict, unavailable]
+  - name: leave
+    doc: Stop syncing a vault and drop its sync state; its files stay.
+    params:
+      - {name: vaultId, type: int}
+    errors: [notFound]
+  - name: status
+    doc: The synced vaults' states.
+    params:
+      - {name: vaultId, type: int, optional: true, doc: "Only this vault."}
+    result: "[]SyncStatus"
+    errors: [notFound]
+  - name: conflicts
+    doc: A synced vault's flagged files.
+    params:
+      - {name: vaultId, type: int}
+    result: "[]SyncConflict"
+    errors: [notFound, unavailable]
+  - name: resolve
+    doc: Clear a file's conflict flag on the hub, once the user has merged it by hand or kept it as it is.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+    errors: [notFound, conflict, unavailable]
+  - name: reset
+    doc: Leave and join again, with a new replica; files match by hash.
+    params:
+      - {name: vaultId, type: int}
+    result: SyncStatus
+    errors: [notFound, unavailable]
+  - name: verify
+    doc: Compare a synced vault with its hub.
+    params:
+      - {name: vaultId, type: int}
+    result: VerifyReport
+    errors: [notFound, unavailable]
+  - name: history
+    doc: The hub's revisions of a file, newest first.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: limit, type: int, optional: true, doc: "At most this many; default 50, at most 200."}
+    result: "[]Revision"
+    errors: [notFound, unavailable]
+events:
+  - name: changed
+    doc: A synced vault's state changed.
+    fields:
+      - {name: status, type: SyncStatus}

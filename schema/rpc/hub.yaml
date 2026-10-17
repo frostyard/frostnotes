@@ -1,0 +1,73 @@
+domain: hub
+callers: [local]
+doc: >-
+  On a hub: the vaults it serves and the devices paired with it
+  (docs/specs/sync-protocol.md). Approving and revoking devices happen only
+  here, over the local socket (ADR-0016).
+types:
+  - name: HubStatus
+    doc: This notesd's hub role.
+    fields:
+      - {name: hub, type: string, doc: "The hub's ID; empty until it serves a vault."}
+      - {name: listen, type: string, optional: true, doc: "The address notesd --hub serves; absent without --hub."}
+      - {name: vaults, type: int}
+      - {name: devices, type: int, doc: "Paired devices that are not revoked."}
+      - {name: connected, type: int, doc: "Devices connected now."}
+  - name: HubVault
+    doc: A vault the hub serves.
+    fields:
+      - {name: vaultId, type: int}
+      - {name: sync, type: string, doc: "Its sync ID."}
+      - {name: name, type: string}
+      - {name: seq, type: int, doc: "Its log's latest sequence number."}
+      - {name: servedAt, type: time}
+  - name: PendingPairing
+    doc: A device waiting to pair.
+    fields:
+      - {name: code, type: string}
+      - {name: name, type: string, doc: "The name the device gave."}
+      - {name: addr, type: string, doc: "The address it asked from, as the hub saw it."}
+      - {name: createdAt, type: time}
+      - {name: expiresAt, type: time}
+      - {name: approved, type: bool, doc: "Approved, and not yet collected."}
+  - name: HubDevice
+    doc: A paired device.
+    fields:
+      - {name: id, type: int}
+      - {name: name, type: string}
+      - {name: pairedAt, type: time}
+      - {name: seenAt, type: time, optional: true, doc: "Its last request; absent when it never used its token."}
+      - {name: connected, type: bool}
+      - {name: revoked, type: bool}
+methods:
+  - name: status
+    doc: This notesd's hub role.
+    result: HubStatus
+  - name: serve
+    doc: >-
+      Serve a registered vault to devices: it gets a sync ID, and each of its
+      files a create revision, by path.
+    params:
+      - {name: vaultId, type: int}
+    result: HubVault
+    errors: [notFound, conflict]
+  - name: vaults
+    doc: The vaults this hub serves.
+    result: "[]HubVault"
+  - name: pending
+    doc: Pairings waiting for approval, oldest first.
+    result: "[]PendingPairing"
+  - name: approve
+    doc: Approve the pending pairing with this code (case, spaces and '-' ignored).
+    params:
+      - {name: code, type: string}
+    result: PendingPairing
+    errors: [notFound]
+  - name: devices
+    doc: The paired devices, by ID.
+    result: "[]HubDevice"
+  - name: revoke
+    doc: Revoke a device's token and close its connections; its revisions keep its name.
+    params:
+      - {name: device, type: int}
+    errors: [notFound]

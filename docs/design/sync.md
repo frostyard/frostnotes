@@ -7,11 +7,17 @@ Living document. Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revis
 [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md) (blobs),
 [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md) (retention),
 [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md) (the simulation).
-Contracts: `specs/sync-protocol.md` and `specs/merge.md`, written in
+Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md) and
+[specs/merge.md](../specs/merge.md), written in
 [plan 0004](../plans/0004-m2-sync.md)'s Phase 2.
 
-**Status: designed, not built** (M2, [plan 0004](../plans/0004-m2-sync.md)).
-This is the design; the M2 specs will be the contract.
+**Status: built** through [plan 0004](../plans/0004-m2-sync.md)'s Phase 5:
+`internal/hub` (pairing, the token check, the `/sync` WebSocket, pushes
+as writes through the vault's actor), `internal/syncer` (the device's
+loop), `internal/blobxfer`, `vault.Apply` and `vault.Push`, and the
+seeded simulation, `internal/synctest` ([Testing](#testing)). Scenario
+cards (Phase 6) and the exit evidence (Phase 7) are next. The specs are
+the contract.
 
 ## Overview
 
@@ -79,16 +85,26 @@ else records pending changes, so a crash or an outage loses none
    each changed file. The hub answers each with `accepted`, `merged`,
    `conflicted` or `refused`, and the head that results. A repeated push
    ID gets the first answer, so a push whose answer was lost is retried
-   safely.
+   safely, and until it is answered no new change of its file is pushed:
+   two creates of one file in flight would make two files on the hub. A
+   writer's content that lost a merge on the device goes too, as a
+   conflict item, so the hub's log keeps it.
 4. **Apply the answer.** The device writes the head (the merged content,
    or the head that refused its delete), expecting the state it pushed,
-   and records the head as agreed. If the user typed meanwhile, that is a
-   new local change based on the head.
+   and records the head as agreed. If the file changed meanwhile, nothing
+   is written and the agreed state stays, so the next push, from the same
+   base, merges again on the hub; a create the hub merged whose file only
+   moved meanwhile takes the merge where it now is.
 5. **Pull** heads after the cursor, when the hub announces new revisions
    on the WebSocket and at every reconnect. For each head, if the file
    still has its agreed hash and path, apply it (create, overwrite, move
    or delete) and advance the agreed state and the cursor in one `Tx`;
-   otherwise push the local change first and take the answer.
+   otherwise push the local change first and take the answer. A head
+   whose path an unchanged copy of another file still holds here parks
+   that copy beside it first, and the copy's own head, later in the pull,
+   moves it on; so does a pushed file a later answer of the same push
+   moves. A swap or a ring of moves never waits on itself, and the hub
+   orders one push's moves the same way.
 
 Applying (`vault.Apply`) compares instead of merging: the file must still
 hold the expected hash, checked again just before the rename, or nothing
@@ -129,9 +145,9 @@ append revisions the same way.
 
 ### Merge
 
-`internal/merge` (planner-owned; 30 golden cases from the M0 spike in
-`merge_test.go`, which become `specs/merge.md`'s fixtures, and a seeded
-property test):
+`internal/merge` (planner-owned; [specs/merge.md](../specs/merge.md) is
+the contract, and its 44 fixtures, M0's 30 among them, are the golden
+tests, with a seeded property test):
 
 - **Text files** (`.md` and other UTF-8 text such as `.base`) merge. Other
   files do not: the later push wins and the other stays in the log.
@@ -142,7 +158,10 @@ property test):
 - **Body:** diff3 by line. Where both sides only inserted lines at the same
   place, both insertions are kept, the head's first; this is what lets two
   daily notes made offline from one template, or two tag lists each grown
-  by one tag, merge cleanly. A hunk both sides changed differently merges
+  by one tag, merge cleanly. A flow list both sides changed
+  (`tags: [a, b]`, as Obsidian writes tags) merges as a list: the head's
+  items, without those the incoming side removed, then its additions. A
+  hunk both sides changed differently merges
   again by word (words and the whitespace between them); insertions at the
   same place conflict at that level, since interleaved words read worse
   than a conflict revision. Whatever still conflicts takes the head's side.
@@ -216,10 +235,18 @@ inserts a unique token. At each quiet point, the checks are:
 - every device's agreed state is the hub's heads, and its index equals a
   rebuild.
 
-Stepwise runs replay a seed exactly; concurrent runs find races. A
-failing seed, reduced, is a regression test. `make test` runs a few
-hundred steps; `make sync-sim` runs M2's 10,000 over a hub and three
-devices
+Stepwise runs replay a seed exactly; concurrent runs find races.
+Concurrent runs edit on disk only files they create: another program's
+edit of a file a pull is writing loses whichever renames first, a
+window the comparison before each rename narrows but cannot close. A
+failing seed, reduced to the steps that still fail, is a plan in
+`internal/synctest/testdata/regressions`, which `make test` replays with
+a few hundred seeded steps; `make sync-sim` runs M2's 10,000 over a hub
+and three devices. Scenario tests drive a world by script, naming paths
+while the oracle keeps its books (`script.go`), and run profiles: op
+weights with checks of their own, among them ops the default plans never
+pick, such as swaps, case-only renames, attachments over 10 MB,
+revocations and rejoins from an older copy (`profile.go`)
 ([ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)).
 
 ## Operational notes
@@ -235,6 +262,10 @@ devices
   its devices stop and ask for a reset.
 - Back up the hub by copying its vault directory and data directory; the
   vault directory alone is a complete copy of the heads.
+- A hub serves one person's devices: every paired device may join every
+  vault it serves, and `log.vaults` lists them all. Serving people who
+  must not see each other's vaults needs per-vault grants, which M2 does
+  not have.
 - Each device needs its own copy of a vault: two devices syncing one
   folder, such as one network share mounted on two machines, would push
   each other's changes as their own.
@@ -243,4 +274,5 @@ devices
 
 - Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
 - Related: [overview.md](overview.md), [vault.md](vault.md)
+- Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Built in: [plan 0004](../plans/0004-m2-sync.md) ([roadmap — M2](../plans/0002-roadmap.md))

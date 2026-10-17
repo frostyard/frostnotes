@@ -202,6 +202,26 @@ func genGo(s *Schema) ([]byte, error) {
 	w.line("}")
 	w.line("")
 
+	w.line("// EventAdmits reports whether the domain of the named event admits")
+	w.line("// caller: the server delivers an event only to connections of the callers")
+	w.line("// its domain admits, as Router.Dispatch does for methods.")
+	w.line("func EventAdmits(name string, caller Caller) bool {")
+	w.line("switch name {")
+	for _, f := range s.Domains {
+		for _, ev := range f.Events {
+			w.line("case %q:", wireMethod(f.Domain, ev.Name))
+			var conds []string
+			for _, c := range f.Callers {
+				conds = append(conds, "caller == Caller"+goName(c))
+			}
+			w.line("return %s", strings.Join(conds, " || "))
+		}
+	}
+	w.line("}")
+	w.line("return false")
+	w.line("}")
+	w.line("")
+
 	w.line("// DecodeEvent decodes the data of the named event.")
 	w.line("func DecodeEvent(name string, data jsontext.Value) (Event, error) {")
 	w.line("switch name {")
