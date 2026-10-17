@@ -6,7 +6,7 @@ Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-
 for deletes and conflict versions, and
 [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
 for content that is not UTF-8.
-Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated).
+Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated), [specs/mcp.md](../specs/mcp.md) (agents' writes).
 
 **Status: built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md),
 Phases 3 to 5): `internal/vault` scans, watches and writes, and
@@ -227,7 +227,7 @@ name subfolders. A missing daily note is created from the template, whose
 (`internal/templates`): `{{title}}` is the note's name, `{{date}}` the date
 in the daily-note format, and the date carries the time of day it is now.
 A template that cannot be read gives an empty note, as in Obsidian. MCP's
-`append_to_daily_note` creates it that way, then appends with a base like
+`append_to_daily_note` ([specs/mcp.md](../specs/mcp.md)) creates it that way, as the agent's version, then appends with a base like
 any write.
 
 ### Versions
@@ -266,5 +266,5 @@ long-term history ([sync.md](sync.md)).
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
-- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md)
+- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))

@@ -59,6 +59,9 @@ file a step names before writing its frostnotes counterpart.
   moves, settings, daily notes and the daily prune. Every change to a
   vault takes its lock (docs/design/vault.md#scan-and-watch).
   `internal/blobs`: the content-addressed store of every version.
+- `internal/mcpserver`: the MCP tools `notesctl mcp` serves
+  ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
+  only package that imports the MCP SDK.
 - `internal/merge`: three-way merges (planner-owned; never a card's).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
   (SHA-pinned actions; no unit test named `TestI…`).

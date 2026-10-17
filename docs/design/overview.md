@@ -60,6 +60,9 @@ a thin client.
 - **MCP** tools are hand-written adapters over the engine, served over stdio
   by `notesctl mcp` and over HTTP by the hub
   ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)).
+  `internal/mcpserver` is a client of notesd's API like the app: its read
+  tools mark note text as data, and its writes name their base and are
+  attributed to the MCP client ([specs/mcp.md](../specs/mcp.md)).
 
 ### Application icon
 
@@ -91,7 +94,7 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/blobs` | the content-addressed blob store |
 | `internal/render` | goldmark rendering and the HTML sanitizer |
 | `internal/sync`, `internal/hub` | the device's sync client; the hub's log, pairing, HTTP and sessions |
-| `internal/mcpserver` | MCP tools over the engine |
+| `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
 | `app/` | Tauri v2 + React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
 | `tools/rpcgen`, `tools/taskrun`, `tools/vaultgen` | the contract generator, the task-card runner, generated test vaults |
 
@@ -125,4 +128,5 @@ database must be on a local file system; vaults may be anywhere.
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
 - Details: [vault.md](vault.md), [sync.md](sync.md)
+- Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
 - Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md)

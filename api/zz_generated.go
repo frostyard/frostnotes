@@ -462,6 +462,11 @@ type NoteDailyParams struct {
 	VaultID int64 `json:"vaultId"`
 	// YYYY-MM-DD; default today in notesd's time zone.
 	Date *string `json:"date,omitzero"`
+	// Who creates it when it is missing: editor (the default) or agent.
+	Source *VersionSource `json:"source,omitzero"`
+	// Who creates it, for the version list; defaults to the client name given to
+	// rpc.hello.
+	Author *string `json:"author,omitzero"`
 }
 
 // NoteService: The notes and attachments in a vault, and what notesd's index

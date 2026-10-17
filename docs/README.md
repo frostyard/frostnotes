@@ -47,6 +47,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [RPC protocol](specs/rpc-protocol.md) — transports, caller kinds, messages, connection setup, events
 - [RPC API](specs/rpc-api.md) — every method, type and event (generated from `schema/rpc`)
 - [Markdown](specs/markdown.md) — the Obsidian dialect, link resolution and the parse fixtures
+- [MCP tools](specs/mcp.md) — what `notesctl mcp` offers an agent: tools, inputs, outputs, edits
 
 
 ### Plans

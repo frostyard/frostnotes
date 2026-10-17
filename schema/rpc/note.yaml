@@ -227,6 +227,8 @@ methods:
     params:
       - {name: vaultId, type: int}
       - {name: date, type: string, optional: true, doc: "YYYY-MM-DD; default today in notesd's time zone."}
+      - {name: source, type: VersionSource, optional: true, doc: "Who creates it when it is missing: editor (the default) or agent."}
+      - {name: author, type: string, optional: true, doc: "Who creates it, for the version list; defaults to the client name given to rpc.hello."}
     result: DailyNote
     errors: [notFound, invalidParams]
 events:

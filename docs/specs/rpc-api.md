@@ -207,6 +207,8 @@ A day's daily note, created from the vault's daily-note template when missing (d
 | --- | --- | --- |
 | `vaultId` | `int` |  |
 | `date` | `string` (optional) | YYYY-MM-DD; default today in notesd's time zone. |
+| `source` | `VersionSource` (optional) | Who creates it when it is missing: editor (the default) or agent. |
+| `author` | `string` (optional) | Who creates it, for the version list; defaults to the client name given to rpc.hello. |
 
 Result: `DailyNote`.
 Errors: `notFound`, `invalidParams`.

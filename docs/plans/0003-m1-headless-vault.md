@@ -9,9 +9,10 @@ from `notesctl` and from an agent through `notesctl mcp`. It follows
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the spec, the schema, scan and watch, the write path, merges
 and the MCP surface; the executor owns cards T-0004 onward.
-Status: **Phases 1 to 5 done** (2026-10-16): this plan,
+Status: **Phases 1 to 6 done** (2026-10-16): this plan,
 [specs/markdown.md](../specs/markdown.md), the index contracts, cards
-T-0004 to T-0020, and the engine. Phase 6 (MCP) is next.
+T-0004 to T-0023, the engine and the MCP server
+([specs/mcp.md](../specs/mcp.md)). Phase 7, the exit evidence, is next.
 
 ## Decisions taken for M1
 
@@ -362,6 +363,38 @@ are merged.
   `get_backlinks`, `create_note`, `edit_note` and `append_to_daily_note`.
 - **Done when:** an SDK client test over an in-memory transport, against
   `rpctest`, runs every tool, and `--read-only` refuses every write.
+- **Planner (2026-10-16):** [specs/mcp.md](../specs/mcp.md) pins the
+  tools. `internal/mcpserver` is on SDK v1.8.0 (released 2026-09-04). It
+  has the seven tools' definitions, descriptions, schemas and
+  annotations, `--read-only` (the write tools are not offered), the
+  author (the MCP client's `clientInfo.name`, source `agent`), the notice
+  that note text is data, and a harness over in-memory transports against
+  `rpctest`. `notesctl mcp` is wired in. `note.daily` gains optional
+  `source` and `author`, so a daily note an agent's append creates is the
+  agent's version too. The handlers are three cards, each checked against
+  a reference with `make verify` green:
+
+  | Card | Size | Package | What | Runs after |
+  | --- | --- | --- | --- | --- |
+  | T-0021 | M | `internal/mcpserver` | the read tools: `search_notes`, `read_note`, `list_notes`, `get_backlinks` | |
+  | T-0022 | M | `internal/mcpserver` | `edit_note`'s edits: replace once, append, prepend, set properties | T-0021 |
+  | T-0023 | S | `internal/mcpserver` | the write tools: `create_note`, `edit_note`, `append_to_daily_note` | T-0022 |
+
+  The three cards share a package, so they run in this order.
+- **Result (2026-10-16): done.** Codex passed T-0021, T-0022 and T-0023
+  on the first attempt each; the planner reviewed each before merging it
+  into `m1/mcp-cards`. `TestEveryTool` runs all seven tools in one agent
+  session against `rpctest`: it searches, reads, lists, follows a
+  backlink, creates a note, edits one and appends to a daily note made
+  from a template, then finds each write attributed to the MCP client
+  and reverts the edit. `TestReadOnlyServerRefusesEveryWrite` lists only
+  the four read tools and fails every write tool, and
+  `TestMCPServesTheVault` drives `notesctl mcp` over pipes as a host
+  launches it. Review found one gap, in the card and in the planner's
+  reference alike: frontmatter written as one flow mapping
+  (`{a: 1, b: 2}`) lost its other keys when one was set; it is now
+  refused. Ahead of Phase 7: `notesctl mcp` keeps one connection to
+  notesd, so a restarted notesd needs the MCP host to restart it.
 
 ## Phase 7 — Exit evidence
 
@@ -392,6 +425,8 @@ are merged.
   `.frostnotes/vault.yaml`; M1 only reads settings.
 - An upload method for binary attachments (M3), which the text API of
   ADR-0014 leaves out.
+- `notesctl mcp` reconnecting to notesd when it restarts, rather than the
+  MCP host restarting `notesctl mcp`.
 
 ## Open questions
 
@@ -403,8 +438,8 @@ are merged.
 
 ## References
 
-- Implements: [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault`); [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
-- Cards: [T-0004 to T-0020](../tasks/done/)
+- Implements: [design/vault.md](../design/vault.md), [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault`), [specs/mcp.md](../specs/mcp.md); [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
+- Cards: [T-0004 to T-0023](../tasks/done/)
 - Evidence: [plan 0001, spikes 2–4](0001-m0-foundations.md#phase-5--spikes-go-or-no-go)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
