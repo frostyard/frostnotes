@@ -1,8 +1,7 @@
 // The Outline pane's tree (docs/specs/ui.md, Right sidebar panes): the
 // active note's headings, nested as Obsidian's outline nests them, its rows
 // with some headings folded, and the heading the cursor is under. The
-// editor reads the headings from its syntax tree as the user types. Task
-// T-0041 implements it; until then the outline is empty.
+// editor reads the headings from its syntax tree as the user types.
 
 /** Heading is a heading of the note. */
 export interface Heading {
@@ -31,16 +30,49 @@ export interface OutlineRow {
 }
 
 /** buildOutline nests headings: each under the nearest heading before it of a lower level. */
-export function buildOutline(_headings: readonly Heading[]): OutlineNode[] {
-  return [];
+export function buildOutline(headings: readonly Heading[]): OutlineNode[] {
+  const roots: OutlineNode[] = [];
+  const stack: OutlineNode[] = [];
+  for (const heading of headings) {
+    let parent = stack.at(-1);
+    while (parent && parent.heading.level >= heading.level) {
+      stack.pop();
+      parent = stack.at(-1);
+    }
+    const node: OutlineNode = { heading, children: [] };
+    (parent ? parent.children : roots).push(node);
+    stack.push(node);
+  }
+  return roots;
 }
 
 /** outlineRows flattens an outline into rows, leaving out what folded headings (by from) hold. */
-export function outlineRows(_nodes: readonly OutlineNode[], _folded: ReadonlySet<number>): OutlineRow[] {
-  return [];
+export function outlineRows(nodes: readonly OutlineNode[], folded: ReadonlySet<number>): OutlineRow[] {
+  const rows: OutlineRow[] = [];
+  const visit = (children: readonly OutlineNode[], depth: number): void => {
+    for (const node of children) {
+      const hasChildren = node.children.length > 0;
+      const expanded = hasChildren && !folded.has(node.heading.from);
+      rows.push({ heading: node.heading, depth, hasChildren, expanded });
+      if (expanded) visit(node.children, depth + 1);
+    }
+  };
+  visit(nodes, 0);
+  return rows;
 }
 
 /** headingAt returns the index of the heading whose section holds pos, or -1 before the first heading. */
-export function headingAt(_headings: readonly Heading[], _pos: number): number {
-  return -1;
+export function headingAt(headings: readonly Heading[], pos: number): number {
+  let low = 0;
+  let high = headings.length;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const heading = headings[mid];
+    if (heading && heading.from <= pos) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low - 1;
 }
