@@ -278,6 +278,15 @@ long-term history ([sync.md](sync.md)).
   file IDs and versions; nothing is lost. Deleting `notesd.db` itself also loses local versions and sync
   state: the vault re-syncs from its hub, and `blobs/` is pruned on the
   next pass.
+- `schema_migrations` records each applied migration's SHA-256, and
+  `store.Open` compares them with the migrations notesd embeds. Pre-release,
+  `0001_init.sql` is edited in place, so a database that applied an earlier
+  text of it would run without the tables the code expects; notesd refuses
+  to start on it, naming the database and the migration. Move such a
+  database aside (with any `-wal` and `-shm` files) and notesd creates a new
+  one, losing what deleting it loses. A database from before checksums were
+  recorded adopts them once its schema equals what its migrations create in
+  an empty database, and is refused otherwise.
 
 ## References
 

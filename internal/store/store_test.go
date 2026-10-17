@@ -1,6 +1,9 @@
 package store
 
 import (
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -22,6 +25,7 @@ func TestOpenMigratesAndReopens(t *testing.T) {
 	if v, err := d.SchemaVersion(t.Context()); err != nil || v != len(ms) {
 		t.Fatalf("SchemaVersion = %d, %v; want %d", v, err, len(ms))
 	}
+	checkRecordedChecksums(t, d, ms)
 	_ = d.Close()
 	d, err = Open(t.Context(), path)
 	if err != nil {
@@ -36,12 +40,112 @@ func TestOpenRefusesNewerSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.db.Exec(`INSERT INTO schema_migrations VALUES (999, 'future.sql', 'x')`); err != nil {
+	if _, err := d.db.Exec(`INSERT INTO schema_migrations (version, name, applied_at, checksum)
+		VALUES (999, 'future.sql', 'x', 'x')`); err != nil {
 		t.Fatal(err)
 	}
 	_ = d.Close()
 	if _, err := Open(t.Context(), path); err == nil || !strings.Contains(err.Error(), "newer") {
 		t.Fatalf("Open = %v, want a newer-schema error", err)
+	}
+}
+
+// A database that applied an earlier text of 0001_init.sql, edited in place
+// since, is refused with what to do rather than run without the tables
+// the code expects.
+func TestOpenRefusesEditedMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notesd.db")
+	d, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	earlier := sha256.Sum256([]byte("-- an earlier 0001_init.sql"))
+	if _, err := d.db.Exec(`UPDATE schema_migrations SET checksum = ? WHERE version = 1`,
+		hex.EncodeToString(earlier[:])); err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Close()
+	_, err = Open(t.Context(), path)
+	checkStaleSchemaError(t, err, path)
+}
+
+// A database from before schema_migrations kept checksums opens and adopts
+// them when its schema is what the migrations create today.
+func TestOpenAdoptsChecksumsOfCurrentSchema(t *testing.T) {
+	ms, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "notesd.db")
+	writeUncheckedDB(t, path, ms)
+	d, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	checkRecordedChecksums(t, d, ms)
+	_ = d.Close()
+	d, err = Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	_ = d.Close()
+}
+
+// The database that ran without M1's tables: M0's notesd applied an
+// earlier 0001_init.sql, before checksums were recorded.
+func TestOpenRefusesUncheckedStaleSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notesd.db")
+	writeUncheckedDB(t, path, []migration{{version: 1, name: "0001_init.sql", sql: `CREATE TABLE vaults (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE,
+		created_at TEXT NOT NULL) STRICT`}})
+	_, err := Open(t.Context(), path)
+	checkStaleSchemaError(t, err, path)
+}
+
+// writeUncheckedDB writes a database at path that applied ms as notesd did
+// before schema_migrations had a checksum column.
+func writeUncheckedDB(t *testing.T, path string, ms []migration) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(t.Context(), `CREATE TABLE schema_migrations (
+		version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL) STRICT`); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range ms {
+		if _, err := db.ExecContext(t.Context(), m.sql); err != nil {
+			t.Fatalf("%s: %v", m.name, err)
+		}
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO schema_migrations VALUES (?, ?, 'x')`,
+			m.version, m.name); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func checkRecordedChecksums(t *testing.T, d *DB, ms []migration) {
+	t.Helper()
+	for _, m := range ms {
+		var sum string
+		if err := d.db.QueryRowContext(t.Context(), `SELECT checksum FROM schema_migrations WHERE version = ?`,
+			m.version).Scan(&sum); err != nil || sum != m.checksum {
+			t.Fatalf("%s: recorded checksum %q, %v; want %q", m.name, sum, err, m.checksum)
+		}
+	}
+}
+
+func checkStaleSchemaError(t *testing.T, err error, path string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("Open succeeded; want the database refused")
+	}
+	for _, want := range []string{path, "0001_init.sql", "predates an in-place edit", "move it aside"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Open = %v; want it to name %q", err, want)
+		}
 	}
 }
 
