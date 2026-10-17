@@ -517,9 +517,10 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 				return false, 0, err
 			}
 		}
-		if err := l.unpark(ctx); err != nil {
-			return false, 0, err
-		}
+		// An answer can also park an unchanged file whose new head was
+		// not part of this push. Leave it parked until the following pull
+		// moves it on; restoring it now could number it and push that
+		// temporary name back to the hub as a new move.
 	}
 	return true, held, nil
 }

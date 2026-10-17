@@ -130,6 +130,9 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 	if err != nil {
 		return nil, err
 	}
+	mu := s.h.logLock(hv.VaultID)
+	mu.Lock()
+	defer mu.Unlock()
 	// A repeat gets the answer it got before; the new items apply in an
 	// order that frees each path before a move onto it, parking a file of
 	// each ring of moves first (vault.PushOrder).
@@ -269,6 +272,9 @@ func (s logService) Pull(ctx context.Context, p *api.LogPullParams) (*api.LogPag
 		}
 		limit = int(*p.Limit)
 	}
+	mu := s.h.logLock(hv.VaultID)
+	mu.RLock()
+	defer mu.RUnlock()
 	page, err := s.h.cfg.DB.Pull(ctx, hv.VaultID, p.After, limit)
 	return &page, err
 }
@@ -281,6 +287,9 @@ func (s logService) Match(ctx context.Context, p *api.LogMatchParams) ([]api.Log
 	if err != nil {
 		return nil, err
 	}
+	mu := s.h.logLock(hv.VaultID)
+	mu.RLock()
+	defer mu.RUnlock()
 	return s.h.cfg.DB.Match(ctx, hv.VaultID, p.Files)
 }
 
@@ -335,6 +344,9 @@ func (s logService) Resolve(ctx context.Context, p *api.LogResolveParams) (*api.
 		return nil, err
 	}
 	who := vault.Author{Source: api.VersionSourceEditor, Name: d.Name, Push: &vault.Push{DeviceID: d.ID}}
+	mu := s.h.logLock(hv.VaultID)
+	mu.Lock()
+	defer mu.Unlock()
 	if err := v.Resolve(ctx, p.File, p.Seq, who); err != nil {
 		return nil, err
 	}
