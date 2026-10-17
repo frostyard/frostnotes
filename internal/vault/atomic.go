@@ -55,6 +55,12 @@ type staged struct {
 // vault at root, and fsyncs it. A new file gets mode 0666 before the
 // umask; an existing file's mode is kept.
 func stage(r *os.Root, root, p string, data []byte, existing fs.FileInfo) (*staged, error) {
+	return stageFrom(r, root, p, bytes.NewReader(data), existing)
+}
+
+// stageFrom is stage for content read from src, such as a blob too big to
+// hold in memory.
+func stageFrom(r *os.Root, root, p string, src io.Reader, existing fs.FileInfo) (*staged, error) {
 	tmp := path.Join(path.Dir(p), tempName())
 	perm := fs.FileMode(0o666)
 	if existing != nil {
@@ -71,7 +77,7 @@ func stage(r *os.Root, root, p string, data []byte, existing fs.FileInfo) (*stag
 				return err
 			}
 		}
-		if _, err := f.Write(data); err != nil {
+		if _, err := io.Copy(f, src); err != nil {
 			return err
 		}
 		if err := f.Sync(); err != nil {

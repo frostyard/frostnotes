@@ -90,6 +90,9 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 				return err
 			}
 		}
+		if err := v.logRevision(ctx, tx, api.RevisionOpMove, f.ID, f.Path, f.Hash, f.Size, who); err != nil {
+			return err
+		}
 		return tx.Emit(ctx, api.NoteMoved{VaultID: v.id, From: from, To: to})
 	})
 	if err != nil {

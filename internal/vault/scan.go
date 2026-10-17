@@ -455,26 +455,39 @@ func (v *Vault) applyOp(ctx context.Context, tx *store.Tx, o op) error {
 			Size: f.Size, Source: api.VersionSourceOutside}); err != nil {
 			return err
 		}
+		if err := v.logRevision(ctx, tx, api.RevisionOpPut, f.ID, f.Path, f.Hash, f.Size, fromOutside()); err != nil {
+			return err
+		}
 		return tx.Emit(ctx, api.NoteChanged{VaultID: v.id, Path: f.Path, Hash: f.Hash, Source: api.VersionSourceOutside})
 	case opMove:
 		if _, err := tx.MoveFile(ctx, o.from.ID, o.path); err != nil {
 			return err
 		}
-		if _, err := tx.PutFile(ctx, file()); err != nil {
+		f, err := tx.PutFile(ctx, file())
+		if err != nil {
+			return err
+		}
+		if err := v.logRevision(ctx, tx, api.RevisionOpMove, f.ID, f.Path, f.Hash, f.Size, fromOutside()); err != nil {
 			return err
 		}
 		return tx.Emit(ctx, api.NoteMoved{VaultID: v.id, From: o.from.Path, To: o.path})
 	case opGone:
-		return v.deleteRow(ctx, tx, *o.row, api.VersionSourceOutside, "")
+		return v.deleteRow(ctx, tx, *o.row, fromOutside())
 	}
 	return fmt.Errorf("unknown change %d", o.kind)
 }
 
-// deleteRow records file row's deletion as a version, removes it from the
-// index and emits note.removed.
-func (v *Vault) deleteRow(ctx context.Context, tx *store.Tx, row store.File, source api.VersionSource, author string) error {
+// fromOutside is the author of what a scan finds: another program.
+func fromOutside() Author { return Author{Source: api.VersionSourceOutside} }
+
+// deleteRow records file row's deletion as a version and a revision,
+// removes it from the index and emits note.removed.
+func (v *Vault) deleteRow(ctx context.Context, tx *store.Tx, row store.File, who Author) error {
 	if _, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: row.Path,
-		Source: source, Author: author}); err != nil {
+		Source: who.Source, Author: who.Name}); err != nil {
+		return err
+	}
+	if err := v.logRevision(ctx, tx, api.RevisionOpDelete, row.ID, row.Path, "", 0, who); err != nil {
 		return err
 	}
 	if err := tx.DeleteFile(ctx, row.ID); err != nil {
