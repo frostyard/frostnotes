@@ -1,89 +1,140 @@
 # Design: sync
 
 Living document. Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
-[ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md).
-Contracts: `specs/sync-protocol.md` and `specs/merge.md` (M2).
+[ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md),
+[ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (pairing),
+[ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md) (revisions),
+[ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md) (blobs),
+[ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md) (retention),
+[ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md) (the simulation).
+Contracts: `specs/sync-protocol.md` and `specs/merge.md`, written in
+[plan 0004](../plans/0004-m2-sync.md)'s Phase 2.
 
-**Status: designed, not built** (M2). The protocol below is a sketch; the
-M2 specs are the contract.
+**Status: designed, not built** (M2, [plan 0004](../plans/0004-m2-sync.md)).
+This is the design; the M2 specs will be the contract.
 
 ## Overview
 
-Each vault syncs through one hub in a star. Devices push changed files with
-the revision they last agreed on. The hub appends each change to the
-vault's revision log, merging three ways when the device was behind, and
-announces new revisions so devices can pull them. The browser and remote
-agents write on the hub directly, as local writers there.
+Each vault syncs through one hub in a star. A hub is a notesd started with
+`--hub`, serving some of its vaults. Devices push changed files with the
+revision they last agreed on. The hub writes each change into its own copy
+of the vault, merging three ways when the device was behind, appends a
+revision to the vault's log, and announces it so other devices pull it. A
+device applies what it pulls only where nothing changed since; it never
+merges. The browser and remote agents (M4) write on the hub directly, as
+local writers there.
 
 ```
- laptop notesd ──push(base)/pull(cursor)──┐
+ laptop notesd ──push(base)/pull(cursor)──┐  /sync WebSocket, device token
+          └──── PUT/GET /sync/blobs ──────┤
                                           ▼
  desktop notesd ──────────────────▶ hub notesd ── revision log + blobs + merge
-                                          ▲  └── vault directory (plain files)
- browser, remote agents ──────────────────┘
+                                          ▲  └── vault directory (plain files: the heads)
+ browser, remote agents (M4) ─────────────┘
 ```
 
 ## Design
 
+### What syncs
+
+Notes and attachments: the files a vault's index has
+([vault.md](vault.md#index)). Folders are not entries, so an empty folder
+does not sync, and a device removes a folder that applying a pulled delete
+or move leaves empty. `.frostnotes/`, hidden paths and the paths a device
+ignores stay on that device; a device skips pulled revisions at paths it
+ignores. A file over 10 MB syncs but does not merge.
+
 ### State
 
-- **Hub, per vault:** `files` (file ID, current path, head revision,
-  deleted flag, conflict flag) and `revisions` (sequence number, file ID,
-  operation create, put, move or delete, path, content hash, base sequence,
-  author, time, and for a conflict revision the revision it lost to).
-  Content is in the hub's blob store. The hub's vault directory always
-  holds the heads.
-- **Device, per vault:** the hub's URL; the device token, in the Secret
-  Service; the pull cursor (the last applied sequence number); and per file,
-  its file ID, agreed revision and agreed hash. A file whose current hash
-  differs from its agreed hash has a local change to push.
+- **Hub, per served vault:** a sync ID (random, 128 bits) and the log.
+  `revisions`: sequence number (from 1, without gaps), file ID (the hub's
+  `files.id`), path, content hash or deletion, base sequence number,
+  device, source and author, time, for a conflict revision the revision it
+  lost to, and the push ID it answers. Per file, the head (its latest
+  revision that is not a conflict revision) and a conflict flag. The hub's
+  vault directory holds the heads; contents are in its blob store.
+- **Hub, devices:** each paired device's ID, its name, the SHA-256 of its
+  token, and when it was paired and last seen; pending pairings, for 10
+  minutes.
+- **Device, per synced vault:** the hub's URL and ID, the hub vault's sync
+  ID, the cursor (the highest sequence number whose heads it has applied),
+  and per file its agreed state: the hub's file ID, the agreed revision,
+  path and hash, and the conflict flag. The device token is in the Secret
+  Service, keyed by the hub's ID.
+
+A file whose path, hash or existence differs from its agreed state has a
+change to push, and a file without an agreed state is a create. Nothing
+else records pending changes, so a crash or an outage loses none
+([ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md)).
 
 ### Device loop
 
-1. **Detect.** Local writes and scanned outside edits mark files changed.
-   Editor saves are coalesced for 2 seconds of quiet before pushing.
-2. **Upload.** Content goes to the hub's blob endpoint first
-   (`PUT /blobs/<sha256>`, idempotent), so pushes carry only hashes.
-3. **Push** `{fileID or none, path, op, base, hash}` for each changed file.
-   The hub answers each with `accepted(seq)`, `merged(seq, hash)` or
-   `conflicted(seq, hash, conflictSeq)`.
-4. **Apply the answer.** For `merged` and `conflicted`, write the returned
-   content with the pushed hash as the base (ADR-0006). If the user typed
-   meanwhile, that is a new local change based on the returned revision.
-5. **Pull** revisions after the cursor, when the hub announces new ones on
-   the WebSocket and at every reconnect. For each, if the file still has
-   its agreed hash, write the revision (create, overwrite, move or delete)
-   and advance the agreed revision and the cursor in one `Tx`; otherwise
-   push the local change first and take the merged result.
+1. **Detect.** Local writes and scanned outside edits change the index,
+   and the loop compares it with the agreed state. It pushes a changed
+   file after 2 seconds without another change to it, and at most 30
+   seconds after its first unpushed change.
+2. **Upload.** It asks the hub which of the changed contents it lacks,
+   and uploads those ([blob transfer](#blob-transfer)).
+3. **Push** `{file ID or none, base, path, hash or deleted, push ID}` for
+   each changed file. The hub answers each with `accepted`, `merged`,
+   `conflicted` or `refused`, and the head that results. A repeated push
+   ID gets the first answer, so a push whose answer was lost is retried
+   safely.
+4. **Apply the answer.** The device writes the head (the merged content,
+   or the head that refused its delete), expecting the state it pushed,
+   and records the head as agreed. If the user typed meanwhile, that is a
+   new local change based on the head.
+5. **Pull** heads after the cursor, when the hub announces new revisions
+   on the WebSocket and at every reconnect. For each head, if the file
+   still has its agreed hash and path, apply it (create, overwrite, move
+   or delete) and advance the agreed state and the cursor in one `Tx`;
+   otherwise push the local change first and take the answer.
+
+Applying (`vault.Apply`) compares instead of merging: the file must still
+hold the expected hash, checked again just before the rename, or nothing
+is written. It streams the content from `blobs/` into the temporary file
+at any size, guards the path as every write does, so a hub cannot write
+outside the vault, and records a `sync` version with the revision's
+author.
 
 ### Hub
 
-Pushes for one vault are applied one at a time, each in a `Tx`, so the
-merge order is the log order.
+Writes to one vault run one at a time under its lock, so the merge order is
+the log order. A push is a write into the hub's vault with the base
+revision's hash as its base, through M1's write path
+([vault.md](vault.md#writes)), and its revision is appended in the same
+`Tx` as the hub's version. Local writes and outside edits on the hub
+append revisions the same way.
 
-- **Base is head:** append the change.
+- **Base is head:** apply the change.
 - **Base is behind:** merge (base, head, pushed) and append the result. A
   hunk that still conflicts takes the head's side; the pushed version is
   appended as a conflict revision, and the file is flagged.
+- **Base content pruned** ([retention](#retention)): merge with the head
+  as two creates are merged.
 - **Create on an existing path:** merge the two with their common lines as
   the base. Two daily notes made offline from one template merge cleanly.
 - **Delete with a stale base:** refused. The head stands (edit beats
-  delete), and the device restores it on its next pull.
-- **Put on a deleted file:** the file comes back at its last path, or at
-  `name 1.md` if another file has taken the path.
+  delete), and the device restores it from the answer.
+- **Put on a deleted file:** the file comes back at the pushed path, or at
+  `name 1.md` if another file has taken it.
 - **Move:** changes the file's path. The latest move wins, and a move onto
-  a taken path gets ` 1`. A move and an edit pushed concurrently both apply.
-- **Paths that differ only by case** from an existing path are refused.
+  a taken path gets ` 1`. A move and an edit pushed concurrently both
+  apply.
+- **Paths that differ only by case** from a live file's path are refused;
+  the device keeps the file and lists it in `notesctl sync status` until
+  it is renamed.
+- **Files that are not text, or are over 10 MB,** do not merge: the later
+  push wins, the other stays in the log, and the file is flagged.
 
 ### Merge
 
 `internal/merge` (planner-owned; 30 golden cases from the M0 spike in
-`merge_test.go`, which become M2's golden tests, and a seeded property test):
+`merge_test.go`, which become `specs/merge.md`'s fixtures, and a seeded
+property test):
 
-
-- **Text files** (`.md` and other UTF-8 text such as `.base` and
-  `.frostnotes/*.yaml`) merge. Other files do not: the later push wins and
-  the other stays in the log.
+- **Text files** (`.md` and other UTF-8 text such as `.base`) merge. Other
+  files do not: the later push wins and the other stays in the log.
 - **Frontmatter** merges by top-level key. Each key's lines are one unit,
   so keys that only one side touched keep their bytes. A key both sides
   changed differently takes the head's value and makes the merge a
@@ -98,48 +149,98 @@ merge order is the log order.
 - **Diffs** use Myers' linear-space algorithm: a 10,000-line note with
   scattered edits merges in about 2 ms; two 10,000-line files with nothing
   in common take about 0.3 s and 3 MB (measured in M0).
-
 - The merge is deterministic: the same three inputs always give the same
   bytes.
 
 ### Pairing and sessions
 
-`notesctl hub join <url> <vault>` asks the hub to pair and shows a one-time
-code. The user approves it on the hub (the web app's devices page or
-`notesctl hub approve <code>`), and the device receives a token for that
-hub, kept in the Secret Service and revocable per device. Browser sign-in
-and remote MCP tokens are decided in the hub's authentication ADR (before
-M4).
+`notesctl hub join <url> <vault>` asks the hub to pair (`/sync/pair`) and
+shows a one-time code of 8 characters. The user approves it on the hub's
+machine, over its local socket (`notesctl hub approve <code>`; later also
+the web app's devices page), and the device collects its token: 32 random
+bytes, of which the hub keeps only the SHA-256. The device keeps the token
+in the Secret Service. Every sync request carries it: the `/sync`
+WebSocket, which serves JSON-RPC as caller `device`, and each blob
+request. `notesctl hub revoke <device>` closes the device's connections
+and ends its sync. Devices refuse a hub URL that is not `https://`, except
+on loopback; TLS comes from a reverse proxy or `tailscale serve`
+([ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md)).
+Browser sign-in and remote MCP tokens are decided in the hub's
+authentication ADR (before M4).
+
+A device that joins with files already in its folder matches them by
+history: a file whose hash is a revision of the hub's file at the same
+path takes that revision as its agreed base, so an unchanged older copy
+takes the head; other files are pushed as creates, merged with the hub's
+file where one has the path; files only the hub has are pulled.
+
+### Blob transfer
+
+Contents move outside JSON-RPC, over `PUT`, `GET` and `HEAD` of
+`/sync/blobs/<sha256>` with the device token. Both ends stream: an upload
+or download goes to a temporary file while it is hashed, and is kept only
+if the hash is the one named. A device asks which hashes the hub lacks and
+uploads them before it pushes; the hub refuses a push whose content it
+lacks, removes uploads that no revision names after 24 hours, hands out
+only content its log names, and refuses blobs over 1 GiB. Downloads resume
+with `Range`; uploads restart. A device runs at most 4 transfers at once
+([ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md)).
+
+### Retention
+
+The hub keeps every revision's record forever, and thins content by age:
+every revision's for 30 days, each file's last of each day for a year,
+then its last of each month; heads always, and conflict revisions while
+their file is flagged. A push whose base content was pruned merges as a
+create. The pass runs daily with each notesd's prune of its own 30 days of
+versions
+([ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md)).
 
 ## Testing
 
 `internal/synctest` runs a hub and several devices in one process, each a
-notesd over its own temporary vault, on loopback. A seeded random scheduler
-drives edits at random positions, creates, deletes, moves, outside edits,
-offline periods, and crashes between a file write and its `Tx`. Every edit
-inserts a unique token. When the run goes quiet, the checks are:
+whole notesd over its own temporary vault, on loopback through a transport
+that partitions, delays and drops answers. A seeded scheduler drives edits
+with current and stale bases, agents' appends, creates (two daily notes
+from one template), deletes, moves, outside edits, attachments, offline
+periods, and crashes between a file write and its `Tx`, between an upload
+and its push, and between the hub's commit and its answer. Every edit
+inserts a unique token. At each quiet point, the checks are:
 
 - every device's vault equals the hub's heads, byte for byte;
-- every inserted token is in a head or in a conflict revision, so no write
-  was lost;
+- every token no writer removed on purpose is in a head or in a conflict
+  revision, so no write was lost;
 - no file in any vault is a conflict copy;
-- the log's sequence numbers increase without gaps, and every revision's
-  base exists.
+- the log's sequence numbers increase without gaps, every revision's base
+  exists, and no two live files share a path, ignoring case;
+- every device's agreed state is the hub's heads, and its index equals a
+  rebuild.
 
-A failing seed is a regression test.
+Stepwise runs replay a seed exactly; concurrent runs find races. A
+failing seed, reduced, is a regression test. `make test` runs a few
+hundred steps; `make sync-sim` runs M2's 10,000 over a hub and three
+devices
+([ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)).
 
 ## Operational notes
 
-- Clocks do not matter; order comes from the hub's sequence numbers.
-- With the hub down, devices keep working and queue their changes.
+- Clocks do not order anything; order comes from the hub's sequence
+  numbers. Times date revisions and drive retention.
+- With the hub down, devices keep working; their changes wait as
+  differences from the agreed state.
 - A revoked token stops sync; the device keeps its vault.
-- `notesctl sync reset` drops a device's sync state and re-syncs: identical
-  files match by hash, and differing ones merge as creates.
+- `notesctl sync reset` drops a device's sync state and joins again:
+  files match by history, and differing ones merge as creates.
+- A hub that lost its database has new file IDs and a new vault sync ID;
+  its devices stop and ask for a reset.
 - Back up the hub by copying its vault directory and data directory; the
   vault directory alone is a complete copy of the heads.
+- Each device needs its own copy of a vault: two devices syncing one
+  folder, such as one network share mounted on two machines, would push
+  each other's changes as their own.
 
 ## References
 
-- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)
+- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
 - Related: [overview.md](overview.md), [vault.md](vault.md)
-- Built in: [roadmap — M2](../plans/0002-roadmap.md)
+- Built in: [plan 0004](../plans/0004-m2-sync.md) ([roadmap — M2](../plans/0002-roadmap.md))

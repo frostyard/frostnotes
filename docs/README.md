@@ -34,12 +34,17 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0013 — Use a sibling Frostyard notebook icon](adr/0013-use-a-sibling-frostyard-notebook-icon.md)
 - [0014 — The API carries text, and keeps the bytes it cannot show](adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
 - [0015 — Index what comments hide, as Obsidian does](adr/0015-index-what-comments-hide-as-obsidian-does.md)
+- [0016 — Pair devices with a one-time code and a revocable token](adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md)
+- [0017 — Revisions number the hub's log, and hashes name content](adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md)
+- [0018 — Move blobs over HTTP, named by their hash](adr/0018-move-blobs-over-http-named-by-their-hash.md)
+- [0019 — Keep every revision's record, and thin the content by age](adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md)
+- [0020 — Test sync with a seeded simulation of a hub and devices](adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
 
 ### Design
 
 - [Overview](design/overview.md) — notesd, its two roles, the clients, the planned layout
 - [Vault](design/vault.md) — scan, watch, parse, index, link resolution, writes, versions
-- [Sync](design/sync.md) — the hub's revision log, push and pull, merges, conflicts, the simulation
+- [Sync](design/sync.md) — the hub's revision log, pairing, push and pull, blobs, merges, conflicts, retention, the simulation
 - [Agent workflow](design/agent-workflow.md) — planner, executor and taskrun; a card's life; sizing
 
 
@@ -56,6 +61,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0001 — M0 foundations](plans/0001-m0-foundations.md)
 - [0002 — Roadmap to replacing Obsidian](plans/0002-roadmap.md)
 - [0003 — M1 headless vault](plans/0003-m1-headless-vault.md)
+- [0004 — M2 sync](plans/0004-m2-sync.md)
 
 ## Conventions
 
