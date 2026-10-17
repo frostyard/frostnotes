@@ -37,7 +37,13 @@ type Client struct {
 	// Dir holds partial downloads as <hash>.part, so a broken download
 	// resumes; it must exist.
 	Dir string
+	// MaxSize is the largest blob a download takes before it gives up, so
+	// a hub cannot fill the device's disk; 0 means DefaultMaxSize.
+	MaxSize int64
 }
+
+// ErrTooBig is a download longer than the client's MaxSize.
+var ErrTooBig = errors.New("blobxfer: the blob is larger than this device takes")
 
 // Upload sends blob hash from Store to the hub with a PUT that carries its
 // Content-Length. 201 and 204 are success. Task card T-0029.
@@ -94,6 +100,10 @@ func (c *Client) Download(ctx context.Context, hash string) error {
 		retry, err = c.downloadAttempt(ctx, hash, part)
 		if err == nil {
 			return c.finishDownload(ctx, hash, part)
+		}
+		if errors.Is(err, ErrTooBig) {
+			_ = os.Remove(part.Name()) // what it took is not kept
+			return err
 		}
 		if !retry || ctx.Err() != nil {
 			return err
@@ -179,7 +189,19 @@ func (c *Client) downloadAttempt(ctx context.Context, hash string, part *os.File
 	default:
 		return false, responseError(resp)
 	}
-	if _, err := io.Copy(part, resp.Body); err != nil {
+	limit := c.MaxSize
+	if limit <= 0 {
+		limit = DefaultMaxSize
+	}
+	at, err := part.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return false, fmt.Errorf("seek partial download: %w", err)
+	}
+	n, err := io.Copy(part, io.LimitReader(resp.Body, limit-at+1))
+	if at+n > limit {
+		return false, fmt.Errorf("download %s: %w", hash, ErrTooBig)
+	}
+	if err != nil {
 		return true, fmt.Errorf("receive blob: %w", err)
 	}
 	return false, nil

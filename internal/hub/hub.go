@@ -61,8 +61,9 @@ type Hub struct {
 
 	mu       sync.Mutex
 	router   *api.Router
-	pairings map[string]*pairing        // by pairing ID
-	conns    map[int64]map[net.Conn]int // a device's live connections
+	pairings map[string]*pairing            // by pairing ID
+	conns    map[int64]map[net.Conn]int     // a device's live connections
+	uploads  map[int64]map[string]time.Time // what each device uploaded, and when
 	// logs guards whole push batches and their answers against other log
 	// calls on the same vault. mu guards this map; each lock guards the log.
 	logs map[int64]*sync.RWMutex
@@ -79,7 +80,7 @@ func New(cfg Config) *Hub {
 	if cfg.MaxBlob == 0 {
 		cfg.MaxBlob = blobxfer.DefaultMaxSize
 	}
-	return &Hub{cfg: cfg, pairings: map[string]*pairing{}, conns: map[int64]map[net.Conn]int{},
+	return &Hub{cfg: cfg, pairings: map[string]*pairing{}, conns: map[int64]map[net.Conn]int{}, uploads: map[int64]map[string]time.Time{},
 		logs: map[int64]*sync.RWMutex{}}
 }
 
@@ -110,7 +111,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("POST /sync/pair", h.startPairing)
 	mux.HandleFunc("GET /sync/pair/{pairing}", h.collectPairing)
 	mux.Handle("GET /sync", h.authenticated(h.syncSocket()))
-	mux.Handle("/sync/blobs/{hash}", h.authenticated(blobxfer.Handler(h.cfg.Blobs, h.cfg.MaxBlob, h.cfg.DB.HasContent)))
+	mux.Handle("/sync/blobs/{hash}", h.authenticated(blobxfer.Handler(h.cfg.Blobs, h.cfg.MaxBlob, h.cfg.DB.HasContent, h.uploaded)))
 	return refuseOrigins(mux)
 }
 
@@ -191,6 +192,50 @@ func (h *Hub) touch(ctx context.Context, id int64) {
 	}
 }
 
+// uploadKept is how long a device's upload counts as its own for its
+// pushes: the day the hub keeps a blob no revision names (ADR-0019).
+const uploadKept = 24 * time.Hour
+
+// uploaded records that the request's device uploaded hash.
+func (h *Hub) uploaded(ctx context.Context, hash string) {
+	d, ok := deviceFrom(ctx)
+	if !ok {
+		return
+	}
+	now := h.cfg.Now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	mine := h.uploads[d.ID]
+	if mine == nil {
+		mine = map[string]time.Time{}
+		h.uploads[d.ID] = mine
+	}
+	for k, at := range mine {
+		if now.Sub(at) > uploadKept {
+			delete(mine, k)
+		}
+	}
+	mine[hash] = now
+}
+
+// mayName reports whether device d may name content hash in a push to hub
+// vault vaultID: its log names it already, or d uploaded it. Content the
+// hub holds for anything else is not d's to name (docs/specs/sync-protocol.md,
+// Blobs).
+func (h *Hub) mayName(ctx context.Context, d int64, vaultID int64, hash string) (bool, error) {
+	h.mu.Lock()
+	at, ok := h.uploads[d][hash]
+	h.mu.Unlock()
+	if ok && h.cfg.Now().Sub(at) <= uploadKept {
+		return true, nil
+	}
+	return h.cfg.DB.VaultHasContent(ctx, vaultID, hash)
+}
+
+// maxConns is how many sync connections one device may hold at once; a
+// device's loop holds one per synced vault.
+const maxConns = 64
+
 // syncSocket serves JSON-RPC over the WebSocket as caller device, until
 // the connection ends or the device is revoked.
 func (h *Hub) syncSocket() http.Handler {
@@ -202,14 +247,28 @@ func (h *Hub) syncSocket() http.Handler {
 			ws.PayloadType = websocket.TextFrame
 			ctx := ws.Request().Context()
 			d, _ := deviceFrom(ctx)
+			if h.cfg.Crash != nil {
+				h.cfg.Crash("connecting") // a test's moment between the token check and what follows
+			}
 			h.mu.Lock()
 			router := h.router
+			if len(h.conns[d.ID]) >= maxConns {
+				h.mu.Unlock()
+				h.cfg.Log.Warn("a device has too many connections", "device", d.ID)
+				return
+			}
 			if h.conns[d.ID] == nil {
 				h.conns[d.ID] = map[net.Conn]int{}
 			}
 			h.conns[d.ID][ws]++
 			h.mu.Unlock()
 			defer h.forget(d.ID, ws)
+			// A revocation between the token check and the line above
+			// closed the device's connections without this one: the
+			// device is checked again now that a revocation would close it.
+			if now, err := h.cfg.DB.Device(ctx, d.ID); err != nil || now.TokenHash != d.TokenHash || !now.RevokedAt.IsZero() {
+				return
+			}
 			if router == nil {
 				h.cfg.Log.Error("the hub has no router")
 				return

@@ -262,6 +262,10 @@ revocations and rejoins from an older copy (`profile.go`)
   its devices stop and ask for a reset.
 - Back up the hub by copying its vault directory and data directory; the
   vault directory alone is a complete copy of the heads.
+- A hub serves one person's devices: every paired device may join every
+  vault it serves, and `log.vaults` lists them all. Serving people who
+  must not see each other's vaults needs per-vault grants, which M2 does
+  not have.
 - Each device needs its own copy of a vault: two devices syncing one
   folder, such as one network share mounted on two machines, would push
   each other's changes as their own.

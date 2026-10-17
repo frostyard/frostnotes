@@ -257,6 +257,20 @@ func (d *DB) Pull(ctx context.Context, vaultID, after int64, limit int) (api.Log
 // served vault that is not pruned names hash: the blobs /sync/blobs hands
 // out. A delete or resolve revision holds no content of its own. Task card
 // T-0024.
+// VaultHasContent reports whether hub vault vaultID's log names content
+// hash and keeps it: what a device of that vault may take as present
+// without uploading it.
+func (d *DB) VaultHasContent(ctx context.Context, vaultID int64, hash string) (bool, error) {
+	if hash == "" {
+		return false, nil
+	}
+	var found bool
+	err := d.db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM revisions WHERE vault_id = ? AND hash = ? AND pruned = 0
+		AND op IN ('create', 'put', 'move', 'conflict'))`, vaultID, hash).Scan(&found)
+	return found, hubReadError("has content", err)
+}
+
 func (d *DB) HasContent(ctx context.Context, hash string) (bool, error) {
 	if hash == "" {
 		return false, nil

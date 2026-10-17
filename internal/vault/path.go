@@ -13,6 +13,14 @@ import (
 // ErrPath is the error CheckPath wraps: a path the API may not name.
 var ErrPath = errors.New("not a vault path")
 
+// The longest a path's segment and a whole path may be, in bytes: what
+// file systems hold (255 bytes a name, and well within PATH_MAX for the
+// vault's own folder too).
+const (
+	MaxSegment = 255
+	MaxPath    = 4000
+)
+
 // CheckPath reports whether p may name a file of a vault through the API
 // (docs/design/vault.md): vault-relative and slash-separated, valid UTF-8,
 // with no empty, "." or ".." segment, no NUL, and no segment starting with
@@ -26,6 +34,8 @@ func CheckPath(p string) error {
 		return fmt.Errorf("%w: %q is not valid UTF-8 text", ErrPath, p)
 	case strings.HasPrefix(p, "/"):
 		return fmt.Errorf("%w: %q is absolute; paths are relative to the vault", ErrPath, p)
+	case len(p) > MaxPath:
+		return fmt.Errorf("%w: a path of %d bytes is longer than %d", ErrPath, len(p), MaxPath)
 	}
 	for i, seg := range strings.Split(p, "/") {
 		switch {
@@ -35,9 +45,25 @@ func CheckPath(p string) error {
 			return fmt.Errorf("%w: %q has a %q segment", ErrPath, p, seg)
 		case strings.HasPrefix(seg, ".") && (i != 0 || seg != SettingsDir):
 			return fmt.Errorf("%w: %q has a hidden segment %q", ErrPath, p, seg)
+		case len(seg) > MaxSegment:
+			return fmt.Errorf("%w: a name of %d bytes is longer than %d", ErrPath, len(seg), MaxSegment)
 		}
 	}
 	return nil
+}
+
+// Beside returns p with suffix put before its extension ("name 1.md",
+// "name.sync-7.md"), the name's stem cut short, at a character, when the
+// name would be longer than MaxSegment.
+func Beside(p, suffix string) string {
+	dir, base := path.Split(p)
+	ext := path.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	for len(stem)+len(suffix)+len(ext) > MaxSegment && stem != "" {
+		_, size := utf8.DecodeLastRuneInString(stem)
+		stem = stem[:len(stem)-size]
+	}
+	return dir + stem + suffix + ext
 }
 
 // IsSettings reports whether p lies in the vault's settings directory.

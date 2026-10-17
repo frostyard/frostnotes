@@ -32,12 +32,33 @@ func TestCheckPath(t *testing.T) {
 		".trash/old.md":          false,
 		"bad\xffname.md":         false,
 		"nul\x00.md":             false,
+		// The longest a name and a path may be (MaxSegment, MaxPath).
+		strings.Repeat("n", 252) + ".md":                      true,
+		strings.Repeat("n", 253) + ".md":                      false,
+		strings.Repeat(strings.Repeat("d", 99)+"/", 40) + "x": false,
 	} {
 		if err := CheckPath(p); (err == nil) != ok {
 			t.Errorf("CheckPath(%q) = %v, want ok %v", p, err, ok)
 		} else if err != nil && !errors.Is(err, ErrPath) {
 			t.Errorf("CheckPath(%q) = %v, not ErrPath", p, err)
 		}
+	}
+}
+
+func TestBesideKeepsANameWithinTheLimit(t *testing.T) {
+	for p, want := range map[string]string{
+		"Plan.md":       "Plan 1.md",
+		"a/b/Plan":      "a/b/Plan 1",
+		"a/notes.v2.md": "a/notes.v2 1.md",
+	} {
+		if got := Beside(p, " 1"); got != want {
+			t.Errorf("Beside(%q) = %q, want %q", p, got, want)
+		}
+	}
+	long := "a/" + strings.Repeat("é", 126) + ".md" // 252 + 3 bytes in its name
+	got := Beside(long, ".sync-12345")
+	if err := CheckPath(got); err != nil || !strings.HasSuffix(got, "é.sync-12345.md") {
+		t.Fatalf("Beside(a long name) = %q, %v; want a name within the limit, cut at a character", got, err)
 	}
 }
 

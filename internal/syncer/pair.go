@@ -136,6 +136,9 @@ func (s *Syncer) paired(ctx context.Context, id string) (*api.PairResult, error)
 		return &api.PairResult{State: api.PairingStatePending, Hub: p.hub}, nil
 	}
 	s.dropPairing(id)
+	if err := s.sameHub(ctx, got.Hub, p.url); err != nil {
+		return nil, err
+	}
 	if err := s.cfg.Secrets.Set(ctx, secrets.HubToken(got.Hub), got.Token); err != nil {
 		return nil, fmt.Errorf("keep the device token: %w", err)
 	}
@@ -149,6 +152,34 @@ func (s *Syncer) paired(ctx context.Context, id string) (*api.PairResult, error)
 	}
 	s.kickHub(row.ID)
 	return &api.PairResult{State: api.PairingStateApproved, Hub: got.Hub}, nil
+}
+
+// sameHub refuses a pairing whose hub claims the ID of a hub this device
+// syncs vaults with at another URL: anyone can learn a hub's ID, so the
+// claim alone would let a hub the user was led to take another's token
+// and vaults (docs/specs/sync-protocol.md, Pairing). A hub that moved is
+// paired again once its vaults have left it.
+func (s *Syncer) sameHub(ctx context.Context, hubID, url string) error {
+	hubs, err := s.cfg.DB.SyncHubs(ctx)
+	if err != nil {
+		return err
+	}
+	for _, h := range hubs {
+		if h.HubID != hubID || h.URL == url {
+			continue
+		}
+		remotes, err := s.cfg.DB.Remotes(ctx)
+		if err != nil {
+			return err
+		}
+		for _, r := range remotes {
+			if r.Hub == h.ID {
+				return api.Conflict("the hub at %s says it is hub %s, which this device syncs with at %s: "+
+					"leave those vaults (sync.leave) before pairing with it at a new URL", url, hubID, h.URL)
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Syncer) dropPairing(id string) {
