@@ -82,6 +82,39 @@ func (d *DB) Search(ctx context.Context, vaultID int64, query string, limit int)
 	return hits, nil
 }
 
+// Query is a search as note.search takes it: words and phrases to match,
+// and filters (schema/rpc/note.yaml, note.search).
+type Query struct {
+	// Match is an FTS5 MATCH expression, as SearchQuery makes it from the
+	// words and phrases that are not filters; "" when there are none.
+	Match string
+	// Paths hold path:TEXT filters: a note's path must contain each,
+	// ignoring case.
+	Paths []string
+	// Files hold file:TEXT filters: a note's file name, its last path
+	// segment, must contain each, ignoring case.
+	Files []string
+	// Tags hold tag:#TAG filters, without '#' and lower-cased: a note must
+	// have each tag or one nested under it.
+	Tags []string
+}
+
+// ParseQuery splits what a user typed into a Query. A filter is a word
+// that starts with path:, file: or tag: (case ignored) followed by its
+// value, which may be a double-quoted phrase; an empty value is no
+// filter. Everything else goes to SearchQuery. Task card T-0044.
+func ParseQuery(text string) Query {
+	return Query{Match: SearchQuery(text)}
+}
+
+// SearchNotes returns vault's notes that match q, at most limit of them.
+// With Match, it ranks and snippets as Search does, keeping only notes the
+// filters admit; with filters alone it lists the notes they admit by path,
+// each without a snippet; with neither it returns none. Task card T-0044.
+func (d *DB) SearchNotes(ctx context.Context, vaultID int64, q Query, limit int) ([]api.SearchHit, error) {
+	return d.Search(ctx, vaultID, q.Match, limit)
+}
+
 func splitSnippet(text string) []api.SnippetPart {
 	parts := []api.SnippetPart{}
 	match := false

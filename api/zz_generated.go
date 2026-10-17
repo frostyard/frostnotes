@@ -911,6 +911,25 @@ func (v LinkKind) Valid() bool {
 	return false
 }
 
+// FileKind: What the index makes of a file.
+type FileKind string
+
+const (
+	// A markdown note (.md), parsed and indexed.
+	FileKindNote FileKind = "note"
+	// Any other file: indexed by name and hash only.
+	FileKindAttachment FileKind = "attachment"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v FileKind) Valid() bool {
+	switch v {
+	case FileKindNote, FileKindAttachment:
+		return true
+	}
+	return false
+}
+
 // VersionSource: Who made a version.
 type VersionSource string
 
@@ -1024,6 +1043,13 @@ type WriteResult struct {
 	// Hunks both sides changed differently; the file's newer side of each stands,
 	// and the content sent is kept as a conflict version (ADR-0005).
 	Conflicts int64 `json:"conflicts"`
+	// The conflict version's id, when conflicts is above zero: what
+	// note.readVersion reads back.
+	ConflictVersion *int64 `json:"conflictVersion,omitzero"`
+	// When merged is true: who made the version the write was merged into.
+	MergedSource *VersionSource `json:"mergedSource,omitzero"`
+	// When merged is true: that version's author; empty for an outside edit.
+	MergedAuthor *string `json:"mergedAuthor,omitzero"`
 }
 
 // MoveResult: A file after a move.
@@ -1058,6 +1084,104 @@ type DailyNote struct {
 	Note Note `json:"note"`
 	// notesd created it from the vault's template for this call.
 	Created bool `json:"created"`
+}
+
+// VaultFile: A file of a vault, as the index has it.
+type VaultFile struct {
+	Path string   `json:"path"`
+	Kind FileKind `json:"kind"`
+	// The SHA-256 of the content, lowercase hex: a write's base, and the name of
+	// its bytes for the app (ADR-0023).
+	Hash string `json:"hash"`
+	// In bytes.
+	Size int64 `json:"size"`
+	// The file's modification time.
+	ModifiedAt time.Time `json:"modifiedAt"`
+}
+
+// VaultFiles: Every file and folder of a vault.
+type VaultFiles struct {
+	// By path.
+	Files []VaultFile `json:"files"`
+	// Every folder below the root, empty ones included, by path; the root is not
+	// listed.
+	Folders []string `json:"folders"`
+}
+
+// Resolution: Where a link target leads from a note.
+type Resolution struct {
+	// The target as asked, without subpath or alias.
+	Target string `json:"target"`
+	// The file it resolves to; absent when unresolved.
+	Path *string `json:"path,omitzero"`
+}
+
+// RenderedNote: A note rendered for the reading view
+// (docs/design/app.md#reading-view).
+type RenderedNote struct {
+	// Sanitized HTML: no script, event handler, form, frame, style or javascript:
+	// URL. Vault files appear as data-blob attributes, never as URLs (ADR-0023).
+	HTML string `json:"html"`
+}
+
+// VersionContent: A version's content.
+type VersionContent struct {
+	Version Version `json:"version"`
+	// As note.read gives content: bytes that are not UTF-8 read as U+FFFD
+	// (ADR-0014); empty for a deletion.
+	Content string `json:"content"`
+}
+
+// TagCount: A tag and how many notes have it.
+type TagCount struct {
+	// As first spelled, without '#'; nested tags are listed whole (a/b), and
+	// their parents only when a note has the parent itself.
+	Tag string `json:"tag"`
+	// Notes with the tag, ignoring case.
+	Count int64 `json:"count"`
+}
+
+// PropertyCount: A frontmatter key and how many notes have it.
+type PropertyCount struct {
+	// As first spelled.
+	Key string `json:"key"`
+	// Its type from the vault's property types (text, multitext, number,
+	// checkbox, date, datetime, aliases, tags); empty when it has none.
+	Type string `json:"type"`
+	// Notes with the key, ignoring case.
+	Count int64 `json:"count"`
+}
+
+// ExpandedTemplate: A template with its variables expanded.
+type ExpandedTemplate struct {
+	Content string `json:"content"`
+}
+
+// FileBase: A file and the hash a delete expects it to have.
+type FileBase struct {
+	Path string `json:"path"`
+	Base string `json:"base"`
+}
+
+// FolderMoveResult: A folder after a move.
+type FolderMoveResult struct {
+	// The folder's new path.
+	Path string `json:"path"`
+	// The files moved, by their new paths.
+	Moved []string `json:"moved"`
+	// The notes whose links were rewritten, by path.
+	Rewritten []string `json:"rewritten"`
+}
+
+// FolderDeleteResult: What a folder delete did.
+type FolderDeleteResult struct {
+	// The files deleted, by path.
+	Deleted []string `json:"deleted"`
+	// Files kept: changed since their base, or not named (made since the
+	// listing). An edit beats a delete (ADR-0005).
+	Kept []string `json:"kept"`
+	// The folder itself is gone: nothing was kept in it.
+	Removed bool `json:"removed"`
 }
 
 // NoteListParams holds the params of note.list.
@@ -1175,6 +1299,90 @@ type NoteDailyParams struct {
 	Author *string `json:"author,omitzero"`
 }
 
+// NoteFilesParams holds the params of note.files.
+type NoteFilesParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// NoteResolveParams holds the params of note.resolve.
+type NoteResolveParams struct {
+	VaultID int64 `json:"vaultId"`
+	// The linking note's path; it need not exist yet.
+	From string `json:"from"`
+	// Link targets as written, without subpath or alias; at most 1,000.
+	Targets []string `json:"targets"`
+}
+
+// NoteRenderParams holds the params of note.render.
+type NoteRenderParams struct {
+	VaultID int64   `json:"vaultId"`
+	Path    string  `json:"path"`
+	Content *string `json:"content,omitzero"`
+}
+
+// NoteUploadParams holds the params of note.upload.
+type NoteUploadParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// The file's bytes, base64 (standard alphabet, padded).
+	Data string `json:"data"`
+	// editor (the default) or agent.
+	Source *VersionSource `json:"source,omitzero"`
+	// Who is writing; defaults to the client name given to rpc.hello.
+	Author *string `json:"author,omitzero"`
+}
+
+// NoteReadVersionParams holds the params of note.readVersion.
+type NoteReadVersionParams struct {
+	VaultID int64 `json:"vaultId"`
+	// The version's id, from note.versions or a write's conflictVersion.
+	Version int64 `json:"version"`
+}
+
+// NoteTagsParams holds the params of note.tags.
+type NoteTagsParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// NotePropertiesParams holds the params of note.properties.
+type NotePropertiesParams struct {
+	VaultID int64 `json:"vaultId"`
+}
+
+// NoteTemplateParams holds the params of note.template.
+type NoteTemplateParams struct {
+	VaultID int64 `json:"vaultId"`
+	// The template note's path.
+	Template string `json:"template"`
+	// {{title}}: the note it goes into; empty by default.
+	Title *string `json:"title,omitzero"`
+	// The date and time {{date}} and {{time}} give; now by default.
+	At *time.Time `json:"at,omitzero"`
+}
+
+// NoteMkdirParams holds the params of note.mkdir.
+type NoteMkdirParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+}
+
+// NoteMoveFolderParams holds the params of note.moveFolder.
+type NoteMoveFolderParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// The new path; it must not exist.
+	To          string `json:"to"`
+	UpdateLinks *bool  `json:"updateLinks,omitzero"`
+}
+
+// NoteDeleteFolderParams holds the params of note.deleteFolder.
+type NoteDeleteFolderParams struct {
+	VaultID int64  `json:"vaultId"`
+	Path    string `json:"path"`
+	// The folder's files as the caller listed them.
+	Files []FileBase `json:"files"`
+}
+
 // NoteService: The notes and attachments in a vault, and what notesd's index
 // knows of them (docs/design/vault.md). A path is vault-relative and
 // slash-separated, as on disk. Every write names the hash of the content it
@@ -1191,6 +1399,9 @@ type NoteService interface {
 	// bodies and frontmatter, best match first. Each word matches as a prefix
 	// ("plan" finds "planting"), a phrase in double quotes matches as written,
 	// and every word or phrase must match. Case and diacritics are ignored.
+	// Filters narrow it, each as its own word: path:TEXT (the path contains
+	// TEXT), file:TEXT (the file name contains TEXT), tag:#TAG (the note has TAG
+	// or a tag nested under it); a filter alone lists matching notes by path.
 	Search(ctx context.Context, p *NoteSearchParams) ([]SearchHit, error)
 	// Backlinks implements note.backlinks. The links to a note or attachment from
 	// the notes of its vault, by source path, then line.
@@ -1229,6 +1440,50 @@ type NoteService interface {
 	// Daily implements note.daily. A day's daily note, created from the vault's
 	// daily-note template when missing (docs/design/vault.md#daily-notes).
 	Daily(ctx context.Context, p *NoteDailyParams) (*DailyNote, error)
+	// Files implements note.files. Every file and folder of a vault: the Files
+	// pane's listing and the hashes the app loads files by (ADR-0023).
+	// note.changed, note.moved and note.removed keep it current.
+	Files(ctx context.Context, p *NoteFilesParams) (*VaultFiles, error)
+	// Resolve implements note.resolve. Where link targets lead from a note, by
+	// the vault's link resolution (docs/specs/markdown.md#link-resolution), for
+	// links the editor shows before the index has them.
+	Resolve(ctx context.Context, p *NoteResolveParams) ([]Resolution, error)
+	// Render implements note.render. A note rendered to sanitized HTML for the
+	// reading view and embeds (ADR-0007): Obsidian's syntax, embeds of notes
+	// three levels deep, a single newline as a line break (Obsidian's default).
+	// With content, that text is rendered as if it were the note at path, so an
+	// editor shows what was typed before it is saved.
+	Render(ctx context.Context, p *NoteRenderParams) (*RenderedNote, error)
+	// Upload implements note.upload. Create an attachment from bytes, as
+	// note.create creates a note: it fails with conflict if the path exists
+	// (ADR-0023). data is base64, at most 10 MB decoded.
+	Upload(ctx context.Context, p *NoteUploadParams) (*WriteResult, error)
+	// ReadVersion implements note.readVersion. A version's content, for the
+	// history view and the merge view.
+	ReadVersion(ctx context.Context, p *NoteReadVersionParams) (*VersionContent, error)
+	// Tags implements note.tags. Every tag in the vault's notes and how many
+	// notes have it, by tag ignoring case.
+	Tags(ctx context.Context, p *NoteTagsParams) ([]TagCount, error)
+	// Properties implements note.properties. Every frontmatter key in the vault's
+	// notes, its type and how many notes have it, by key ignoring case.
+	Properties(ctx context.Context, p *NotePropertiesParams) ([]PropertyCount, error)
+	// Template implements note.template. A template note's content with
+	// {{title}}, {{date}}, {{time}} and their formats and offsets expanded, as
+	// Obsidian's Insert template does (docs/design/vault.md#daily-notes).
+	Template(ctx context.Context, p *NoteTemplateParams) (*ExpandedTemplate, error)
+	// Mkdir implements note.mkdir. Create a folder and any missing parents. An
+	// existing folder is not an error.
+	Mkdir(ctx context.Context, p *NoteMkdirParams) error
+	// MoveFolder implements note.moveFolder. Rename or move a folder with
+	// everything in it, creating missing parents. Each file moves as note.move
+	// moves it, keeping its versions; with updateLinks, links to them from notes
+	// outside the folder are rewritten.
+	MoveFolder(ctx context.Context, p *NoteMoveFolderParams) (*FolderMoveResult, error)
+	// DeleteFolder implements note.deleteFolder. Delete a folder's files, each
+	// with the base the caller listed, then the folder when nothing is left in
+	// it. A file changed since its base, or not listed, is kept: an edit beats a
+	// delete (ADR-0005). Every deleted file's versions stay for note.revert.
+	DeleteFolder(ctx context.Context, p *NoteDeleteFolderParams) (*FolderDeleteResult, error)
 }
 
 func registerNote(r *Router, s NoteService) {
@@ -1316,6 +1571,83 @@ func registerNote(r *Router, s NoteService) {
 			return nil, err
 		}
 		return s.Daily(ctx, &p)
+	})
+	r.handle("note.files", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteFilesParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Files(ctx, &p)
+	})
+	r.handle("note.resolve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteResolveParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "from", "targets"}); err != nil {
+			return nil, err
+		}
+		return s.Resolve(ctx, &p)
+	})
+	r.handle("note.render", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteRenderParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return s.Render(ctx, &p)
+	})
+	r.handle("note.upload", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteUploadParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "data"}); err != nil {
+			return nil, err
+		}
+		return s.Upload(ctx, &p)
+	})
+	r.handle("note.readVersion", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteReadVersionParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "version"}); err != nil {
+			return nil, err
+		}
+		return s.ReadVersion(ctx, &p)
+	})
+	r.handle("note.tags", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteTagsParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Tags(ctx, &p)
+	})
+	r.handle("note.properties", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NotePropertiesParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		return s.Properties(ctx, &p)
+	})
+	r.handle("note.template", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteTemplateParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "template"}); err != nil {
+			return nil, err
+		}
+		return s.Template(ctx, &p)
+	})
+	r.handle("note.mkdir", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteMkdirParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		return nil, s.Mkdir(ctx, &p)
+	})
+	r.handle("note.moveFolder", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteMoveFolderParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "to"}); err != nil {
+			return nil, err
+		}
+		return s.MoveFolder(ctx, &p)
+	})
+	r.handle("note.deleteFolder", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteDeleteFolderParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path", "files"}); err != nil {
+			return nil, err
+		}
+		return s.DeleteFolder(ctx, &p)
 	})
 }
 
@@ -1421,6 +1753,102 @@ func (x NoteClient) Revert(ctx context.Context, p *NoteRevertParams) (*WriteResu
 func (x NoteClient) Daily(ctx context.Context, p *NoteDailyParams) (*DailyNote, error) {
 	var r DailyNote
 	err := x.c.Call(ctx, "note.daily", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Files calls note.files.
+func (x NoteClient) Files(ctx context.Context, p *NoteFilesParams) (*VaultFiles, error) {
+	var r VaultFiles
+	err := x.c.Call(ctx, "note.files", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Resolve calls note.resolve.
+func (x NoteClient) Resolve(ctx context.Context, p *NoteResolveParams) ([]Resolution, error) {
+	var r []Resolution
+	err := x.c.Call(ctx, "note.resolve", p, &r)
+	return r, err
+}
+
+// Render calls note.render.
+func (x NoteClient) Render(ctx context.Context, p *NoteRenderParams) (*RenderedNote, error) {
+	var r RenderedNote
+	err := x.c.Call(ctx, "note.render", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Upload calls note.upload.
+func (x NoteClient) Upload(ctx context.Context, p *NoteUploadParams) (*WriteResult, error) {
+	var r WriteResult
+	err := x.c.Call(ctx, "note.upload", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// ReadVersion calls note.readVersion.
+func (x NoteClient) ReadVersion(ctx context.Context, p *NoteReadVersionParams) (*VersionContent, error) {
+	var r VersionContent
+	err := x.c.Call(ctx, "note.readVersion", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Tags calls note.tags.
+func (x NoteClient) Tags(ctx context.Context, p *NoteTagsParams) ([]TagCount, error) {
+	var r []TagCount
+	err := x.c.Call(ctx, "note.tags", p, &r)
+	return r, err
+}
+
+// Properties calls note.properties.
+func (x NoteClient) Properties(ctx context.Context, p *NotePropertiesParams) ([]PropertyCount, error) {
+	var r []PropertyCount
+	err := x.c.Call(ctx, "note.properties", p, &r)
+	return r, err
+}
+
+// Template calls note.template.
+func (x NoteClient) Template(ctx context.Context, p *NoteTemplateParams) (*ExpandedTemplate, error) {
+	var r ExpandedTemplate
+	err := x.c.Call(ctx, "note.template", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Mkdir calls note.mkdir.
+func (x NoteClient) Mkdir(ctx context.Context, p *NoteMkdirParams) error {
+	return x.c.Call(ctx, "note.mkdir", p, nil)
+}
+
+// MoveFolder calls note.moveFolder.
+func (x NoteClient) MoveFolder(ctx context.Context, p *NoteMoveFolderParams) (*FolderMoveResult, error) {
+	var r FolderMoveResult
+	err := x.c.Call(ctx, "note.moveFolder", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// DeleteFolder calls note.deleteFolder.
+func (x NoteClient) DeleteFolder(ctx context.Context, p *NoteDeleteFolderParams) (*FolderDeleteResult, error) {
+	var r FolderDeleteResult
+	err := x.c.Call(ctx, "note.deleteFolder", p, &r)
 	if err != nil {
 		return nil, err
 	}
@@ -1643,6 +2071,13 @@ type SyncConflict struct {
 	Revisions []Revision `json:"revisions"`
 }
 
+// RevisionContent: A hub revision's content.
+type RevisionContent struct {
+	Revision Revision `json:"revision"`
+	// As note.read gives content; empty for a delete or resolve.
+	Content string `json:"content"`
+}
+
 // VerifyReport: How a synced vault compares with its hub (M2's exit
 // evidence).
 type VerifyReport struct {
@@ -1723,6 +2158,13 @@ type SyncHistoryParams struct {
 	Limit *int64 `json:"limit,omitzero"`
 }
 
+// SyncReadRevisionParams holds the params of sync.readRevision.
+type SyncReadRevisionParams struct {
+	VaultID int64 `json:"vaultId"`
+	// The revision's sequence number, from sync.history or sync.conflicts.
+	Seq int64 `json:"seq"`
+}
+
 // SyncService: On a device: pairing with hubs and syncing vaults through them
 // (docs/design/sync.md, docs/specs/sync-protocol.md). The device token stays
 // in notesd's secret store and never crosses this API.
@@ -1757,6 +2199,10 @@ type SyncService interface {
 	// History implements sync.history. The hub's revisions of a file, newest
 	// first.
 	History(ctx context.Context, p *SyncHistoryParams) ([]Revision, error)
+	// ReadRevision implements sync.readRevision. A hub revision's content, for
+	// the merge view: from this device's blob store when it has it, else fetched
+	// from the hub (ADR-0018).
+	ReadRevision(ctx context.Context, p *SyncReadRevisionParams) (*RevisionContent, error)
 }
 
 func registerSync(r *Router, s SyncService) {
@@ -1837,6 +2283,13 @@ func registerSync(r *Router, s SyncService) {
 			return nil, err
 		}
 		return s.History(ctx, &p)
+	})
+	r.handle("sync.readRevision", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncReadRevisionParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "seq"}); err != nil {
+			return nil, err
+		}
+		return s.ReadRevision(ctx, &p)
 	})
 }
 
@@ -1936,6 +2389,16 @@ func (x SyncClient) History(ctx context.Context, p *SyncHistoryParams) ([]Revisi
 	return r, err
 }
 
+// ReadRevision calls sync.readRevision.
+func (x SyncClient) ReadRevision(ctx context.Context, p *SyncReadRevisionParams) (*RevisionContent, error) {
+	var r RevisionContent
+	err := x.c.Call(ctx, "sync.readRevision", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // SyncChanged: A synced vault's state changed.
 type SyncChanged struct {
 	Status SyncStatus `json:"status"`
@@ -1969,6 +2432,108 @@ func (v ScanState) Valid() bool {
 		return true
 	}
 	return false
+}
+
+// NewNoteLocation: Where a new note goes (Obsidian's Default location for new
+// notes).
+type NewNoteLocation string
+
+const (
+	// The vault's root (Obsidian's default).
+	NewNoteLocationRoot NewNoteLocation = "root"
+	// The folder of the note open when it is made.
+	NewNoteLocationCurrent NewNoteLocation = "current"
+	// The folder newNoteFolder names.
+	NewNoteLocationFolder NewNoteLocation = "folder"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v NewNoteLocation) Valid() bool {
+	switch v {
+	case NewNoteLocationRoot, NewNoteLocationCurrent, NewNoteLocationFolder:
+		return true
+	}
+	return false
+}
+
+// LinkFormat: How a new link names its file (Obsidian's New link format).
+type LinkFormat string
+
+const (
+	// The file's name when that resolves to it, else its path (Obsidian's
+	// default).
+	LinkFormatShortest LinkFormat = "shortest"
+	// Its path from the linking note's folder.
+	LinkFormatRelative LinkFormat = "relative"
+	// Its path from the vault's root.
+	LinkFormatAbsolute LinkFormat = "absolute"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v LinkFormat) Valid() bool {
+	switch v {
+	case LinkFormatShortest, LinkFormatRelative, LinkFormatAbsolute:
+		return true
+	}
+	return false
+}
+
+// SettingSource: Where a setting's value comes from.
+type SettingSource string
+
+const (
+	// The vault's .frostnotes/vault.yaml.
+	SettingSourceFrostnotes SettingSource = "frostnotes"
+	// Obsidian's settings in .obsidian/, read while vault.yaml lacks the setting.
+	SettingSourceObsidian SettingSource = "obsidian"
+	// Neither has it: Obsidian's default.
+	SettingSourceDefault SettingSource = "default"
+)
+
+// Valid reports whether v is one of the declared values.
+func (v SettingSource) Valid() bool {
+	switch v {
+	case SettingSourceFrostnotes, SettingSourceObsidian, SettingSourceDefault:
+		return true
+	}
+	return false
+}
+
+// VaultSettings: A vault's settings (docs/design/vault.md#on-disk; ADR-0021):
+// from .frostnotes/vault.yaml, else Obsidian's .obsidian/ files, else
+// Obsidian's defaults.
+type VaultSettings struct {
+	// Where daily notes go; empty is the vault root.
+	DailyFolder string `json:"dailyFolder"`
+	// A moment.js format for a daily note's name; may hold '/' to name
+	// subfolders.
+	DailyFormat string `json:"dailyFormat"`
+	// The daily-note template's path; empty for none.
+	DailyTemplate string `json:"dailyTemplate"`
+	// Where templates live; empty when unset.
+	TemplateFolder string `json:"templateFolder"`
+	// {{date}}'s moment.js format.
+	TemplateDateFormat string `json:"templateDateFormat"`
+	// {{time}}'s moment.js format.
+	TemplateTimeFormat string          `json:"templateTimeFormat"`
+	NewNoteLocation    NewNoteLocation `json:"newNoteLocation"`
+	// With newNoteLocation folder: that folder; empty is the root.
+	NewNoteFolder string `json:"newNoteFolder"`
+	// Where pasted and dropped files go, as Obsidian writes it: "/" the vault
+	// root, "./" the note's folder, "./NAME" a folder NAME beside the note, else
+	// a folder's path.
+	AttachmentFolder string     `json:"attachmentFolder"`
+	LinkFormat       LinkFormat `json:"linkFormat"`
+	// New links are [[wikilinks]] rather than markdown links.
+	Wikilinks bool `json:"wikilinks"`
+	// Moves rewrite links without asking (Obsidian's Automatically update
+	// internal links).
+	UpdateLinks bool `json:"updateLinks"`
+	// Gitignore-style patterns of files the vault leaves out (Obsidian's Excluded
+	// files).
+	Ignore []string `json:"ignore"`
+	// Where each setting above comes from, by its field name.
+	Sources map[string]SettingSource `json:"sources"`
 }
 
 // ScanStatus: The state of a vault's index and its scans.
@@ -2029,6 +2594,29 @@ type VaultReindexParams struct {
 	ID int64 `json:"id"`
 }
 
+// VaultSettingsParams holds the params of vault.settings.
+type VaultSettingsParams struct {
+	ID int64 `json:"id"`
+}
+
+// VaultConfigureParams holds the params of vault.configure.
+type VaultConfigureParams struct {
+	ID                 int64            `json:"id"`
+	DailyFolder        *string          `json:"dailyFolder,omitzero"`
+	DailyFormat        *string          `json:"dailyFormat,omitzero"`
+	DailyTemplate      *string          `json:"dailyTemplate,omitzero"`
+	TemplateFolder     *string          `json:"templateFolder,omitzero"`
+	TemplateDateFormat *string          `json:"templateDateFormat,omitzero"`
+	TemplateTimeFormat *string          `json:"templateTimeFormat,omitzero"`
+	NewNoteLocation    *NewNoteLocation `json:"newNoteLocation,omitzero"`
+	NewNoteFolder      *string          `json:"newNoteFolder,omitzero"`
+	AttachmentFolder   *string          `json:"attachmentFolder,omitzero"`
+	LinkFormat         *LinkFormat      `json:"linkFormat,omitzero"`
+	Wikilinks          *bool            `json:"wikilinks,omitzero"`
+	UpdateLinks        *bool            `json:"updateLinks,omitzero"`
+	Ignore             []string         `json:"ignore,omitzero"`
+}
+
 // VaultService: The vaults this notesd owns: directories of markdown notes
 // (ADR-0003). Registering a vault never writes to it.
 type VaultService interface {
@@ -2048,6 +2636,14 @@ type VaultService interface {
 	// so nothing is lost. The scan runs in the background; vault.scan events
 	// report its progress.
 	Reindex(ctx context.Context, p *VaultReindexParams) (*ScanStatus, error)
+	// Settings implements vault.settings. A vault's settings, and where each
+	// comes from.
+	Settings(ctx context.Context, p *VaultSettingsParams) (*VaultSettings, error)
+	// Configure implements vault.configure. Change a vault's settings: each field
+	// given is written to .frostnotes/vault.yaml, atomically, keeping the rest of
+	// the file; the others keep their values. This is the only method that writes
+	// .frostnotes/ (ADR-0021).
+	Configure(ctx context.Context, p *VaultConfigureParams) (*VaultSettings, error)
 }
 
 func registerVault(r *Router, s VaultService) {
@@ -2086,6 +2682,20 @@ func registerVault(r *Router, s VaultService) {
 			return nil, err
 		}
 		return s.Reindex(ctx, &p)
+	})
+	r.handle("vault.settings", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p VaultSettingsParams
+		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
+			return nil, err
+		}
+		return s.Settings(ctx, &p)
+	})
+	r.handle("vault.configure", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p VaultConfigureParams
+		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
+			return nil, err
+		}
+		return s.Configure(ctx, &p)
 	})
 }
 
@@ -2139,6 +2749,26 @@ func (x VaultClient) Reindex(ctx context.Context, p *VaultReindexParams) (*ScanS
 	return &r, nil
 }
 
+// Settings calls vault.settings.
+func (x VaultClient) Settings(ctx context.Context, p *VaultSettingsParams) (*VaultSettings, error) {
+	var r VaultSettings
+	err := x.c.Call(ctx, "vault.settings", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Configure calls vault.configure.
+func (x VaultClient) Configure(ctx context.Context, p *VaultConfigureParams) (*VaultSettings, error) {
+	var r VaultSettings
+	err := x.c.Call(ctx, "vault.configure", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // VaultScan: A vault's scan started, made progress (at most every 250 ms) or
 // ended.
 type VaultScan struct {
@@ -2161,6 +2791,18 @@ func (VaultAdded) EventName() string { return "vault.added" }
 
 // Durable reports whether VaultAdded is kept in the changes log.
 func (VaultAdded) Durable() bool { return true }
+
+// VaultConfigured: A vault's settings changed, by vault.configure or in
+// .frostnotes/vault.yaml.
+type VaultConfigured struct {
+	ID int64 `json:"id"`
+}
+
+// EventName is the wire name of VaultConfigured.
+func (VaultConfigured) EventName() string { return "vault.configured" }
+
+// Durable reports whether VaultConfigured is kept in the changes log.
+func (VaultConfigured) Durable() bool { return true }
 
 // VaultRemoved: A vault was forgotten.
 type VaultRemoved struct {
@@ -2247,6 +2889,17 @@ var Methods = []string{
 	"note.versions",
 	"note.revert",
 	"note.daily",
+	"note.files",
+	"note.resolve",
+	"note.render",
+	"note.upload",
+	"note.readVersion",
+	"note.tags",
+	"note.properties",
+	"note.template",
+	"note.mkdir",
+	"note.moveFolder",
+	"note.deleteFolder",
 	"rpc.hello",
 	"sync.pair",
 	"sync.paired",
@@ -2259,11 +2912,14 @@ var Methods = []string{
 	"sync.reset",
 	"sync.verify",
 	"sync.history",
+	"sync.readRevision",
 	"vault.list",
 	"vault.add",
 	"vault.remove",
 	"vault.status",
 	"vault.reindex",
+	"vault.settings",
+	"vault.configure",
 }
 
 // EventAdmits reports whether the domain of the named event admits
@@ -2284,6 +2940,8 @@ func EventAdmits(name string, caller Caller) bool {
 	case "vault.scan":
 		return caller == CallerLocal
 	case "vault.added":
+		return caller == CallerLocal
+	case "vault.configured":
 		return caller == CallerLocal
 	case "vault.removed":
 		return caller == CallerLocal
@@ -2332,6 +2990,12 @@ func DecodeEvent(name string, data jsontext.Value) (Event, error) {
 		return e, nil
 	case "vault.added":
 		var e VaultAdded
+		if err := json.Unmarshal(data, &e); err != nil {
+			return nil, fmt.Errorf("decode event %s: %w", name, err)
+		}
+		return e, nil
+	case "vault.configured":
+		var e VaultConfigured
 		if err := json.Unmarshal(data, &e); err != nil {
 			return nil, fmt.Errorf("decode event %s: %w", name, err)
 		}

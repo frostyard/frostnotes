@@ -19,7 +19,10 @@ ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
 T-0042, which Codex passed and which are merged. Phase 3, the contracts,
-is next.
+is under way in three parts, each its own PR against `main`: the API's
+contract with the store's cards T-0043 and T-0044 (done); the renderer's
+contract with its cards T-0045 and T-0046 (done); and the blob scheme
+with the mock's vault.
 
 ## Decisions taken for M3
 
@@ -89,6 +92,13 @@ does, so the plan records them without ADRs:
   for the merge view when it is another device's); `WriteResult` gains
   the conflict version's ID and who made the side that won, for the
   conflict notice; search gains `path:`, `file:` and `tag:`.
+- **A folder delete deletes what is unchanged.** `note.deleteFolder`
+  takes the files the caller listed, each with its base, deletes those
+  still at their base, keeps any changed since or made since, and removes
+  the folder only when nothing is left: per file, an edit beats a delete
+  ([ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)),
+  and every deleted file's versions stay for `note.revert`. (Phase 3
+  settled what was open until then.)
 - **One window shows one vault.** A switcher at the bottom of the left
   sidebar changes it. More windows and pop-out tabs wait.
 - **New dependencies are the planner's,** pinned, each release at least
@@ -218,6 +228,29 @@ does, so the plan records them without ADRs:
 - **Done when:** `make check` and `make ui-check` are green with every
   stub in place, `make gen-check` passes, and each card has passed its
   reference.
+- **Result, part 1 (2026-10-17): the API's contract.** `note.yaml` gains
+  `files`, `resolve`, `render`, `upload`, `readVersion`, `tags`,
+  `properties`, `template`, `mkdir`, `moveFolder` and `deleteFolder`, and
+  `WriteResult` the conflict version's ID and who made the side a write
+  merged into; `vault.yaml` gains `settings`, `configure` and the durable
+  `vault.configured` event; `sync.yaml` gains `readRevision`; `note.search`
+  documents its filters. All are additive within protocol 1, generated
+  by `make gen`, and answer `unavailable` until Phase 4
+  (`internal/engine/m3.go`). The store has stubs for the counts and the
+  filters (`counts.go`, `ParseQuery` and `SearchNotes`), and two cards,
+  each checked against a reference that is then deleted, with `make
+  check` green; against the stubs every one of their tests fails.
+  Checking caught one bug in a given test (an empty result compared as
+  nil) and settled one rule: property keys fold as Go folds them, so
+  "Été" and "été" are one key, which SQLite's ASCII `lower()` would not
+  do.
+
+  | Card | Size | File | What | Runs after |
+  | --- | --- | --- | --- | --- |
+  | [T-0043](../tasks/todo/0043-tag-and-property-counts.md) | S | `internal/store/counts.go` | every tag and frontmatter key of a vault, with how many notes have it | |
+  | [T-0044](../tasks/todo/0044-search-filters.md) | M | `internal/store/search.go` | `path:`, `file:` and `tag:` in searches, and listing by filters alone | T-0043 |
+
+  Both cards are in `internal/store`, so they run one after the other.
 - **Result, part 2 (2026-10-17): the renderer's contract.**
   [specs/render.md](../specs/render.md) pins the HTML for each piece of
   syntax, the sanitizer's allowlist, a fixture vault and 18 fixtures, read
@@ -368,9 +401,6 @@ against the built app.
 
 ## Open questions
 
-- **Deleting a folder whose files changed since it was listed:** refuse
-  the whole delete, or delete what is unchanged and keep the rest? By
-  Phase 3.
 - **The latency budget with every provider on:** if 16 ms breaks, which
   providers update when typing pauses instead of per keystroke? Phase 5
   measures.
@@ -383,6 +413,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/todo/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
