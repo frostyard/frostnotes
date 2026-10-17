@@ -49,13 +49,6 @@ end-to-end encryption, a mobile app (Tauri mobile), a web clipper.
 - **OAuth for remote MCP:** claude.ai's connectors expect it. By M4.
 - **Query format:** Obsidian Bases (`.base` YAML and `base` code blocks) or
   a Frostnotes condition language. Leaning Bases. By M5, as an ADR.
-- *Proposed in [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md):*
-  **history retention on the hub.** Every revision's record forever; its
-  content for 30 days, then each file's last of each day for a year, then
-  of each month; conflicts until resolved.
-- *Proposed in [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md):*
-  **empty folders.** They do not sync: revisions are about files, and a
-  device removes a folder that a pulled delete or move leaves empty.
 
 ## References
 

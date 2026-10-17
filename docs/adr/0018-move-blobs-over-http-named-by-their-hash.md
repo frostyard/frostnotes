@@ -1,6 +1,6 @@
 # 0018 — Move blobs over HTTP, named by their hash
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
 
 ## Context

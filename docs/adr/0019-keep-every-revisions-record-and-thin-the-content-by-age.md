@@ -1,6 +1,6 @@
 # 0019 — Keep every revision's record, and thin the content by age
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
 
 ## Context
