@@ -4,8 +4,8 @@
 // at word starts and returning their merged spans in the original text.
 
 const SPACE = /\s/;
-const PUNCTUATION = /[ -⁯⸀-⹿\\'!"#$%&()*+,\-./:;<=>?@[\]^_`{|}~]/;
-const CJK = /[ༀ-࿿぀-ヿ㐀-䶿一-鿿豈-﫿ｦ-ﾟ]/;
+const PUNCTUATION = /[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,\-./:;<=>?@[\]^_`{|}~]/;
+const CJK = /[\u0F00-\u0FFF\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]/;
 
 /** Range is a matched span of a text, [start, end) in UTF-16 code units. */
 export type Range = [number, number];
