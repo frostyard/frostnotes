@@ -18,9 +18,9 @@ markdown files with YAML frontmatter, in a folder you own
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties.
 
-Pre-release: M0 (foundations) is done, and M1, the headless vault, is
-nearly done: notesd indexes, watches and writes vaults, and `notesctl` and
-`notesctl mcp` drive it. The app comes in M3.
+Pre-release: M0 (foundations) and M1, the headless vault, are done:
+notesd indexes, watches and writes vaults, and `notesctl` and
+`notesctl mcp` drive it. Sync (M2) is next; the app comes in M3.
 
 ## Try it
 

@@ -5,7 +5,9 @@ Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-
 [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md)
 for deletes and conflict versions, and
 [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
-for content that is not UTF-8.
+for content that is not UTF-8, and
+[ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) for
+comments.
 Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md) (generated), [specs/mcp.md](../specs/mcp.md) (agents' writes).
 
 **Status: built** in M1 ([plan 0003](../plans/0003-m1-headless-vault.md),
@@ -74,7 +76,9 @@ in the vault except the settings in `.frostnotes/`.
 - **Open:** walk the vault; compare each file's size and mtime with the
   index; read and hash those that differ; parse and index changed notes;
   treat a missing file and a new file of the same kind with the same hash
-  as a move (paired in path order), keeping the file's ID. Changes commit
+  as a move (paired in path order), keeping the file's ID. Reads, and the
+  blobs they store, run 8 files at a time: on a network share each read
+  waits on the server, and fsyncs made together cost less. Changes commit
   in batches of at most 200 files per `Tx`, each checked against the disk
   and the index again under the vault's lock, so a write that ran since
   the walk is never undone and `kill -9` leaves an index the next scan
@@ -102,6 +106,7 @@ in the vault except the settings in `.frostnotes/`.
   Measured in M0 on the user's vault over SMB 3 (97 folders, 666 notes,
   2.2 MiB): a walk with stat takes about 85 ms, and reading every note 7 ms
   cached or 674 ms cold, so a rescan that reads only changed files is cheap.
+  A whole cold index of it takes 0.73 s (M1, Phase 7).
 
 - An outside change is indexed like any write: a version is kept and a
   durable `note.changed` event is emitted.
@@ -117,8 +122,11 @@ and inline, nested `#a/b`), links (wikilinks, property links and markdown
 links to vault files: target, subpath `#heading` or `#^block`, alias,
 embed flag, position), headings, block IDs, tasks (status character and
 line) and word count. Comments are found after goldmark parses, so a
-comment may span blocks; what lies inside one is dropped. The title is the
-file name without `.md`, as in Obsidian.
+comment may span blocks. They hide text when a note is rendered, not from
+the index: what lies inside one is indexed like the rest, as Obsidian
+indexes it, and only the word count leaves it out
+([ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)). The
+title is the file name without `.md`, as in Obsidian.
 
 ### Index
 
@@ -264,7 +272,7 @@ long-term history ([sync.md](sync.md)).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md) ([roadmap](../plans/0002-roadmap.md))

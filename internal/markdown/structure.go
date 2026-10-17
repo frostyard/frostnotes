@@ -29,8 +29,8 @@ type linkLabel struct {
 }
 
 // collectStructure adds the markdown links to vault files, headings, block
-// IDs and tasks outside comments to d, and counts its words
-// (docs/specs/markdown.md#body).
+// IDs and tasks to d, those inside comments included (ADR-0015), and counts
+// its words outside comments (docs/specs/markdown.md#body).
 func collectStructure(d *Doc, root ast.Node, s *source) {
 	var labels []*linkLabel
 	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -49,9 +49,6 @@ func collectStructure(d *Doc, root ast.Node, s *source) {
 					label.text.WriteByte(' ')
 				}
 			}
-		}
-		if s.inComment(n.Pos() + s.base) {
-			return ast.WalkContinue, nil
 		}
 		switch n := n.(type) {
 		case *ast.Link:
@@ -130,7 +127,7 @@ func collectTask(d *Doc, n *ast.ListItem, s *source) {
 	seg := first.Lines().At(0)
 	line := seg.Value(s.body)
 	match := taskPattern.FindSubmatchIndex(line)
-	if match == nil || s.inComment(seg.Start+s.base) {
+	if match == nil {
 		return
 	}
 	d.Tasks = append(d.Tasks, Task{
@@ -158,9 +155,7 @@ func collectBlockID(d *Doc, n ast.Node, s *source) {
 		return
 	}
 	off := start + match[2] - 1 + s.base // The '^' immediately precedes the ID.
-	if !s.inComment(off) {
-		d.Blocks = append(d.Blocks, Block{ID: string(text[match[2]:match[3]]), Line: s.line(off)})
-	}
+	d.Blocks = append(d.Blocks, Block{ID: string(text[match[2]:match[3]]), Line: s.line(off)})
 }
 
 func countWords(s *source) int {

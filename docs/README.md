@@ -33,6 +33,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0012 — Agents reach notes through MCP](adr/0012-agents-reach-notes-through-mcp.md)
 - [0013 — Use a sibling Frostyard notebook icon](adr/0013-use-a-sibling-frostyard-notebook-icon.md)
 - [0014 — The API carries text, and keeps the bytes it cannot show](adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md)
+- [0015 — Index what comments hide, as Obsidian does](adr/0015-index-what-comments-hide-as-obsidian-does.md)
 
 ### Design
 

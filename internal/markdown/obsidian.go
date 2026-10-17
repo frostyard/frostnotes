@@ -248,11 +248,11 @@ func literalRanges(root ast.Node) [][2]int {
 	return ranges
 }
 
-// collectObsidian adds the wikilinks, embeds and inline tags outside
-// comments to d.
+// collectObsidian adds the wikilinks, embeds and inline tags to d, those
+// inside comments included, as Obsidian indexes them (ADR-0015).
 func collectObsidian(d *Doc, root ast.Node, s *source) {
 	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering || s.inComment(n.Pos()+s.base) {
+		if !entering {
 			return ast.WalkContinue, nil
 		}
 		switch n := n.(type) {
