@@ -258,7 +258,9 @@ push moves a file away from (or a create there) goes after that item, so
 a chain of renames takes no numbers. In a ring of such moves, a swap the
 simplest, one item's file first moves aside to `name.sync-<file ID>.ext`,
 a `move` revision of that item's push, and the ring then applies in
-order. Answers keep the items' order.
+order. Answers keep the items' order. A push applies as a whole: no other
+`log` call on the vault (a push, pull, match or resolve) sees it half
+done, such as a file still parked.
 
 1. **Repeats:** an item whose `push` this replica has sent before gets the
    first answer's status and reason, with the file's current state.
@@ -357,9 +359,13 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   every file in the page is agreed or skipped.
 - The answers to one push apply in order. An answer that moves a file
   onto the path of a file a later item of the same push carried, still as
-  pushed, parks that file first; its own answer moves it on from there. A
-  crash between the two leaves it at its parked name, which the device
-  then pushes as a move: a name to fix by hand, nothing lost.
+  pushed, parks that file first; its own answer moves it on from there. An
+  answer whose path an unchanged copy of another file holds parks it as
+  a pulled head does (rule 5), and the following pull moves it on. A
+  parked file is never pushed; one nothing moved on goes back after the
+  pull, or to a numbered name beside its old path if that was taken. A
+  crash meanwhile leaves it at its parked name, which the device then
+  pushes as a move: a name to fix by hand, nothing lost.
 - When an answer gives a local file a hub file that another local file is
   agreed with (a create merged into a file that moved onto its path), the
   local file at the head's path keeps it, and the other is deleted if it
