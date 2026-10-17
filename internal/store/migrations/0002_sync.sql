@@ -153,7 +153,6 @@ CREATE TABLE sync_pushes (
   at       TEXT NOT NULL,
   status   TEXT CHECK (status IN ('accepted', 'merged', 'conflicted', 'refused')), -- NULL until answered
   reason   TEXT NOT NULL DEFAULT '',
-  conflict INTEGER NOT NULL DEFAULT 0 CHECK (conflict IN (0, 1)), -- a local conflict version, pushed to the hub's log
   PRIMARY KEY (vault_id, push_id)
 ) STRICT;
 

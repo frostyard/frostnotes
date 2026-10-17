@@ -380,7 +380,7 @@ joins again with a new replica.
 | Artifact | Derivation |
 | --- | --- |
 | `api/zz_generated.go`, `app/src/rpc/gen/api.ts`, [rpc-api.md](rpc-api.md) | `make gen` from `schema/rpc/hub.yaml`, `sync.yaml` and `log.yaml` |
-| `internal/store/migrations/0002_sync.sql` | the hub's and devices' state in this spec |
+| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql` | the hub's and devices' state in this spec |
 
 ## References
 
