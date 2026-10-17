@@ -22,7 +22,7 @@ enums:
       - {name: missing, doc: "The hub has no content for the hash: upload it first."}
       - {name: unknown, doc: "The file ID is not a file of this vault."}
       - {name: base, doc: "The base is not a revision of the file, or its hash differs."}
-      - {name: collision, doc: "The path differs only by case from another live file's."}
+      - {name: collision, doc: "The path differs only by case from another live file's; no longer given, since such a create gets a number."}
       - {name: edited, doc: "A delete of a file that changed since its base: an edit beats a delete."}
   - name: RevisionOp
     doc: What a revision did to its file.

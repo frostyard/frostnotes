@@ -440,7 +440,7 @@ Why the hub refused a pushed change.
 | `missing` | The hub has no content for the hash: upload it first. |
 | `unknown` | The file ID is not a file of this vault. |
 | `base` | The base is not a revision of the file, or its hash differs. |
-| `collision` | The path differs only by case from another live file's. |
+| `collision` | The path differs only by case from another live file's; no longer given, since such a create gets a number. |
 | `edited` | A delete of a file that changed since its base: an edit beats a delete. |
 
 ### Enum `RevisionOp`

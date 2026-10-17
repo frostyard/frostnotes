@@ -460,6 +460,11 @@ func agreedColumnsOf(alias string) string {
 		alias + ".path, " + alias + ".hash, " + alias + ".conflicted"
 }
 
+// AgreedByFileTx is AgreedByFile as this transaction sees it.
+func (t *Tx) AgreedByFileTx(ctx context.Context, fileID int64) (Agreed, error) {
+	return scanAgreed(t.QueryRowContext(ctx, `SELECT `+agreedColumns+` FROM sync_files WHERE file_id = ?`, fileID))
+}
+
 // AgreedByHubFileTx is AgreedByHubFile as this transaction sees it.
 func (t *Tx) AgreedByHubFileTx(ctx context.Context, vaultID, hubFile int64) (Agreed, error) {
 	return scanAgreed(t.QueryRowContext(ctx, `SELECT `+agreedColumns+` FROM sync_files WHERE vault_id = ? AND hub_file = ?`,

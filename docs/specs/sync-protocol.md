@@ -252,7 +252,13 @@ A device has a change to push for a file when, comparing its index
 
 Items are applied one at a time under the vault's lock, each through the
 hub vault's write path ([vault.md](../design/vault.md#writes)) and each
-revision in the same `Tx` as the hub's version.
+revision in the same `Tx` as the hub's version. They apply in the order
+they come, but a put that moves its file onto a path another item of the
+push moves a file away from (or a create there) goes after that item, so
+a chain of renames takes no numbers. In a ring of such moves, a swap the
+simplest, one item's file first moves aside to `name.sync-<file ID>.ext`,
+a `move` revision of that item's push, and the ring then applies in
+order. Answers keep the items' order.
 
 1. **Repeats:** an item whose `push` this replica has sent before gets the
    first answer's status and reason, with the file's current state.
@@ -268,8 +274,11 @@ revision in the same `Tx` as the hub's version.
    - at a path no live file has, ignoring case: a new file; `accepted`;
    - at a live file's exact path: merged into that file as two creates
      ([merge.md](merge.md#create)); `merged`, or `conflicted`;
-   - at a path that differs only by case from a live file's: refused,
-     `collision`.
+   - at a path that differs only by case from a live file's: a new file
+     at the first free of `name 1.ext`, `name 2.ext`, …, since a file
+     system that ignores case could not hold the two; `accepted`, and the
+     answer's head moves the device's file there. (`collision`, a refusal
+     of protocol 1, is no longer given.)
 4. **Delete:** if the head's content is the base's (its path may differ),
    the file is deleted; `accepted`. Otherwise refused, `edited`: an edit
    beats a delete, and the answer carries the head. A delete of a deleted
@@ -329,6 +338,13 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   4. **Changed locally** — the file differs from the agreed state, or a
      file without an agreed row is at the path — the device pushes its
      change first and applies the answer.
+  5. A head whose path a copy of another file still holds here, that
+     file's own head being later in the pull, parks the copy first when it
+     is unchanged: it moves to `name.sync-<hub file>.ext`, its agreed row
+     following it, and its own head then moves it on, so a swap or a ring
+     of moves never waits on itself. A changed copy is pushed first, and
+     the head waits: the cursor stays below the waiting head while the
+     rest of the pull applies.
 - `vault.Apply` streams the content from the device's blob store,
   downloading it first if missing (`GET /sync/blobs/{hash}`, checked, 4 at
   a time), and compares the file with the expected state just before the
@@ -339,6 +355,11 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   empty, `hub` for the hub's own writers), and the agreed row set to the
   head (dropped for a delete). The cursor advances to a page's `next` once
   every file in the page is agreed or skipped.
+- The answers to one push apply in order. An answer that moves a file
+  onto the path of a file a later item of the same push carried, still as
+  pushed, parks that file first; its own answer moves it on from there. A
+  crash between the two leaves it at its parked name, which the device
+  then pushes as a move: a name to fix by hand, nothing lost.
 - When an answer gives a local file a hub file that another local file is
   agreed with (a create merged into a file that moved onto its path), the
   local file at the head's path keeps it, and the other is deleted if it

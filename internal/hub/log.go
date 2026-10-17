@@ -130,9 +130,53 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 	if err != nil {
 		return nil, err
 	}
+	// A repeat gets the answer it got before; the new items apply in an
+	// order that frees each path before a move onto it, parking a file of
+	// each ring of moves first (vault.PushOrder).
+	prior := make([]*store.PushAnswer, len(p.Items))
+	var fresh []int
+	var changes []vault.PushChange
+	for i, it := range p.Items {
+		a, seen, err := s.answered(ctx, rep, it.Push)
+		if err != nil {
+			return nil, err
+		}
+		if seen {
+			prior[i] = &a
+			continue
+		}
+		fresh = append(fresh, i)
+		changes = append(changes, changeOf(it))
+	}
+	order, park, err := v.PushOrder(ctx, changes)
+	if err != nil {
+		return nil, err
+	}
+	type parking struct{ from, to string }
+	parked := map[int]parking{}
+	for _, k := range park {
+		from, to, err := v.Park(ctx, changes[k], s.author(d, rep, p.Items[fresh[k]]))
+		if err != nil {
+			return nil, err
+		}
+		parked[k] = parking{from, to}
+	}
+	for _, k := range order {
+		i := fresh[k]
+		a, err := s.apply(ctx, v, rep, d, p.Items[i], changes[k])
+		if err != nil {
+			return nil, err
+		}
+		prior[i] = &a
+	}
+	for k, pk := range parked {
+		if err := v.Unpark(ctx, changes[k].FileID, pk.from, pk.to, s.author(d, rep, p.Items[fresh[k]])); err != nil {
+			return nil, err
+		}
+	}
 	out := make([]api.PushAnswer, 0, len(p.Items))
-	for _, it := range p.Items {
-		a, err := s.pushOne(ctx, v, hv, rep, d, it)
+	for i, it := range p.Items {
+		a, err := s.answer(ctx, hv, it, *prior[i])
 		if err != nil {
 			return nil, err
 		}
@@ -145,47 +189,59 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 	return out, nil
 }
 
-// pushOne applies one item, or answers a repeat of it as it was answered.
-func (s logService) pushOne(ctx context.Context, v *vault.Vault, hv store.HubVault, rep store.Replica, d store.HubDevice,
-	it api.PushItem) (api.PushAnswer, error) {
-	var prior store.PushAnswer
+// answered returns the answer push already got from replica rep, if any.
+func (s logService) answered(ctx context.Context, rep store.Replica, push int64) (store.PushAnswer, bool, error) {
+	var a store.PushAnswer
 	var seen bool
-	if err := s.h.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
-		a, err := tx.PushAnswer(ctx, rep.ID, it.Push)
+	err := s.h.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
+		got, err := tx.PushAnswer(ctx, rep.ID, push)
 		if errors.Is(err, store.ErrNotFound) {
 			return nil
 		}
-		prior, seen = a, err == nil
+		a, seen = got, err == nil
 		return err
-	}); err != nil {
-		return api.PushAnswer{}, err
+	})
+	return a, seen, err
+}
+
+func changeOf(it api.PushItem) vault.PushChange {
+	c := vault.PushChange{Base: it.Base, BaseHash: it.BaseHash, Path: it.Path}
+	if it.File != nil {
+		c.FileID = *it.File
 	}
-	if !seen {
-		c := vault.PushChange{Base: it.Base, BaseHash: it.BaseHash, Path: it.Path}
-		if it.File != nil {
-			c.FileID = *it.File
-		}
-		if it.Hash != nil {
-			c.Hash = *it.Hash
-		}
-		if it.Deleted != nil {
-			c.Deleted = *it.Deleted
-		}
-		if it.Conflict != nil {
-			c.Conflict = *it.Conflict
-		}
-		who := vault.Author{Source: pushSource(it.Source), Name: it.Author,
-			Push: &vault.Push{DeviceID: d.ID, ReplicaID: rep.ID, PushID: it.Push, Base: it.Base}}
-		out, err := v.Push(ctx, c, who)
-		if err != nil {
-			return api.PushAnswer{}, err
-		}
-		prior = store.PushAnswer{ReplicaID: rep.ID, PushID: it.Push, FileID: out.FileID, Status: out.Status,
-			Reason: out.Reason, Conflicts: out.Conflicts, BasePruned: out.BasePruned}
-		if err := s.h.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return tx.RecordPush(ctx, prior) }); err != nil {
-			return api.PushAnswer{}, err
-		}
+	if it.Hash != nil {
+		c.Hash = *it.Hash
 	}
+	if it.Deleted != nil {
+		c.Deleted = *it.Deleted
+	}
+	if it.Conflict != nil {
+		c.Conflict = *it.Conflict
+	}
+	return c
+}
+
+func (s logService) author(d store.HubDevice, rep store.Replica, it api.PushItem) vault.Author {
+	return vault.Author{Source: pushSource(it.Source), Name: it.Author,
+		Push: &vault.Push{DeviceID: d.ID, ReplicaID: rep.ID, PushID: it.Push, Base: it.Base}}
+}
+
+// apply applies one new item and records its answer.
+func (s logService) apply(ctx context.Context, v *vault.Vault, rep store.Replica, d store.HubDevice, it api.PushItem,
+	c vault.PushChange) (store.PushAnswer, error) {
+	out, err := v.Push(ctx, c, s.author(d, rep, it))
+	if err != nil {
+		return store.PushAnswer{}, err
+	}
+	a := store.PushAnswer{ReplicaID: rep.ID, PushID: it.Push, FileID: out.FileID, Status: out.Status,
+		Reason: out.Reason, Conflicts: out.Conflicts, BasePruned: out.BasePruned}
+	err = s.h.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return tx.RecordPush(ctx, a) })
+	return a, err
+}
+
+// answer is the wire answer to item it, from its recorded answer, with the
+// file's state now.
+func (s logService) answer(ctx context.Context, hv store.HubVault, it api.PushItem, prior store.PushAnswer) (api.PushAnswer, error) {
 	a := api.PushAnswer{Push: it.Push, Status: prior.Status, Conflicts: prior.Conflicts, BasePruned: prior.BasePruned}
 	if prior.Reason != "" {
 		reason := prior.Reason

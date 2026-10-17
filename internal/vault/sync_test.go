@@ -172,9 +172,10 @@ func TestPushCreatesAndMergesCreates(t *testing.T) {
 	if got := hv.disk("2026-10-16.md"); got != "# 2026-10-16\n## Tasks\n- [ ] call the bank\n## Notes\nmet Ana at lunch\n\n" {
 		t.Fatalf("merged daily note = %q", got)
 	}
-	if out := hv.push(PushChange{Path: "NEW/plan.md", Hash: hv.blob("x\n")}); out.Status != api.PushStatusRefused ||
-		out.Reason != api.RefuseReasonCollision {
-		t.Fatalf("a create differing only by case = %+v, want a collision", out)
+	// A create differing only by case is a file of its own, numbered.
+	if out := hv.push(PushChange{Path: "NEW/plan.md", Hash: hv.blob("x\n")}); out.Status != api.PushStatusAccepted ||
+		hv.row("NEW/plan 1.md").ID != out.FileID {
+		t.Fatalf("a create differing only by case = %+v, want a new file at NEW/plan 1.md", out)
 	}
 }
 

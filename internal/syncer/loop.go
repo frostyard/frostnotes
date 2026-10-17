@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"path"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +40,18 @@ type loop struct {
 	kicks   uint64        // kick() calls
 	idle    uint64        // the kicks a cycle that found nothing to do had seen
 	idled   chan struct{} // closed and replaced after each idle cycle
+
+	// parked are local files moved aside to make room for a head, until
+	// their own head or answer moves them on; the loop's goroutine alone
+	// uses it.
+	parked map[int64]parkedFile
+}
+
+// parkedFile is where a parked file was and is, and whether its agreed
+// state followed it there.
+type parkedFile struct {
+	from, to string
+	agreed   bool
 }
 
 // mark is when a path last changed, and first since it was last pushed.
@@ -46,7 +60,7 @@ type mark struct{ first, last time.Time }
 func newLoop(s *Syncer, vaultID int64, cancel context.CancelFunc) *loop {
 	return &loop{s: s, vaultID: vaultID, cancel: cancel, done: make(chan struct{}), wake: make(chan struct{}, 1),
 		status: api.SyncStatus{VaultID: vaultID, State: api.SyncStateOffline, Refused: []api.SyncRefusal{}, Skipped: []string{}},
-		dirty:  map[string]mark{}, skipped: map[string]bool{}, idled: make(chan struct{})}
+		dirty:  map[string]mark{}, skipped: map[string]bool{}, idled: make(chan struct{}), parked: map[int64]parkedFile{}}
 }
 
 func (l *loop) kick() {
@@ -413,8 +427,8 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 	now := l.s.cfg.Now()
 	var held time.Duration
 	for _, c := range changes {
-		if inFlight[c.FileID] {
-			continue
+		if _, parked := l.parked[c.FileID]; inFlight[c.FileID] || parked {
+			continue // a parked file waits to be moved on or back
 		}
 		paths := []string{c.Path}
 		if c.Agreed != nil {
@@ -488,10 +502,23 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 		if l.s.crashed("answered") {
 			return false, 0, ErrCrashed
 		}
+		b := &answering{sent: send}
 		for i, a := range answers {
-			if err := l.answer(ctx, sess, remote, send[i], a); err != nil {
+			b.at = i
+			if err := l.answer(ctx, sess, remote, send[i], a, b); err != nil {
 				return false, 0, err
 			}
+		}
+		// A parked file whose answer could not apply, its path then taken,
+		// gets a second try once the rest of the batch has applied.
+		b.at = len(send)
+		for _, i := range slices.Clone(b.retry) {
+			if err := l.answer(ctx, sess, remote, send[i], answers[i], b); err != nil {
+				return false, 0, err
+			}
+		}
+		if err := l.unpark(ctx); err != nil {
+			return false, 0, err
 		}
 	}
 	return true, held, nil
@@ -586,7 +613,48 @@ func fromHub(author, device string) vault.Author {
 
 // answer records the hub's answer to push p and makes the file what the
 // hub now has, where it still holds what was pushed.
-func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p store.LocalPush, a api.PushAnswer) error {
+// answering is the pushes of one log.push whose answers are being applied, in
+// order: when an answer moves a file onto the path of another file of the
+// batch still to be answered, that file is parked aside first, and its own
+// answer moves it on from there. A swap of two files' paths applies so.
+type answering struct {
+	sent  []store.LocalPush
+	at    int   // the answer being applied
+	retry []int // answers of parked files that could not apply
+}
+
+// makeRoom parks the file at p if it is a later push of b, still as it was
+// pushed; a crash before that push's answer applies leaves it at the
+// parked path, which the device then pushes as a move.
+func (l *loop) makeRoom(ctx context.Context, v *vault.Vault, b *answering, p string) error {
+	occ, err := l.s.cfg.DB.FileByPath(ctx, l.vaultID, p)
+	if err != nil {
+		return nil
+	}
+	for _, q := range b.sent[b.at+1:] {
+		// A create's answer may merge it or number it anywhere: only a file
+		// the hub knows is parked, and a move a create blocks waits for
+		// its answer.
+		if q.FileID != occ.ID || q.Path != occ.Path || q.Hash != occ.Hash || q.Hash == "" || q.Conflict || q.HubFile == 0 {
+			continue
+		}
+		ext := path.Ext(p)
+		to := fmt.Sprintf("%s.sync-%d%s", strings.TrimSuffix(p, ext), q.FileID, ext)
+		if _, err := v.Apply(ctx, vault.Expect{Path: p, Hash: q.Hash}, vault.Head{Path: to, Hash: q.Hash},
+			vault.Author{Source: api.VersionSourceSync, Name: "sync"}, nil); err != nil {
+			if errors.Is(err, vault.ErrChanged) {
+				return nil
+			}
+			return err
+		}
+		l.parked[q.FileID] = parkedFile{from: p, to: to}
+		l.s.cfg.Log.Debug("parked a file for an answer", "vault", l.vaultID, "file", q.FileID, "from", p, "to", to)
+		return nil
+	}
+	return nil
+}
+
+func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p store.LocalPush, a api.PushAnswer, b *answering) error {
 	db := l.s.cfg.DB
 	var reason api.RefuseReason
 	if a.Reason != nil {
@@ -657,10 +725,24 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 	if err != nil {
 		return err
 	}
+	if pk, ok := l.parked[p.FileID]; ok {
+		exp.Path = pk.to
+	}
 	if exp.Path == head.Path && exp.Hash == head.Hash {
 		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return rec(ctx, tx, store.File{}) })
 	}
+	if !head.Deleted && head.Path != exp.Path {
+		if err := l.makeRoom(ctx, v, b, head.Path); err != nil {
+			return err
+		}
+		if _, err := l.clearPath(ctx, v, head.Path, p.FileID, nil); err != nil {
+			return err
+		}
+	}
 	_, err = v.Apply(ctx, exp, head, fromHub(f.Author, f.DeviceName), rec)
+	if _, parked := l.parked[p.FileID]; parked && errors.Is(err, vault.ErrChanged) && b.at < len(b.sent) {
+		b.retry = append(b.retry, b.at)
+	}
 	if errors.Is(err, vault.ErrChanged) && p.HubFile == 0 && !f.Deleted {
 		// A create the hub merged, whose file moved since without changing:
 		// the merge applies where the file is now, and the move is pushed
@@ -762,7 +844,7 @@ func (l *loop) pull(ctx context.Context, sess *session) (bool, bool, error) {
 			return false, false, err
 		}
 		if !page.More {
-			return pulled, hold >= 0, nil
+			return pulled, hold >= 0, l.unpark(ctx)
 		}
 		after = page.Next
 	}
@@ -809,6 +891,10 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 		// Only the conflict flag changed.
 		return false, false, db.Tx(ctx, func(tx *store.Tx) error { return tx.PutAgreed(ctx, agreedOf(l.vaultID, f, a.FileID)) })
 	}
+	v, err := l.s.cfg.Vaults.Vault(l.vaultID)
+	if err != nil {
+		return false, false, err
+	}
 	var exp vault.Expect
 	if agreed {
 		local, err := db.FileByID(ctx, a.FileID)
@@ -818,17 +904,26 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 			return false, false, err
 		}
 		exp = vault.Expect{Path: a.Path, Hash: a.Hash}
+		if !f.Deleted && f.Path != a.Path {
+			if _, err := l.clearPath(ctx, v, f.Path, a.FileID, pending); err != nil {
+				return false, false, err
+			}
+		}
 	} else {
 		if f.Deleted {
 			return false, false, nil // a file this device never had
 		}
 		if local, err := db.FileByPath(ctx, l.vaultID, f.Path); err == nil {
-			if _, err := db.AgreedByFile(ctx, local.ID); err == nil && !pending[local.ID] {
-				// Another hub file's copy, unchanged, holds the path: that
-				// file's own head, later in the pull, moves or deletes it.
-				return false, true, nil
+			free, err := l.clearPath(ctx, v, f.Path, 0, pending)
+			if err != nil {
+				return false, false, err
 			}
-			return false, l.waitOrSkip(local.ID, f.Path, pending), nil
+			if !free {
+				if _, err := db.AgreedByFile(ctx, local.ID); err == nil {
+					return false, true, nil // another file's copy, changed here: it is pushed first
+				}
+				return false, l.waitOrSkip(local.ID, f.Path, pending), nil
+			}
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return false, false, err
 		}
@@ -838,10 +933,6 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 		if err := l.download(ctx, sess, f.Hash); err != nil {
 			return false, false, err
 		}
-	}
-	v, err := l.s.cfg.Vaults.Vault(l.vaultID)
-	if err != nil {
-		return false, false, err
 	}
 	rec := func(ctx context.Context, tx *store.Tx, file store.File) error {
 		if f.Deleted {
@@ -861,6 +952,102 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 		return false, false, err
 	}
 	return true, false, nil
+}
+
+// clearPath makes room at p for a pulled head, other than local file
+// self's: a copy of another hub file there, agreed and unchanged, is left
+// over from before that file's own head, later in the pull, moves or
+// deletes it. It is parked beside p, its agreed state following it, so a
+// swap or a ring of moves never waits on itself, and that head then moves
+// it on (docs/specs/sync-protocol.md, Pulling and applying). A copy with
+// a change of the device's own stays: it is pushed first. It reports
+// whether p is free.
+func (l *loop) clearPath(ctx context.Context, v *vault.Vault, p string, self int64, pending map[int64]bool) (bool, error) {
+	db := l.s.cfg.DB
+	occ, err := db.FileByPath(ctx, l.vaultID, p)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return true, nil
+	case err != nil:
+		return false, err
+	case occ.ID == self:
+		return true, nil
+	}
+	a, err := db.AgreedByFile(ctx, occ.ID)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && (pending[occ.ID] || a.Path != occ.Path || a.Hash != occ.Hash)) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	ext := path.Ext(p)
+	a.Path = fmt.Sprintf("%s.sync-%d%s", strings.TrimSuffix(p, ext), a.HubFile, ext)
+	_, err = v.Apply(ctx, vault.Expect{Path: p, Hash: occ.Hash}, vault.Head{Path: a.Path, Hash: occ.Hash},
+		vault.Author{Source: api.VersionSourceSync, Name: "sync"},
+		func(ctx context.Context, tx *store.Tx, _ store.File) error { return tx.PutAgreed(ctx, a) })
+	if errors.Is(err, vault.ErrChanged) {
+		return false, nil
+	}
+	if err == nil {
+		l.parked[occ.ID] = parkedFile{from: p, to: a.Path, agreed: true}
+		l.s.cfg.Log.Debug("parked a file for a head", "vault", l.vaultID, "file", occ.ID, "from", p, "to", a.Path)
+	}
+	return err == nil, err
+}
+
+// unpark moves back the parked files nothing moved on (their own head
+// waited, or their answer could not apply), where their path is still
+// free, so a parked name never reaches the hub as a move.
+func (l *loop) unpark(ctx context.Context) error {
+	db := l.s.cfg.DB
+	v, err := l.s.cfg.Vaults.Vault(l.vaultID)
+	if err != nil {
+		return err
+	}
+	for id, pk := range l.parked {
+		f, err := db.FileByID(ctx, id)
+		if err != nil || f.Path != pk.to {
+			delete(l.parked, id) // moved on, or gone
+			continue
+		}
+		back := pk.from
+		for n := 1; ; n++ {
+			_, err := db.FileByPath(ctx, l.vaultID, back)
+			if errors.Is(err, store.ErrNotFound) {
+				break
+			} else if err != nil {
+				return err
+			}
+			// Taken meanwhile: the protocol's own way out of two files
+			// wanting one path, a number.
+			ext := path.Ext(pk.from)
+			back = fmt.Sprintf("%s %d%s", strings.TrimSuffix(pk.from, ext), n, ext)
+		}
+		rec := func(ctx context.Context, tx *store.Tx, _ store.File) error {
+			if !pk.agreed {
+				return nil
+			}
+			a, err := tx.AgreedByFileTx(ctx, id)
+			if err != nil {
+				return nil
+			}
+			if back != pk.from {
+				return nil // a move to push, from the agreed state as it was
+			}
+			a.Path = pk.from
+			return tx.PutAgreed(ctx, a)
+		}
+		_, err = v.Apply(ctx, vault.Expect{Path: pk.to, Hash: f.Hash}, vault.Head{Path: back, Hash: f.Hash},
+			vault.Author{Source: api.VersionSourceSync, Name: "sync"}, rec)
+		switch {
+		case errors.Is(err, vault.ErrChanged):
+			continue // its disk is ahead of its index: tried again next time
+		case err != nil:
+			return err
+		}
+		l.s.cfg.Log.Debug("moved a parked file back", "vault", l.vaultID, "file", id, "to", back)
+		delete(l.parked, id)
+	}
+	return nil
 }
 
 // waitOrSkip decides for a pulled file whose local copy changed: it waits

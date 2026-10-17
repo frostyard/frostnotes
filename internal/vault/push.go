@@ -167,7 +167,18 @@ func (v *Vault) pushCreate(ctx context.Context, r *os.Root, c PushChange, who Au
 		return PushOutcome{Status: api.PushStatusAccepted, FileID: f.ID}, nil
 	}
 	if taken != c.Path {
-		return refuse(api.RefuseReasonCollision), nil
+		// Only the case differs: a file of its own, which a file system
+		// that ignores case could not hold beside the other, at the first
+		// free name.
+		p, err := v.freePath(ctx, r, c.Path, 0)
+		if err != nil {
+			return PushOutcome{}, err
+		}
+		f, err := v.putBlob(ctx, r, p, "", c.Hash, 0, who, nil)
+		if err != nil {
+			return PushOutcome{}, err
+		}
+		return PushOutcome{Status: api.PushStatusAccepted, FileID: f.ID}, nil
 	}
 	row, cur, err := v.refresh(ctx, r, c.Path)
 	if err != nil {

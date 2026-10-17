@@ -258,20 +258,17 @@ func TestAMoveOntoATakenPathGetsANumber(t *testing.T) {
 	}
 }
 
-func TestACaseOnlyCollisionIsRefused(t *testing.T) {
-	h, _, b := twoDevices(t, map[string]string{"plan.md": "the hub's\n"})
+func TestACaseOnlyCollisionGetsANumber(t *testing.T) {
+	// A new file whose path differs only by case from a live one's is a
+	// file of its own, which a file system that ignores case could not hold
+	// beside the other: it gets the first free number, everywhere.
+	h, a, b := twoDevices(t, map[string]string{"plan.md": "the hub's\n"})
 	b.write("Plan.md", "b's own\n")
 	b.srv.Syncer.Kick(b.vault)
-	settle(t, h, b.node)
-	st, err := b.c.Sync().Status(t.Context(), &api.SyncStatusParams{VaultID: &b.vault})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(st[0].Refused) != 1 || st[0].Refused[0].Path != "Plan.md" || st[0].Refused[0].Reason != api.RefuseReasonCollision {
-		t.Fatalf("status = %+v; want Plan.md refused as a collision", st[0])
-	}
-	if _, ok := files(t, h.dir)["Plan.md"]; ok {
-		t.Fatal("the hub took a path differing only by case")
+	settle(t, h, a.node, b.node)
+	got := same(t, h, a.node, b.node)
+	if len(got) != 2 || got["plan.md"] != "the hub's\n" || got["Plan 1.md"] != "b's own\n" {
+		t.Fatalf("a case-only collision = %q, want plan.md and Plan 1.md", got)
 	}
 }
 
@@ -523,5 +520,24 @@ func TestANewFileWaitsForTheOneLeavingItsPath(t *testing.T) {
 	got := same(t, h, a.node)
 	if len(got) != 2 || got["plan.md"] != "a new plan\n" || got["old.md"] != "the old plan\nkept\n" {
 		t.Fatalf("a's vault = %q, want the new plan.md and the edited old.md", got)
+	}
+}
+
+func TestASwapKeepsBothNames(t *testing.T) {
+	// a swaps two notes' paths while away, so one push moves both, each
+	// onto the other's path; b edited both meanwhile. Each note keeps its
+	// edit and takes the other's name, everywhere, with no number.
+	h, a, b := twoDevices(t, map[string]string{"x.md": "X\n", "y.md": "Y\n"})
+	inOrder(t, h, []*device{a, b}, func() {
+		a.move("x.md", "t.md")
+		a.move("y.md", "x.md")
+		a.move("t.md", "y.md")
+		b.write("x.md", "X\nfrom b\n")
+		b.write("y.md", "Y\nfrom b\n")
+	})
+	settle(t, h, a.node, b.node)
+	got := same(t, h, a.node, b.node)
+	if len(got) != 2 || got["x.md"] != "Y\nfrom b\n" || got["y.md"] != "X\nfrom b\n" {
+		t.Fatalf("a swap = %q, want x.md and y.md swapped, with b's edits", got)
 	}
 }

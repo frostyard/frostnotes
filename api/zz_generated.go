@@ -441,7 +441,8 @@ const (
 	RefuseReasonUnknown RefuseReason = "unknown"
 	// The base is not a revision of the file, or its hash differs.
 	RefuseReasonBase RefuseReason = "base"
-	// The path differs only by case from another live file's.
+	// The path differs only by case from another live file's; no longer given,
+	// since such a create gets a number.
 	RefuseReasonCollision RefuseReason = "collision"
 	// A delete of a file that changed since its base: an edit beats a delete.
 	RefuseReasonEdited RefuseReason = "edited"
