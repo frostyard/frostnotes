@@ -280,7 +280,7 @@ func (d *DB) Pending(ctx context.Context, vaultID int64) ([]Change, error) {
 		SELECT 1 FROM sync_pushes p WHERE p.vault_id = ? AND p.file_id = c.file_id
 		AND p.push_id = (SELECT MAX(latest.push_id) FROM sync_pushes latest
 			WHERE latest.vault_id = p.vault_id AND latest.file_id = p.file_id)
-		AND p.status = 'refused' AND p.path = c.path AND p.hash = c.hash
+		AND p.status = 'refused' AND p.reason <> 'missing' AND p.path = c.path AND p.hash = c.hash
 	) ORDER BY c.kind, c.path`, vaultID, vaultID, vaultID)
 	if err != nil {
 		return nil, fmt.Errorf("list pending: %w", err)

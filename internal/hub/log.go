@@ -85,19 +85,32 @@ func (s logService) Missing(ctx context.Context, p *api.LogMissingParams) ([]str
 	if len(p.Hashes) > maxBatch {
 		return nil, api.InvalidParams("at most %d hashes at once", maxBatch)
 	}
-	if _, err := s.served(ctx, p.Vault); err != nil {
+	hv, err := s.served(ctx, p.Vault)
+	if err != nil {
 		return nil, err
+	}
+	d, ok := deviceFrom(ctx)
+	if !ok {
+		return nil, errNoDevice
 	}
 	out := []string{}
 	for _, h := range p.Hashes {
 		if !hashRE.MatchString(h) {
 			return nil, api.InvalidParams("%q is not a hash", h)
 		}
-		ok, err := s.h.cfg.Blobs.Has(h)
+		// Present means this vault's, or this device's own upload: what
+		// the hub holds for anything else is not the device's to learn.
+		named, err := s.h.mayName(ctx, d.ID, hv.VaultID, h)
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		has := false
+		if named {
+			if has, err = s.h.cfg.Blobs.Has(h); err != nil {
+				return nil, err
+			}
+		}
+		if !has {
 			out = append(out, h)
 		}
 	}
@@ -147,6 +160,23 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 		if seen {
 			prior[i] = &a
 			continue
+		}
+		if it.Hash != nil {
+			named, err := s.h.mayName(ctx, d.ID, hv.VaultID, *it.Hash)
+			if err != nil {
+				return nil, err
+			}
+			if !named {
+				// Content the device neither uploaded nor finds in this
+				// vault's log: missing, as if the hub lacked it.
+				a := store.PushAnswer{ReplicaID: rep.ID, PushID: it.Push, Status: api.PushStatusRefused,
+					Reason: api.RefuseReasonMissing}
+				if err := s.h.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return tx.RecordPush(ctx, a) }); err != nil {
+					return nil, err
+				}
+				prior[i] = &a
+				continue
+			}
 		}
 		fresh = append(fresh, i)
 		changes = append(changes, changeOf(it))

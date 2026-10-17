@@ -32,7 +32,7 @@ func newHub(t *testing.T, maxSize int64, wrap func(http.Handler) http.Handler) *
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		return h.readable[hash], nil
-	})
+	}, nil)
 	if wrap != nil {
 		handler = wrap(handler)
 	}
@@ -92,8 +92,13 @@ func TestHandlerPut(t *testing.T) {
 	if got, err := h.store.Get(id); err != nil || string(got) != content {
 		t.Fatalf("stored %q, %v", got, err)
 	}
-	if resp := h.do(http.MethodPut, id, strings.NewReader(content), nil); resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("PUT of a blob the hub has = %s, want 204", resp.Status)
+	// A blob the hub has already is read and checked like any other, and
+	// answered the same: an upload tells nothing of what the hub holds.
+	if resp := h.do(http.MethodPut, id, strings.NewReader(content), nil); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("PUT of a blob the hub has = %s, want 201", resp.Status)
+	}
+	if resp := h.do(http.MethodPut, id, strings.NewReader("not it"), nil); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("PUT of a wrong body for a blob the hub has = %s, want 400", resp.Status)
 	}
 
 	other := blobs.ID([]byte("what the URL names"))

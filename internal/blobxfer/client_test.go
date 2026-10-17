@@ -102,6 +102,25 @@ func TestDownloadChecksTheHash(t *testing.T) {
 	}
 }
 
+func TestDownloadStopsAtTheDevicesLimit(t *testing.T) {
+	// A hub that sends more than the device takes cannot fill its disk:
+	// the download stops past MaxSize and keeps nothing.
+	want := blobs.ID([]byte("small"))
+	h := newHub(t, DefaultMaxSize, func(http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, strings.Repeat("x", 5000))
+		})
+	})
+	c := h.client(t)
+	c.MaxSize = 1000
+	if err := c.Download(t.Context(), want); !errors.Is(err, ErrTooBig) {
+		t.Fatalf("Download of more than MaxSize = %v, want ErrTooBig", err)
+	}
+	if parts, _ := filepath.Glob(filepath.Join(c.Dir, "*")); len(parts) != 0 {
+		t.Fatalf("a refused download left %v", parts)
+	}
+}
+
 func TestDownloadResumes(t *testing.T) {
 	content := strings.Repeat("0123456789", 10_000)
 	var mu sync.Mutex

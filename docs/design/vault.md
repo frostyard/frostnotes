@@ -171,7 +171,8 @@ revision in its `Tx` (`vault.logRevision`;
 [sync.md](sync.md#device-loop)). A device's push on a hub is `vault.Push`,
 which applies the protocol's rules through this same write path. A vault's writes run one at a time,
 under the vault's lock. Paths pass the guard first: vault-relative and
-slash-separated, no empty, `.` or `..` segment, no hidden segment, and no
+slash-separated, no empty, `.` or `..` segment, no hidden segment, no
+name over 255 bytes and no path over 4,000 (what file systems hold), and no
 symlink on the way (every file operation goes through an `os.Root` of the
 vault, and each parent is checked with `lstat`). The note domain also
 refuses `.frostnotes/`, which holds settings, not notes, and paths the

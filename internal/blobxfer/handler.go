@@ -26,7 +26,8 @@ const DefaultMaxSize = 1 << 30
 // r.PathValue("hash"), so it is mounted on a pattern ending in {hash}.
 // readable reports whether GET and HEAD may hand out a hash: the hub passes
 // store.DB.HasContent. PUT refuses blobs over maxSize. Task card T-0029.
-func Handler(store *blobs.Store, maxSize int64, readable func(ctx context.Context, hash string) (bool, error)) http.Handler {
+func Handler(store *blobs.Store, maxSize int64, readable func(ctx context.Context, hash string) (bool, error),
+	uploaded func(ctx context.Context, hash string)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hash := r.PathValue("hash")
 		if len(hash) != 64 || strings.Trim(hash, "0123456789abcdef") != "" {
@@ -44,7 +45,9 @@ func Handler(store *blobs.Store, maxSize int64, readable func(ctx context.Contex
 				serveBlob(w, r, store, hash)
 			}
 		case http.MethodPut:
-			putBlob(w, r, store, maxSize, hash)
+			if putBlob(w, r, store, maxSize, hash) && uploaded != nil {
+				uploaded(r.Context(), hash)
+			}
 		default:
 			w.Header().Set("Allow", "GET, HEAD, PUT")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -73,23 +76,18 @@ func serveBlob(w http.ResponseWriter, r *http.Request, store *blobs.Store, hash 
 	http.ServeContent(w, r, hash, time.Time{}, content)
 }
 
-func putBlob(w http.ResponseWriter, r *http.Request, store *blobs.Store, maxSize int64, hash string) {
+// putBlob stores an upload and reports whether it did. The body is read
+// and checked even when the store has the blob already, and the answer is
+// the same either way, so an upload never tells a device what else the
+// hub holds.
+func putBlob(w http.ResponseWriter, r *http.Request, store *blobs.Store, maxSize int64, hash string) bool {
 	if r.ContentLength < 0 {
 		http.Error(w, "content-length required", http.StatusLengthRequired)
-		return
+		return false
 	}
 	if r.ContentLength > maxSize {
 		http.Error(w, "blob exceeds size limit", http.StatusRequestEntityTooLarge)
-		return
-	}
-	has, err := store.Has(hash)
-	if err != nil {
-		http.Error(w, "cannot check blob store", http.StatusInternalServerError)
-		return
-	}
-	if has {
-		w.WriteHeader(http.StatusNoContent)
-		return
+		return false
 	}
 	body := &uploadBody{reader: http.MaxBytesReader(w, r.Body, r.ContentLength), remaining: r.ContentLength}
 	if err := store.PutWant(r.Context(), body, hash); err != nil {
@@ -100,9 +98,10 @@ func putBlob(w http.ResponseWriter, r *http.Request, store *blobs.Store, maxSize
 		} else {
 			http.Error(w, "cannot store blob", http.StatusInternalServerError)
 		}
-		return
+		return false
 	}
 	w.WriteHeader(http.StatusCreated)
+	return true
 }
 
 // uploadBody rejects a short body before PutWant can publish its contents.

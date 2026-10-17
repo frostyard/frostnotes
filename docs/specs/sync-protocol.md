@@ -63,7 +63,15 @@ name 1 to 64 bytes of UTF-8 without control characters):
 - The code is 8 characters of Crockford's base32 alphabet
   (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`), shown as two groups of four. A
   pairing lasts 10 minutes. Pending pairings live in the hub's memory: a
-  restart forgets them.
+  restart forgets them. The 8 are the hub's, not a caller's: anyone who
+  can reach the hub can hold them for 10 minutes, which delays a pairing
+  but grants nothing.
+- A device keys a hub by the hub ID the hub's answers carry, which is no
+  secret. So `sync.paired` refuses (`conflict`) an approval whose hub ID
+  is that of a hub this device syncs vaults with at another URL, before it
+  keeps any token: otherwise a hub the user was led to pair with could
+  take another hub's token and vaults. To pair with a hub that moved,
+  leave its vaults (`sync.leave`) first.
 - `hub.approve {code}` (local socket only) approves the pending pairing
   with that code. Codes compare without case, spaces or `-`, reading `O`
   as `0` and `I` and `L` as `1`.
@@ -90,7 +98,10 @@ never seen and can be revoked.
 JSON-RPC on it as specified in [rpc-protocol.md](rpc-protocol.md), caller
 `device`, for the token's device. The device calls `rpc.hello`, then
 `events.subscribe` without `sinceSeq`, then `log` methods. Revoking the
-device closes its connections. Events reach a connection only when their
+device closes its connections; a connection whose token was checked as
+the device was revoked is closed too, since the hub checks the device
+again once it counts the connection. A device holds at most 64
+connections at once, one per synced vault. Events reach a connection only when their
 domain admits its caller, so a device receives `log.appended` and none of
 the hub's `note` or `vault` events.
 
@@ -153,11 +164,22 @@ and `deviceName` (`hub` for the hub's own writers).
 `/sync/blobs/{hash}`, with the device token; a `hash` that is not 64
 lowercase hex digits is 400.
 
-- `PUT` streams the body into the hub's blob store. 201 when stored, 204
-  when the hub already had it; 400 when the body's SHA-256 is not `hash`
-  (nothing is stored); 411 without `Content-Length`; 413 over the hub's
-  limit (1 GiB unless `notesd --hub-max-blob` says otherwise), checked
-  before reading.
+- `PUT` streams the body into the hub's blob store, reading and checking
+  it whether or not the hub holds the blob already: 201 when it matches;
+  400 when the body's SHA-256 is not `hash` (nothing is stored); 411
+  without `Content-Length`; 413 over the hub's limit (1 GiB unless
+  `notesd --hub-max-blob` says otherwise), checked before reading. The
+  answer is the same either way, so an upload tells a device nothing of
+  what else the hub holds; the hub remembers for 24 hours which device
+  uploaded what.
+- A device may name content in a push, and `log.missing` reports it as
+  present, only when the vault's log names it with its content kept, or
+  the device uploaded it in the last 24 hours. The hub's blob store is
+  shared by every vault on its notesd, served or not, and its other
+  content is not the device's to learn or read. A push that names other
+  content is refused `missing`; the device uploads it and pushes again.
+- A device's download stops, keeping nothing, once it is longer than the
+  device takes (1 GiB), so a hub cannot fill its disk.
 - `GET` answers 200 with `Content-Type: application/octet-stream`,
   `Content-Length` and `ETag: "<hash>"`, and honors `Range` (206). `HEAD`
   answers the same without a body. Both are 404 unless a revision of a
@@ -265,10 +287,14 @@ done, such as a file still parked.
 1. **Repeats:** an item whose `push` this replica has sent before gets the
    first answer's status and reason, with the file's current state.
 2. **Checks**, refusing with a reason:
-   - `invalid`: a path the path guard refuses, a malformed hash, a create
-     with `deleted`, or a `hash` with `deleted`;
+   - `invalid`: a path the path guard refuses (among its rules, no name
+     over 255 bytes and no path over 4,000), a name the hub's file system
+     cannot hold, a malformed hash, a create with `deleted`, or a `hash`
+     with `deleted`; the item is refused, and the push's others apply;
    - `ignored`: the hub's settings ignore the path;
-   - `missing`: the hub has no content for `hash`;
+   - `missing`: the hub has no content for `hash`, or none this device
+     may name ([Blobs](#blobs)); unlike other refusals, the change stays
+     pending, and the device uploads it and pushes again;
    - `unknown`: `file` is not a file of this vault;
    - `base`: `base` is not a revision of `file`, or its hash is not
      `baseHash`.
@@ -331,8 +357,12 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   `seq` (or `after` for an empty page).
 - For each `LogFile` (and each answer's `file`), in order:
   1. A file whose agreed revision is at `seq` or later is skipped.
-  2. A path the device ignores, or whose guard refuses it, is skipped and
-     listed in `sync.status`.
+  2. A path the device ignores, whose guard refuses it, or whose name the
+     device's file system cannot hold, is skipped and listed in
+     `sync.status`. So is an answer's head at such a path: the push is
+     recorded as refused on the device (`ignored` or `invalid`), the file
+     leaves the device's care with its change merged on the hub, and it is
+     pushed again only once it changes again.
   3. **Unchanged locally** — the agreed row's file still has the agreed
      path and hash, or there is no agreed row and no file at the path —
      the head is applied (`vault.Apply`): created, rewritten, moved or
@@ -400,6 +430,8 @@ joins again with a new replica.
 | What | Value |
 | --- | --- |
 | a pairing | 10 minutes; at most 8 pending |
+| a path | at most 4,000 bytes, a name in it at most 255 |
+| a device's connections | 64 |
 | quiet before a push | 2 s, at most 30 s after the first change |
 | items in one push | 100 |
 | hashes in one `log.missing`, files in one `log.match` | 1,000 |
@@ -408,6 +440,7 @@ joins again with a new replica.
 | reconnect | after 1 s, doubling to 60 s, ±20% jitter; at once on a local change |
 | a blob | 1 GiB by default |
 | an unnamed blob | 24 hours |
+| a download | 1 GiB on the device |
 
 ## Derived artifacts
 

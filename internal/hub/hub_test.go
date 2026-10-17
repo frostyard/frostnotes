@@ -27,13 +27,16 @@ type testHub struct {
 	vault api.HubVault
 }
 
-func newHub(t *testing.T) *testHub {
+func newHub(t *testing.T) *testHub { return newHubWith(t, nil) }
+
+// newHubWith is newHub with a hook at the hub's crash points.
+func newHubWith(t *testing.T, crash func(point string) bool) *testHub {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv := rpctest.StartWith(t, rpctest.Options{HubListen: true})
+	srv := rpctest.StartWith(t, rpctest.Options{HubListen: true, Crash: crash})
 	c := srv.Dial(t)
 	v, err := c.Vault().Add(t.Context(), &api.VaultAddParams{Path: dir})
 	if err != nil {

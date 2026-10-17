@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
 	"strings"
 
 	"github.com/frostyard/frostnotes/internal/store"
@@ -114,8 +113,7 @@ func (v *Vault) Park(ctx context.Context, c PushChange, who Author) (string, str
 	if err != nil {
 		return "", "", err
 	}
-	ext := path.Ext(row.Path)
-	to, err := v.freePath(ctx, r, fmt.Sprintf("%s.sync-%d%s", strings.TrimSuffix(row.Path, ext), row.ID, ext), row.ID)
+	to, err := v.freePath(ctx, r, Beside(row.Path, fmt.Sprintf(".sync-%d", row.ID)), row.ID)
 	if err != nil {
 		return "", "", err
 	}

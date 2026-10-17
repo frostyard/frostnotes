@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"regexp"
 	"strings"
+	"syscall"
 	"unicode/utf8"
 
 	"github.com/frostyard/frostnotes/api"
@@ -54,6 +54,22 @@ var hashRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // push ID. The repeat of a push ID is the caller's to answer. A refusal is
 // an outcome, not an error; errors are failures of the hub itself.
 func (v *Vault) Push(ctx context.Context, c PushChange, who Author) (PushOutcome, error) {
+	out, err := v.push(ctx, c, who)
+	if Unholdable(err) {
+		// A name this file system cannot hold refuses the item, not the
+		// whole push.
+		return refuse(api.RefuseReasonInvalid), nil
+	}
+	return out, err
+}
+
+// Unholdable reports whether err is a file system refusing a name: too
+// long, or not in its character set.
+func Unholdable(err error) bool {
+	return errors.Is(err, syscall.ENAMETOOLONG) || errors.Is(err, syscall.EILSEQ)
+}
+
+func (v *Vault) push(ctx context.Context, c PushChange, who Author) (PushOutcome, error) {
 	if checkNotePath(c.Path) != nil || (c.Deleted && (c.Hash != "" || c.FileID == 0)) ||
 		(!c.Deleted && !hashRE.MatchString(c.Hash)) {
 		return refuse(api.RefuseReasonInvalid), nil
@@ -322,13 +338,10 @@ func (v *Vault) livePath(ctx context.Context, p string) (string, error) {
 // nothing is there on disk, and otherwise the first of "name 1.ext",
 // "name 2.ext", … that is free. self is a file that may keep its own path.
 func (v *Vault) freePath(ctx context.Context, r *os.Root, p string, self int64) (string, error) {
-	dir, base := path.Split(p)
-	ext := path.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
 	for n := 0; n < 10000; n++ {
 		q := p
 		if n > 0 {
-			q = fmt.Sprintf("%s%s %d%s", dir, stem, n, ext)
+			q = Beside(p, fmt.Sprintf(" %d", n))
 		}
 		taken, err := v.livePath(ctx, q)
 		if err != nil {

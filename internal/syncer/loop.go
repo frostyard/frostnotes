@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"path"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -639,8 +637,7 @@ func (l *loop) makeRoom(ctx context.Context, v *vault.Vault, b *answering, p str
 		if q.FileID != occ.ID || q.Path != occ.Path || q.Hash != occ.Hash || q.Hash == "" || q.Conflict || q.HubFile == 0 {
 			continue
 		}
-		ext := path.Ext(p)
-		to := fmt.Sprintf("%s.sync-%d%s", strings.TrimSuffix(p, ext), q.FileID, ext)
+		to := vault.Beside(p, fmt.Sprintf(".sync-%d", q.FileID))
 		if _, err := v.Apply(ctx, vault.Expect{Path: p, Hash: q.Hash}, vault.Head{Path: to, Hash: q.Hash},
 			vault.Author{Source: api.VersionSourceSync, Name: "sync"}, nil); err != nil {
 			if errors.Is(err, vault.ErrChanged) {
@@ -695,6 +692,9 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		return answerOnly(drop)
 	}
 	f := *a.File
+	if !f.Deleted && (vault.CheckPath(f.Path) != nil || vault.IsSettings(f.Path) || l.ignored(f.Path)) {
+		return l.refuseHere(ctx, p, f.Path, api.RefuseReasonIgnored)
+	}
 	exp := vault.Expect{Path: p.Path, Hash: p.Hash}
 	head := vault.Head{Path: f.Path, Hash: f.Hash, Deleted: f.Deleted}
 	if !f.Deleted {
@@ -741,6 +741,10 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		}
 	}
 	_, err = v.Apply(ctx, exp, head, fromHub(f.Author, f.DeviceName), rec)
+	var ae *api.Error
+	if vault.Unholdable(err) || (errors.As(err, &ae) && ae.Code == api.CodeInvalidParams) {
+		return l.refuseHere(ctx, p, f.Path, api.RefuseReasonInvalid)
+	}
 	if _, parked := l.parked[p.FileID]; parked && errors.Is(err, vault.ErrChanged) && b.at < len(b.sent) {
 		b.retry = append(b.retry, b.at)
 	}
@@ -766,6 +770,18 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		return answerOnly(drop)
 	}
 	return err
+}
+
+// refuseHere records the answer to push p, whose head is at a path this
+// device does not hold (ignored here, or one its file system refuses), as
+// a refusal of the device's own: the file leaves its care, as a pulled
+// head at such a path does, and its change is not pushed again until it
+// changes once more (docs/specs/sync-protocol.md, Pulling and applying).
+func (l *loop) refuseHere(ctx context.Context, p store.LocalPush, at string, reason api.RefuseReason) error {
+	l.skip(at)
+	return l.s.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
+		return tx.AnswerPush(ctx, l.vaultID, p.PushID, api.PushStatusRefused, reason)
+	})
 }
 
 // dropOther removes local file prev, agreed with a hub file that another
@@ -946,7 +962,7 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 	switch {
 	case errors.Is(err, vault.ErrChanged):
 		return false, true, nil
-	case errors.As(err, &ae) && ae.Code == api.CodeInvalidParams:
+	case errors.As(err, &ae) && ae.Code == api.CodeInvalidParams, vault.Unholdable(err):
 		l.skip(f.Path) // a path this device's vault cannot hold
 		return false, false, nil
 	case err != nil:
@@ -980,8 +996,7 @@ func (l *loop) clearPath(ctx context.Context, v *vault.Vault, p string, self int
 	} else if err != nil {
 		return false, err
 	}
-	ext := path.Ext(p)
-	a.Path = fmt.Sprintf("%s.sync-%d%s", strings.TrimSuffix(p, ext), a.HubFile, ext)
+	a.Path = vault.Beside(p, fmt.Sprintf(".sync-%d", a.HubFile))
 	_, err = v.Apply(ctx, vault.Expect{Path: p, Hash: occ.Hash}, vault.Head{Path: a.Path, Hash: occ.Hash},
 		vault.Author{Source: api.VersionSourceSync, Name: "sync"},
 		func(ctx context.Context, tx *store.Tx, _ store.File) error { return tx.PutAgreed(ctx, a) })
@@ -1020,8 +1035,7 @@ func (l *loop) unpark(ctx context.Context) error {
 			}
 			// Taken meanwhile: the protocol's own way out of two files
 			// wanting one path, a number.
-			ext := path.Ext(pk.from)
-			back = fmt.Sprintf("%s %d%s", strings.TrimSuffix(pk.from, ext), n, ext)
+			back = vault.Beside(pk.from, fmt.Sprintf(" %d", n))
 		}
 		rec := func(ctx context.Context, tx *store.Tx, _ store.File) error {
 			if !pk.agreed {
