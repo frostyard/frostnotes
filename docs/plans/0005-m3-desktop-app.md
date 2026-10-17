@@ -14,8 +14,8 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-17): **Phase 1 done** but for the user's acceptance of
-ADRs 0021 to 0023: this plan, the ADRs (proposed),
+Status (2026-10-17): **Phase 1 done**, and the user accepted ADRs 0021
+to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
 T-0042, each checked against a reference.
@@ -122,7 +122,8 @@ does, so the plan records them without ADRs:
   and cross-linked both ways; each card has passed its reference with
   `make verify` and `make ui-check` green; and the user has accepted the
   ADRs, or said what to change, before Phase 5's code merges.
-- **Result (2026-10-17): done, but for the acceptance.** Reading Obsidian
+- **Result (2026-10-17): done.** The user accepted ADRs 0021 to 0023 as
+  written, after this plan merged (PR frostyard/frostnotes#19). Reading Obsidian
   1.14.4's own code in the user's install settled what the spec pins:
   the hotkeys (Ctrl+L toggles a checkbox, Ctrl+; adds a property,
   Ctrl+Shift+N makes a note to the right, and the editor drops Alt+↑ and

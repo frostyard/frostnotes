@@ -1,6 +1,6 @@
 # 0021 — Keep the workspace and app preferences on each device
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-17
 
 ## Context

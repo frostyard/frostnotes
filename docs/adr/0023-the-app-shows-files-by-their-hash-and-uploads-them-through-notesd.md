@@ -1,6 +1,6 @@
 # 0023 — The app shows files by their hash and uploads them through notesd
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-17
 
 ## Context
