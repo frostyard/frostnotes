@@ -91,3 +91,54 @@ func (v *Vault) Serve(ctx context.Context) (store.HubVault, error) {
 	})
 	return served, err
 }
+
+// Resolve clears file fileID's conflict flag with a resolve revision
+// (log.resolve). seq is the newest conflict revision the user has seen: a
+// newer one is api.Conflict, so a conflict that arrived since is not
+// dismissed unseen. A file that is not flagged needs nothing.
+func (v *Vault) Resolve(ctx context.Context, fileID, seq int64, who Author) error {
+	if err := v.lock(); err != nil {
+		return err
+	}
+	defer v.mu.Unlock()
+	hf, err := v.cfg.DB.HubFile(ctx, v.id, fileID)
+	if errors.Is(err, store.ErrNotFound) {
+		return api.NotFound("file %d is not in the vault's log", fileID)
+	} else if err != nil {
+		return err
+	}
+	if !hf.Conflicted {
+		return nil
+	}
+	revs, err := v.cfg.DB.History(ctx, v.id, fileID, 0, 200)
+	if err != nil {
+		return err
+	}
+	var newest api.Revision
+	for _, r := range revs {
+		if r.Op == api.RevisionOpConflict {
+			newest = r
+			break
+		}
+	}
+	if newest.Seq > seq {
+		return api.Conflict("file %d has a conflict revision, %d, newer than %d: look at it first", fileID, newest.Seq, seq)
+	}
+	head, err := v.cfg.DB.Revision(ctx, v.id, hf.Revision)
+	if err != nil {
+		return err
+	}
+	hash := head.Hash
+	if hash == "" {
+		hash = newest.Hash // a deleted file keeps no content of its own
+	}
+	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
+		r := store.Revision{VaultID: v.id, FileID: fileID, Op: api.RevisionOpResolve, Path: head.Path, Hash: hash,
+			Size: head.Size, Base: hf.Revision, Source: who.Source, Author: who.Name}
+		if p := who.Push; p != nil {
+			r.DeviceID, r.ReplicaID = p.DeviceID, p.ReplicaID
+		}
+		_, err := tx.AppendRevision(ctx, r)
+		return err
+	})
+}

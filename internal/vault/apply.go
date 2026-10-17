@@ -151,6 +151,9 @@ func (v *Vault) putBlob(ctx context.Context, r *os.Root, p, want, hash string, i
 	if err != nil {
 		return store.File{}, err
 	}
+	if v.staged != nil {
+		v.staged(p)
+	}
 	if want != "" {
 		if now, err := read(r, p); err != nil || now.hash != want || !now.sameStat(cur.info) {
 			st.discard()

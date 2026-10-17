@@ -41,8 +41,9 @@ ADR-0016). Every other path answers 404.
 | `/sync` | `GET` (WebSocket upgrade) | `Bearer` device token | JSON-RPC as caller `device` |
 | `/sync/blobs/{hash}` | `HEAD`, `GET`, `PUT` | `Bearer` device token | contents |
 
-- A request that carries an `Origin` header is refused with 403: devices
-  send none, and browsers always do.
+- A request whose `Origin` header is present and is not exactly
+  `notesd://device` is refused with 403: a device sends that origin, or
+  none, and a browser always sends its page's own, which can never be it.
 - A missing, unknown or revoked device token is 401, with
   `WWW-Authenticate: Bearer` and no detail.
 - Error responses are `text/plain` with one line saying why.
