@@ -11,7 +11,7 @@ editor and the reading view),
 (saves and merges),
 [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
 (attachments).
-Contracts: [specs/ui.md](../specs/ui.md), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
+Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
 [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 (the syntax both parsers read).
 
@@ -215,7 +215,8 @@ key's value and keeps every other byte, as MCP's property edits do in Go
 
 notesd renders a note (`note.render`, from the document's text when it
 is open) with goldmark and the Obsidian extension, then sanitizes it by
-an allowlist (`internal/render`, the planner's): no script, event
+an allowlist (`internal/render`; [specs/render.md](../specs/render.md)
+pins the HTML and the allowlist): no script, event
 handler, form, frame, `style` or `javascript:` URL; raw HTML in a note
 keeps listed elements and attributes only. In the HTML, an internal link
 is `a.internal-link` with `data-href` (as written) and `data-path` (the
@@ -314,5 +315,5 @@ dropping an image calls `note.upload` and inserts `![[name]]`.
 
 - Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts)
-- Contracts: [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
+- Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))

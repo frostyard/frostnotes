@@ -67,3 +67,4 @@ indexed and the file it resolves to:
 - Shapes: [specs/markdown.md](../specs/markdown.md), [design/vault.md](../design/vault.md#parse)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md)
 - Resolves: [plan 0003's open question](../plans/0003-m1-headless-vault.md#open-questions)
+- Rendered: [specs/render.md](../specs/render.md) hides what comments hold, as the reading view does

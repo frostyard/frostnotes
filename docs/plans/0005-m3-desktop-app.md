@@ -218,6 +218,26 @@ does, so the plan records them without ADRs:
 - **Done when:** `make check` and `make ui-check` are green with every
   stub in place, `make gen-check` passes, and each card has passed its
   reference.
+- **Result, part 2 (2026-10-17): the renderer's contract.**
+  [specs/render.md](../specs/render.md) pins the HTML for each piece of
+  syntax, the sanitizer's allowlist, a fixture vault and 18 fixtures, read
+  by `internal/render`'s tests. `internal/markdown` gives the renderer the
+  index's goldmark, the Obsidian nodes and the body to render (comments
+  out, their newlines kept, so `data-line` counts the note's lines);
+  `internal/render` has `Render`, `HTML`, embeds' depth and cycles, a
+  fallback that keeps unknown nodes from crashing goldmark, and a
+  sanitizer that escapes everything until Phase 4 builds it. Writing the
+  references settled two rules: a note embed alone in its paragraph
+  replaces the paragraph as a block, since a `div` in a `p` is split
+  apart by every HTML parser, and one among text is a link; and an
+  embedded note names no lines. Each card was checked against a reference
+  that is then deleted, T-0045's alone and then both, with `make check`
+  green; against the stubs every `[links]` and `[syntax]` fixture fails.
+
+  | Card | Size | File | What | Runs after |
+  | --- | --- | --- | --- | --- |
+  | [T-0045](../tasks/todo/0045-render-links.md) | M | `internal/render/links.go` | links, note embeds and their sections, files by hash, markdown images | |
+  | [T-0046](../tasks/todo/0046-render-syntax.md) | M | `internal/render/syntax.go` | tags, highlights, math, callouts, checkboxes and headings with lines, block IDs | T-0045 |
 
 ## Phase 4 — notesd's additions (planner, alongside Phase 5)
 
