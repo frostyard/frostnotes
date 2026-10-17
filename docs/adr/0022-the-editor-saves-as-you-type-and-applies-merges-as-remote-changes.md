@@ -1,6 +1,6 @@
 # 0022 — The editor saves as you type and applies merges as remote changes
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-17
 
 ## Context
