@@ -348,6 +348,13 @@ export interface NoteDailyParams {
   vaultId: number;
   /** YYYY-MM-DD; default today in notesd's time zone. */
   date?: string;
+  /** Who creates it when it is missing: editor (the default) or agent. */
+  source?: VersionSource;
+  /**
+   * Who creates it, for the version list; defaults to the client name given
+   * to rpc.hello.
+   */
+  author?: string;
 }
 
 /** A file was created or its content changed, by a write or on disk. */

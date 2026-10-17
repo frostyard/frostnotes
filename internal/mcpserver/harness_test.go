@@ -4,7 +4,6 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -98,63 +97,6 @@ func waitScan(t *testing.T, c *api.Client, id int64) {
 	}
 }
 
-// call calls a tool and returns its result. A protocol error fails the
-// test: tools report failures as error results.
-func (h *harness) call(name string, args map[string]any) *sdk.CallToolResult {
-	h.t.Helper()
-	res, err := h.cs.CallTool(h.t.Context(), &sdk.CallToolParams{Name: name, Arguments: args})
-	if err != nil {
-		h.t.Fatalf("%s: protocol error %v", name, err)
-	}
-	return res
-}
-
-// ok calls a tool that must succeed and decodes its structured result
-// into out. It checks that the text content is the same JSON.
-func (h *harness) ok(name string, args map[string]any, out any) {
-	h.t.Helper()
-	res := h.call(name, args)
-	if res.IsError {
-		h.t.Fatalf("%s(%v) failed: %s", name, args, resultText(h.t, res))
-	}
-	data, err := json.Marshal(res.StructuredContent)
-	if err != nil {
-		h.t.Fatal(err)
-	}
-	if err := json.Unmarshal(data, out); err != nil {
-		h.t.Fatalf("%s: structured content %s: %v", name, data, err)
-	}
-	var fromText any
-	if err := json.Unmarshal([]byte(resultText(h.t, res)), &fromText); err != nil {
-		h.t.Fatalf("%s: the text content is not JSON: %v", name, err)
-	}
-}
-
-// fails calls a tool that must fail with an error result, and returns its
-// text.
-func (h *harness) fails(name string, args map[string]any) string {
-	h.t.Helper()
-	res := h.call(name, args)
-	text := resultText(h.t, res)
-	if !res.IsError {
-		h.t.Fatalf("%s(%v) succeeded with %s; want an error result", name, args, text)
-	}
-	return text
-}
-
-func resultText(t *testing.T, res *sdk.CallToolResult) string {
-	t.Helper()
-	var parts []string
-	for _, c := range res.Content {
-		text, ok := c.(*sdk.TextContent)
-		if !ok {
-			t.Fatalf("result content is %T, want text", c)
-		}
-		parts = append(parts, text.Text)
-	}
-	return strings.Join(parts, "\n")
-}
-
 // disk returns a vault file's content.
 func (h *harness) disk(p string) string {
 	h.t.Helper()
@@ -163,26 +105,6 @@ func (h *harness) disk(p string) string {
 		h.t.Fatal(err)
 	}
 	return string(data)
-}
-
-// read returns a note through notesd, as a client other than the agent.
-func (h *harness) read(p string) *api.Note {
-	h.t.Helper()
-	n, err := h.notes.Read(h.t.Context(), &api.NoteReadParams{VaultID: h.vault, Path: p})
-	if err != nil {
-		h.t.Fatalf("note.read(%s): %v", p, err)
-	}
-	return n
-}
-
-// newest returns a note's newest version.
-func (h *harness) newest(p string) api.Version {
-	h.t.Helper()
-	vs, err := h.notes.Versions(h.t.Context(), &api.NoteVersionsParams{VaultID: h.vault, Path: p})
-	if err != nil || len(vs) == 0 {
-		h.t.Fatalf("note.versions(%s) = %v, %v", p, vs, err)
-	}
-	return vs[0]
 }
 
 func toolParams(name string, args map[string]any) *sdk.CallToolParams {

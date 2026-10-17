@@ -297,3 +297,22 @@ func TestGeneratedVaultIndexesItsManifest(t *testing.T) {
 		t.Errorf("only %d links in the manifest", len(want))
 	}
 }
+
+// A daily note an agent's call creates is the agent's version.
+func TestDailyRecordsItsCreator(t *testing.T) {
+	av := openVault(t, t.TempDir())
+	agent, name := api.VersionSourceAgent, "claude-code"
+	date := "2026-10-16"
+	d, err := av.c.Note().Daily(t.Context(), &api.NoteDailyParams{VaultID: av.id, Date: &date, Source: &agent, Author: &name})
+	if err != nil || !d.Created || d.Note.Path != "2026-10-16.md" {
+		t.Fatalf("Daily = %+v, %v", d, err)
+	}
+	vs, err := av.c.Note().Versions(t.Context(), &api.NoteVersionsParams{VaultID: av.id, Path: d.Note.Path})
+	if err != nil || len(vs) != 1 || vs[0].Source != agent || vs[0].Author != name {
+		t.Fatalf("versions = %+v, %v; want one by %s", vs, err, name)
+	}
+	outside := api.VersionSourceOutside
+	if _, err := av.c.Note().Daily(t.Context(), &api.NoteDailyParams{VaultID: av.id, Source: &outside}); !errors.Is(err, api.ErrInvalidParams) {
+		t.Errorf("a daily note claimed by another program = %v, want invalidParams", err)
+	}
+}

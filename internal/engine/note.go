@@ -222,7 +222,7 @@ func (n notes) Daily(ctx context.Context, p *api.NoteDailyParams) (*api.DailyNot
 			return nil, api.InvalidParams("date %q is not YYYY-MM-DD", *p.Date)
 		}
 	}
-	who, err := author(ctx, nil, nil)
+	who, err := author(ctx, p.Source, p.Author)
 	if err != nil {
 		return nil, err
 	}

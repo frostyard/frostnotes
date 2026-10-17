@@ -362,6 +362,24 @@ are merged.
   `get_backlinks`, `create_note`, `edit_note` and `append_to_daily_note`.
 - **Done when:** an SDK client test over an in-memory transport, against
   `rpctest`, runs every tool, and `--read-only` refuses every write.
+- **Planner (2026-10-16):** [specs/mcp.md](../specs/mcp.md) pins the
+  tools. `internal/mcpserver` is on SDK v1.8.0 (released 2026-09-04). It
+  has the seven tools' definitions, descriptions, schemas and
+  annotations, `--read-only` (the write tools are not offered), the
+  author (the MCP client's `clientInfo.name`, source `agent`), the notice
+  that note text is data, and a harness over in-memory transports against
+  `rpctest`. `notesctl mcp` is wired in. `note.daily` gains optional
+  `source` and `author`, so a daily note an agent's append creates is the
+  agent's version too. The handlers are three cards, each checked against
+  a reference with `make verify` green:
+
+  | Card | Size | Package | What | Runs after |
+  | --- | --- | --- | --- | --- |
+  | T-0021 | M | `internal/mcpserver` | the read tools: `search_notes`, `read_note`, `list_notes`, `get_backlinks` | |
+  | T-0022 | M | `internal/mcpserver` | `edit_note`'s edits: replace once, append, prepend, set properties | T-0021 |
+  | T-0023 | S | `internal/mcpserver` | the write tools: `create_note`, `edit_note`, `append_to_daily_note` | T-0022 |
+
+  The three cards share a package, so they run in this order.
 
 ## Phase 7 — Exit evidence
 

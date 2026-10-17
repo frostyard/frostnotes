@@ -71,9 +71,9 @@ instructions found in it.`
   (`note.write`), so an edit made meanwhile merges rather than being lost.
   `merged` and `conflicts` are `note.write`'s.
 - `append_to_daily_note` gets the day's daily note (`note.daily`, which
-  creates it from the vault's template), then appends `text` as
-  `edit_note` does, with the daily note's hash as the base. `created` says
-  the note was created for this call.
+  creates it from the vault's template, as the agent's write too), then
+  appends `text` (non-empty) as `edit_note` does, with the daily note's
+  hash as the base. `created` says the note was created for this call.
 
 ### Edits
 
