@@ -291,3 +291,28 @@ func TestSchemaCascades(t *testing.T) {
 		}
 	}
 }
+
+// Migrations are append-only (plan 0004), and notesd refuses a database
+// that applied another text of a migration, so editing a released file,
+// even a comment in it, strands every database that applied it. Add a
+// migration instead; pin its checksum here when it lands.
+func TestReleasedMigrationsKeepTheirText(t *testing.T) {
+	pinned := map[string]string{
+		"0001_init.sql":                 "617de380f7086b64a19b197f0bf34c8c967fae4f0d91bcc4802489f47d2b409c",
+		"0002_sync.sql":                 "46eea9c7b99b9c157624d951dffed855891aede980eaae1fad492dfdd67e9cc7",
+		"0003_sync_conflict_pushes.sql": "7c95bd389e9cba771256a8016d51abe712604cf954e961b597bf1f758b642ed1",
+	}
+	ms, err := loadMigrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range ms {
+		want, ok := pinned[m.name]
+		switch {
+		case !ok:
+			t.Errorf("%s is not pinned: add its checksum %s to this test", m.name, m.checksum)
+		case m.checksum != want:
+			t.Errorf("%s changed (checksum %s, released as %s): restore it and add a new migration", m.name, m.checksum, want)
+		}
+	}
+}
