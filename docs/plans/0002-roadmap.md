@@ -1,8 +1,8 @@
 # Plan 0002: roadmap to replacing Obsidian
 
-Frostnotes replaces the user's Obsidian and Obsidian Sync: their vault (666
-notes, 577 with frontmatter, daily notes from a template) on two Linux
-machines, a hub, a browser and a phone, with agents reading and writing
+Frostnotes replaces the user's Obsidian, which they open over an SMB share
+with no other sync: their vault (666 notes, 577 with frontmatter, daily
+notes from a template) on two Linux machines, a hub, a browser and a phone, with agents reading and writing
 through MCP. Each milestone gets its own plan with task cards before it
 starts. Planner work stays with Claude; executor work goes on cards
 ([ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md)).
@@ -49,13 +49,6 @@ end-to-end encryption, a mobile app (Tauri mobile), a web clipper.
 - **OAuth for remote MCP:** claude.ai's connectors expect it. By M4.
 - **Query format:** Obsidian Bases (`.base` YAML and `base` code blocks) or
   a Frostnotes condition language. Leaning Bases. By M5, as an ADR.
-- *Proposed in [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md):*
-  **history retention on the hub.** Every revision's record forever; its
-  content for 30 days, then each file's last of each day for a year, then
-  of each month; conflicts until resolved.
-- *Proposed in [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md):*
-  **empty folders.** They do not sync: revisions are about files, and a
-  device removes a folder that a pulled delete or move leaves empty.
 
 ## References
 

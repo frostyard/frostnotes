@@ -1,6 +1,6 @@
 # 0020 — Test sync with a seeded simulation of a hub and devices
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-16
 
 ## Context
