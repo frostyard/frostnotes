@@ -162,6 +162,11 @@ describe("toggle checkbox status", () => {
     expect(run(toggleChecklist, "  1. [/] doing|")).toBe("  1. [ ] doing|");
   });
 
+  it("checks a task with nothing after its box", () => {
+    expect(run(toggleChecklist, "- [ ]|")).toBe("- [x]|");
+    expect(run(toggleChecklist, "- [x]|\n")).toBe("- [ ]|\n");
+  });
+
   it("makes a list item a task", () => {
     expect(run(toggleChecklist, "- item|")).toBe("- [ ] item|");
     expect(run(toggleChecklist, "1) item|")).toBe("1) [ ] item|");

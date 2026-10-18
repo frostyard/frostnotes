@@ -149,7 +149,7 @@ export const toggleChecklist: StateCommand = editLines((line) => {
   const from = line.from + indent.length;
   if (!item) return { from, insert: "- [ ] " };
   const content = from + item[0].length;
-  const task = /^\[(.)\] /.exec(line.text.slice(content - line.from));
+  const task = /^\[(.)\](?=\s|$)/.exec(line.text.slice(content - line.from));
   if (task) return { from: content + 1, to: content + 2, insert: task[1] === " " ? "x" : " " };
   return { from: content, insert: /\s$/.test(item[0]) ? "[ ] " : " [ ] " };
 });
