@@ -512,8 +512,9 @@ vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset
 Obsidian's vault chooser
 ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)).
 
-- **The frame:** while there is no vault, the whole window under the
-  title bar row (which keeps the window controls and drags the window).
+- **The frame:** while there is no vault, the whole window between the
+  title bar row (which keeps the window controls and drags the window)
+  and the status bar (which still tells of the connection).
   Otherwise a dialog, opened by the vault menu's Manage vaults… and the
   command Open another vault: 720 × 480 (at most 90% × 85% of the
   window), `--bg-window`, 1px `--separator`, rounded 12,

@@ -14,7 +14,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
-import { ask, notify, openPrompt, openSettings, openTemplates } from "../data/overlays";
+import { ask, notify, openPrompt, openSettings, openTemplates, openVaultManager } from "../data/overlays";
 import { setRenaming, usePanes } from "../data/panes";
 import { usePrefs, zoomStep } from "../data/prefs";
 import { useNotes } from "../data/stores";
@@ -507,6 +507,7 @@ export function workspaceCommands(c: Client): Command[] {
     { id: "switcher:open", name: "Open quick switcher", applies: hasVault, run: () => openPrompt("switcher") },
     { id: "command-palette:open", name: "Open command palette", run: () => openPrompt("palette") },
     { id: "app:open-settings", name: "Open settings", run: () => openSettings() },
+    { id: "app:open-vault", name: "Open another vault", run: () => openVaultManager() },
     { id: "app:open-help", name: "Open help", run: () => openSettings("hotkeys") },
     {
       id: "sync:view-version-history",

@@ -96,14 +96,16 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   next listing.
 - **One vault per window** ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)). The window shows one
   vault; the vault menu at the foot of the left sidebar switches it in
-  place, and the app reopens the last one. The vault manager opens a
-  folder as a vault (`vault.add` of a folder from the system's picker),
-  creates one (`vault.add` with `create`) and removes one from the
-  list (`vault.remove`, which keeps its files). It is the whole window
-  while there is no vault, and otherwise a dialog from the menu's
-  Manage vaults…. [Plan 0005's Phase 8](../plans/0005-m3-desktop-app.md#phase-8--vaults-from-the-app)
-  builds the manager; until then a window without a vault says to run
-  `notesctl vault add`.
+  place, and the app reopens the last one. The vault manager
+  (`app/VaultsView.tsx` over `features/vaults/`, and `data/vaults.ts`)
+  opens a folder as a vault (`vault.add` of a folder from the system's
+  picker, `pickFolder`, or a typed path in a browser), creates one
+  (`vault.add` with `create`, notesd making the folder) and removes one
+  from the list (`vault.remove`, which keeps its files) after asking
+  what goes. It is the whole window while there is no vault, and
+  otherwise a dialog from the menu's Manage vaults… or the command Open
+  another vault. notesd's refusals show as notices in the person's
+  words. The window's title names the active note and the vault.
 - **Files:** `note.files` lists a vault's files and folders (path, kind,
   hash, size, modification time) once, and `note.changed`, `note.moved`
   and `note.removed` keep the list current. Folders have no events: after

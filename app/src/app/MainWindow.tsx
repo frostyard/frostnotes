@@ -11,11 +11,12 @@ import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";
 import { feed } from "../data/events";
-import { ask } from "../data/overlays";
+import { ask, openVaultManager } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
+import { titleOf } from "../editor/NoteEditor";
 import { DocumentRegistry, DocumentsContext } from "../editor/registry";
 import { IconButton } from "../features/chrome/IconButton";
 import { Ribbon } from "../features/chrome/Ribbon";
@@ -35,6 +36,8 @@ import { openConflictsMenu, openEditingModeMenu } from "./menus";
 import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
 import { statusSync, useBacklinkCount, useNoteCounts } from "./status";
+import { setWindowTitle, windowTitle } from "./system";
+import { VaultsView } from "./VaultsView";
 import { WorkspaceView } from "./WorkspaceView";
 
 /** RIBBON is the ribbon's width; WORKSPACE_MIN the least the workspace keeps (docs/specs/ui.md#layout). */
@@ -172,6 +175,7 @@ export function MainWindow() {
               current={vaultId}
               settingsDisabled={!registry.applies("app:open-settings")}
               onChoose={(id) => void openVault(id)}
+              onManage={openVaultManager}
               onSettings={() => registry.run("app:open-settings")}
             />
           )}
@@ -198,6 +202,46 @@ export function MainWindow() {
     keys: keysOf(command),
     disabled: !registry.applies(command),
   });
+  // The window's title names the active note and the vault (ADR-0024).
+  const vaultName = vaults.find((v) => v.id === vaultId)?.name ?? null;
+  const noteTitle = activeNote ? titleOf(activeNote.path) : null;
+  useEffect(() => setWindowTitle(windowTitle(noteTitle, vaultName)), [noteTitle, vaultName]);
+
+  // Without a vault the window is the vault manager between the title bar
+  // row and the status bar, which still tells of the connection (ADR-0024).
+  if (vaultId === null) {
+    return (
+      <CommandsContext.Provider value={registry}>
+        <DocumentsContext.Provider value={docs}>
+          <div className="flex h-full flex-col bg-window">
+            <div
+              data-tauri-drag-region
+              className="flex h-11 shrink-0 items-center justify-end border-b border-separator bg-toolbar"
+            >
+              <WindowControls
+                rightOpen={false}
+                maximized={maximized}
+                windowControls={controls}
+                onWindow={windowCommand}
+              />
+            </div>
+            <VaultsView mode="window" />
+            <StatusBar
+              connection={connection}
+              sync={null}
+              backlinks={null}
+              counts={null}
+              mode={null}
+              onConflicts={() => {}}
+              onBacklinks={() => {}}
+              onMode={() => {}}
+            />
+            <Overlays />
+          </div>
+        </DocumentsContext.Provider>
+      </CommandsContext.Provider>
+    );
+  }
   return (
     <CommandsContext.Provider value={registry}>
       <DocumentsContext.Provider value={docs}>
@@ -227,7 +271,7 @@ export function MainWindow() {
               )}
             </div>
             {shown.left && sidebar("left")}
-            {vaultId === null ? <NoVault /> : <WorkspaceView reserve={shown.right ? 0 : controls ? 140 : 44} />}
+            <WorkspaceView reserve={shown.right ? 0 : controls ? 140 : 44} />
             {shown.right && sidebar("right")}
             {!shown.right && <div className="absolute top-0 right-0">{windowControls}</div>}
           </div>
@@ -289,17 +333,6 @@ function keepUnsaved(docs: DocumentRegistry): () => void {
     window.removeEventListener("beforeunload", beforeUnload);
     offClose?.();
   };
-}
-
-function NoVault() {
-  return (
-    <main aria-label="Workspace" className="flex min-w-0 flex-1 flex-col bg-window">
-      <div data-tauri-drag-region className="h-11 shrink-0 border-b border-separator bg-toolbar" />
-      <p className="text-empty m-auto max-w-md px-8 text-center text-secondary">
-        No vaults yet. Register one with <code className="select-text">notesctl vault add PATH</code>.
-      </p>
-    </main>
-  );
 }
 
 /** Connecting stands in for MainWindow until notesd answers; the title bar stays usable. */

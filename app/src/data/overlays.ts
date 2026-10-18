@@ -54,6 +54,8 @@ export interface OverlayState {
   confirm: OpenConfirm | null;
   /** The settings dialog, open at a section. */
   settings: string | null;
+  /** The vault manager, open as a dialog over the window. */
+  vaults: boolean;
   /** The template chooser, open over the template folder's notes. */
   templates: readonly string[] | null;
   /** A link's page preview, open while the pointer stays on it. */
@@ -84,6 +86,7 @@ export const useOverlays = create<OverlayState>(() => ({
   move: null,
   confirm: null,
   settings: null,
+  vaults: false,
   templates: null,
   preview: null,
   notices: [],
@@ -178,4 +181,13 @@ export function openSettings(section = "editor"): void {
 
 export function closeSettings(): void {
   useOverlays.setState({ settings: null });
+}
+
+/** openVaultManager opens the vault manager over the window (Manage vaults…, Open another vault). */
+export function openVaultManager(): void {
+  useOverlays.setState({ vaults: true, menu: null, prompt: null });
+}
+
+export function closeVaultManager(): void {
+  useOverlays.setState({ vaults: false });
 }

@@ -41,7 +41,8 @@ short of its own (a follow-up). Evidence 4 is the user's 7-day trial.
 It waits for Phase 8, which lets the app open and create vaults
 ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
 accepted 2026-10-18): batch 2's vault switcher only ever switched
-vaults.
+vaults. Phase 8 (the contract, the shell's folder picker, T-0082 and
+T-0083, and the wiring) is in review.
 
 ## Decisions taken for M3
 
@@ -980,6 +981,33 @@ as a dialog. Choosing a vault there switches the window in place
     the user's steps for evidence 4.
   - Evidence 4 starts once this phase is merged.
 
+- **Result (2026-10-18).** The contract came first: `vault.add`'s
+  `create` in notesd (the folder is made only once the vault may be
+  registered; a refused one is never made), `notesctl vault add
+  --create`, and the mock, each with tests. The shell gained
+  `tauri-plugin-dialog` 2.8.1 for its open dialog alone, with the
+  crates under it pinned to releases at least two weeks old
+  (`tauri-plugin-fs` 2.6.0, `tauri-plugin` 2.7.1); the capability grants
+  `dialog:allow-open` and `core:window:allow-set-title`, and its test
+  lists them. `specs/ui.md` describes the vault manager. Codex passed
+  T-0082 and T-0083 on the first attempt each, and a mutation of each
+  failed its given tests (Open passing a path with a picker; a name
+  starting with a dot taken). The planner's part: `data/vaults.ts`
+  (adding, with notesd's refusals in the person's words, and removing
+  after asking what goes), the container, the manager as the window
+  without a vault (between the title bar row and the status bar, which
+  still tells of the connection) and as a dialog from Manage vaults… and
+  Open another vault, and the window's title. Window tests over the mock
+  cover the first run's create, open with each refusal, switching in
+  place with the title, Remove from list with Cancel and Remove, and the
+  command. Still to see by hand: the system's folder picker in the built
+  app (the user's steps for evidence 4).
+
+  | Card | Attempts | Review |
+  | --- | --- | --- |
+  | T-0082 vault manager | 1 | correct; focuses itself as a dialog and gives focus back |
+  | T-0083 create form | 1 | correct |
+
 ## Later / ideas
 
 - Bookmarks, canvas, note composer, and workspaces (the user has none
@@ -1016,6 +1044,6 @@ as a dialog. Choosing a vault there switches the window in place
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/), [T-0082 and T-0083](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)

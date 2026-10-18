@@ -38,6 +38,7 @@ import { useWorkspace } from "../workspace/store";
 import { insertTemplate, openOrCreate, viewOf } from "./commands";
 import { move } from "./panes/files";
 import { SettingsContainer } from "./Settings";
+import { VaultsView } from "./VaultsView";
 
 const WHERE: Record<SwitcherWhere, OpenWhere> = { current: "here", tab: "tab", right: "right" };
 
@@ -50,9 +51,11 @@ export function Overlays() {
   const moving = useOverlays((s) => s.move);
   const templates = useOverlays((s) => s.templates);
   const preview = useOverlays((s) => s.preview);
+  const vaults = useOverlays((s) => s.vaults);
   return (
     <>
       <SettingsContainer />
+      {vaults && <VaultsView mode="dialog" />}
       {moving && <Mover path={moving.path} folder={moving.folder} />}
       {templates && <Templates paths={templates} />}
       {preview && (

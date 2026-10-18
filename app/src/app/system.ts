@@ -71,3 +71,8 @@ export function setWindowTitle(title: string): void {
   document.title = title;
   if (isTauri()) void getCurrentWindow().setTitle(title);
 }
+
+/** windowTitle is the window's title (ADR-0024): the active note and the window's vault. */
+export function windowTitle(note: string | null, vault: string | null): string {
+  return [note, vault, "Frostnotes"].filter((part): part is string => part !== null && part !== "").join(" - ");
+}

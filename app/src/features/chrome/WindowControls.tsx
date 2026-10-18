@@ -11,7 +11,8 @@ export interface WindowControlsProps {
   maximized: boolean;
   /** Draw minimize, maximize and close. */
   windowControls: boolean;
-  onToggleRight: () => void;
+  /** Toggle right sidebar; without it, a window with no sidebars, the button is not drawn. */
+  onToggleRight?: () => void;
   onWindow: (command: WindowCommand) => void;
 }
 
@@ -19,12 +20,14 @@ export interface WindowControlsProps {
 export function WindowControls(props: WindowControlsProps) {
   return (
     <div className="flex h-11 shrink-0 items-center gap-1 px-2">
-      <IconButton
-        label="Toggle right sidebar"
-        icon={<PanelRight size={16} />}
-        pressed={props.rightOpen}
-        onClick={props.onToggleRight}
-      />
+      {props.onToggleRight && (
+        <IconButton
+          label="Toggle right sidebar"
+          icon={<PanelRight size={16} />}
+          pressed={props.rightOpen}
+          onClick={props.onToggleRight}
+        />
+      )}
       {props.windowControls && (
         <>
           <IconButton
