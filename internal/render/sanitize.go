@@ -12,7 +12,8 @@ import (
 // (docs/specs/render.md#sanitizer): what the renderer draws, and the
 // harmless part of a note's raw HTML. It never adds markup and keeps the
 // order of what it keeps. Text is passed through as the tokenizer read it,
-// so entities stay as written; attribute values are written escaped.
+// so entities stay as written, but for <; attribute values are written
+// escaped.
 func Sanitize(h string) string {
 	z := html.NewTokenizer(strings.NewReader(h))
 	var out bytes.Buffer
@@ -25,11 +26,17 @@ func Sanitize(h string) string {
 			}
 			return out.String() // A tokenizer error ends the input; what came before stands.
 		case html.TextToken:
-			out.Write(z.Raw())
+			// A < the tokenizer read as text could open a tag joined with
+			// the text after an element that goes (<<x>script>).
+			out.Write(bytes.ReplaceAll(z.Raw(), []byte("<"), []byte("&lt;")))
 		case html.StartTagToken, html.SelfClosingTagToken:
 			t := z.Token()
 			if dropsContent(t) {
-				if tt == html.StartTagToken && !isVoid(t.Data) {
+				// A browser ignores the slash of an HTML element that is not
+				// void (<xmp/> opens it), and the tokenizer reads what follows
+				// a raw-text one (<script/>, <iframe/>) as its text; only a
+				// foreign element (<svg/>) closes itself.
+				if !isVoid(t.Data) && (tt == html.StartTagToken || !isForeign(t.Data)) {
 					skipTo(z, t.Data)
 				}
 				continue
@@ -76,9 +83,33 @@ func writeStart(out *bytes.Buffer, t html.Token) {
 		if a.Namespace != "" || !allowedAttr(t.Data, a.Key, a.Val) {
 			continue
 		}
-		out.WriteString(" " + a.Key + `="` + html.EscapeString(a.Val) + `"`)
+		val := a.Val
+		if a.Key == "class" {
+			if val = classes(val); val == "" {
+				continue
+			}
+		}
+		out.WriteString(" " + a.Key + `="` + html.EscapeString(val) + `"`)
 	}
 	out.WriteByte('>')
+}
+
+// classes keeps the class names the renderer draws (links, embeds, tags,
+// math, callouts, footnotes, a code block's language), so a note cannot
+// dress its HTML in the app's own styles.
+func classes(v string) string {
+	var keep []string
+	for c := range strings.FieldsSeq(v) {
+		switch {
+		case c == "internal-link", c == "external-link", c == "is-unresolved", c == "embed", c == "file-embed",
+			c == "tag", c == "math", c == "callout", c == "callout-title", c == "callout-content",
+			c == "footnotes", c == "footnote-ref", c == "footnote-backref":
+			keep = append(keep, c)
+		case strings.HasPrefix(c, "language-") && len(c) > len("language-"):
+			keep = append(keep, c)
+		}
+	}
+	return strings.Join(keep, " ")
 }
 
 // dropsContent reports whether an element goes with everything in it:
@@ -99,6 +130,12 @@ func dropsContent(t html.Token) bool {
 		return true
 	}
 	return false
+}
+
+// isForeign reports whether an element is SVG's or MathML's, which a
+// slash closes.
+func isForeign(name string) bool {
+	return name == "svg" || name == "math"
 }
 
 func isVoid(name string) bool {
@@ -122,9 +159,15 @@ func allowedElement(name string) bool {
 
 func allowedAttr(element, key, val string) bool {
 	switch key {
-	case "class", "title", "id", "role", "lang", "dir", "data-href", "data-path", "data-blob", "data-tag",
+	case "class", "title", "lang", "dir", "data-href", "data-path", "data-blob", "data-tag",
 		"data-tex", "data-callout", "data-fold", "data-line", "data-block":
 		return true
+	case "id":
+		// A footnote's and its reference's: no other id can name a window
+		// property the app reads.
+		return strings.HasPrefix(val, "fn:") || strings.HasPrefix(val, "fnref")
+	case "role":
+		return val == "doc-noteref" || val == "doc-endnotes" || val == "doc-backlink"
 	}
 	switch element {
 	case "ol":

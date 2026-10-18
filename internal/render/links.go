@@ -187,10 +187,7 @@ func (r *linkRenderer) inlineEmbed(l markdown.Link, resolved string) string {
 		return unresolvedEmbed(l)
 	}
 	if fileType(resolved) == "note" {
-		if r.opts.Note == nil {
-			return unresolvedEmbed(l)
-		}
-		if _, ok := r.opts.Note(resolved); !ok {
+		if !r.exists(resolved) {
 			return unresolvedEmbed(l)
 		}
 		return internalLink(l, resolved) + escapeLink(linkLabel(l)) + "</a>"
@@ -203,6 +200,21 @@ func (r *linkRenderer) inlineEmbed(l markdown.Link, resolved string) string {
 		return unresolvedEmbed(l)
 	}
 	return fileEmbed(l, resolved, hash)
+}
+
+// exists reports whether the vault has a note at path: by File, which
+// does not read it, when File knows it.
+func (r *linkRenderer) exists(path string) bool {
+	if r.opts.File != nil {
+		if _, ok := r.opts.File(path); ok {
+			return true
+		}
+	}
+	if r.opts.Note != nil {
+		_, ok := r.opts.Note(path)
+		return ok
+	}
+	return false
 }
 
 func fileEmbed(l markdown.Link, resolved, hash string) string {
@@ -320,12 +332,13 @@ func (r *linkRenderer) renderNoteEmbed(w util.BufWriter, _ []byte, node ast.Node
 	if r.opts.Note != nil {
 		note, ok = r.opts.Note(n.path)
 	}
-	if !ok {
+	if !ok && !r.exists(n.path) {
 		_, _ = w.WriteString("<p>" + unresolvedEmbed(n.link) + "</p>\n")
-	} else if rendered, allowed := r.embed(n.path, noteSection(note, n.link.Subpath)); allowed {
+	} else if rendered, allowed := r.embed(n.path, noteSection(note, n.link.Subpath)); ok && allowed {
 		_, _ = w.WriteString(`<div class="embed"` + linkAttr("data-href", n.link.Target+n.link.Subpath) +
 			linkAttr("data-path", n.path) + ">\n" + rendered + "</div>\n")
 	} else {
+		// Too deep, a loop, past the budget, or too large to embed: a link.
 		label := n.link
 		label.Target, label.Alias = strings.TrimSuffix(path.Base(n.path), path.Ext(n.path)), ""
 		_, _ = w.WriteString("<p>" + internalLink(n.link, n.path) + escapeLink(linkLabel(label)) + "</a></p>\n")

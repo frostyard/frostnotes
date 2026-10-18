@@ -18,10 +18,14 @@ type Options struct {
 	Path    string                              // the note's vault path
 	Resolve func(from, target string) string    // the path a link target leads to from the note at from; "" unresolved
 	File    func(path string) (hash string, ok bool) // a vault file's content hash
-	Note    func(path string) ([]byte, bool)    // an embedded note's content
+	Note    func(path string) ([]byte, bool)    // an embedded note's content; false for one over MaxEmbedBytes
 }
 
 const MaxEmbedDepth = 3
+const (
+	MaxEmbeds     = 100     // note embeds one render draws, every level together
+	MaxEmbedBytes = 4 << 20 // their notes' bytes, together
+)
 
 func Render(note []byte, opts Options) string // Sanitize(HTML(note, opts)): note.render's html
 func HTML(note []byte, opts Options) string   // before sanitizing: what the fixtures pin
@@ -70,9 +74,13 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
     with a heading subpath only its section: the heading's line to the
     line before the next heading of its level or above. A block subpath
     embeds the whole note in M3. Embeds nest at most `MaxEmbedDepth`
-    levels below the rendered note; one deeper, or one of a note already
-    being rendered (a cycle), is a paragraph holding an internal link to
-    it. An embedded note names no lines.
+    levels below the rendered note; one deeper, one of a note already
+    being rendered (a cycle), one past the render's budget (`MaxEmbeds`
+    note embeds, or `MaxEmbedBytes` of their notes, every level
+    together), or one of a note larger than that, is a paragraph holding
+    an internal link to it, so a few notes that embed each other many
+    times over render in bounded time and size. An embedded note names
+    no lines.
   - **with other text in its paragraph**, it is an internal link: HTML
     cannot nest a note's blocks in a paragraph.
 - **An embed of another vault file**, by its extension (Obsidian's
@@ -89,9 +97,10 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
     alias, else the file name, as its text.
 - **A markdown image** of a vault file is an embed of it as above, its
   alt the image's text; a remote image stays `<img src alt>`.
-- **An unresolved embed**, a file `File` does not know, or a note `Note`
-  does not give, is `<span class="embed is-unresolved"
-  data-href>` with the link as its text.
+- **An unresolved embed**, a file neither `File` nor `Note` knows, is
+  `<span class="embed is-unresolved" data-href>` with the link as its
+  text. Whether a note exists is asked of `File` first, which does not
+  read it.
 
 ### Obsidian's syntax
 
@@ -132,10 +141,17 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
 | `audio`, `video` | `controls` |
 | `input` | `type` (`checkbox` only), `checked`, `disabled` |
 
-- **Shared attributes,** on any kept element: `class`, `title`, `id`,
-  `role`, `lang`, `dir`, and `data-href`, `data-path`, `data-blob`,
-  `data-tag`, `data-tex`, `data-callout`, `data-fold`, `data-line`,
-  `data-block`.
+- **Shared attributes,** on any kept element: `title`, `lang`, `dir`,
+  and `data-href`, `data-path`, `data-blob`, `data-tag`, `data-tex`,
+  `data-callout`, `data-fold`, `data-line`, `data-block`; and three that
+  keep only what the renderer writes, so a note cannot dress its HTML in
+  the app's own styles or name a window property: `class` keeps
+  `internal-link`, `external-link`, `is-unresolved`, `embed`,
+  `file-embed`, `tag`, `math`, `callout`, `callout-title`,
+  `callout-content`, `footnotes`, `footnote-ref`, `footnote-backref` and
+  `language-…` (an attribute with none of them goes); `id` stays when it
+  starts `fn:` or `fnref`, a footnote's; `role` stays when it is
+  `doc-noteref`, `doc-endnotes` or `doc-backlink`.
 - Every other attribute goes: `style`, every `on…` handler, `srcset`.
   A URL attribute whose scheme is not listed goes.
 - `script`, `style`, `template`, `iframe`, `frame`, `frameset`,
@@ -145,15 +161,21 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
   `svg`, `math`, `noscript`, `noembed`, `noframes`, `xmp` and
   `plaintext` go with their content, an unclosed one with the rest of
   the HTML; any other element not listed goes and its content stays.
+  Written self-closing, they go with their content all the same, as a
+  browser ignores the slash of an HTML element that is not void
+  (`<xmp/>` opens one); only `<svg/>` and `<math/>` are empty.
   Comments and doctypes go.
 - It reads the HTML with `golang.org/x/net/html`'s tokenizer, as a
-  browser does. Text passes as written, entities included; attribute
+  browser does. Text passes as written, entities included, but a `<`
+  is written `&lt;`, so that text joined across a dropped tag
+  (`<<x>script>`) cannot open one; attribute
   values are written again, escaped; a self-closing tag is written open
   (`<br>`). A URL is read as a browser reads its scheme, without white
   space or control characters (`jav&#x09;ascript:` is `javascript:`),
   and one with no scheme goes: the app names vault files by `data-blob`
   and `data-path`, never by URL.
-- Every fixture's HTML below sanitizes to itself, but R02's `onclick`.
+- Every fixture's HTML below sanitizes to itself, but R02's `class`
+  and `onclick`.
 
 ## Fixture vault
 

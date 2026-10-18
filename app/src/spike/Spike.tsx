@@ -5,23 +5,51 @@
 // JSON line and exits (src-tauri/src/spike.rs). IME input cannot be
 // automated: check it by hand in this view. "editor" measures the app's
 // own editor, every live-preview provider on, the same way
-// (docs/plans/0005-m3-desktop-app.md, Phase 5's exit).
+// (docs/plans/0005-m3-desktop-app.md, Phase 5's exit); "editor/math,rendered"
+// leaves those groups of providers out, to find what costs time.
 import type { EditorView } from "@codemirror/view";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 
 import { editorExtensions } from "../editor/extensions";
-import { buildInline } from "../editor/preview/framework";
+import { BASIC } from "../editor/preview/basic";
+import { CODE } from "../editor/preview/code";
+import { buildInline, livePreview, type Provider } from "../editor/preview/framework";
+import { GUIDES } from "../editor/preview/guides";
+import { INLINE } from "../editor/preview/inline";
+import { LISTS } from "../editor/preview/lists";
+import { MATH } from "../editor/preview/math";
+import { MEDIA } from "../editor/preview/media";
+import { PROPERTIES } from "../editor/preview/properties";
+import { RENDERED } from "../editor/preview/rendered";
 import { noteExtensions } from "./editor";
 import { generateNote } from "./generate";
 import { check, frames, fullParse, mount, scrolling, typing } from "./measure";
 
-/** appEditor is the app's editor with its defaults: live preview, Obsidian's preferences. */
-function appEditor() {
+/** GROUPS are live preview's providers by file, in PROVIDERS' order. */
+const GROUPS: Record<string, readonly Provider[]> = {
+  properties: PROPERTIES,
+  basic: BASIC,
+  inline: INLINE,
+  code: CODE,
+  lists: LISTS,
+  guides: GUIDES,
+  math: MATH,
+  rendered: RENDERED,
+  media: MEDIA,
+};
+
+/**
+ * appEditor is the app's editor with its defaults: live preview,
+ * Obsidian's preferences; without names groups of providers to leave out.
+ */
+function appEditor(without: readonly string[]) {
+  const providers = Object.entries(GROUPS).flatMap(([group, ps]) => (without.includes(group) ? [] : ps));
   return editorExtensions({
     prefs: {
-      live: true,
+      // Live preview comes from extra, with the providers chosen.
+      live: false,
       readable: true,
       fontSize: 16,
       spellcheck: true,
@@ -37,6 +65,7 @@ function appEditor() {
     },
     env: { resolve: () => null, command: () => {} },
     onBlur: () => {},
+    extra: livePreview(providers),
   });
 }
 
@@ -92,7 +121,7 @@ export function Spike({ name, auto, report }: SpikeProps) {
       setStatus("Scrolling the whole note…");
       const scroll = await scrolling(v);
       setStatus("Checking live preview…");
-      const checks = await check(v, name === "editor" ? (x) => countHidden(x) : undefined);
+      const checks = await check(v, name.startsWith("editor") ? (x) => countHidden(x) : undefined);
       const fullParseMs = fullParse(base.note);
       setStatus("Done");
       await finish({ ...base.result, keystroke, scroll, checks, parse: { fullParseMs } });
@@ -109,7 +138,9 @@ export function Spike({ name, auto, report }: SpikeProps) {
     if (started.current) return;
     started.current = true;
     void (async () => {
-      if (name !== "cm6" && name !== "editor") {
+      const [kind, out = ""] = name.split("/");
+      const without = out.split(",").filter((g) => g !== "");
+      if ((kind !== "cm6" && kind !== "editor") || without.some((g) => !(g in GROUPS))) {
         setStatus(`Unknown spike "${name}"`);
         if (report) await finish({ spike: name, ok: false, error: "unknown spike" });
         return;
@@ -122,7 +153,7 @@ export function Spike({ name, auto, report }: SpikeProps) {
       const g0 = performance.now();
       const note = generateNote(LINES);
       const generateMs = Math.round((performance.now() - g0) * 100) / 100;
-      const load = await mount(parent, note, name === "editor" ? appEditor() : noteExtensions());
+      const load = await mount(parent, note, kind === "editor" ? appEditor(without) : noteExtensions());
       view.current = load.view;
       const result: Report = {
         spike: name,

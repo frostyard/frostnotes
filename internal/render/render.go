@@ -22,6 +22,18 @@ import (
 // embeds three levels down show their notes, and a fourth level is a link.
 const MaxEmbedDepth = 3
 
+// MaxEmbeds and MaxEmbedBytes bound the note embeds one render draws, at
+// every depth together: past either, an embed is a link, as one too deep
+// is, so a few notes that embed each other many times over cannot make
+// notesd render without end.
+const (
+	MaxEmbeds     = 100
+	MaxEmbedBytes = 4 << 20
+)
+
+// budget is what is left of a render's note embeds.
+type budget struct{ embeds, bytes int }
+
 // Options say where a note sits and how to reach what it links to.
 type Options struct {
 	// Path is the note's vault path; links resolve from its folder.
@@ -34,7 +46,7 @@ type Options struct {
 	// has no file at path.
 	File func(path string) (hash string, ok bool)
 	// Note returns an embedded note's content, or false when there is
-	// none at path.
+	// none at path or it is larger than MaxEmbedBytes.
 	Note func(path string) ([]byte, bool)
 }
 
@@ -46,14 +58,14 @@ func Render(note []byte, opts Options) string {
 // HTML renders note to HTML before it is sanitized: what the spec's
 // fixtures pin.
 func HTML(note []byte, opts Options) string {
-	return render(note, opts, []string{opts.Path})
+	return render(note, opts, []string{opts.Path}, &budget{embeds: MaxEmbeds, bytes: MaxEmbedBytes})
 }
 
 // render renders note, embedded in the notes of stack (the outermost
-// first, the note itself last).
-func render(note []byte, opts Options, stack []string) string {
+// first, the note itself last), drawing note embeds while left lasts.
+func render(note []byte, opts Options, stack []string, left *budget) string {
 	body, line := markdown.RenderSource(note)
-	ext := &obsidianHTML{opts: opts, stack: stack, line: line}
+	ext := &obsidianHTML{opts: opts, stack: stack, line: line, left: left}
 	md := markdown.Goldmark(
 		goldmark.WithRendererOptions(html.WithHardWraps(), html.WithUnsafe(),
 			// align, not a style attribute, which the sanitizer drops.
@@ -75,6 +87,7 @@ type obsidianHTML struct {
 	opts  Options
 	stack []string // the notes being rendered, the outermost first
 	line  int      // the note's line on which the rendered source starts
+	left  *budget  // the render's note embeds still to draw
 }
 
 // lineless reports whether the note being rendered is embedded: an
@@ -109,13 +122,16 @@ func (fallback) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 }
 
 // embed renders the note at path as an embed of the note being rendered,
-// or returns false when that would nest deeper than MaxEmbedDepth or
-// embed a note that is already being rendered.
+// or returns false when that would nest deeper than MaxEmbedDepth, embed
+// a note that is already being rendered, or go past the render's budget.
 func (e *obsidianHTML) embed(path string, note []byte) (string, bool) {
-	if len(e.stack) >= MaxEmbedDepth+1 || slices.Contains(e.stack, path) {
+	if len(e.stack) >= MaxEmbedDepth+1 || slices.Contains(e.stack, path) ||
+		e.left.embeds == 0 || len(note) > e.left.bytes {
 		return "", false
 	}
+	e.left.embeds--
+	e.left.bytes -= len(note)
 	opts := e.opts
 	opts.Path = path
-	return render(note, opts, append(slices.Clone(e.stack), path)), true
+	return render(note, opts, append(slices.Clone(e.stack), path), e.left), true
 }

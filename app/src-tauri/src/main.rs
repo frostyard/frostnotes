@@ -35,7 +35,8 @@ fn main() {
             open::open_url,
             open::open_file,
             spike::spike_mode,
-            spike::spike_report
+            spike::spike_report,
+            spike::spike_say
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -53,6 +54,8 @@ fn main() {
                 .decorations(false)
                 .on_navigation(allowed_navigation)
                 .on_new_window(|_, _| NewWindowResponse::Deny)
+                // Nor does it download: a note's links open in the browser.
+                .on_download(|_, _| false)
                 .visible(false)
                 .build()?;
             show_soon(main);
@@ -113,6 +116,32 @@ fn apply_webkit_workarounds() {
 #[cfg(test)]
 mod tests {
     use super::allowed_navigation;
+
+    // Review finding 12 (plan 0005, Phase 7): the window holds only what
+    // the page uses of Tauri's own commands; destroy is how a close that
+    // waited for unsaved notes ends (onCloseRequested).
+    #[test]
+    fn grants_only_what_the_page_uses() {
+        let caps = include_str!("../capabilities/default.json");
+        let list = caps.split("\"permissions\"").nth(1).and_then(|s| s.split(']').next()).unwrap();
+        let granted: Vec<&str> = list.split('"').skip(1).step_by(2).collect();
+        assert_eq!(
+            granted,
+            [
+                "core:event:allow-listen",
+                "core:event:allow-unlisten",
+                "core:window:allow-is-maximized",
+                "core:window:allow-minimize",
+                "core:window:allow-toggle-maximize",
+                "core:window:allow-internal-toggle-maximize",
+                "core:window:allow-start-dragging",
+                "core:window:allow-show",
+                "core:window:allow-close",
+                "core:window:allow-destroy",
+                "core:webview:allow-set-webview-zoom",
+            ]
+        );
+    }
 
     #[test]
     fn navigates_only_within_the_app() {

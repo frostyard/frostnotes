@@ -607,10 +607,13 @@ belongs to the field, a prompt or a menu.
 
 - No component draws literal colors or fonts; tokens only.
 - Rendered note HTML reaches the page only through the reading view,
-  sanitized by notesd and again by DOMPurify, and never through
-  `dangerouslySetInnerHTML` elsewhere; no element of it carries an event
-  handler, and none carries `style` except the markup KaTeX draws for
-  math afterwards, from the `data-tex` text alone.
+  live preview's rendered blocks and page previews, each sanitized by
+  notesd and again by DOMPurify and finished in a template before the
+  page has it, and never through `dangerouslySetInnerHTML` elsewhere; no
+  element of it carries an event handler, a class the renderer does not
+  draw, or `style`, except the markup KaTeX draws for math afterwards,
+  from the `data-tex` text alone. Its box (`.rendered`) contains its
+  layout, so nothing in it is placed over the window.
 - The editor's document is the file's text: only CodeMirror transactions
   change it, and only the document registry writes it, with its base
   ([ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)).

@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./app/App";
+import { suppressNativeMenu } from "./app/system";
 import type { Connect } from "./data/session";
 
 // VITE_NOTESD_WS connects to notesd's dev gateway (notesd -devgw) and
@@ -45,8 +46,16 @@ async function spikeRun(): Promise<SpikeRun | null> {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
+suppressNativeMenu();
 const spike = await spikeRun();
-if (spike) {
+// M3's exit evidence drives the app itself (src/spike/drive.tsx).
+if (spike?.name === "hotkeys") {
+  const { runHotkeys } = await import("./spike/hotkeys");
+  void runHotkeys(root);
+} else if (spike?.name === "writers") {
+  const { runWriters } = await import("./spike/writers");
+  void runWriters(root, connect);
+} else if (spike) {
   const { Spike } = await import("./spike/Spike");
   createRoot(root).render(<Spike name={spike.name} auto={spike.auto} report={spike.report} />);
 } else {

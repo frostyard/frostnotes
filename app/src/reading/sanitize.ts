@@ -51,6 +51,38 @@ export const SHARED = [
   "data-block",
 ];
 
+/**
+ * CLASSES are the class names notesd's renderer draws (render.md's
+ * sanitizer): a note's other classes go, so its HTML cannot use the app's
+ * own styles. A code block's language-… stays too.
+ */
+const CLASSES = new Set([
+  "internal-link",
+  "external-link",
+  "is-unresolved",
+  "embed",
+  "file-embed",
+  "tag",
+  "math",
+  "callout",
+  "callout-title",
+  "callout-content",
+  "footnotes",
+  "footnote-ref",
+  "footnote-backref",
+]);
+
+/** ROLES are the roles notesd's renderer draws: footnotes'. */
+const ROLES = ["doc-noteref", "doc-endnotes", "doc-backlink"];
+
+/** classes keeps the class names of value the renderer draws. */
+export function classes(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter((c) => CLASSES.has(c) || (c.startsWith("language-") && c.length > "language-".length))
+    .join(" ");
+}
+
 /** BY_ELEMENT are the attributes particular elements may carry besides the shared ones. */
 const BY_ELEMENT: Record<string, readonly string[]> = {
   ol: ["start"],
@@ -125,6 +157,20 @@ export function createSanitizer(win: Window & typeof globalThis = window): (html
   purify.addHook("uponSanitizeAttribute", (node, data) => {
     const tag = node.nodeName.toLowerCase();
     const name = data.attrName;
+    if (name === "class") {
+      data.attrValue = classes(data.attrValue);
+      data.keepAttr = data.attrValue !== "";
+      return;
+    }
+    // A footnote's id and role only: no other id can name a window property the app reads.
+    if (name === "id") {
+      data.keepAttr = data.attrValue.startsWith("fn:") || data.attrValue.startsWith("fnref");
+      return;
+    }
+    if (name === "role") {
+      data.keepAttr = ROLES.includes(data.attrValue);
+      return;
+    }
     if (SHARED.includes(name)) return;
     if (!BY_ELEMENT[tag]?.includes(name)) {
       data.keepAttr = false;

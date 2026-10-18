@@ -193,6 +193,8 @@ export async function followLink(
     await openExternal(cmd.target);
     return;
   }
+  // A protocol-relative URL (//host) names no note, as the reading view's sanitizer has it.
+  if (cmd.target.trim().startsWith("//")) return;
   const target = cmd.target.trim().replace(/^\/+/, "");
   if (target === "" || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target)) return;
   const name = target.endsWith(".md") ? target : `${target}.md`;

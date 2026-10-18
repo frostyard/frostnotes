@@ -11,7 +11,7 @@ import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { TabNotice, type TabNoticeAction } from "../features/workspace/TabNotice";
 import { extensionOf } from "../lib/fileTree";
-import { finish } from "../reading/finish";
+import { fill } from "../reading/finish";
 import { createSanitizer } from "../reading/sanitize";
 import { completionCatalog } from "./catalog";
 import type { NoteDoc, Notice } from "./document";
@@ -102,9 +102,10 @@ export function NoteEditor(props: NoteEditorProps) {
       new BlockRenderer(
         async (markdown) =>
           sanitize((await client.current.note.render({ vaultId, path: doc.path, content: markdown })).html),
-        (el) =>
-          finish(
+        (el, html) =>
+          fill(
             el,
+            html,
             (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "",
             usePrefs.getState().loadRemoteImages,
           ),

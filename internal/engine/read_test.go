@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/render"
 	"github.com/frostyard/frostnotes/internal/vaultgen"
 )
 
@@ -355,5 +356,21 @@ func TestVaultSettingsSayWhereEachComesFrom(t *testing.T) {
 	}
 	if _, err := bare.c.Vault().Settings(t.Context(), &api.VaultSettingsParams{ID: 999}); !errors.Is(err, api.ErrNotFound) {
 		t.Errorf("Settings of an unknown vault = %v, want notFound", err)
+	}
+}
+
+// A note too large to embed renders as a link and is never read (review
+// finding 2, plan 0005 Phase 7).
+func TestRenderLinksANoteTooLargeToEmbed(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vault")
+	writeFiles(t, dir, map[string]string{
+		"Big.md":  strings.Repeat("word ", render.MaxEmbedBytes/5+1) + "\n",
+		"Host.md": "![[Big]]\n\nInline ![[Big]].\n",
+	})
+	av := openVault(t, dir)
+	r, err := av.c.Note().Render(t.Context(), &api.NoteRenderParams{VaultID: av.id, Path: "Host.md"})
+	if err != nil || strings.Contains(r.HTML, `class="embed`) ||
+		strings.Count(r.HTML, `<a class="internal-link" data-href="Big" data-path="Big.md">Big</a>`) != 2 {
+		t.Errorf("Render = %+v, %v; want two links to Big", r, err)
 	}
 }

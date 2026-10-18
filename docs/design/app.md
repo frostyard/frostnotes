@@ -65,7 +65,7 @@ against the dev gateway now and the hub in M4.
 | `lib/` | pure helpers: the keymap, fuzzy matching, the file tree, the outline, formatting | cards |
 | `styles/` | `tokens.css` (the spec's tokens), `app.css` (Tailwind entry), `editor.css` (the editor's and the reading view's styles) | planner |
 | `testing/` | Testing Library setup and render helpers | planner |
-| `spike/` | M0's CodeMirror spike, kept for `make spike-cm6` until the editor's own harness replaces it | planner |
+| `spike/` | M0's CodeMirror spike (`make spike-cm6`), its measurement of the app's editor, and the drivers of M3's exit evidence (`make m3-evidence`) | planner |
 
 Presentational components take data and callbacks as props, hold only
 transient state (hover, an open menu, a field being typed), and import
@@ -401,9 +401,14 @@ the transport's `blobURL(hash, ext)` gives a file's URL:
 browser, a `data:` URL from the mock. Images, audio and video show
 inline in live preview, in the reading view and in a `file` tab; a PDF
 shows with a button that opens it with the system's application (the
-shell's `open_file`; [Window](#window)). With the Load remote images preference off,
-the reading view drops remote `img` sources. Pasting or
-dropping an image calls `note.upload` and inserts `![[name]]`.
+shell's `open_file`; [Window](#window)). Rendered HTML is finished
+(`reading/finish.ts`'s `fill`) in a template, which loads nothing, before
+the page has it: with the Load remote images preference off, a remote
+`img` loses its source there and is never requested. `notesblob://`
+answers a range at most 8 MiB long and a file without a range only up to
+64 MiB, so a large video plays without sitting whole in memory. M3 pastes
+plain text only; pasting or dropping an image to call `note.upload` and
+insert `![[name]]` is later work.
 
 Both servers of a hash (`protocol.rs` in Tauri, `internal/devgw` in a
 browser; [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports))
@@ -500,7 +505,11 @@ serves `/blobs/` from Vite there if it must.
   drags the window, and a double click toggles maximize. The capability
   file grants the window permissions the controls use and the app's own
   commands.
-- The webview's own context menu is off; the app draws its own menus.
+- The webview's own context menu is off (`system.ts`'s
+  `suppressNativeMenu`, from the first line of the page); the app draws
+  its own menus. The webview downloads nothing (`on_download`).
+- A view that fails while it draws shows why in its tab
+  (`ViewBoundary`); the rest of the window works on.
 - Links to the web open in the system browser (`http`, `https`, `mailto`
   only); the webview never navigates away from the app. The shell's two
   commands (`src-tauri/src/open.rs`) are the only ways the page reaches
@@ -523,10 +532,17 @@ serves `/blobs/` from Vite there if it must.
   where it can be; views run in happy-dom where a test needs one, and in
   jsdom (`// @vitest-environment jsdom`) where DOMPurify must sanitize:
   the sanitizer's tests and the reading, merge and history views'.
-- App tests drive the built app in WebKitGTK through `WebKitWebDriver`,
-  as spike 1 did (`app/src/spike/measure.ts`, `make spike-cm6`): typing
-  latency in the real editor on a generated 10,000-line note, saves and
-  merges against a real notesd, and the default shortcuts.
+- `make m3-evidence` drives the built app in WebKitGTK
+  ([plan 0005, Phase 7](../plans/0005-m3-desktop-app.md#phase-7--review-and-exit-evidence)):
+  the app runs with `FROSTNOTES_SPIKE` naming a driver in `spike/`. The
+  editor's measurement (`editor`, after spike 1's `measure.ts`) times
+  typing and scrolling in a generated 10,000-line note with every
+  live-preview provider. The hotkeys (`hotkeys`, over the mock) and the
+  writer pairs (`writers`, over the Tauri bridge to a real notesd) ask a
+  harness, `internal/appevidence`, for what the page cannot do itself,
+  in lines the shell prints (`spike_say`): xdotool presses keys under
+  Xvfb, so they arrive through X, GTK and WebKit, and vim, notesctl's
+  MCP server and a second notesd through a hub write the open note.
 
 ## Operational notes
 

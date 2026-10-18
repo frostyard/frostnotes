@@ -68,6 +68,9 @@ file a step names before writing its frostnotes counterpart.
   ([docs/specs/sync-protocol.md](docs/specs/sync-protocol.md)).
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).
+  `internal/evidence`: real notesd processes for the milestones' exit
+  evidence; `internal/appevidence`: M3's, over the built app under Xvfb
+  (`make m3-evidence`).
 - `internal/mcpserver`: the MCP tools `notesctl mcp` serves
   ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
   only package that imports the MCP SDK.
@@ -79,7 +82,7 @@ file a step names before writing its frostnotes counterpart.
   `app/src/rpc/transport.ts`, with Tauri, WebSocket (`transport/ws.ts`) and
   mock (`rpc/mock/`) transports. `app/src/features/` is presentational;
   `app/src/app/` and `app/src/data/` connect it. `app/src/spike/` is M0's
-  CodeMirror spike. The icon's master is `app/src-tauri/icons/icon.svg`
+  CodeMirror spike and the drivers of M3's exit evidence. The icon's master is `app/src-tauri/icons/icon.svg`
   (`scripts/render-icons.py`, ADR-0013).
 - `dev/nsl/provision.sh`: the nsl machine for the app toolchain;
   `scripts/dev-app.sh` runs notesd beside the app or Vite there.
