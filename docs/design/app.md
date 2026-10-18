@@ -18,7 +18,8 @@ Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) 
 **Status: M0's shell is built** ([plan 0001](../plans/0001-m0-foundations.md#phase-4--app-shell)):
 the transports, the mock, the title bar, the status bar, and the
 CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
-dev gateway's `/blobs/` (Phase 3), and M3's data layer below (Phase 5).
+dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout
+and commands below (Phase 5).
 Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
@@ -122,14 +123,32 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   next and previous, the nth, move a tab within or between groups or to a
   group's edge (a new split), split, resize, back and forward, pin, apply
   a move or a delete, and validate. Empty splits collapse; the last tab of
-  the last group becomes an empty tab rather than closing.
+  the last group becomes an empty tab rather than closing. Closing a tab
+  activates the one that takes its place; opening a note in an empty tab
+  keeps no history of the empty view; a delete drops the file from history
+  and the recent files, while a tab showing it stays and says so. IDs are
+  `t`, `g` and `s` with a counter the workspace keeps, so operations are
+  deterministic.
 - **Opening links** follows Obsidian: a click opens in the current tab,
   or in a new tab when the current one is pinned; Ctrl+click opens in a
   new tab; Ctrl+Alt+click opens to the right; middle click opens in a new
   tab. A new tab goes right after the active one.
 - **Persistence** ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)):
   local storage, one document per vault, written 500 ms after the last
-  change; recently opened files (the last 50) ride along.
+  change and when the page goes away; recently opened files (the last 50)
+  ride along. Validation (`workspace/validate.ts`) keeps what it
+  understands of a stored workspace and drops the rest, so no stored
+  layout wedges the window. `wireWorkspace` listens to the event feed
+  before `Session` connects, so moves and deletes, replays included,
+  reach the shown vault's workspace and every other vault's stored one.
+- **Layout** (`app/MainWindow.tsx`, `app/WorkspaceView.tsx`): the ribbon,
+  the sidebars and the workspace are columns, each drawing its part of
+  the title bar row, so the row's segments meet the panes' edges without
+  measuring; groups whose top edge is the workspace's draw their strips
+  there, and the top-right one keeps clear of the window controls while
+  the right sidebar is closed. Dragging a tab over a group shows where it
+  lands (between tabs on the strip; the group's end in its middle; a new
+  split in its outer quarter) and drops it there with `moveTab`.
 
 ## Editor
 
@@ -301,6 +320,12 @@ serves `/blobs/` from Vite there if it must.
   `editor:toggle-bold`), its name, when it applies (an editor is
   active, a note is open, a sidebar exists) and what it does. The command
   palette, the menus and the keys all run commands through it.
+- The registry (`commands/registry.ts`) holds the workspace's commands
+  now (`app/commands.ts`): tabs, groups, history, sidebars, creating a
+  note where the vault's settings say (`Untitled.md`, then `Untitled 1.md`
+  …), and Reset workspace layout (`frostnotes:reset-workspace-layout`,
+  Frostnotes' own); a button whose command is not registered yet (the
+  switcher, the palette, settings) is disabled until its card lands.
 - **The window has one key listener,** in the bubble phase, so
   CodeMirror and fields handle their own keys first. It skips events
   already handled, maps the rest with `lib/keymap.ts` (Obsidian's default
