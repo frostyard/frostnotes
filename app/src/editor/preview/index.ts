@@ -4,6 +4,7 @@
 import { BASIC } from "./basic";
 import { CODE } from "./code";
 import type { Provider } from "./framework";
+import { GUIDES } from "./guides";
 import { INLINE } from "./inline";
 import { LISTS } from "./lists";
 import { MATH } from "./math";
@@ -18,6 +19,7 @@ export const PROVIDERS: readonly Provider[] = [
   ...INLINE,
   ...CODE,
   ...LISTS,
+  ...GUIDES,
   ...MATH,
   ...RENDERED,
   ...MEDIA,
