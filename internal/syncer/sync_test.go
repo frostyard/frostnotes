@@ -118,7 +118,7 @@ func deviceOptions(name string) rpctest.Options {
 // everything the hub's log holds.
 func settle(t *testing.T, h *node, devices ...*node) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), settleWait)
 	defer cancel()
 	for range 50 {
 		vs, err := h.c.Hub().Vaults(ctx, &api.HubVaultsParams{})

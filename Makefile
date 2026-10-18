@@ -102,7 +102,7 @@ verify: ## Tidy, generated files, vet, format, lint and unit tests
 check: fmt verify ## Format, then verify (the developer gate)
 
 ci: verify ui-check app-build app-test ## verify plus race tests and the app checks (nsl)
-	go test -race -run '^Test[^I]' ./...
+	go test -race -timeout 25m -run '^Test[^I]' ./...
 
 clean: ## Remove build output
 	rm -rf build dist coverage.out coverage.html

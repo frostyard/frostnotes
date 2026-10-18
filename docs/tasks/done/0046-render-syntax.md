@@ -27,8 +27,9 @@ block IDs that leave the text for a `data-block` attribute.
 - `internal/render/render.go`: the `obsidianHTML` extension, `lineOf`
   (a source offset's note line), `lineless` (true in an embedded note),
   the fallback renderer.
-- `internal/render/links.go` (T-0045's): `attr` and `writeText`, which
-  you may call.
+- `internal/render/links.go` (T-0045's): `linkAttr` (an attribute,
+  escaped, with its leading space) and `escapeLink` (escaped text), which
+  you may call; don't redefine names it declares.
 - `internal/render/syntax.go`: the stub `extendSyntax`.
 - `internal/markdown/render.go`: `TagKind`, `TagOf`, `InlineMathKind`,
   `MathBlockKind`, `MathOf`; `docs/specs/markdown.md#block-ids`.

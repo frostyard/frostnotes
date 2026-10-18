@@ -104,7 +104,51 @@ type Query struct {
 // value, which may be a double-quoted phrase; an empty value is no
 // filter. Everything else goes to SearchQuery. Task card T-0044.
 func ParseQuery(text string) Query {
-	return Query{Match: SearchQuery(text)}
+	var q Query
+	var terms []string
+	for {
+		text = strings.TrimLeft(text, " \t\r\n")
+		if text == "" {
+			break
+		}
+		if text[0] == '"' {
+			var phrase string
+			phrase, text, _ = strings.Cut(text[1:], `"`)
+			terms = append(terms, `"`+phrase+`"`)
+			continue
+		}
+		end := strings.IndexAny(text, " \t\r\n\"")
+		if end < 0 {
+			end = len(text)
+		}
+		word := text[:end]
+		text = text[end:]
+		kind, value, found := strings.Cut(word, ":")
+		kind = strings.ToLower(kind)
+		if !found || (kind != "path" && kind != "file" && kind != "tag") {
+			terms = append(terms, word)
+			continue
+		}
+		if value == "" && strings.HasPrefix(text, `"`) {
+			value, text, _ = strings.Cut(text[1:], `"`)
+		}
+		if kind == "tag" {
+			value = strings.ToLower(strings.TrimPrefix(value, "#"))
+		}
+		if value == "" {
+			continue
+		}
+		switch kind {
+		case "path":
+			q.Paths = append(q.Paths, value)
+		case "file":
+			q.Files = append(q.Files, value)
+		case "tag":
+			q.Tags = append(q.Tags, value)
+		}
+	}
+	q.Match = SearchQuery(strings.Join(terms, " "))
+	return q
 }
 
 // SearchNotes returns vault's notes that match q, at most limit of them.
@@ -112,7 +156,66 @@ func ParseQuery(text string) Query {
 // filters admit; with filters alone it lists the notes they admit by path,
 // each without a snippet; with neither it returns none. Task card T-0044.
 func (d *DB) SearchNotes(ctx context.Context, vaultID int64, q Query, limit int) ([]api.SearchHit, error) {
-	return d.Search(ctx, vaultID, q.Match, limit)
+	hits := []api.SearchHit{}
+	if q.Match == "" && len(q.Paths)+len(q.Files)+len(q.Tags) == 0 {
+		return hits, nil
+	}
+	limit = min(max(limit, 1), 100)
+	query, args := searchNotesSQL(vaultID, q)
+	rows, err := d.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return hits, fmt.Errorf("search notes: %w", err)
+	}
+	defer rows.Close()
+	// Do not limit SQL results: path and file filters must admit limit notes.
+	for len(hits) < limit && rows.Next() {
+		var hit api.SearchHit
+		var snippet string
+		if err := rows.Scan(&hit.Path, &hit.Title, &snippet); err != nil {
+			return hits, fmt.Errorf("scan search hit: %w", err)
+		}
+		folded := strings.ToLower(hit.Path)
+		name := folded[strings.LastIndexByte(folded, '/')+1:]
+		if !containsSearchFilters(folded, q.Paths) || !containsSearchFilters(name, q.Files) {
+			continue
+		}
+		hit.Snippet = splitSnippet(snippet)
+		hits = append(hits, hit)
+	}
+	if err := rows.Err(); err != nil {
+		return hits, fmt.Errorf("read search hits: %w", err)
+	}
+	return hits, nil
+}
+
+func searchNotesSQL(vaultID int64, q Query) (string, []any) {
+	columns := "files.path, notes.title, ''"
+	from := "notes JOIN files ON files.id = notes.file_id"
+	where := "files.vault_id = ?"
+	args := []any{vaultID}
+	order := "files.path"
+	if q.Match != "" {
+		columns = "files.path, notes.title, snippet(notes_fts, -1, char(2), char(3), '…', 16)"
+		from += " JOIN notes_fts ON notes_fts.rowid = notes.file_id"
+		where += " AND notes_fts MATCH ?"
+		args = append(args, q.Match)
+		order = "bm25(notes_fts, 10.0, 5.0, 1.0, 2.0), files.path"
+	}
+	for _, tag := range q.Tags {
+		where += ` AND EXISTS (SELECT 1 FROM tags WHERE tags.file_id = notes.file_id
+			AND (tags.folded = ? OR (tags.folded >= ? AND tags.folded < ?)))`
+		args = append(args, tag, tag+"/", tag+"0")
+	}
+	return "SELECT " + columns + " FROM " + from + " WHERE " + where + " ORDER BY " + order, args
+}
+
+func containsSearchFilters(folded string, filters []string) bool {
+	for _, filter := range filters {
+		if !strings.Contains(folded, strings.ToLower(filter)) {
+			return false
+		}
+	}
+	return true
 }
 
 func splitSnippet(text string) []api.SnippetPart {
