@@ -27,7 +27,9 @@ it fits: [design/overview.md](../design/overview.md).
     hub's authentication.
 - Each message is one line: a JSON object followed by `\n`, at most 16 MiB
   (`api.MaxMessageSize`). JSON escapes newlines in strings, so a message is
-  never split.
+  never split. notesd answers a request whose reply would be longer with
+  `internal` instead, and sends no longer notification; the app's bridge
+  ends a connection that sends a longer line.
 - **Files' bytes travel beside the RPC,** by content hash
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)):
   the desktop app reads `notesblob://localhost/<sha256>.<ext>` from

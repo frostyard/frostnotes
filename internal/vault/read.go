@@ -80,8 +80,8 @@ func (v *Vault) Render(ctx context.Context, p string, note []byte) (string, erro
 		},
 		Note: func(p string) ([]byte, bool) {
 			f, ok := file(p)
-			if !ok || f.Kind() != store.FileNote {
-				return nil, false
+			if !ok || f.Kind() != store.FileNote || f.Size > render.MaxEmbedBytes {
+				return nil, false // a note too large to embed is a link, never read
 			}
 			data, err := v.cfg.Blobs.Get(f.Hash)
 			if err != nil {
