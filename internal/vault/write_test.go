@@ -128,6 +128,12 @@ func TestTwoWritersOnOneBase(t *testing.T) {
 	if data, err := tv.blobs.Get(vs[0].Hash); err != nil || string(data) != sent {
 		t.Errorf("the conflict version holds %q, %v; want what the writer sent", data, err)
 	}
+	if third.ConflictVersion == nil || *third.ConflictVersion != vs[0].ID {
+		t.Errorf("the answer names conflict version %v, want %d: the one the editor's Compare reads", third.ConflictVersion, vs[0].ID)
+	}
+	if first.ConflictVersion != nil || second.ConflictVersion != nil {
+		t.Error("a write without conflicts names a conflict version")
+	}
 	if third.Hash != tv.row("Plan.md").Hash || vs[1].Hash != third.Hash {
 		t.Error("a write that changed nothing on disk moved the file's hash")
 	}

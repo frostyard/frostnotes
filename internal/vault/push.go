@@ -162,7 +162,7 @@ func (v *Vault) pushConflict(ctx context.Context, c PushChange, row store.File, 
 	if err != nil {
 		return PushOutcome{}, err
 	}
-	if err := v.flagConflict(ctx, row, c.Hash, size, who); err != nil {
+	if _, err := v.flagConflict(ctx, row, c.Hash, size, who); err != nil {
 		return PushOutcome{}, err
 	}
 	return PushOutcome{Status: api.PushStatusAccepted, FileID: c.FileID}, nil
@@ -282,7 +282,7 @@ func (v *Vault) mergeInto(ctx context.Context, r *os.Root, row store.File, head,
 		if _, err := v.putBlob(ctx, r, row.Path, row.Hash, hash, 0, who, nil); err != nil {
 			return PushOutcome{}, err
 		}
-		if err := v.flagConflict(ctx, row, row.Hash, row.Size, who); err != nil {
+		if _, err := v.flagConflict(ctx, row, row.Hash, row.Size, who); err != nil {
 			return PushOutcome{}, err
 		}
 		out.Status, out.Conflicts, out.BasePruned = api.PushStatusConflicted, 1, false
@@ -301,7 +301,7 @@ func (v *Vault) mergeInto(ctx context.Context, r *os.Root, row store.File, head,
 	}
 	res := merge.Create(head, incoming)
 	if len(res.Conflicts) > 0 {
-		if err := v.keepConflict(ctx, row, incoming, who); err != nil {
+		if _, err := v.keepConflict(ctx, row, incoming, who); err != nil {
 			return PushOutcome{}, err
 		}
 		out.Status, out.Conflicts = api.PushStatusConflicted, int64(len(res.Conflicts))

@@ -284,7 +284,7 @@ func (v *Vault) Write(ctx context.Context, p, base string, text []byte, who Auth
 // bytes to write as they are (a revert's version, a link rewrite). v.mu
 // must be held.
 func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming []byte, isText bool, who Author) (*api.WriteResult, error) {
-	kept := "" // the conflict version kept by an earlier attempt
+	kept, keptID := "", int64(0) // the conflict version kept by an earlier attempt
 	for range 5 {
 		row, cur, err := v.refresh(ctx, r, p)
 		if err != nil {
@@ -325,10 +325,13 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 		// transaction of its own, so neither a crash nor a client that
 		// goes away loses it once the file has changed.
 		if conflicts > 0 && kept != blobs.ID(in) {
-			if err := v.keepConflict(ctx, row, in, who); err != nil {
+			if keptID, err = v.keepConflict(ctx, row, in, who); err != nil {
 				return nil, err
 			}
 			kept = blobs.ID(in)
+		}
+		if conflicts > 0 {
+			wr.ConflictVersion = &keptID
 		}
 		if hash == row.Hash {
 			return wr, nil // the file's side stood everywhere
@@ -375,26 +378,31 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 }
 
 // keepConflict stores content, a writer's text that lost a conflicting
-// hunk, as a conflict version of file row (ADR-0005).
-func (v *Vault) keepConflict(ctx context.Context, row store.File, content []byte, who Author) error {
+// hunk, as a conflict version of file row (ADR-0005), and returns the
+// version's ID.
+func (v *Vault) keepConflict(ctx context.Context, row store.File, content []byte, who Author) (int64, error) {
 	hash, err := v.cfg.Blobs.Put(ctx, bytes.NewReader(content))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	return v.flagConflict(ctx, row, hash, int64(len(content)), who)
 }
 
 // flagConflict records the blob hash, content that lost to file row's
 // head, as a conflict version and, on a hub, a conflict revision, which
-// flags the file.
-func (v *Vault) flagConflict(ctx context.Context, row store.File, hash string, size int64, who Author) error {
-	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
-		if _, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: row.Path, Hash: hash,
-			Size: size, Source: who.Source, Author: who.Name, Conflict: true}); err != nil {
+// flags the file. It returns the version's ID.
+func (v *Vault) flagConflict(ctx context.Context, row store.File, hash string, size int64, who Author) (int64, error) {
+	var id int64
+	err := v.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
+		ver, err := tx.AddVersion(ctx, store.Version{VaultID: v.id, FileID: row.ID, Path: row.Path, Hash: hash,
+			Size: size, Source: who.Source, Author: who.Name, Conflict: true})
+		if err != nil {
 			return err
 		}
+		id = ver.ID
 		return v.logRevision(ctx, tx, api.RevisionOpConflict, row.ID, row.Path, hash, size, who)
 	})
+	return id, err
 }
 
 // baseContent returns the content whose hash is base, a version of file
