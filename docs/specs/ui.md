@@ -134,9 +134,11 @@ it every `em` above.
   handle, which turns `--accent` while dragged. Widths persist with the
   workspace
   ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)).
-  A collapsed sidebar takes no width; the ribbon stays. A window too
-  narrow for the open sidebars at their minimum and 320 for the
-  workspace collapses the right sidebar, then the left.
+  A collapsed sidebar takes no width; the ribbon stays. Open sidebars
+  give way to the workspace's 320, the right first, down to their
+  minimum; a window too narrow for them at that collapses the right
+  sidebar, then the left. Their stored widths and open flags stay, for a
+  wider window.
 - **Buttons** in the chrome are 28 × 28 with 16px Lucide icons in
   `--text-secondary`, rounded 6; hover `--selection-inactive`; pressed or
   selected `--selection-sidebar`; disabled at 40% opacity. Every

@@ -25,8 +25,8 @@ T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
 and they are merged. Phase 4, notesd's additions, is merged in two PRs.
 Phase 5 runs as four PRs against `main`, one at a time: the data layer
-(in review), the workspace and commands, the editor core, and the
-reading view, merge view and history with the exit evidence.
+(merged), the workspace and commands (in review), the editor core, and
+the reading view, merge view and history with the exit evidence.
 
 ## Decisions taken for M3
 
@@ -393,6 +393,19 @@ of [specs/ui.md](../specs/ui.md) not marked for a batch.
   merges (scripted with `scriptMerges`, else the newer side stands with a
   conflict version), versions, folders, events, and a replay after
   `sinceSeq`; `VITE_MOCK=1` shows a made-up vault (`rpc/mock/fixture.ts`).
+- **Result so far (2026-10-17): the workspace and commands.** The model,
+  its pure operations, validation and per-vault persistence
+  (`workspace/`), following moves and deletes from the event feed into
+  every vault's saved workspace; the command registry and the window's
+  key listener over T-0038's keymap (`commands/`); and the layout
+  (`app/`): the ribbon, the sidebars with their pane tabs, splitters and
+  the vault row, the split tree of tab groups with T-0042's strips in the
+  title bar row and view headers, drag and drop between groups and to
+  their edges, and sidebars that give way, then collapse, in a narrow
+  window ([specs/ui.md](../specs/ui.md#layout)). Until batch 2, the Files
+  pane is a plain list of paths, a note tab shows its text read-only
+  until the editor core, and the menus (tab menu, tab list, More
+  options) and the panes' contents are not drawn.
 
 ## Phase 6 — Executor batches 2 and 3, and wiring
 
