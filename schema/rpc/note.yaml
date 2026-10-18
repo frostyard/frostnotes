@@ -63,6 +63,7 @@ types:
     fields:
       - {name: source, type: string, doc: "The linking note's path."}
       - {name: link, type: Link}
+      - {name: context, type: "[]SnippetPart", doc: "The link's line in the source, the link itself marked as matching, cut with '…' about 120 characters from it; empty when the source's text is not at hand."}
   - name: SnippetPart
     doc: A piece of a search snippet.
     fields:

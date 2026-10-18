@@ -857,6 +857,7 @@ A link to a file from a note.
 | --- | --- | --- |
 | `source` | `string` | The linking note's path. |
 | `link` | `Link` |  |
+| `context` | `[]SnippetPart` | The link's line in the source, the link itself marked as matching, cut with '…' about 120 characters from it; empty when the source's text is not at hand. |
 
 ### Type `SnippetPart`
 

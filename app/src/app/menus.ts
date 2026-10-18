@@ -3,6 +3,7 @@
 // does. Each opens through the overlays store at a point; app/Overlays.tsx
 // draws it.
 import { openMenu } from "../data/overlays";
+import { setRenaming } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import type { MenuItem } from "../features/menu/Menu";
 import type { Client, SyncConflict } from "../rpc/gen/api";
@@ -17,6 +18,7 @@ import {
   findTab,
   open,
   pin,
+  revealPath,
   selectPane,
   setView,
   split,
@@ -88,9 +90,9 @@ export function openTabList(groupId: string, x: number, y: number): void {
   });
 }
 
-/** revealInFiles shows the Files pane, opening the left sidebar. */
-export function revealInFiles(): void {
-  update((w) => selectPane(w, "left", "files"));
+/** revealInFiles shows the Files pane with path's row in view, its folders open; a folder path ends with "/". */
+export function revealInFiles(path?: string): void {
+  update((w) => selectPane(path === undefined ? w : revealPath(w, path), "left", "files"));
 }
 
 /** openMoreOptions opens a view's More options at (x, y). */
@@ -102,7 +104,7 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
   if (file !== null) {
     items.push(
       SEP,
-      item("rename", "Rename…", { keys: "F2", disabled: true }),
+      item("rename", "Rename…", { keys: "F2" }),
       item("move", "Move file to…", { disabled: true }),
       item("copy-path", "Copy path"),
       item("reveal", "Reveal in Files"),
@@ -129,7 +131,14 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
           if (file !== null) void copyPath(file);
           return;
         case "reveal":
-          return revealInFiles();
+          if (file !== null) revealInFiles(file);
+          return;
+        case "rename":
+          if (file !== null) {
+            revealInFiles(file);
+            setRenaming(file);
+          }
+          return;
         case "delete":
           if (file !== null) void deleteFile(c, file);
           return;

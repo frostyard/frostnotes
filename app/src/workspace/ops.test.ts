@@ -22,7 +22,11 @@ import {
   pin,
   reopenClosed,
   resize,
+  revealPath,
   selectPane,
+  setFileSort,
+  setFolderOpen,
+  setFoldersOpen,
   setSidebarWidth,
   split,
   toggleSidebar,
@@ -272,5 +276,30 @@ describe("validate", () => {
     expect(ws.right.open).toBe(true);
     expect(ws.recent).toEqual(["a.md"]);
     expect(ws.nextId).toBe(4);
+  });
+});
+
+describe("the Files pane's state", () => {
+  it("sorts, opens and closes folders, and reveals a path's folders", () => {
+    let ws = emptyWorkspace();
+    expect(ws.files).toEqual({ sort: "alphabetical", expanded: [] });
+    ws = setFileSort(ws, "byModifiedTime");
+    ws = setFolderOpen(ws, "Projects", true);
+    ws = setFolderOpen(ws, "Projects", true);
+    expect(ws.files).toEqual({ sort: "byModifiedTime", expanded: ["Projects"] });
+    ws = revealPath(ws, "Journal/2026/Oct/a.md");
+    expect(ws.files.expanded).toEqual(["Projects", "Journal", "Journal/2026", "Journal/2026/Oct"]);
+    ws = setFolderOpen(ws, "Projects", false);
+    expect(ws.files.expanded).toEqual(["Journal", "Journal/2026", "Journal/2026/Oct"]);
+    expect(setFoldersOpen(ws, []).files.expanded).toEqual([]);
+  });
+
+  it("follows a folder's move, and validates what was stored", () => {
+    let ws = setFoldersOpen(emptyWorkspace(), ["Journal", "Journal/2026", "Other"]);
+    ws = applyMove(ws, "Journal", "Diary");
+    expect(ws.files.expanded).toEqual(["Diary", "Diary/2026", "Other"]);
+    const stored = validate({ ...ws, files: { sort: "sideways", expanded: ["a", "/abs", 3, "a"] } });
+    expect(stored.files).toEqual({ sort: "alphabetical", expanded: ["a"] });
+    expect(validate({ ...ws, files: undefined }).files).toEqual({ sort: "alphabetical", expanded: [] });
   });
 });

@@ -20,7 +20,8 @@ the transports, the mock, the title bar, the status bar, and the
 CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
 dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
 commands, editor core, reading view, merge view and history below
-(Phase 5), and Phase 6's menus, notices, prompts and status bar.
+(Phase 5), and Phase 6's menus, notices, prompts, status bar and
+sidebar panes.
 Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
@@ -121,7 +122,8 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   mode `edit` or `read`, scroll and cursor), `history` (path), `merge`
   (path and the other side), `file` (an attachment's path). The left and
   right sidebars are tab groups of panes, with a width and an open flag.
-  One tab group is active, and its active tab is the active tab.
+  One tab group is active, and its active tab is the active tab. The
+  Files pane's sort order and open folders are the workspace's too.
 - **Operations** are pure functions from a workspace to a workspace, so
   each is a unit test: open (here, in a new tab, to the right, below),
   close, close others, reopen the last closed (the last 20), activate,
@@ -146,6 +148,30 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   layout wedges the window. `wireWorkspace` listens to the event feed
   before `Session` connects, so moves and deletes, replays included,
   reach the shown vault's workspace and every other vault's stored one.
+- **The panes** (`app/Panes.tsx`, containers in `app/panes/`) draw
+  batch 2's presentational panes over the stores. Files: `lib/fileTree.ts`'s
+  rows from the files store, its commands through notesd (renames and
+  drops move with `note.move` or `note.moveFolder`, links updated as the
+  vault's setting says, else after asking; New folder makes "Untitled"
+  and renames it in place; Delete asks first while Confirm file deletion
+  is on); notesd sends no event for an empty folder, so a window that
+  makes, moves or deletes one lists the folders again. Search:
+  `note.search` 250 ms after the query last changed, at most 100 notes,
+  Obsidian's `[key]` listed with `note.list`; the query lives in
+  `data/panes.ts`, where the Tags pane (`tag:#name`), All properties
+  (`[key]`) and Ctrl+Shift+F (the editor's selection) set it. Backlinks:
+  `note.backlinks` grouped by note, each link's line from its
+  `context`, and unlinked mentions from a search for the title and
+  aliases as phrases, leaving out the notes that link; a line opens its
+  note at the line. Outgoing links: `note.links` through
+  `lib/outgoing.ts`; an unresolved one is created where new notes go.
+  Tags and All properties: `note.tags` and `note.properties`, sorted by
+  name or count. Outline: the active editor's headings from its syntax
+  tree (`editor/outline.ts`), read again 150 ms after the text changes,
+  the heading under the cursor marked; the editors map tells its
+  subscribers about every change. Each pane reads again when the vault's
+  files change. F2 renames the active file in the Files pane until batch
+  3's inline title.
 - **Layout** (`app/MainWindow.tsx`, `app/WorkspaceView.tsx`): the ribbon,
   the sidebars and the workspace are columns, each drawing its part of
   the title bar row, so the row's segments meet the panes' edges without
@@ -368,9 +394,9 @@ serves `/blobs/` from Vite there if it must.
 - **Over the layout** (`data/overlays.ts`, drawn by `app/Overlays.tsx`):
   one menu at a time, the quick switcher or the command palette, and the
   notices. The menus (`app/menus.ts`) are the tab's, the tab list, More
-  options, the vault menu, the status bar's editing mode and conflicts;
-  More options' Rename, Move file to and Open in default app wait for
-  their prompts and the opener plugin. The quick switcher lists the
+  options, the vault menu, the status bar's editing mode and conflicts,
+  the Files pane's sort order and its rows'; Move file to and Open in
+  default app wait for their prompt and the opener plugin. The quick switcher lists the
   vault's notes and the workspace's recent files (aliases join when
   `note.list` carries them); Shift+Enter creates the note where new notes
   go. The palette lists the commands that apply as it opens, the ten run

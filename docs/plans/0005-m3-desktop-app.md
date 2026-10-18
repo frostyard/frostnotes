@@ -27,7 +27,8 @@ and they are merged. Phase 4, notesd's additions, is merged in two PRs.
 Phase 5 is merged in four PRs: the data layer, the workspace and
 commands, the editor core, and the reading view, merge view and history
 with the exit evidence. Phase 6 is under way: batch 2's shared pieces,
-T-0047 to T-0052 and their wiring, are in review.
+T-0047 to T-0052 and their wiring, are merged; its sidebar panes,
+T-0053 to T-0059 and their wiring, are in review.
 
 ## Decisions taken for M3
 
@@ -559,6 +560,37 @@ into its container as it merges.
   | T-0050 status bar | 1 | 2 m 16 s | correct |
   | T-0051 quick switcher | 1 | 2 m 16 s | correct |
   | T-0052 command palette | 1 | 1 m 21 s | correct; its key caps took the monospace font Tailwind gives `kbd`, which the planner set back |
+
+- **Result so far (2026-10-18): batch 2's sidebar panes.** Codex passed
+  T-0053 to T-0059 on the first attempt each, four at a time in the
+  executor worktrees (`exec-m3e` to `exec-m3h`, from `m3/batch2-panes`),
+  the three small cards taking the worktrees as the first four merged.
+  A mutation of each card's code failed its given tests: an outline
+  that marks no heading (1 test), outgoing links listed twice (1), tag
+  and property sorts that ignore counts (1 and 2), unlinked mentions
+  open at first (3), a search without its singular (1), and ← that does
+  not reach a row's folder (1). The planner's part: `note.backlinks`
+  carries each link's line (`context`, additive; the vault reads the
+  source's indexed content from the blob store), the workspace keeps
+  the Files pane's sort order and open folders, the mock's search and
+  list take notesd's filters, and the containers (`app/panes/`) with
+  the Outline reading the editor's syntax tree (the editors map tells
+  subscribers of every change). Wiring found that notesd sends no event
+  for an empty folder: a window that makes, moves or deletes a folder
+  lists the folders again, and another window sees it at its next
+  listing (a folder event is left for later). Rename joins More options
+  and F2 (in the Files pane until the inline title); Move file to and
+  Open in default app wait for their prompt and the opener plugin.
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0053 Outline | 1 | 1 m 48 s | correct |
+  | T-0054 Outgoing links | 1 | 1 m 21 s | correct |
+  | T-0055 Tags | 1 | 3 m 16 s | correct; adds each count to every node on its path, which sums as the contract says |
+  | T-0056 All properties | 1 | 1 m 33 s | correct; guards the icon table with `Object.hasOwn` |
+  | T-0057 Backlinks | 1 | 2 m 42 s | correct; some rows lack the 8px inset, left as is |
+  | T-0058 Search | 1 | 2 m 19 s | correct; opens on a middle click too |
+  | T-0059 Files | 1 | 3 m 2 s | correct; drag targets found from the event at the tree; Enter sends a blank name, which the container ignores |
 
 ## Phase 7 — Review and exit evidence
 

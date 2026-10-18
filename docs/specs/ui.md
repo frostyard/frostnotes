@@ -257,9 +257,9 @@ holds a space.
 - **Outgoing links:** the active note's links (`note.links`), each target
   once: resolved ones by title, then unresolved ones in
   `--text-tertiary`. A click opens it; an unresolved one creates it.
-- **Tags:** every tag in the vault with its count, nested at `/`, sorted
-  by name (A to Z) or count (a toolbar menu). A click searches
-  `tag:#name`.
+- **Tags:** every tag in the vault with its count, nested at `/` (a
+  parent counts its own notes and its children's), sorted by name (A to
+  Z) or count (a toolbar menu). A click searches `tag:#name`.
 - **All properties:** every frontmatter key in the vault with its type's
   icon and count, sorted as Tags are. A click lists the notes with that
   key in the search pane (`note.list` with the key).

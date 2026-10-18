@@ -14,6 +14,7 @@ import { DocumentRegistry } from "../editor/registry";
 import { finish, toggleLine } from "../reading/ReadingView";
 import { Client, PROTOCOL } from "../rpc/gen/api";
 import { MockTransport, mockVaults } from "../rpc/mock/mock";
+import { findFileRow } from "../testing/files";
 import { emptyWorkspace } from "../workspace/model";
 import { open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
@@ -55,7 +56,7 @@ describe("the reading view", () => {
   it("renders the document's text, saved or not, and follows its links", async () => {
     await start();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "a.md" }));
+    await user.click(await findFileRow("a.md"));
     await waitFor(() => expect(editor()).not.toBeNull());
     act(() =>
       editor()?.dispatch({ changes: { from: NOTE.length, insert: "Typed, not saved.\n" }, userEvent: "input.type" }),
@@ -106,7 +107,7 @@ describe("the merge view", () => {
   it("opens from a conflict's Compare, against the version notesd kept, and Done closes it", async () => {
     const mock = await start();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "a.md" }));
+    await user.click(await findFileRow("a.md"));
     await waitFor(() => expect(editor()).not.toBeNull());
     act(() => editor()?.dispatch({ changes: { from: 2, insert: "My " }, userEvent: "input.type" }));
     act(() => mock.vault(3).outside("a.md", "# Their Plan\n\nSee [[b]] and more.\n"));

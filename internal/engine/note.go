@@ -108,7 +108,11 @@ func (n notes) Backlinks(ctx context.Context, p *api.NoteBacklinksParams) ([]api
 	if err != nil {
 		return nil, err
 	}
-	return n.db.Backlinks(ctx, f.ID)
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	return v.Backlinks(ctx, f.ID)
 }
 
 func (n notes) Links(ctx context.Context, p *api.NoteLinksParams) ([]api.Link, error) {

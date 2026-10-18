@@ -145,3 +145,18 @@ export async function loadFiles(c: Client, vaultId: number, since: number): Prom
     return next;
   });
 }
+
+/**
+ * refreshFolders lists vault vaultId's folders again, keeping every folder
+ * the store's files sit in: notesd sends no event for an empty folder, so
+ * a window that made, moved or deleted one asks.
+ */
+export async function refreshFolders(c: Client, vaultId: number): Promise<void> {
+  const listing = await c.note.files({ vaultId });
+  useFiles.setState((s) => {
+    if (s.vaultId !== vaultId) return s;
+    let folders: readonly string[] = [...listing.folders].sort(byPath);
+    for (const p of s.files.keys()) folders = withParents(folders, p);
+    return { ...s, folders, pathsVersion: s.pathsVersion + 1 };
+  });
+}

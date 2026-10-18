@@ -98,6 +98,7 @@ export function NoteEditor(props: NoteEditorProps) {
       dispatchTransactions: (trs, ev) => {
         ev.update(trs);
         for (const tr of trs) doc.local(tr, ev);
+        if (trs.some((tr) => tr.docChanged || tr.selection)) registry.editors.changed();
       },
     });
     view.current = v;
