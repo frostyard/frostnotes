@@ -1,6 +1,6 @@
 # 0024 — The app opens and creates vaults, and a window switches between them
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-18
 
 ## Context

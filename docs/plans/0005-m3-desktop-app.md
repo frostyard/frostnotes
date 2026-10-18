@@ -40,7 +40,8 @@ pairs meet their targets in the built app, and scrolling falls just
 short of its own (a follow-up). Evidence 4 is the user's 7-day trial.
 It waits for Phase 8, which lets the app open and create vaults
 ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
-Proposed): batch 2's vault switcher only ever switched vaults.
+accepted 2026-10-18): batch 2's vault switcher only ever switched
+vaults.
 
 ## Decisions taken for M3
 
@@ -79,7 +80,7 @@ A fourth came with Phase 8 (2026-10-18):
 - **The app opens and creates vaults, and a window switches between
   them**
   ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
-  Proposed). Open folder as vault, Create new vault and Remove from
+  accepted 2026-10-18). Open folder as vault, Create new vault and Remove from
   list go through notesd's `vault.add` (which gains `create`) and
   `vault.remove`; the folder comes from the system's picker
   (`tauri-plugin-dialog`, open only); one window shows one vault and
