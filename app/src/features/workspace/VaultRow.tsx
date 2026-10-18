@@ -1,10 +1,11 @@
 // The vault row at the foot of the left sidebar (docs/specs/ui.md#sidebars-and-panes):
-// the vault's name opens the vault menu; Settings sits at the right. The
-// menu here is the vault switcher's first form, until batch 2's menus.
-import { Check, ChevronsUpDown, Settings } from "lucide-react";
+// the vault's name opens the vault menu, which lists the vaults by name
+// with the current one checked; Settings sits at the right.
+import { ChevronsUpDown, Settings } from "lucide-react";
 import { useState } from "react";
 
 import { IconButton } from "../chrome/IconButton";
+import { Menu } from "../menu/Menu";
 
 /** VaultChoice is a vault the menu lists. */
 export interface VaultChoice {
@@ -23,16 +24,20 @@ export interface VaultRowProps {
 
 /** VaultRow draws the vault row and its menu. */
 export function VaultRow(props: VaultRowProps) {
-  const [open, setOpen] = useState(false);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const current = props.vaults.find((v) => v.id === props.current);
   return (
     <div className="relative flex h-9 shrink-0 items-center gap-1 border-t border-separator px-2">
       <button
         type="button"
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={menuAt !== null}
         title={current?.path}
-        onClick={() => setOpen(!open)}
+        onClick={(e) => {
+          // The menu opens above the row, which sits at the window's foot.
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenuAt(menuAt ? null : { x: r.left, y: r.top - props.vaults.length * 28 - 14 });
+        }}
         className="text-sidebar-row flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 font-semibold hover:bg-selection-inactive"
       >
         <span className="truncate">{current?.name ?? "No vault"}</span>
@@ -46,30 +51,20 @@ export function VaultRow(props: VaultRowProps) {
         disabled={props.settingsDisabled}
         onClick={props.onSettings}
       />
-      {open && (
-        <div
-          role="menu"
-          aria-label="Vaults"
-          className="absolute bottom-full left-2 z-20 mb-1 min-w-[180px] rounded-lg border border-separator bg-window p-1 shadow-[var(--popover-shadow)]"
-        >
-          {props.vaults.map((v) => (
-            <button
-              key={v.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={v.id === props.current}
-              title={v.path}
-              onClick={() => {
-                setOpen(false);
-                props.onChoose(v.id);
-              }}
-              className="text-sidebar-row flex h-7 w-full items-center gap-2 rounded px-2 text-left hover:bg-accent hover:text-accent-contrast"
-            >
-              <span className="w-4 shrink-0">{v.id === props.current && <Check size={14} aria-hidden />}</span>
-              <span className="truncate">{v.name}</span>
-            </button>
-          ))}
-        </div>
+      {menuAt && (
+        <Menu
+          label="Vaults"
+          items={props.vaults.map((v) => ({
+            kind: "item",
+            id: String(v.id),
+            label: v.name,
+            checked: v.id === props.current,
+          }))}
+          x={menuAt.x}
+          y={menuAt.y}
+          onChoose={(id) => props.onChoose(Number(id))}
+          onClose={() => setMenuAt(null)}
+        />
       )}
     </div>
   );

@@ -49,6 +49,15 @@ describe("Notices", () => {
     expect(onDismiss.mock.calls).toEqual([["a"], ["c"]]);
   });
 
+  it("dismisses a notice once, however often the stack draws again", () => {
+    const onDismiss = vi.fn();
+    const view = render(<Notices notices={[A]} onDismiss={onDismiss} />);
+    act(() => vi.advanceTimersByTime(3000));
+    view.rerender(<Notices notices={[{ ...A }]} onDismiss={onDismiss} />);
+    act(() => vi.advanceTimersByTime(NOTICE_ACTION_MS));
+    expect(onDismiss.mock.calls).toEqual([["a"]]);
+  });
+
   it("forgets the timer of a notice that left early", () => {
     const onDismiss = vi.fn();
     const view = render(<Notices notices={[A]} onDismiss={onDismiss} />);

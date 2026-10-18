@@ -67,8 +67,13 @@ export function Prompt<T>(props: PromptProps<T>) {
   const field = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState(0);
 
+  // Focus moves to the field, and back to what had it when the prompt goes.
   useEffect(() => {
+    const before = document.activeElement;
     field.current?.focus();
+    return () => {
+      if (before instanceof HTMLElement && before.isConnected) before.focus();
+    };
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: items is the trigger.

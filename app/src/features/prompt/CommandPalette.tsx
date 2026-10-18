@@ -35,7 +35,7 @@ export function CommandPalette({ commands, recent, onRun, onClose }: CommandPale
           {command.keys.length > 0 && (
             <span className="ml-2 flex shrink-0 gap-1">
               {command.keys.map((keys) => (
-                <kbd key={keys} className="rounded-[4px] bg-badge px-1.5 py-0.5 text-badge-text text-keycap">
+                <kbd key={keys} className="rounded-[4px] bg-badge px-1.5 py-0.5 font-sans text-badge-text text-keycap">
                   {keys}
                 </kbd>
               ))}

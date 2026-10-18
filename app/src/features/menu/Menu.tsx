@@ -3,7 +3,6 @@
 // by keyboard or pointer. Containers supply the actions.
 import { Check, ChevronRight } from "lucide-react";
 import {
-  Children,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -49,6 +48,13 @@ export interface MenuProps {
 export function Menu(props: MenuProps) {
   const portal = useRef<HTMLDivElement>(null);
   const { onClose } = props;
+  // Focus goes back to what had it when the menu opened.
+  useLayoutEffect(() => {
+    const before = document.activeElement;
+    return () => {
+      if (before instanceof HTMLElement && before.isConnected) before.focus();
+    };
+  }, []);
   useEffect(() => {
     function outside(event: PointerEvent) {
       if (event.target instanceof Node && !portal.current?.contains(event.target)) onClose();
@@ -183,51 +189,50 @@ function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef }: Me
         onKeyDown={keyDown}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {Children.toArray(
-          items.map((item, index) => {
-            if (item.kind === "separator") {
-              return <hr className="my-1 h-px border-0 bg-separator" />;
-            }
-            const highlighted = highlight === index;
-            const common = {
-              "aria-label": item.label,
-              className: `text-sidebar-row flex h-7 items-center gap-2 rounded px-2 ${highlighted ? "bg-accent text-accent-contrast" : ""} ${item.kind === "item" && item.disabled ? "opacity-40" : ""}`,
-            };
-            const contents = <ItemContents item={item} highlighted={highlighted} />;
-            if (item.kind === "submenu") {
-              return (
-                <div
-                  key={`submenu-${item.label}`}
-                  role="menuitem"
-                  tabIndex={-1}
-                  onKeyDown={keyDown}
-                  onPointerEnter={() => pointerEnter(index)}
-                  onClick={() => choose(index)}
-                  aria-haspopup="menu"
-                  aria-expanded={submenu?.index === index}
-                  {...common}
-                >
-                  {contents}
-                </div>
-              );
-            }
+        {items.map((item, index) => {
+          if (item.kind === "separator") {
+            // biome-ignore lint/suspicious/noArrayIndexKey: a separator is known by its place alone
+            return <hr key={`separator-${index}`} className="my-1 h-px border-0 bg-separator" />;
+          }
+          const highlighted = highlight === index;
+          const common = {
+            "aria-label": item.label,
+            className: `text-sidebar-row flex h-7 items-center gap-2 rounded px-2 ${highlighted ? "bg-accent text-accent-contrast" : ""} ${item.kind === "item" && item.disabled ? "opacity-40" : ""}`,
+          };
+          const contents = <ItemContents item={item} highlighted={highlighted} />;
+          if (item.kind === "submenu") {
             return (
-              // biome-ignore lint/a11y/useAriaPropsSupportedByRole lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: Biome cannot resolve the conditional menu item role; the list handles keyboard events.
               <div
-                key={item.id}
-                role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+                key={`submenu-${item.label}`}
+                role="menuitem"
                 tabIndex={-1}
+                onKeyDown={keyDown}
                 onPointerEnter={() => pointerEnter(index)}
                 onClick={() => choose(index)}
-                aria-checked={item.checked}
-                aria-disabled={item.disabled || undefined}
+                aria-haspopup="menu"
+                aria-expanded={submenu?.index === index}
                 {...common}
               >
                 {contents}
               </div>
             );
-          }),
-        )}
+          }
+          return (
+            // biome-ignore lint/a11y/useAriaPropsSupportedByRole lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: Biome cannot resolve the conditional menu item role; the list handles keyboard events.
+            <div
+              key={item.id}
+              role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+              tabIndex={-1}
+              onPointerEnter={() => pointerEnter(index)}
+              onClick={() => choose(index)}
+              aria-checked={item.checked}
+              aria-disabled={item.disabled || undefined}
+              {...common}
+            >
+              {contents}
+            </div>
+          );
+        })}
       </div>
       {submenu && child?.kind === "submenu" && (
         <MenuList
