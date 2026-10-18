@@ -91,7 +91,7 @@ export function MainWindow() {
   const clientRef = useRef(client);
   clientRef.current = client;
   const docs = useMemo(() => new DocumentRegistry(() => clientRef.current), []);
-  useEffect(() => registry.register(...workspaceCommands(client), ...editorCommands(docs)), [registry, client, docs]);
+  useEffect(() => registry.register(...workspaceCommands(client), ...editorCommands(client, docs)), [registry, client, docs]);
   // The chrome asks which commands apply: draw it again as commands come and go.
   useSyncExternalStore(registry.subscribe, registry.version);
   useEffect(() => installKeyListener(registry), [registry]);

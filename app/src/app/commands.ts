@@ -1,10 +1,13 @@
 // The window's commands (docs/design/app.md#commands-and-keys): the
 // workspace's, the sidebars', the active editor's, creating a note, and
-// following a link an editor drew. Each reads the stores when it runs, so
-// the registry holds them once. The commands batch 2's prompts, settings
-// and panes add join as those land.
+// following a link an editor drew or the cursor is on, and Obsidian's
+// formatting commands (editor/format.ts). Each reads the stores when it
+// runs, so the registry holds them once.
 
+import { syntaxTree } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
+import type { EditorState, StateCommand } from "@codemirror/state";
+import type { SyntaxNode } from "@lezer/common";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -15,8 +18,21 @@ import { setRenaming, usePanes } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
-import type { PreviewCommand } from "../editor/preview/framework";
+import {
+  deleteParagraph,
+  insertLink,
+  setHeading,
+  toggleBold,
+  toggleChecklist,
+  toggleCode,
+  toggleComment,
+  toggleHighlight,
+  toggleItalics,
+  toggleStrikethrough,
+} from "../editor/format";
+import { type PreviewCommand, previewEnv } from "../editor/preview/framework";
 import type { DocumentRegistry } from "../editor/registry";
+import { findLinks } from "../editor/syntax/extract";
 import type { Client } from "../rpc/gen/api";
 import type { ViewState } from "../workspace/model";
 import {
@@ -203,14 +219,82 @@ export async function mergeDone(c: Client, docs: DocumentRegistry, path: string,
   closeTab();
 }
 
+/** linkAt is the link at pos in a view's note: its target and, for a web link, its URL. */
+export function linkAt(state: EditorState, pos: number): { target: string; href?: string } | null {
+  const line = state.doc.lineAt(pos);
+  const link = findLinks(state, line.from, line.to).find((l) => l.from <= pos && pos <= l.to);
+  if (link) return { target: link.target };
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 0); n; n = n.parent) {
+    if (n.name !== "Link" && n.name !== "Autolink" && n.name !== "URL") continue;
+    const url = n.name === "URL" ? n : n.getChild("URL");
+    const href = url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, "") : "";
+    return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href) ? { target: href, href } : null;
+  }
+  return null;
+}
+
 /** editorCommands are the commands of the active tab's editor. */
-export function editorCommands(docs: DocumentRegistry): Command[] {
+export function editorCommands(c: Client, docs: DocumentRegistry): Command[] {
   const editor = () => {
     const tab = activeTab(ws());
     return tab.view.type === "note" && tab.view.mode === "edit" ? docs.editors.get(tab.id) : undefined;
   };
   const has = () => editor() !== undefined;
+  // format runs one of Obsidian's formatting commands on the active editor.
+  const format = (id: string, name: string, cmd: StateCommand): Command => ({
+    id,
+    name,
+    applies: has,
+    run: () => {
+      const e = editor();
+      if (!e) return;
+      cmd(e.view);
+      e.view.focus();
+    },
+  });
+  // follow follows the link under the cursor, resolved from the note's folder.
+  const follow = (id: string, name: string, where: OpenWhere): Command => ({
+    id,
+    name,
+    applies: () => {
+      const e = editor();
+      return e !== undefined && linkAt(e.view.state, e.view.state.selection.main.head) !== null;
+    },
+    run: async () => {
+      const e = editor();
+      const vaultId = useNotes.getState().vaultId;
+      const link = e && linkAt(e.view.state, e.view.state.selection.main.head);
+      // A link to the note itself ([[#Heading]]) leads nowhere else.
+      if (!e || !link || link.target === "" || vaultId === null) return;
+      const tabId = activeTab(ws()).id;
+      let path: string | null = null;
+      if (!link.href) {
+        const known = e.view.state.facet(previewEnv).resolve(link.target);
+        path =
+          known !== undefined
+            ? known
+            : ((await c.note.resolve({ vaultId, from: e.doc.path, targets: [link.target] }))[0]?.path ?? null);
+      }
+      await followLink(c, { kind: "follow", target: link.target, path, where }, tabId);
+    },
+  });
   return [
+    format("editor:toggle-bold", "Toggle bold", toggleBold),
+    format("editor:toggle-italics", "Toggle italics", toggleItalics),
+    format("editor:toggle-strikethrough", "Toggle strikethrough", toggleStrikethrough),
+    format("editor:toggle-highlight", "Toggle highlight", toggleHighlight),
+    format("editor:toggle-code", "Toggle code", toggleCode),
+    format("editor:toggle-comments", "Toggle comment", toggleComment),
+    format("editor:insert-link", "Insert Markdown link", insertLink),
+    format("editor:toggle-checklist-status", "Toggle checkbox status", toggleChecklist),
+    format("editor:delete-paragraph", "Delete paragraph", deleteParagraph),
+    ...[1, 2, 3, 4, 5, 6].map((n) => format(`editor:set-heading-${n}`, `Set heading ${n}`, setHeading(n))),
+    format("editor:set-heading-0", "Remove heading", setHeading(0)),
+    follow("editor:follow-link", "Follow link under cursor", "here"),
+    follow("editor:open-link-in-new-leaf", "Open link under cursor in new tab", "tab"),
+    follow("editor:open-link-in-new-split", "Open link under cursor to the right", "right"),
+    // A new window is a new tab until the app has more windows.
+    follow("editor:open-link-in-new-window", "Open link under cursor in new window", "tab"),
     {
       id: "global-search:open",
       name: "Search in all files",
