@@ -1,6 +1,9 @@
 // A generated markdown note for spike 1 (docs/plans/0001-m0-foundations.md,
-// Phase 5): frontmatter, headings, paragraphs with emphasis, links and
-// wikilinks, lists, tasks, quotes and fenced code, made-up and deterministic.
+// Phase 5) and M3's exit evidence 1 (docs/plans/0005-m3-desktop-app.md,
+// Phase 7): frontmatter, headings, paragraphs with emphasis, links and
+// wikilinks, lists, tasks, quotes and fenced code, and what batch 3 draws
+// (highlights, tags, math, comments, footnotes, callouts, tables, embeds,
+// rules), made-up and deterministic.
 
 const WORDS = (
   "frost lantern meadow quill harbor ember thistle copper orbit willow cinder " +
@@ -41,7 +44,7 @@ class Writer {
   // inline is one phrase of prose, sometimes marked up.
   inline(): string {
     const w = this.words(this.int(1, 3));
-    switch (this.int(0, 11)) {
+    switch (this.int(0, 19)) {
       case 0:
         return `*${w}*`;
       case 1:
@@ -60,6 +63,16 @@ class Writer {
         return `[[${this.pick(NOTES)}#${this.pick(WORDS)}]]`;
       case 8:
         return `_${w}_`;
+      case 12:
+        return `==${w}==`;
+      case 13:
+        return `#${this.pick(WORDS)}`;
+      case 14:
+        return `$${this.pick(["x^2", "\\alpha + \\beta", "a_i"])}$`;
+      case 15:
+        return `%%${w}%%`;
+      case 16:
+        return `${w}[^${this.int(1, 9)}]`;
       default:
         return w;
     }
@@ -78,7 +91,7 @@ class Writer {
   }
 
   block(): string[] {
-    switch (this.int(0, 9)) {
+    switch (this.int(0, 15)) {
       case 0:
         return [`${"#".repeat(this.int(2, 4))} ${this.words(this.int(2, 4))}`];
       case 1:
@@ -105,6 +118,24 @@ class Writer {
       }
       case 7:
         return Array.from({ length: this.int(1, 3) }, () => `> ${this.sentence()}`);
+      case 9:
+        return [
+          `> [!${this.pick(["note", "tip", "warning"])}] ${this.words(this.int(1, 3))}`,
+          ...Array.from({ length: this.int(1, 2) }, () => `> ${this.sentence()}`),
+        ];
+      case 10: {
+        const cols = this.int(2, 3);
+        const row = () => `| ${Array.from({ length: cols }, () => this.inline()).join(" | ")} |`;
+        return [row(), `|${" --- |".repeat(cols)}`, ...Array.from({ length: this.int(2, 4) }, row)];
+      }
+      case 11:
+        return ["$$", `${this.pick(WORDS)} = \\sum_{i=1}^{n} x_i^2`, "$$"];
+      case 12:
+        return [`![[${this.pick(NOTES)}]]`];
+      case 13:
+        return [`[^${this.int(1, 9)}]: ${this.sentence()}`];
+      case 14:
+        return ["---"];
       default:
         return this.paragraph();
     }

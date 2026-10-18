@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Provision the nsl `frostnotes` machine (Debian 13) with the Tauri, WebKitGTK,
-# Node, Rust and Go toolchains the app build needs. The host is atomic and
+# Node, Rust and Go toolchains the app build needs, and Xvfb, xdotool and vim
+# for the built app's evidence runs (make m3-evidence). The host is atomic and
 # cannot install -dev packages; the engine itself builds and tests on the host.
 #
 # Run from the repository root on the host (idempotent; safe to re-run):
@@ -38,7 +39,7 @@ apt-get update -q
 apt-get install -y -q --no-install-recommends \
 	build-essential ca-certificates curl file git make pkg-config wget xz-utils \
 	libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
-	librsvg2-dev webkit2gtk-driver xvfb xauth
+	librsvg2-dev webkit2gtk-driver xvfb xauth xdotool vim
 
 if [[ "$(/opt/node/bin/node --version 2>/dev/null)" != "v$NODE_VERSION" ]]; then
 	fetch "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \

@@ -3,7 +3,9 @@
 //! instead of the app (src/spike), hands its results to `spike_report`,
 //! which prints them on stdout as one JSON line, and the app exits. With
 //! FROSTNOTES_SPIKE=cm6:manual it only shows the spike, for checks by hand
-//! such as IME input.
+//! such as IME input. M3's exit evidence (docs/plans/0005-m3-desktop-app.md,
+//! Phase 7) drives the app itself the same way; its page asks the harness
+//! for key presses with `spike_say`, one JSON line each, before it reports.
 
 use std::io::Write;
 use std::time::Duration;
@@ -49,6 +51,18 @@ pub fn spike_report(app: AppHandle, spike: State<'_, Spike>, report: String) -> 
     out.write_all(line.as_bytes()).and_then(|()| out.flush()).map_err(|e| format!("print the report: {e}"))?;
     app.exit(0);
     Ok(())
+}
+
+/// Print one line for the harness driving the spike, and go on. Only a
+/// spike run may call it.
+#[tauri::command]
+pub fn spike_say(spike: State<'_, Spike>, line: String) -> Result<(), String> {
+    if !spike.active() {
+        return Err("no spike is running".into());
+    }
+    let line = report_line(line)?;
+    let mut out = std::io::stdout().lock();
+    out.write_all(line.as_bytes()).and_then(|()| out.flush()).map_err(|e| format!("print the line: {e}"))
 }
 
 /// The report as printed: one line.

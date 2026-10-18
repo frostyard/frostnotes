@@ -155,6 +155,18 @@ spike-cm6-nsl: ## Run spike 1 in the nsl machine under Xvfb (software rendering)
 	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
 	$(IN_NSL) 'FROSTNOTES_SPIKE=cm6 $(XVFB) build/frostnotes-app'
 
+# M3's exit evidence (docs/plans/0005-m3-desktop-app.md, Phase 7) with the
+# built app: 1, typing and scrolling in a generated 10,000-line note with
+# every live-preview provider, on the host's GPU and under Xvfb in nsl;
+# 2 and 3, every hotkey and the writer pairs, in nsl under Xvfb, where
+# xdotool presses the keys (internal/appevidence).
+.PHONY: m3-evidence
+m3-evidence: ## Record M3's exit evidence 1-3 with build/frostnotes-app (from make app-build)
+	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
+	FROSTNOTES_SPIKE=editor build/frostnotes-app
+	$(IN_NSL) 'FROSTNOTES_SPIKE=editor $(XVFB) build/frostnotes-app'
+	$(IN_NSL) 'FROSTNOTES_APP=$$PWD/build/frostnotes-app $(XVFB) go test -tags integration -count=1 -timeout 15m -v -run "^TestI" ./internal/appevidence'
+
 # Task cards (docs/design/agent-workflow.md). The executor is Codex with the
 # user's model unless EXECUTOR_MODEL names one; or opencode with
 # EXECUTOR_MODEL as its provider/model (ADR-0010).
