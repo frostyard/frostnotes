@@ -15,8 +15,8 @@ const connect: Connect = gateway
   ? async () => (await import("./rpc/transport/ws")).connectWS(gateway)
   : import.meta.env.VITE_MOCK === "1"
     ? async () => {
-        const { MockTransport, mockVaults } = await import("./rpc/mock/mock");
-        return new MockTransport(mockVaults(), { latency: 15 });
+        const { MockTransport, mockFiles, mockVaults } = await import("./rpc/mock/mock");
+        return new MockTransport(mockVaults(), { latency: 15, files: mockFiles() });
       }
     : async () => (await import("./rpc/transport/tauri")).connectTauri();
 

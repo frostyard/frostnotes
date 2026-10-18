@@ -1,10 +1,16 @@
-// The connection to notesd and the stores it feeds (ADR-0011): connect,
-// rpc.hello, events.subscribe, then load; reconnect when the connection ends.
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+// The connection to notesd and the stores it feeds (docs/design/app.md#data):
+// connect, rpc.hello, events.subscribe from the last sequence number the
+// window applied, then load the vaults and the window's vault; reconnect
+// every second when the connection ends, loading again.
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 
 import { Client, type Event, PROTOCOL } from "../rpc/gen/api";
 import type { Transport } from "../rpc/transport";
+import { feed } from "./events";
+import { emptyFiles, loadFiles, noteEvent, useFiles } from "./files";
+import { usePrefs } from "./prefs";
 import { applyVaultEvent, useNotes } from "./stores";
+import { emptyVault, loadScan, loadSettings, loadSync, useVaultState, vaultEvent } from "./vaultState";
 
 const ClientContext = createContext<Client | null>(null);
 
@@ -21,12 +27,12 @@ export type Connect = () => Promise<Transport>;
 /** RETRY_MS is how long Session waits before reconnecting. */
 export const RETRY_MS = 1000;
 
-/** CLIENT_NAME is what rpc.hello tells notesd, for its logs. */
+/** CLIENT_NAME is what rpc.hello tells notesd, for its logs and versions. */
 export const CLIENT_NAME = "frostnotes-app";
 
 /**
  * Session connects with connect, completes rpc.hello, subscribes to events,
- * loads the vaults, and renders children with the client. When the
+ * loads the stores, and renders children with the client. When the
  * connection ends it reconnects every RETRY_MS, rendering fallback meanwhile.
  */
 export function Session(props: { connect: Connect; children: ReactNode; fallback: ReactNode }) {
@@ -53,19 +59,23 @@ export function Session(props: { connect: Connect; children: ReactNode; fallback
         if (stopped) return;
         const c = new Client(transport);
         const hello = await c.rpc.hello({ protocol: PROTOCOL, client: CLIENT_NAME });
-        // Events that arrive before vault.list answers are held and applied
-        // to its result (applyVaultEvent is idempotent), so none is lost.
+        // Events wait until the stores have loaded, then apply in order:
+        // the stores skip what their loads reflect, and the feed sees all.
         let held: Event[] | null = [];
+        let liveFrom = 0;
         cleanup = transport.onEvent((e) => {
           if (held) held.push(e);
-          else useNotes.setState((s) => ({ vaults: applyVaultEvent(s.vaults, e) }));
+          else route(c, e, liveFrom);
         });
-        await c.events.subscribe({});
-        let vaults = await c.vault.list();
+        const since = feed.since();
+        const sub = await c.events.subscribe(since === undefined ? {} : { sinceSeq: since });
+        feed.started(sub, since);
+        liveFrom = sub.seq;
+        await load(c, liveFrom);
         if (stopped) return;
-        for (const e of held) vaults = applyVaultEvent(vaults, e);
+        for (const e of held) route(c, e, liveFrom);
         held = null;
-        useNotes.setState({ hello, vaults, connection: { state: "ready" } });
+        useNotes.setState({ hello, connection: { state: "ready" } });
         setClient(c);
         transport.onClose((reason) => {
           if (!stopped) lost(reason);
@@ -84,4 +94,68 @@ export function Session(props: { connect: Connect; children: ReactNode; fallback
 
   if (!client) return <>{props.fallback}</>;
   return <ClientContext.Provider value={client}>{props.children}</ClientContext.Provider>;
+}
+
+// load lists the vaults and opens the window's vault: the one it showed
+// last while it exists, else the first.
+async function load(c: Client, since: number): Promise<void> {
+  const vaults = await c.vault.list();
+  useNotes.setState({ vaults });
+  const last = usePrefs.getState().lastVault;
+  const pick = vaults.find((v) => v.path === last) ?? vaults[0];
+  await openVault(c, pick?.id ?? null, since);
+}
+
+/**
+ * openVault makes vault id the window's vault, remembers it, and loads its
+ * files, settings, sync state and index state. since is the last sequence
+ * number notesd had sent; the files store applies events after it.
+ */
+export async function openVault(c: Client, id: number | null, since = feed.since() ?? 0): Promise<void> {
+  const vault = useNotes.getState().vaults.find((v) => v.id === id);
+  useNotes.setState({ vaultId: vault?.id ?? null });
+  useVaultState.setState(emptyVault(vault?.id ?? null));
+  if (!vault) {
+    useFiles.setState((s) => emptyFiles(null, 0, s.generation + 1));
+    return;
+  }
+  usePrefs.getState().setPrefs({ lastVault: vault.path });
+  await Promise.all([
+    loadFiles(c, vault.id, since),
+    loadSettings(c, vault.id),
+    loadSync(c, vault.id),
+    loadScan(c, vault.id),
+  ]);
+}
+
+/** useOpenVault returns a function that makes a vault the window's. */
+export function useOpenVault(): (id: number) => Promise<void> {
+  const c = useClient();
+  return useCallback((id: number) => openVault(c, id), [c]);
+}
+
+// route passes an event to the feed, then to the stores, unless it is a
+// replay the stores' loads already reflect.
+function route(c: Client, e: Event, liveFrom: number): void {
+  feed.deliver(e);
+  if (e.seq !== undefined && e.seq <= liveFrom) return;
+  switch (e.event) {
+    case "vault.added":
+    case "vault.removed": {
+      useNotes.setState((s) => ({ vaults: applyVaultEvent(s.vaults, e) }));
+      const { vaults, vaultId } = useNotes.getState();
+      if (vaultId === null || !vaults.some((v) => v.id === vaultId)) void openVault(c, vaults[0]?.id ?? null);
+      break;
+    }
+    case "note.changed":
+    case "note.moved":
+    case "note.removed":
+      noteEvent(e);
+      break;
+    case "vault.configured":
+    case "sync.changed":
+    case "vault.scan":
+      vaultEvent(c, e);
+      break;
+  }
 }

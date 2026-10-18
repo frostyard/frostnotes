@@ -10,6 +10,11 @@ export interface Transport {
   onEvent(handler: (event: Event) => void): () => void;
   /** Called once when the connection ends. */
   onClose(handler: (reason: string) => void): () => void;
+  /**
+   * The URL a vault file's bytes load from by its hash and extension
+   * (ADR-0023); "" when the transport serves none.
+   */
+  blobURL?(hash: string, ext: string): string;
 }
 
 /** A JSON-RPC error returned by notesd; code is an ErrorCode. */
@@ -48,7 +53,14 @@ export class JsonRpcSession implements Transport {
   private readonly closeHandlers = new Set<(reason: string) => void>();
   private closedReason: string | undefined;
 
-  constructor(private readonly sendLine: (line: string) => Promise<void>) {}
+  constructor(
+    private readonly sendLine: (line: string) => Promise<void>,
+    private readonly blobs?: (hash: string, ext: string) => string,
+  ) {}
+
+  blobURL(hash: string, ext: string): string {
+    return this.blobs?.(hash, ext) ?? "";
+  }
 
   call<T>(method: string, params: unknown): Promise<T> {
     if (this.closedReason !== undefined) {

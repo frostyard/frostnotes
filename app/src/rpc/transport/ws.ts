@@ -8,7 +8,7 @@ import { JsonRpcSession, type Transport } from "../transport";
 export function connectWS(url: string): Promise<Transport> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
-    const session = new JsonRpcSession(async (line) => ws.send(`${line}\n`));
+    const session = new JsonRpcSession(async (line) => ws.send(`${line}\n`), gatewayBlobs(url));
     let buffer = "";
     let open = false;
     ws.onmessage = (e) => {
@@ -28,4 +28,16 @@ export function connectWS(url: string): Promise<Transport> {
       session.close(`dev gateway closed (${e.code})`);
     };
   });
+}
+
+/**
+ * gatewayBlobs serves blobs from the gateway's /blobs/ with its token, as
+ * an <img> sends no header (ADR-0023): ws://host/?token=T gives
+ * http://host/blobs/<hash>.<ext>?token=T.
+ */
+export function gatewayBlobs(url: string): (hash: string, ext: string) => string {
+  const u = new URL(url);
+  const origin = `${u.protocol === "wss:" ? "https:" : "http:"}//${u.host}`;
+  const token = encodeURIComponent(u.searchParams.get("token") ?? "");
+  return (hash, ext) => `${origin}/blobs/${hash}.${ext}?token=${token}`;
 }

@@ -16,10 +16,10 @@ Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) 
 (the syntax both parsers read).
 
 **Status: M0's shell is built** ([plan 0001](../plans/0001-m0-foundations.md#phase-4--app-shell)):
-the transports, the mock, `Session`, the vault store, the title bar, the
-status bar, and the CodeMirror spike (`app/src/spike`); so are M3's
-`notesblob://` and the dev gateway's `/blobs/` (Phase 3). Everything else
-here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
+the transports, the mock, the title bar, the status bar, and the
+CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
+dev gateway's `/blobs/` (Phase 3), and M3's data layer below (Phase 5).
+Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
 ## Overview
@@ -78,6 +78,15 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   loads the stores, and reconnects every second when the connection
   ends. On reconnect it reloads the stores and reads each open document
   again, applying any difference as another writer's change.
+- **Events.** Every event, replays included, goes first to the event
+  feed (`data/events.ts`), whose listeners keep state across runs (saved
+  workspaces follow moves), and which records the last sequence number
+  in `frostnotes.seq`. The stores then skip replays, which their loads,
+  made after subscribing, already reflect. The files store applies each
+  note event after its listing's starting point over the listing, in
+  order, and queues those that arrive while it loads, so it ends where
+  the disk is; a changed file's time is the event's arrival, until the
+  next listing.
 - **One vault per window.** The window shows one vault; the switcher at
   the bottom of the left sidebar changes it, and the app remembers the
   last one.
@@ -91,7 +100,9 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   about 100 KB of JSON.
 - **Sync:** `sync.status` per vault, kept current by `sync.changed`.
 - **Settings:** the vault's settings (`vault.settings`, changed with
-  `vault.configure`) and the app's preferences (local storage), both per
+  `vault.configure`, loaded again on `vault.configured`) and the app's
+  preferences (local storage, `data/prefs.ts`: a stored value a
+  preference cannot take falls back to Obsidian's default), both per
   [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md).
 - **Documents:** the registry of open notes (below).
 
@@ -242,7 +253,7 @@ the document, as live preview does. The CSP forbids inline script
 ## Attachments
 
 Per [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md),
-`blobURL(hash, ext)` gives a file's URL for the transport in use:
+the transport's `blobURL(hash, ext)` gives a file's URL:
 `notesblob://localhost/…` in Tauri, the dev gateway's `/blobs/…` in a
 browser, a `data:` URL from the mock. Images, audio and video show
 inline in live preview, in the reading view and in a `file` tab; a PDF
