@@ -229,7 +229,7 @@ func TestIWriters(t *testing.T) {
 	}
 	t.Logf("typed %d tokens in each of two tabs, the cursors where they were before every token; meanwhile vim saved %d, MCP appended %d, b wrote %d through the hub; a and b hold all of them in order, with no conflict",
 		r.Tokens, len(o.list("vim")), len(o.list("mcp")), len(o.list("hub")))
-	t.Logf("a's versions of the note by source (the editor saves at most every 10 s while typing goes on, so the others landed on unsaved typing): %v", sources)
+	t.Logf("a's versions of the note by source: %v", sources)
 }
 
 // --- the app

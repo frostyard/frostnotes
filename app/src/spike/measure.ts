@@ -210,7 +210,9 @@ export interface Checks {
 
 /** check verifies live preview at the top of the note; hidden counts its hidden ranges, the spike's by default. */
 export async function check(view: EditorView, hidden?: (view: EditorView) => number): Promise<Checks> {
-  view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(0, { y: "start" }) });
+  // The first task's line, so a checkbox shows; the note's start without one.
+  const task = Math.max(0, view.state.doc.toString().search(/^[ \t]*[-*+] \[[ xX]\] /m));
+  view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(task, { y: "start" }) });
   await frames(5);
   let hiddenRanges = 0;
   if (hidden) hiddenRanges = hidden(view);
