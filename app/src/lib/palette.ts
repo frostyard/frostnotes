@@ -1,6 +1,6 @@
-// The command palette's results (docs/specs/ui.md, Prompts). Task T-0052
-// replaces this stub.
-import type { FuzzyMatch } from "./fuzzy";
+// The command palette's results (docs/specs/ui.md, Prompts): recent commands
+// lead an empty query; fuzzy name matches are ranked with ties by name.
+import { type FuzzyMatch, prepareFuzzySearch, sortByScore } from "./fuzzy";
 
 /** PALETTE_RECENT is how many recently run commands lead an empty query's list. */
 export const PALETTE_RECENT = 10;
@@ -21,9 +21,34 @@ export interface PaletteResult {
 
 /** paletteResults lists the rows for query, given the IDs of the commands run, newest first. */
 export function paletteResults(
-  _commands: readonly PaletteCommand[],
-  _query: string,
-  _recent: readonly string[],
+  commands: readonly PaletteCommand[],
+  query: string,
+  recent: readonly string[],
 ): PaletteResult[] {
-  return [];
+  const sorted = [...commands].sort((a, b) => a.name.localeCompare(b.name));
+  const q = query.trim();
+  if (q) {
+    const search = prepareFuzzySearch(q);
+    const matches: { command: PaletteCommand; match: FuzzyMatch }[] = [];
+    for (const command of sorted) {
+      const match = search(command.name);
+      if (match) matches.push({ command, match });
+    }
+    return sortByScore(matches);
+  }
+
+  const byId = new Map(sorted.map((command) => [command.id, command]));
+  const seen = new Set<string>();
+  const results: PaletteResult[] = [];
+  for (const id of recent) {
+    if (seen.size === PALETTE_RECENT) break;
+    const command = byId.get(id);
+    if (!command || seen.has(id)) continue;
+    seen.add(id);
+    results.push({ command, match: null });
+  }
+  for (const command of sorted) {
+    if (!seen.has(command.id)) results.push({ command, match: null });
+  }
+  return results;
 }
