@@ -53,6 +53,18 @@ describe("the window's key listener", () => {
     expect(ran).toEqual(["new-tab"]);
   });
 
+  it("reads Shift+Tab as WebKitGTK names it, Unidentified with the code Tab", () => {
+    const r = new CommandRegistry();
+    const ran: string[] = [];
+    r.register({ id: "workspace:previous-tab", name: "Go to previous tab", run: () => void ran.push("previous") });
+    const off = installKeyListener(r);
+    const e = press(document.body, "Unidentified", { code: "Tab", ctrlKey: true, shiftKey: true });
+    press(document.body, "Unidentified", { code: "KeyQ", ctrlKey: true, shiftKey: true });
+    off();
+    expect(e.defaultPrevented).toBe(true);
+    expect(ran).toEqual(["previous"]);
+  });
+
   it("skips handled presses and, in a field outside the editor, presses without Ctrl or Alt", () => {
     const r = new CommandRegistry();
     const ran: string[] = [];

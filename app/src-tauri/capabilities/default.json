@@ -1,17 +1,21 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window. App commands (notesd_connect, notesd_send, open_url, open_file, spike_mode, spike_report) are allowed by default; the window permissions back the app's own title bar, and the webview's zoom backs View's Zoom in and out.",
-  "windows": ["main"],
+  "description": "The main window. App commands (notesd_connect, notesd_send, open_url, open_file, spike_mode, spike_report, spike_say) are allowed by default. Of Tauri's own, only what the page uses: event listening (the window's events), the window controls of the app's own title bar and the close that waits for unsaved notes (destroy), and the webview's zoom, never core:default's menus, tray, images or paths.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
-    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-is-maximized",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
-    "core:window:allow-is-maximized",
-    "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-show",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
     "core:webview:allow-set-webview-zoom"
   ]
 }

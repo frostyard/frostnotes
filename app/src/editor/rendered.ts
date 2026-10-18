@@ -16,12 +16,13 @@ export class BlockRenderer {
   private readonly shown = new Map<HTMLElement, string>();
 
   /**
-   * ask renders markdown to sanitized HTML; finish fills in what the HTML
-   * names (files, math); filled tells the view an element's size changed.
+   * ask renders markdown to sanitized HTML; place shows it in an element,
+   * finished (the reading view's fill: files, math); filled tells the view
+   * an element's size changed.
    */
   constructor(
     private readonly ask: (markdown: string) => Promise<string>,
-    private readonly finish: (el: HTMLElement) => void,
+    private readonly place: (el: HTMLElement, html: string) => void,
     private readonly filled: () => void,
   ) {}
 
@@ -73,8 +74,7 @@ export class BlockRenderer {
   }
 
   private put(el: HTMLElement, html: string): void {
-    el.innerHTML = html;
-    this.finish(el);
+    this.place(el, html);
     this.filled();
   }
 }

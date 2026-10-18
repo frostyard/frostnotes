@@ -22,6 +22,15 @@ export function inEditor(el: Element | null): boolean {
   return el?.closest(".cm-editor") != null;
 }
 
+/**
+ * keyOf is a press's key as the keymap names it. WebKitGTK names Shift+Tab,
+ * which X sends as ISO_Left_Tab, "Unidentified"; its code still says Tab
+ * (found by M3's exit evidence 2, docs/plans/0005-m3-desktop-app.md).
+ */
+export function keyOf(e: Pick<KeyboardEvent, "key" | "code">): string {
+  return e.key === "Unidentified" && e.code === "Tab" ? "Tab" : e.key;
+}
+
 /** keyHandler returns the listener that runs the registry's commands for key presses. */
 export function keyHandler(registry: CommandRegistry): (e: KeyboardEvent) => void {
   return (e) => {
@@ -30,7 +39,7 @@ export function keyHandler(registry: CommandRegistry): (e: KeyboardEvent) => voi
     if (inTextField(target) && !inEditor(target) && !e.ctrlKey && !e.altKey && e.key !== "F1" && e.key !== "F2") {
       return;
     }
-    const id = commandFor({ key: e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey });
+    const id = commandFor({ key: keyOf(e), ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey });
     if (id !== null && registry.run(id)) e.preventDefault();
   };
 }

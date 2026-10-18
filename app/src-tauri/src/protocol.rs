@@ -92,8 +92,21 @@ fn status(code: StatusCode) -> Response<Vec<u8>> {
     r
 }
 
+/// WINDOW is the most bytes one 206 answer carries: a media element reads
+/// on with further ranges, so a large video never sits whole in memory.
+const WINDOW: u64 = 8 << 20;
+
+/// WHOLE is the largest blob answered whole, to a request without a range
+/// (an image, a document); a larger one must be asked for in ranges.
+const WHOLE: u64 = 64 << 20;
+
 /// serve answers a request for path from the blob store at blobs.
 pub fn serve(blobs: &Path, path: &str, range: Option<&str>) -> Response<Vec<u8>> {
+    serve_within(blobs, path, range, WINDOW, WHOLE)
+}
+
+/// serve_within is serve with the window and the whole-file limit given.
+fn serve_within(blobs: &Path, path: &str, range: Option<&str>, window: u64, whole: u64) -> Response<Vec<u8>> {
     let Some((hash, ext)) = parse(path) else {
         return status(StatusCode::NOT_FOUND);
     };
@@ -113,6 +126,13 @@ pub fn serve(blobs: &Path, path: &str, range: Option<&str>) -> Response<Vec<u8>>
         .header(header::CACHE_CONTROL, "private, max-age=31536000, immutable")
         .header(header::ACCEPT_RANGES, "bytes");
     let result = match range {
+        None if len > whole => {
+            return Response::builder()
+                .status(StatusCode::PAYLOAD_TOO_LARGE)
+                .header(header::ACCEPT_RANGES, "bytes")
+                .body(Vec::new())
+                .unwrap_or_else(|_| status(StatusCode::PAYLOAD_TOO_LARGE));
+        }
         None => {
             let mut body = Vec::with_capacity(len as usize);
             f.read_to_end(&mut body).map(|_| builder.status(StatusCode::OK).body(body))
@@ -126,6 +146,7 @@ pub fn serve(blobs: &Path, path: &str, range: Option<&str>) -> Response<Vec<u8>>
                     .unwrap_or_else(|_| status(StatusCode::RANGE_NOT_SATISFIABLE));
             }
             Some((start, end)) => {
+                let end = end.min(start + window - 1);
                 let mut body = vec![0; (end - start + 1) as usize];
                 f.seek(SeekFrom::Start(start)).and_then(|_| f.read_exact(&mut body)).map(|_| {
                     builder
@@ -227,6 +248,26 @@ mod tests {
 
         assert_eq!(serve(&dir, &format!("/{}.png", "f".repeat(64)), None).status(), StatusCode::NOT_FOUND);
         assert_eq!(serve(&dir, "/../notesd.db", None).status(), StatusCode::NOT_FOUND);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // A large blob is never read whole (review finding 3, plan 0005 Phase 7).
+    #[test]
+    fn serves_a_large_blob_a_window_at_a_time() {
+        let content: Vec<u8> = (0..100u8).collect();
+        let dir = store(&content);
+        let path = format!("/{HASH}.mp4");
+
+        for (range, start, end) in [("bytes=0-", 0, 15), ("bytes=90-", 90, 99), ("bytes=10-50", 10, 25), ("bytes=-30", 70, 85)] {
+            let r = serve_within(&dir, &path, Some(range), 16, 64);
+            assert_eq!(r.status(), StatusCode::PARTIAL_CONTENT, "{range}");
+            assert_eq!(r.body().as_slice(), &content[start..=end], "{range}");
+            assert_eq!(r.headers()[header::CONTENT_RANGE], format!("bytes {start}-{end}/100"), "{range}");
+        }
+        let r = serve_within(&dir, &path, None, 16, 64);
+        assert_eq!(r.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert!(r.body().is_empty());
+        assert_eq!(serve_within(&dir, &path, None, 16, 100).status(), StatusCode::OK);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -35,3 +35,17 @@ export async function openInDefaultApp(vaultId: number, path: string): Promise<v
     notify(`Cannot open ${path}: ${message(err)}`);
   }
 }
+
+/**
+ * suppressNativeMenu keeps the webview's own context menu from showing
+ * (docs/design/app.md#window): the app draws its own menus, and the
+ * webview's would offer to download a link, save an image, or reload the
+ * app. It returns the removal.
+ */
+export function suppressNativeMenu(
+  target: Pick<Window, "addEventListener" | "removeEventListener"> = window,
+): () => void {
+  const stop = (e: Event) => e.preventDefault();
+  target.addEventListener("contextmenu", stop);
+  return () => target.removeEventListener("contextmenu", stop);
+}

@@ -16,7 +16,10 @@ function setup() {
         asked.push(markdown);
         waiting.set(markdown, { resolve, reject });
       }),
-    (el) => void finished.push(el),
+    (el, html) => {
+      el.innerHTML = html;
+      finished.push(el);
+    },
     () => void filled++,
   );
   const answer = async (markdown: string, html: string) => {

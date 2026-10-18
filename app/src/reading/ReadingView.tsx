@@ -19,7 +19,7 @@ import { useNoteDoc } from "../editor/useNoteDoc";
 import { PropertiesBlock, type PropertyRow } from "../features/properties/PropertiesBlock";
 import { InlineTitle } from "../features/workspace/InlineTitle";
 import { type OpenWhere, whereFor } from "../workspace/ops";
-import { finish } from "./finish";
+import { fill } from "./finish";
 import { createSanitizer } from "./sanitize";
 
 /** RENDER_DELAY is how long after a change the view renders again. */
@@ -82,8 +82,7 @@ export function ReadingView(props: ReadingViewProps) {
   useLayoutEffect(() => {
     const el = box.current;
     if (!el || html === null) return;
-    el.innerHTML = html;
-    finish(el, (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "", remoteImages);
+    fill(el, html, (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "", remoteImages);
   }, [html, remoteImages]);
 
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -103,8 +102,12 @@ export function ReadingView(props: ReadingViewProps) {
         client.current.note
           .render({ vaultId, path: to })
           .then((rendered) => {
-            box.innerHTML = sanitize(rendered.html);
-            finish(box, (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "", remoteImages);
+            fill(
+              box,
+              sanitize(rendered.html),
+              (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "",
+              remoteImages,
+            );
           })
           .catch((err: unknown) => {
             box.textContent = `Cannot show ${to}: ${err instanceof Error ? err.message : String(err)}`;

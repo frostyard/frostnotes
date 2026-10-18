@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The app's sanitizer against notesd's contract (docs/specs/render.md):
-// every fixture's HTML sanitizes to itself but R02's onclick, as notesd's
+// every fixture's HTML sanitizes to itself but R02's class and onclick, as notesd's
 // does, and what script, handlers and dangerous URLs try goes. DOMPurify
 // misreads happy-dom's DOM (it keeps <script> there), so this runs in
 // jsdom, as a browser's DOM.
@@ -44,8 +44,8 @@ describe("the reading view's sanitizer", () => {
   });
 
   for (const f of fixtures) {
-    it(`keeps ${f.id}'s HTML${f.id === "R02" ? ", but its onclick" : ""}`, () => {
-      const want = f.id === "R02" ? f.html.replace(' onclick="bad()"', "") : f.html;
+    it(`keeps ${f.id}'s HTML${f.id === "R02" ? ", but its class and onclick" : ""}`, () => {
+      const want = f.id === "R02" ? f.html.replace(' class="x" onclick="bad()"', "") : f.html;
       expect(sanitize(f.html)).toBe(normal(want));
     });
   }
@@ -70,6 +70,27 @@ describe("the reading view's sanitizer", () => {
       ['<svg onload="x()"><circle/></svg><iframe src="https://e.test"></iframe>k', "k"],
       ['<custom-el data-x="1">kept</custom-el>', "kept"],
       ['<video controls="" src="https://e.test/v.mp4" autoplay=""></video>', '<video controls=""></video>'],
+    ];
+    for (const [input, want] of cases) expect(sanitize(input), input).toBe(normal(want));
+  });
+
+  // Review finding 4 (plan 0005, Phase 7): a note's HTML cannot dress
+  // itself in the app's styles, or name a window property.
+  it("keeps only the renderer's classes, footnotes' ids and roles", () => {
+    const cases: [string, string][] = [
+      [
+        '<div class="fixed inset-0 z-50 callout bg-backdrop">x</div><a class="external-link fixed" href="https://e.test/">y</a>',
+        '<div class="callout">x</div><a class="external-link" href="https://e.test/">y</a>',
+      ],
+      [
+        '<span class="fixed inset-0">x</span><code class="language-go">y</code>',
+        '<span>x</span><code class="language-go">y</code>',
+      ],
+      ['<span id="isTauri">x</span><sup id="fnref:1">1</sup>', '<span>x</span><sup id="fnref:1">1</sup>'],
+      [
+        '<div role="dialog">x</div><a role="doc-noteref" href="#fn:1">1</a>',
+        '<div>x</div><a role="doc-noteref" href="#fn:1">1</a>',
+      ],
     ];
     for (const [input, want] of cases) expect(sanitize(input), input).toBe(normal(want));
   });

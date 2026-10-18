@@ -5,7 +5,11 @@
 //! not in the page: a file must be a regular, non-executable file inside
 //! the vault folder it names, of a type that opens as a document, never
 //! one a desktop runs (a script, a .desktop entry, HTML). The system opens
-//! them with xdg-open, the path or URL one argument, no shell.
+//! them with xdg-open, the path or URL one argument, no shell. The
+//! extension list guards a file's type, not the handler: xdg-open may pick
+//! one by the file's content. A vault on a CIFS mount whose file_mode has
+//! execute bits (the kernel's default, 0755) shows every file executable,
+//! so Open in default app refuses them all; mount it with file_mode=0644.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -22,9 +26,27 @@ pub fn web_url(url: &str) -> Result<tauri::Url, String> {
     let parsed = tauri::Url::parse(url).map_err(|e| format!("not a URL: {e}"))?;
     match parsed.scheme() {
         "http" | "https" if parsed.host_str().is_some_and(|h| !h.is_empty()) => Ok(parsed),
-        "mailto" => Ok(parsed),
+        "mailto" => Ok(mail_url(parsed)),
         other => Err(format!("{other}: links open outside the app only for http, https and mailto")),
     }
+}
+
+/// mail_url keeps a mailto link's addressees, subject and body, and drops
+/// whatever else its query asks of the mail client, such as attaching a
+/// file (attach=).
+fn mail_url(mut url: tauri::Url) -> tauri::Url {
+    let kept: Vec<String> = url
+        .query()
+        .unwrap_or("")
+        .split('&')
+        .filter(|part| {
+            let key = part.split('=').next().unwrap_or("").to_ascii_lowercase();
+            matches!(key.as_str(), "to" | "cc" | "bcc" | "subject" | "body")
+        })
+        .map(str::to_string)
+        .collect();
+    url.set_query((!kept.is_empty()).then(|| kept.join("&")).as_deref());
+    url
 }
 
 /// vault_file resolves path inside the vault folder root to a file Open in
@@ -62,14 +84,16 @@ pub fn vault_file(root: &str, path: &str) -> Result<PathBuf, String> {
 }
 
 fn xdg_open(arg: &std::ffi::OsStr) -> Result<(), String> {
-    std::process::Command::new("xdg-open")
+    let mut child = std::process::Command::new("xdg-open")
         .arg(arg)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("xdg-open: {e}"))
+        .map_err(|e| format!("xdg-open: {e}"))?;
+    // Reaped when it exits, so no open leaves a zombie behind.
+    std::thread::spawn(move || child.wait());
+    Ok(())
 }
 
 /// open_url opens a web link in the system's browser.
@@ -99,6 +123,19 @@ mod tests {
         for bad in ["file:///etc/passwd", "javascript:alert(1)", "notesblob://localhost/x", "smb://h/s", "x", "http://"] {
             assert!(web_url(bad).is_err(), "{bad}");
         }
+    }
+
+    // Review finding 7, plan 0005 Phase 7.
+    #[test]
+    fn mail_links_keep_only_addressees_subject_and_body() {
+        let url = |s: &str| web_url(s).unwrap().to_string();
+        assert_eq!(
+            url("mailto:a@e.test?attach=/etc/passwd&subject=Hi%20there&Attachment=x&cc=b@e.test&ATTACH=y&body=a+b"),
+            "mailto:a@e.test?subject=Hi%20there&cc=b@e.test&body=a+b"
+        );
+        assert_eq!(url("mailto:a@e.test?attach=/home/u/.ssh/id_ed25519"), "mailto:a@e.test");
+        assert_eq!(url("mailto:a@e.test?%61ttach=x&To=c@e.test"), "mailto:a@e.test?To=c@e.test");
+        assert_eq!(url("mailto:a@e.test"), "mailto:a@e.test");
     }
 
     #[test]
