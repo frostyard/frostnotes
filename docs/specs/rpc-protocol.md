@@ -28,6 +28,17 @@ it fits: [design/overview.md](../design/overview.md).
 - Each message is one line: a JSON object followed by `\n`, at most 16 MiB
   (`api.MaxMessageSize`). JSON escapes newlines in strings, so a message is
   never split.
+- **Files' bytes travel beside the RPC,** by content hash
+  ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)):
+  the desktop app reads `notesblob://localhost/<sha256>.<ext>` from
+  notesd's blob store itself (`app/src-tauri/src/protocol.rs`), and the
+  development gateway serves `GET /blobs/<sha256>.<ext>?token=…` on its
+  listener (M3). Either answers only those paths (64 lowercase hex digits
+  and an extension of 1 to 8 lowercase letters or digits), with the
+  content type the extension names ([design/app.md](../design/app.md#attachments)),
+  `X-Content-Type-Options: nosniff`, a `Content-Security-Policy` of
+  `default-src 'none'; style-src 'unsafe-inline'; sandbox`, immutable
+  caching, and one `Range` per request.
 
 ## Caller kinds
 

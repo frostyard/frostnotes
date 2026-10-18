@@ -22,9 +22,40 @@ fn socket_from(getenv: impl Fn(&str) -> Option<OsString>) -> Result<PathBuf, Str
         .ok_or_else(|| "XDG_RUNTIME_DIR is not set; set FROSTNOTES_SOCKET".to_string())
 }
 
+/// notesd's data directory, where its blob store is, as internal/config
+/// resolves it: $FROSTNOTES_DATA_DIR, else $XDG_DATA_HOME/frostnotes,
+/// else ~/.local/share/frostnotes.
+pub fn data_dir() -> Result<PathBuf, String> {
+    data_dir_from(|key| std::env::var_os(key))
+}
+
+fn data_dir_from(getenv: impl Fn(&str) -> Option<OsString>) -> Result<PathBuf, String> {
+    if let Some(p) = getenv("FROSTNOTES_DATA_DIR").filter(|v| !v.is_empty()) {
+        return Ok(PathBuf::from(p));
+    }
+    if let Some(p) = abs(getenv("XDG_DATA_HOME")) {
+        return Ok(p.join("frostnotes"));
+    }
+    getenv("HOME")
+        .filter(|v| !v.is_empty())
+        .map(|h| PathBuf::from(h).join(".local").join("share").join("frostnotes"))
+        .ok_or_else(|| "HOME is not set; set FROSTNOTES_DATA_DIR".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn data_dir_follows_internal_config() {
+        let vars = [("FROSTNOTES_DATA_DIR", "/data/fn"), ("XDG_DATA_HOME", "/xdg"), ("HOME", "/home/u")];
+        assert_eq!(data_dir_from(env(&vars)), Ok(PathBuf::from("/data/fn")));
+        let vars = [("XDG_DATA_HOME", "/xdg"), ("HOME", "/home/u")];
+        assert_eq!(data_dir_from(env(&vars)), Ok(PathBuf::from("/xdg/frostnotes")));
+        let vars = [("XDG_DATA_HOME", "relative"), ("HOME", "/home/u")];
+        assert_eq!(data_dir_from(env(&vars)), Ok(PathBuf::from("/home/u/.local/share/frostnotes")));
+        assert!(data_dir_from(env(&[])).is_err());
+    }
 
     fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
         move |key| vars.iter().find(|(k, _)| *k == key).map(|(_, v)| OsString::from(v))

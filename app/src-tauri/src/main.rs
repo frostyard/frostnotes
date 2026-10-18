@@ -1,9 +1,11 @@
-//! The Frostnotes app shell: one instance with one main window and a line
-//! bridge to notesd's socket. All notes logic lives in notesd; see
+//! The Frostnotes app shell: one instance with one main window, a line
+//! bridge to notesd's socket, and notesblob://, notesd's blob store by
+//! content hash (ADR-0023). All notes logic lives in notesd; see
 //! docs/design/overview.md and docs/specs/rpc-protocol.md.
 
 mod bridge;
 mod paths;
+mod protocol;
 mod spike;
 
 use tauri::webview::NewWindowResponse;
@@ -22,6 +24,7 @@ fn main() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| second_launch(app)));
     }
     builder
+        .register_asynchronous_uri_scheme_protocol("notesblob", protocol::notesblob)
         .manage(bridge::Bridge::default())
         .manage(spike)
         .invoke_handler(tauri::generate_handler![

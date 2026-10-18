@@ -14,15 +14,15 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-17): **Phases 1 and 2 done**, and the user accepted
+Status (2026-10-17): **Phases 1 to 3 done**, and the user accepted
 ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
 T-0042, which Codex passed and which are merged. Phase 3, the contracts,
-is under way in three parts, each its own PR against `main`: the API's
-contract with the store's cards T-0043 and T-0044 (done); the renderer's
-contract with its cards T-0045 and T-0046 (done); and the blob scheme
-with the mock's vault.
+is done too, in three PRs against `main`: the API's contract with the
+store's cards T-0043 and T-0044; the renderer's contract with its cards
+T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
+Cards T-0043 to T-0046 are ready to run; Phases 4 and 5 are next.
 
 ## Decisions taken for M3
 
@@ -222,7 +222,8 @@ does, so the plan records them without ADRs:
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md));
   the CSP's `notesblob:` and `https:` for images.
 - `MockTransport`'s vault: the `note` and `vault` domains, events, and
-  scripted merges.
+  scripted merges. *Moved to Phase 5,* with the containers that use it: no
+  card needs it, since batch 2's components take props.
 - The batch-3 cards whose contracts these settle, each checked against a
   reference.
 - **Done when:** `make check` and `make ui-check` are green with every
@@ -272,6 +273,19 @@ does, so the plan records them without ADRs:
   | [T-0045](../tasks/todo/0045-render-links.md) | M | `internal/render/links.go` | links, note embeds and their sections, files by hash, markdown images | |
   | [T-0046](../tasks/todo/0046-render-syntax.md) | M | `internal/render/syntax.go` | tags, highlights, math, callouts, checkboxes and headings with lines, block IDs | T-0045 |
 
+  The render cards share a package with neither store card, so the two
+  pairs may run at once in separate executor worktrees.
+- **Result, part 3 (2026-10-17): files by hash.** `notesblob://` is built
+  (`app/src-tauri/src/protocol.rs`, registered in `main.rs`, the data
+  directory found as `internal/config` finds it), with Rust tests of its
+  path check, content types, ranges and responses; the dev gateway serves
+  `/blobs/` behind its token with `Range` (`internal/devgw/blobs.go`, and
+  notesd passes it the blob store); the CSP admits `notesblob:` for images
+  and media and `https:` for remote images. Both servers share one table
+  of content types ([design/app.md](../design/app.md#attachments)) and
+  the headers [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports)
+  now pins.
+
 ## Phase 4 — notesd's additions (planner, alongside Phase 5)
 
 Implements [design/vault.md](../design/vault.md) (written settings,
@@ -303,7 +317,9 @@ live preview, reading view, history and merges, commands) and the parts
 of [specs/ui.md](../specs/ui.md) not marked for a batch.
 
 - `data/`: `Session` from the stored sequence number; the files, sync
-  and settings stores.
+  and settings stores; `MockTransport`'s vault (the `note` and `vault`
+  domains with notesd's semantics, events, scripted merges), moved here
+  from Phase 3.
 - `workspace/`: the model, its operations, validation and persistence;
   the layout (ribbon, sidebars, splits, strips from T-0042, view
   headers) and drag and drop between groups.
