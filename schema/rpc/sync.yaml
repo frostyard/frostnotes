@@ -68,6 +68,11 @@ types:
       - {name: path, type: string}
       - {name: file, type: int, doc: "The hub's file ID."}
       - {name: revisions, type: "[]Revision"}
+  - name: RevisionContent
+    doc: A hub revision's content.
+    fields:
+      - {name: revision, type: Revision}
+      - {name: content, type: string, doc: "As note.read gives content; empty for a delete or resolve."}
   - name: VerifyReport
     doc: How a synced vault compares with its hub (M2's exit evidence).
     fields:
@@ -146,6 +151,15 @@ methods:
       - {name: path, type: string}
       - {name: limit, type: int, optional: true, doc: "At most this many; default 50, at most 200."}
     result: "[]Revision"
+    errors: [notFound, unavailable]
+  - name: readRevision
+    doc: >-
+      A hub revision's content, for the merge view: from this device's blob
+      store when it has it, else fetched from the hub (ADR-0018).
+    params:
+      - {name: vaultId, type: int}
+      - {name: seq, type: int, doc: "The revision's sequence number, from sync.history or sync.conflicts."}
+    result: RevisionContent
     errors: [notFound, unavailable]
 events:
   - name: changed

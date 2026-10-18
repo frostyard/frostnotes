@@ -10,7 +10,45 @@ enums:
       - {name: idle, doc: "No scan is running; the index holds what the last scan and the watcher found."}
       - {name: scanning, doc: "A scan is running."}
       - {name: failed, doc: "The last scan failed and error says why; the index keeps what it held."}
+  - name: NewNoteLocation
+    doc: Where a new note goes (Obsidian's Default location for new notes).
+    values:
+      - {name: root, doc: "The vault's root (Obsidian's default)."}
+      - {name: current, doc: "The folder of the note open when it is made."}
+      - {name: folder, doc: "The folder newNoteFolder names."}
+  - name: LinkFormat
+    doc: How a new link names its file (Obsidian's New link format).
+    values:
+      - {name: shortest, doc: "The file's name when that resolves to it, else its path (Obsidian's default)."}
+      - {name: relative, doc: "Its path from the linking note's folder."}
+      - {name: absolute, doc: "Its path from the vault's root."}
+  - name: SettingSource
+    doc: Where a setting's value comes from.
+    values:
+      - {name: frostnotes, doc: "The vault's .frostnotes/vault.yaml."}
+      - {name: obsidian, doc: "Obsidian's settings in .obsidian/, read while vault.yaml lacks the setting."}
+      - {name: default, doc: "Neither has it: Obsidian's default."}
 types:
+  - name: VaultSettings
+    doc: >-
+      A vault's settings (docs/design/vault.md#on-disk; ADR-0021): from
+      .frostnotes/vault.yaml, else Obsidian's .obsidian/ files, else
+      Obsidian's defaults.
+    fields:
+      - {name: dailyFolder, type: string, doc: "Where daily notes go; empty is the vault root."}
+      - {name: dailyFormat, type: string, doc: "A moment.js format for a daily note's name; may hold '/' to name subfolders."}
+      - {name: dailyTemplate, type: string, doc: "The daily-note template's path; empty for none."}
+      - {name: templateFolder, type: string, doc: "Where templates live; empty when unset."}
+      - {name: templateDateFormat, type: string, doc: "{{date}}'s moment.js format."}
+      - {name: templateTimeFormat, type: string, doc: "{{time}}'s moment.js format."}
+      - {name: newNoteLocation, type: NewNoteLocation}
+      - {name: newNoteFolder, type: string, doc: "With newNoteLocation folder: that folder; empty is the root."}
+      - {name: attachmentFolder, type: string, doc: "Where pasted and dropped files go, as Obsidian writes it: \"/\" the vault root, \"./\" the note's folder, \"./NAME\" a folder NAME beside the note, else a folder's path."}
+      - {name: linkFormat, type: LinkFormat}
+      - {name: wikilinks, type: bool, doc: "New links are [[wikilinks]] rather than markdown links."}
+      - {name: updateLinks, type: bool, doc: "Moves rewrite links without asking (Obsidian's Automatically update internal links)."}
+      - {name: ignore, type: "[]string", doc: "Gitignore-style patterns of files the vault leaves out (Obsidian's Excluded files)."}
+      - {name: sources, type: "map[string]SettingSource", doc: "Where each setting above comes from, by its field name."}
   - name: ScanStatus
     doc: The state of a vault's index and its scans.
     fields:
@@ -63,6 +101,35 @@ methods:
       - {name: id, type: int}
     result: ScanStatus
     errors: [notFound]
+  - name: settings
+    doc: A vault's settings, and where each comes from.
+    params:
+      - {name: id, type: int}
+    result: VaultSettings
+    errors: [notFound]
+  - name: configure
+    doc: >-
+      Change a vault's settings: each field given is written to
+      .frostnotes/vault.yaml, atomically, keeping the rest of the file;
+      the others keep their values. This is the only method that writes
+      .frostnotes/ (ADR-0021).
+    params:
+      - {name: id, type: int}
+      - {name: dailyFolder, type: string, optional: true}
+      - {name: dailyFormat, type: string, optional: true}
+      - {name: dailyTemplate, type: string, optional: true}
+      - {name: templateFolder, type: string, optional: true}
+      - {name: templateDateFormat, type: string, optional: true}
+      - {name: templateTimeFormat, type: string, optional: true}
+      - {name: newNoteLocation, type: NewNoteLocation, optional: true}
+      - {name: newNoteFolder, type: string, optional: true}
+      - {name: attachmentFolder, type: string, optional: true}
+      - {name: linkFormat, type: LinkFormat, optional: true}
+      - {name: wikilinks, type: bool, optional: true}
+      - {name: updateLinks, type: bool, optional: true}
+      - {name: ignore, type: "[]string", optional: true}
+    result: VaultSettings
+    errors: [notFound, invalidParams]
 events:
   - name: scan
     doc: A vault's scan started, made progress (at most every 250 ms) or ended.
@@ -73,6 +140,11 @@ events:
     durable: true
     fields:
       - {name: vault, type: Vault}
+  - name: configured
+    doc: A vault's settings changed, by vault.configure or in .frostnotes/vault.yaml.
+    durable: true
+    fields:
+      - {name: id, type: int}
   - name: removed
     doc: A vault was forgotten.
     durable: true

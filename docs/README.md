@@ -60,6 +60,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [MCP tools](specs/mcp.md) — what `notesctl mcp` offers an agent: tools, inputs, outputs, edits
 - [Sync protocol](specs/sync-protocol.md) — the hub's endpoints, pairing, pushes and pulls, applying, joining, limits
 - [Three-way merge](specs/merge.md) — how `internal/merge` merges text and notes, with its golden fixtures
+- [Rendering](specs/render.md) — the HTML notesd renders notes into, the sanitizer's allowlist, and its fixtures
 - [UI](specs/ui.md) — the main window: tokens, type, Obsidian's layout in frostmail's look, panes, prompts, the keyboard map
 
 

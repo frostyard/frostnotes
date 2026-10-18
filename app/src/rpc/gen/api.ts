@@ -502,6 +502,10 @@ function logClient(t: Transport): LogClient {
 export type LinkKind = "wiki" | "markdown" | "property";
 export const LinkKindValues: readonly LinkKind[] = ["wiki", "markdown", "property"];
 
+/** What the index makes of a file. */
+export type FileKind = "note" | "attachment";
+export const FileKindValues: readonly FileKind[] = ["note", "attachment"];
+
 /** Who made a version. */
 export type VersionSource = "editor" | "agent" | "outside" | "sync";
 export const VersionSourceValues: readonly VersionSource[] = ["editor", "agent", "outside", "sync"];
@@ -610,6 +614,15 @@ export interface WriteResult {
    * stands, and the content sent is kept as a conflict version (ADR-0005).
    */
   conflicts: number;
+  /**
+   * The conflict version's id, when conflicts is above zero: what
+   * note.readVersion reads back.
+   */
+  conflictVersion?: number;
+  /** When merged is true: who made the version the write was merged into. */
+  mergedSource?: VersionSource;
+  /** When merged is true: that version's author; empty for an outside edit. */
+  mergedAuthor?: string;
 }
 
 /** A file after a move. */
@@ -646,6 +659,118 @@ export interface DailyNote {
   note: Note;
   /** notesd created it from the vault's template for this call. */
   created: boolean;
+}
+
+/** A file of a vault, as the index has it. */
+export interface VaultFile {
+  path: string;
+  kind: FileKind;
+  /**
+   * The SHA-256 of the content, lowercase hex: a write's base, and the name
+   * of its bytes for the app (ADR-0023).
+   */
+  hash: string;
+  /** In bytes. */
+  size: number;
+  /** The file's modification time. */
+  modifiedAt: string /* RFC 3339 */;
+}
+
+/** Every file and folder of a vault. */
+export interface VaultFiles {
+  /** By path. */
+  files: VaultFile[];
+  /**
+   * Every folder below the root, empty ones included, by path; the root is
+   * not listed.
+   */
+  folders: string[];
+}
+
+/** Where a link target leads from a note. */
+export interface Resolution {
+  /** The target as asked, without subpath or alias. */
+  target: string;
+  /** The file it resolves to; absent when unresolved. */
+  path?: string;
+}
+
+/** A note rendered for the reading view (docs/design/app.md#reading-view). */
+export interface RenderedNote {
+  /**
+   * Sanitized HTML: no script, event handler, form, frame, style or
+   * javascript: URL. Vault files appear as data-blob attributes, never as
+   * URLs (ADR-0023).
+   */
+  html: string;
+}
+
+/** A version's content. */
+export interface VersionContent {
+  version: Version;
+  /**
+   * As note.read gives content: bytes that are not UTF-8 read as U+FFFD
+   * (ADR-0014); empty for a deletion.
+   */
+  content: string;
+}
+
+/** A tag and how many notes have it. */
+export interface TagCount {
+  /**
+   * As first spelled, without '#'; nested tags are listed whole (a/b), and
+   * their parents only when a note has the parent itself.
+   */
+  tag: string;
+  /** Notes with the tag, ignoring case. */
+  count: number;
+}
+
+/** A frontmatter key and how many notes have it. */
+export interface PropertyCount {
+  /** As first spelled. */
+  key: string;
+  /**
+   * Its type from the vault's property types (text, multitext, number,
+   * checkbox, date, datetime, aliases, tags); empty when it has none.
+   */
+  type: string;
+  /** Notes with the key, ignoring case. */
+  count: number;
+}
+
+/** A template with its variables expanded. */
+export interface ExpandedTemplate {
+  content: string;
+}
+
+/** A file and the hash a delete expects it to have. */
+export interface FileBase {
+  path: string;
+  base: string;
+}
+
+/** A folder after a move. */
+export interface FolderMoveResult {
+  /** The folder's new path. */
+  path: string;
+  /** The files moved, by their new paths. */
+  moved: string[];
+  /** The notes whose links were rewritten, by path. */
+  rewritten: string[];
+}
+
+/** What a folder delete did. */
+export interface FolderDeleteResult {
+  /** The files deleted, by path. */
+  deleted: string[];
+  /**
+   * Files kept: changed since their base, or not named (made since the
+   * listing). An edit beats a delete (ADR-0005).
+   */
+  kept: string[];
+  /** The folder itself is gone: nothing was kept in it. */
+  removed: boolean;
 }
 
 /** Params of note.list. */
@@ -775,6 +900,90 @@ export interface NoteDailyParams {
   author?: string;
 }
 
+/** Params of note.files. */
+export interface NoteFilesParams {
+  vaultId: number;
+}
+
+/** Params of note.resolve. */
+export interface NoteResolveParams {
+  vaultId: number;
+  /** The linking note's path; it need not exist yet. */
+  from: string;
+  /** Link targets as written, without subpath or alias; at most 1,000. */
+  targets: string[];
+}
+
+/** Params of note.render. */
+export interface NoteRenderParams {
+  vaultId: number;
+  path: string;
+  content?: string;
+}
+
+/** Params of note.upload. */
+export interface NoteUploadParams {
+  vaultId: number;
+  path: string;
+  /** The file's bytes, base64 (standard alphabet, padded). */
+  data: string;
+  /** editor (the default) or agent. */
+  source?: VersionSource;
+  /** Who is writing; defaults to the client name given to rpc.hello. */
+  author?: string;
+}
+
+/** Params of note.readVersion. */
+export interface NoteReadVersionParams {
+  vaultId: number;
+  /** The version's id, from note.versions or a write's conflictVersion. */
+  version: number;
+}
+
+/** Params of note.tags. */
+export interface NoteTagsParams {
+  vaultId: number;
+}
+
+/** Params of note.properties. */
+export interface NotePropertiesParams {
+  vaultId: number;
+}
+
+/** Params of note.template. */
+export interface NoteTemplateParams {
+  vaultId: number;
+  /** The template note's path. */
+  template: string;
+  /** {{title}}: the note it goes into; empty by default. */
+  title?: string;
+  /** The date and time {{date}} and {{time}} give; now by default. */
+  at?: string /* RFC 3339 */;
+}
+
+/** Params of note.mkdir. */
+export interface NoteMkdirParams {
+  vaultId: number;
+  path: string;
+}
+
+/** Params of note.moveFolder. */
+export interface NoteMoveFolderParams {
+  vaultId: number;
+  path: string;
+  /** The new path; it must not exist. */
+  to: string;
+  updateLinks?: boolean;
+}
+
+/** Params of note.deleteFolder. */
+export interface NoteDeleteFolderParams {
+  vaultId: number;
+  path: string;
+  /** The folder's files as the caller listed them. */
+  files: FileBase[];
+}
+
 /** A file was created or its content changed, by a write or on disk. */
 export interface NoteChanged {
   vaultId: number;
@@ -815,7 +1024,10 @@ export interface NoteClient {
    * Full-text search over titles, aliases, bodies and frontmatter, best match
    * first. Each word matches as a prefix ("plan" finds "planting"), a phrase
    * in double quotes matches as written, and every word or phrase must match.
-   * Case and diacritics are ignored.
+   * Case and diacritics are ignored. Filters narrow it, each as its own word:
+   * path:TEXT (the path contains TEXT), file:TEXT (the file name contains
+   * TEXT), tag:#TAG (the note has TAG or a tag nested under it); a filter
+   * alone lists matching notes by path.
    */
   search(params: NoteSearchParams): Promise<SearchHit[]>;
   /**
@@ -871,6 +1083,68 @@ export interface NoteClient {
    * missing (docs/design/vault.md#daily-notes).
    */
   daily(params: NoteDailyParams): Promise<DailyNote>;
+  /**
+   * Every file and folder of a vault: the Files pane's listing and the hashes
+   * the app loads files by (ADR-0023). note.changed, note.moved and
+   * note.removed keep it current.
+   */
+  files(params: NoteFilesParams): Promise<VaultFiles>;
+  /**
+   * Where link targets lead from a note, by the vault's link resolution
+   * (docs/specs/markdown.md#link-resolution), for links the editor shows
+   * before the index has them.
+   */
+  resolve(params: NoteResolveParams): Promise<Resolution[]>;
+  /**
+   * A note rendered to sanitized HTML for the reading view and embeds
+   * (ADR-0007): Obsidian's syntax, embeds of notes three levels deep, a
+   * single newline as a line break (Obsidian's default). With content, that
+   * text is rendered as if it were the note at path, so an editor shows what
+   * was typed before it is saved.
+   */
+  render(params: NoteRenderParams): Promise<RenderedNote>;
+  /**
+   * Create an attachment from bytes, as note.create creates a note: it fails
+   * with conflict if the path exists (ADR-0023). data is base64, at most 10
+   * MB decoded.
+   */
+  upload(params: NoteUploadParams): Promise<WriteResult>;
+  /** A version's content, for the history view and the merge view. */
+  readVersion(params: NoteReadVersionParams): Promise<VersionContent>;
+  /**
+   * Every tag in the vault's notes and how many notes have it, by tag
+   * ignoring case.
+   */
+  tags(params: NoteTagsParams): Promise<TagCount[]>;
+  /**
+   * Every frontmatter key in the vault's notes, its type and how many notes
+   * have it, by key ignoring case.
+   */
+  properties(params: NotePropertiesParams): Promise<PropertyCount[]>;
+  /**
+   * A template note's content with {{title}}, {{date}}, {{time}} and their
+   * formats and offsets expanded, as Obsidian's Insert template does
+   * (docs/design/vault.md#daily-notes).
+   */
+  template(params: NoteTemplateParams): Promise<ExpandedTemplate>;
+  /**
+   * Create a folder and any missing parents. An existing folder is not an
+   * error.
+   */
+  mkdir(params: NoteMkdirParams): Promise<void>;
+  /**
+   * Rename or move a folder with everything in it, creating missing parents.
+   * Each file moves as note.move moves it, keeping its versions; with
+   * updateLinks, links to them from notes outside the folder are rewritten.
+   */
+  moveFolder(params: NoteMoveFolderParams): Promise<FolderMoveResult>;
+  /**
+   * Delete a folder's files, each with the base the caller listed, then the
+   * folder when nothing is left in it. A file changed since its base, or not
+   * listed, is kept: an edit beats a delete (ADR-0005). Every deleted file's
+   * versions stay for note.revert.
+   */
+  deleteFolder(params: NoteDeleteFolderParams): Promise<FolderDeleteResult>;
 }
 
 function noteClient(t: Transport): NoteClient {
@@ -887,6 +1161,17 @@ function noteClient(t: Transport): NoteClient {
     versions: (params) => t.call<Version[]>("note.versions", params),
     revert: (params) => t.call<WriteResult>("note.revert", params),
     daily: (params) => t.call<DailyNote>("note.daily", params),
+    files: (params) => t.call<VaultFiles>("note.files", params),
+    resolve: (params) => t.call<Resolution[]>("note.resolve", params),
+    render: (params) => t.call<RenderedNote>("note.render", params),
+    upload: (params) => t.call<WriteResult>("note.upload", params),
+    readVersion: (params) => t.call<VersionContent>("note.readVersion", params),
+    tags: (params) => t.call<TagCount[]>("note.tags", params),
+    properties: (params) => t.call<PropertyCount[]>("note.properties", params),
+    template: (params) => t.call<ExpandedTemplate>("note.template", params),
+    mkdir: (params) => t.call<null>("note.mkdir", params).then(() => undefined),
+    moveFolder: (params) => t.call<FolderMoveResult>("note.moveFolder", params),
+    deleteFolder: (params) => t.call<FolderDeleteResult>("note.deleteFolder", params),
   };
 }
 
@@ -1011,6 +1296,13 @@ export interface SyncConflict {
   revisions: Revision[];
 }
 
+/** A hub revision's content. */
+export interface RevisionContent {
+  revision: Revision;
+  /** As note.read gives content; empty for a delete or resolve. */
+  content: string;
+}
+
 /** How a synced vault compares with its hub (M2's exit evidence). */
 export interface VerifyReport {
   /** No file differs and every push is on record. */
@@ -1092,6 +1384,13 @@ export interface SyncHistoryParams {
   limit?: number;
 }
 
+/** Params of sync.readRevision. */
+export interface SyncReadRevisionParams {
+  vaultId: number;
+  /** The revision's sequence number, from sync.history or sync.conflicts. */
+  seq: number;
+}
+
 /** A synced vault's state changed. */
 export interface SyncChanged {
   status: SyncStatus;
@@ -1135,6 +1434,11 @@ export interface SyncClient {
   verify(params: SyncVerifyParams): Promise<VerifyReport>;
   /** The hub's revisions of a file, newest first. */
   history(params: SyncHistoryParams): Promise<Revision[]>;
+  /**
+   * A hub revision's content, for the merge view: from this device's blob
+   * store when it has it, else fetched from the hub (ADR-0018).
+   */
+  readRevision(params: SyncReadRevisionParams): Promise<RevisionContent>;
 }
 
 function syncClient(t: Transport): SyncClient {
@@ -1150,6 +1454,7 @@ function syncClient(t: Transport): SyncClient {
     reset: (params) => t.call<SyncStatus>("sync.reset", params),
     verify: (params) => t.call<VerifyReport>("sync.verify", params),
     history: (params) => t.call<Revision[]>("sync.history", params),
+    readRevision: (params) => t.call<RevisionContent>("sync.readRevision", params),
   };
 }
 
@@ -1158,6 +1463,65 @@ function syncClient(t: Transport): SyncClient {
 /** What a vault's scanner is doing. */
 export type ScanState = "idle" | "scanning" | "failed";
 export const ScanStateValues: readonly ScanState[] = ["idle", "scanning", "failed"];
+
+/** Where a new note goes (Obsidian's Default location for new notes). */
+export type NewNoteLocation = "root" | "current" | "folder";
+export const NewNoteLocationValues: readonly NewNoteLocation[] = ["root", "current", "folder"];
+
+/** How a new link names its file (Obsidian's New link format). */
+export type LinkFormat = "shortest" | "relative" | "absolute";
+export const LinkFormatValues: readonly LinkFormat[] = ["shortest", "relative", "absolute"];
+
+/** Where a setting's value comes from. */
+export type SettingSource = "frostnotes" | "obsidian" | "default";
+export const SettingSourceValues: readonly SettingSource[] = ["frostnotes", "obsidian", "default"];
+
+/**
+ * A vault's settings (docs/design/vault.md#on-disk; ADR-0021): from
+ * .frostnotes/vault.yaml, else Obsidian's .obsidian/ files, else Obsidian's
+ * defaults.
+ */
+export interface VaultSettings {
+  /** Where daily notes go; empty is the vault root. */
+  dailyFolder: string;
+  /**
+   * A moment.js format for a daily note's name; may hold '/' to name
+   * subfolders.
+   */
+  dailyFormat: string;
+  /** The daily-note template's path; empty for none. */
+  dailyTemplate: string;
+  /** Where templates live; empty when unset. */
+  templateFolder: string;
+  /** {{date}}'s moment.js format. */
+  templateDateFormat: string;
+  /** {{time}}'s moment.js format. */
+  templateTimeFormat: string;
+  newNoteLocation: NewNoteLocation;
+  /** With newNoteLocation folder: that folder; empty is the root. */
+  newNoteFolder: string;
+  /**
+   * Where pasted and dropped files go, as Obsidian writes it: "/" the vault
+   * root, "./" the note's folder, "./NAME" a folder NAME beside the note,
+   * else a folder's path.
+   */
+  attachmentFolder: string;
+  linkFormat: LinkFormat;
+  /** New links are [[wikilinks]] rather than markdown links. */
+  wikilinks: boolean;
+  /**
+   * Moves rewrite links without asking (Obsidian's Automatically update
+   * internal links).
+   */
+  updateLinks: boolean;
+  /**
+   * Gitignore-style patterns of files the vault leaves out (Obsidian's
+   * Excluded files).
+   */
+  ignore: string[];
+  /** Where each setting above comes from, by its field name. */
+  sources: Record<string, SettingSource>;
+}
 
 /** The state of a vault's index and its scans. */
 export interface ScanStatus {
@@ -1221,6 +1585,29 @@ export interface VaultReindexParams {
   id: number;
 }
 
+/** Params of vault.settings. */
+export interface VaultSettingsParams {
+  id: number;
+}
+
+/** Params of vault.configure. */
+export interface VaultConfigureParams {
+  id: number;
+  dailyFolder?: string;
+  dailyFormat?: string;
+  dailyTemplate?: string;
+  templateFolder?: string;
+  templateDateFormat?: string;
+  templateTimeFormat?: string;
+  newNoteLocation?: NewNoteLocation;
+  newNoteFolder?: string;
+  attachmentFolder?: string;
+  linkFormat?: LinkFormat;
+  wikilinks?: boolean;
+  updateLinks?: boolean;
+  ignore?: string[];
+}
+
 /** A vault's scan started, made progress (at most every 250 ms) or ended. */
 export interface VaultScan {
   status: ScanStatus;
@@ -1229,6 +1616,14 @@ export interface VaultScan {
 /** A vault was registered. */
 export interface VaultAdded {
   vault: Vault;
+}
+
+/**
+ * A vault's settings changed, by vault.configure or in
+ * .frostnotes/vault.yaml.
+ */
+export interface VaultConfigured {
+  id: number;
 }
 
 /** A vault was forgotten. */
@@ -1259,6 +1654,15 @@ export interface VaultClient {
    * runs in the background; vault.scan events report its progress.
    */
   reindex(params: VaultReindexParams): Promise<ScanStatus>;
+  /** A vault's settings, and where each comes from. */
+  settings(params: VaultSettingsParams): Promise<VaultSettings>;
+  /**
+   * Change a vault's settings: each field given is written to
+   * .frostnotes/vault.yaml, atomically, keeping the rest of the file; the
+   * others keep their values. This is the only method that writes
+   * .frostnotes/ (ADR-0021).
+   */
+  configure(params: VaultConfigureParams): Promise<VaultSettings>;
 }
 
 function vaultClient(t: Transport): VaultClient {
@@ -1268,6 +1672,8 @@ function vaultClient(t: Transport): VaultClient {
     remove: (params) => t.call<null>("vault.remove", params).then(() => undefined),
     status: (params) => t.call<ScanStatus>("vault.status", params),
     reindex: (params) => t.call<ScanStatus>("vault.reindex", params),
+    settings: (params) => t.call<VaultSettings>("vault.settings", params),
+    configure: (params) => t.call<VaultSettings>("vault.configure", params),
   };
 }
 
@@ -1280,6 +1686,7 @@ export type Event =
   | { event: "sync.changed"; seq?: number; data: SyncChanged }
   | { event: "vault.scan"; seq?: number; data: VaultScan }
   | { event: "vault.added"; seq?: number; data: VaultAdded }
+  | { event: "vault.configured"; seq?: number; data: VaultConfigured }
   | { event: "vault.removed"; seq?: number; data: VaultRemoved }
 ;
 
@@ -1314,6 +1721,17 @@ export const METHODS = [
   "note.versions",
   "note.revert",
   "note.daily",
+  "note.files",
+  "note.resolve",
+  "note.render",
+  "note.upload",
+  "note.readVersion",
+  "note.tags",
+  "note.properties",
+  "note.template",
+  "note.mkdir",
+  "note.moveFolder",
+  "note.deleteFolder",
   "rpc.hello",
   "sync.pair",
   "sync.paired",
@@ -1326,11 +1744,14 @@ export const METHODS = [
   "sync.reset",
   "sync.verify",
   "sync.history",
+  "sync.readRevision",
   "vault.list",
   "vault.add",
   "vault.remove",
   "vault.status",
   "vault.reindex",
+  "vault.settings",
+  "vault.configure",
 ] as const;
 
 /** The typed notesd API over a Transport. */

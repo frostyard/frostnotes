@@ -14,6 +14,11 @@ enums:
       - {name: wiki, doc: "A [[wikilink]] or ![[embed]] in the body."}
       - {name: markdown, doc: "A markdown link or image to a vault file."}
       - {name: property, doc: "A wikilink in a frontmatter value."}
+  - name: FileKind
+    doc: What the index makes of a file.
+    values:
+      - {name: note, doc: "A markdown note (.md), parsed and indexed."}
+      - {name: attachment, doc: "Any other file: indexed by name and hash only."}
   - name: VersionSource
     doc: Who made a version.
     values:
@@ -77,6 +82,9 @@ types:
       - {name: merged, type: bool, doc: "The file had changed since the base, and notesd merged the write into it."}
       - {name: content, type: string, optional: true, doc: "What the file now holds, when merged is true."}
       - {name: conflicts, type: int, doc: "Hunks both sides changed differently; the file's newer side of each stands, and the content sent is kept as a conflict version (ADR-0005)."}
+      - {name: conflictVersion, type: int, optional: true, doc: "The conflict version's id, when conflicts is above zero: what note.readVersion reads back."}
+      - {name: mergedSource, type: VersionSource, optional: true, doc: "When merged is true: who made the version the write was merged into."}
+      - {name: mergedAuthor, type: string, optional: true, doc: "When merged is true: that version's author; empty for an outside edit."}
   - name: MoveResult
     doc: A file after a move.
     fields:
@@ -99,6 +107,65 @@ types:
     fields:
       - {name: note, type: Note}
       - {name: created, type: bool, doc: "notesd created it from the vault's template for this call."}
+  - name: VaultFile
+    doc: A file of a vault, as the index has it.
+    fields:
+      - {name: path, type: string}
+      - {name: kind, type: FileKind}
+      - {name: hash, type: string, doc: "The SHA-256 of the content, lowercase hex: a write's base, and the name of its bytes for the app (ADR-0023)."}
+      - {name: size, type: int, doc: "In bytes."}
+      - {name: modifiedAt, type: time, doc: "The file's modification time."}
+  - name: VaultFiles
+    doc: Every file and folder of a vault.
+    fields:
+      - {name: files, type: "[]VaultFile", doc: "By path."}
+      - {name: folders, type: "[]string", doc: "Every folder below the root, empty ones included, by path; the root is not listed."}
+  - name: Resolution
+    doc: Where a link target leads from a note.
+    fields:
+      - {name: target, type: string, doc: "The target as asked, without subpath or alias."}
+      - {name: path, type: string, optional: true, doc: "The file it resolves to; absent when unresolved."}
+  - name: RenderedNote
+    doc: A note rendered for the reading view (docs/design/app.md#reading-view).
+    fields:
+      - {name: html, type: string, doc: "Sanitized HTML: no script, event handler, form, frame, style or javascript: URL. Vault files appear as data-blob attributes, never as URLs (ADR-0023)."}
+  - name: VersionContent
+    doc: A version's content.
+    fields:
+      - {name: version, type: Version}
+      - {name: content, type: string, doc: "As note.read gives content: bytes that are not UTF-8 read as U+FFFD (ADR-0014); empty for a deletion."}
+  - name: TagCount
+    doc: A tag and how many notes have it.
+    fields:
+      - {name: tag, type: string, doc: "As first spelled, without '#'; nested tags are listed whole (a/b), and their parents only when a note has the parent itself."}
+      - {name: count, type: int, doc: "Notes with the tag, ignoring case."}
+  - name: PropertyCount
+    doc: A frontmatter key and how many notes have it.
+    fields:
+      - {name: key, type: string, doc: "As first spelled."}
+      - {name: type, type: string, doc: "Its type from the vault's property types (text, multitext, number, checkbox, date, datetime, aliases, tags); empty when it has none."}
+      - {name: count, type: int, doc: "Notes with the key, ignoring case."}
+  - name: ExpandedTemplate
+    doc: A template with its variables expanded.
+    fields:
+      - {name: content, type: string}
+  - name: FileBase
+    doc: A file and the hash a delete expects it to have.
+    fields:
+      - {name: path, type: string}
+      - {name: base, type: string}
+  - name: FolderMoveResult
+    doc: A folder after a move.
+    fields:
+      - {name: path, type: string, doc: "The folder's new path."}
+      - {name: moved, type: "[]string", doc: "The files moved, by their new paths."}
+      - {name: rewritten, type: "[]string", doc: "The notes whose links were rewritten, by path."}
+  - name: FolderDeleteResult
+    doc: What a folder delete did.
+    fields:
+      - {name: deleted, type: "[]string", doc: "The files deleted, by path."}
+      - {name: kept, type: "[]string", doc: "Files kept: changed since their base, or not named (made since the listing). An edit beats a delete (ADR-0005)."}
+      - {name: removed, type: bool, doc: "The folder itself is gone: nothing was kept in it."}
 methods:
   - name: list
     doc: >-
@@ -124,7 +191,11 @@ methods:
       Full-text search over titles, aliases, bodies and frontmatter, best
       match first. Each word matches as a prefix ("plan" finds "planting"),
       a phrase in double quotes matches as written, and every word or
-      phrase must match. Case and diacritics are ignored.
+      phrase must match. Case and diacritics are ignored. Filters narrow
+      it, each as its own word: path:TEXT (the path contains TEXT),
+      file:TEXT (the file name contains TEXT), tag:#TAG (the note has TAG
+      or a tag nested under it); a filter alone lists matching notes by
+      path.
     params:
       - {name: vaultId, type: int}
       - {name: query, type: string}
@@ -230,6 +301,114 @@ methods:
       - {name: source, type: VersionSource, optional: true, doc: "Who creates it when it is missing: editor (the default) or agent."}
       - {name: author, type: string, optional: true, doc: "Who creates it, for the version list; defaults to the client name given to rpc.hello."}
     result: DailyNote
+    errors: [notFound, invalidParams]
+  - name: files
+    doc: >-
+      Every file and folder of a vault: the Files pane's listing and the
+      hashes the app loads files by (ADR-0023). note.changed, note.moved and
+      note.removed keep it current.
+    params:
+      - {name: vaultId, type: int}
+    result: VaultFiles
+    errors: [notFound]
+  - name: resolve
+    doc: >-
+      Where link targets lead from a note, by the vault's link resolution
+      (docs/specs/markdown.md#link-resolution), for links the editor shows
+      before the index has them.
+    params:
+      - {name: vaultId, type: int}
+      - {name: from, type: string, doc: "The linking note's path; it need not exist yet."}
+      - {name: targets, type: "[]string", doc: "Link targets as written, without subpath or alias; at most 1,000."}
+    result: "[]Resolution"
+    errors: [notFound, invalidParams]
+  - name: render
+    doc: >-
+      A note rendered to sanitized HTML for the reading view and embeds
+      (ADR-0007): Obsidian's syntax, embeds of notes three levels deep, a
+      single newline as a line break (Obsidian's default). With content,
+      that text is rendered as if it were the note at path, so an editor
+      shows what was typed before it is saved.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: content, type: string, optional: true}
+    result: RenderedNote
+    errors: [notFound, invalidParams]
+  - name: upload
+    doc: >-
+      Create an attachment from bytes, as note.create creates a note: it
+      fails with conflict if the path exists (ADR-0023). data is base64, at
+      most 10 MB decoded.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: data, type: string, doc: "The file's bytes, base64 (standard alphabet, padded)."}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent."}
+      - {name: author, type: string, optional: true, doc: "Who is writing; defaults to the client name given to rpc.hello."}
+    result: WriteResult
+    errors: [notFound, conflict, invalidParams]
+  - name: readVersion
+    doc: A version's content, for the history view and the merge view.
+    params:
+      - {name: vaultId, type: int}
+      - {name: version, type: int, doc: "The version's id, from note.versions or a write's conflictVersion."}
+    result: VersionContent
+    errors: [notFound]
+  - name: tags
+    doc: Every tag in the vault's notes and how many notes have it, by tag ignoring case.
+    params:
+      - {name: vaultId, type: int}
+    result: "[]TagCount"
+    errors: [notFound]
+  - name: properties
+    doc: Every frontmatter key in the vault's notes, its type and how many notes have it, by key ignoring case.
+    params:
+      - {name: vaultId, type: int}
+    result: "[]PropertyCount"
+    errors: [notFound]
+  - name: template
+    doc: >-
+      A template note's content with {{title}}, {{date}}, {{time}} and their
+      formats and offsets expanded, as Obsidian's Insert template does
+      (docs/design/vault.md#daily-notes).
+    params:
+      - {name: vaultId, type: int}
+      - {name: template, type: string, doc: "The template note's path."}
+      - {name: title, type: string, optional: true, doc: "{{title}}: the note it goes into; empty by default."}
+      - {name: at, type: time, optional: true, doc: "The date and time {{date}} and {{time}} give; now by default."}
+    result: ExpandedTemplate
+    errors: [notFound, invalidParams]
+  - name: mkdir
+    doc: Create a folder and any missing parents. An existing folder is not an error.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+    errors: [notFound, invalidParams]
+  - name: moveFolder
+    doc: >-
+      Rename or move a folder with everything in it, creating missing
+      parents. Each file moves as note.move moves it, keeping its versions;
+      with updateLinks, links to them from notes outside the folder are
+      rewritten.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: to, type: string, doc: "The new path; it must not exist."}
+      - {name: updateLinks, type: bool, optional: true}
+    result: FolderMoveResult
+    errors: [notFound, conflict, invalidParams]
+  - name: deleteFolder
+    doc: >-
+      Delete a folder's files, each with the base the caller listed, then
+      the folder when nothing is left in it. A file changed since its base,
+      or not listed, is kept: an edit beats a delete (ADR-0005). Every
+      deleted file's versions stay for note.revert.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: files, type: "[]FileBase", doc: "The folder's files as the caller listed them."}
+    result: FolderDeleteResult
     errors: [notFound, invalidParams]
 events:
   - name: changed

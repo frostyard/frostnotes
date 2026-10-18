@@ -491,7 +491,7 @@ Errors: `notFound`.
 
 ### `note.search`
 
-Full-text search over titles, aliases, bodies and frontmatter, best match first. Each word matches as a prefix ("plan" finds "planting"), a phrase in double quotes matches as written, and every word or phrase must match. Case and diacritics are ignored.
+Full-text search over titles, aliases, bodies and frontmatter, best match first. Each word matches as a prefix ("plan" finds "planting"), a phrase in double quotes matches as written, and every word or phrase must match. Case and diacritics are ignored. Filters narrow it, each as its own word: path:TEXT (the path contains TEXT), file:TEXT (the file name contains TEXT), tag:#TAG (the note has TAG or a tag nested under it); a filter alone lists matching notes by path.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -625,6 +625,145 @@ A day's daily note, created from the vault's daily-note template when missing (d
 Result: `DailyNote`.
 Errors: `notFound`, `invalidParams`.
 
+### `note.files`
+
+Every file and folder of a vault: the Files pane's listing and the hashes the app loads files by (ADR-0023). note.changed, note.moved and note.removed keep it current.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `VaultFiles`.
+Errors: `notFound`.
+
+### `note.resolve`
+
+Where link targets lead from a note, by the vault's link resolution (docs/specs/markdown.md#link-resolution), for links the editor shows before the index has them.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `from` | `string` | The linking note's path; it need not exist yet. |
+| `targets` | `[]string` | Link targets as written, without subpath or alias; at most 1,000. |
+
+Result: `[]Resolution`.
+Errors: `notFound`, `invalidParams`.
+
+### `note.render`
+
+A note rendered to sanitized HTML for the reading view and embeds (ADR-0007): Obsidian's syntax, embeds of notes three levels deep, a single newline as a line break (Obsidian's default). With content, that text is rendered as if it were the note at path, so an editor shows what was typed before it is saved.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `content` | `string` (optional) |  |
+
+Result: `RenderedNote`.
+Errors: `notFound`, `invalidParams`.
+
+### `note.upload`
+
+Create an attachment from bytes, as note.create creates a note: it fails with conflict if the path exists (ADR-0023). data is base64, at most 10 MB decoded.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `data` | `string` | The file's bytes, base64 (standard alphabet, padded). |
+| `source` | `VersionSource` (optional) | editor (the default) or agent. |
+| `author` | `string` (optional) | Who is writing; defaults to the client name given to rpc.hello. |
+
+Result: `WriteResult`.
+Errors: `notFound`, `conflict`, `invalidParams`.
+
+### `note.readVersion`
+
+A version's content, for the history view and the merge view.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `version` | `int` | The version's id, from note.versions or a write's conflictVersion. |
+
+Result: `VersionContent`.
+Errors: `notFound`.
+
+### `note.tags`
+
+Every tag in the vault's notes and how many notes have it, by tag ignoring case.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `[]TagCount`.
+Errors: `notFound`.
+
+### `note.properties`
+
+Every frontmatter key in the vault's notes, its type and how many notes have it, by key ignoring case.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+
+Result: `[]PropertyCount`.
+Errors: `notFound`.
+
+### `note.template`
+
+A template note's content with {{title}}, {{date}}, {{time}} and their formats and offsets expanded, as Obsidian's Insert template does (docs/design/vault.md#daily-notes).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `template` | `string` | The template note's path. |
+| `title` | `string` (optional) | {{title}}: the note it goes into; empty by default. |
+| `at` | `time` (optional) | The date and time {{date}} and {{time}} give; now by default. |
+
+Result: `ExpandedTemplate`.
+Errors: `notFound`, `invalidParams`.
+
+### `note.mkdir`
+
+Create a folder and any missing parents. An existing folder is not an error.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+
+Result: none (`null`).
+Errors: `notFound`, `invalidParams`.
+
+### `note.moveFolder`
+
+Rename or move a folder with everything in it, creating missing parents. Each file moves as note.move moves it, keeping its versions; with updateLinks, links to them from notes outside the folder are rewritten.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `to` | `string` | The new path; it must not exist. |
+| `updateLinks` | `bool` (optional) |  |
+
+Result: `FolderMoveResult`.
+Errors: `notFound`, `conflict`, `invalidParams`.
+
+### `note.deleteFolder`
+
+Delete a folder's files, each with the base the caller listed, then the folder when nothing is left in it. A file changed since its base, or not listed, is kept: an edit beats a delete (ADR-0005). Every deleted file's versions stay for note.revert.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `files` | `[]FileBase` | The folder's files as the caller listed them. |
+
+Result: `FolderDeleteResult`.
+Errors: `notFound`, `invalidParams`.
+
 ### Event `note.changed` (durable)
 
 A file was created or its content changed, by a write or on disk.
@@ -737,6 +876,9 @@ A note after a write.
 | `merged` | `bool` | The file had changed since the base, and notesd merged the write into it. |
 | `content` | `string` (optional) | What the file now holds, when merged is true. |
 | `conflicts` | `int` | Hunks both sides changed differently; the file's newer side of each stands, and the content sent is kept as a conflict version (ADR-0005). |
+| `conflictVersion` | `int` (optional) | The conflict version's id, when conflicts is above zero: what note.readVersion reads back. |
+| `mergedSource` | `VersionSource` (optional) | When merged is true: who made the version the write was merged into. |
+| `mergedAuthor` | `string` (optional) | When merged is true: that version's author; empty for an outside edit. |
 
 ### Type `MoveResult`
 
@@ -772,6 +914,109 @@ A day's daily note.
 | `note` | `Note` |  |
 | `created` | `bool` | notesd created it from the vault's template for this call. |
 
+### Type `VaultFile`
+
+A file of a vault, as the index has it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `kind` | `FileKind` |  |
+| `hash` | `string` | The SHA-256 of the content, lowercase hex: a write's base, and the name of its bytes for the app (ADR-0023). |
+| `size` | `int` | In bytes. |
+| `modifiedAt` | `time` | The file's modification time. |
+
+### Type `VaultFiles`
+
+Every file and folder of a vault.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `files` | `[]VaultFile` | By path. |
+| `folders` | `[]string` | Every folder below the root, empty ones included, by path; the root is not listed. |
+
+### Type `Resolution`
+
+Where a link target leads from a note.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `target` | `string` | The target as asked, without subpath or alias. |
+| `path` | `string` (optional) | The file it resolves to; absent when unresolved. |
+
+### Type `RenderedNote`
+
+A note rendered for the reading view (docs/design/app.md#reading-view).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `html` | `string` | Sanitized HTML: no script, event handler, form, frame, style or javascript: URL. Vault files appear as data-blob attributes, never as URLs (ADR-0023). |
+
+### Type `VersionContent`
+
+A version's content.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `version` | `Version` |  |
+| `content` | `string` | As note.read gives content: bytes that are not UTF-8 read as U+FFFD (ADR-0014); empty for a deletion. |
+
+### Type `TagCount`
+
+A tag and how many notes have it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `tag` | `string` | As first spelled, without '#'; nested tags are listed whole (a/b), and their parents only when a note has the parent itself. |
+| `count` | `int` | Notes with the tag, ignoring case. |
+
+### Type `PropertyCount`
+
+A frontmatter key and how many notes have it.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `key` | `string` | As first spelled. |
+| `type` | `string` | Its type from the vault's property types (text, multitext, number, checkbox, date, datetime, aliases, tags); empty when it has none. |
+| `count` | `int` | Notes with the key, ignoring case. |
+
+### Type `ExpandedTemplate`
+
+A template with its variables expanded.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `content` | `string` |  |
+
+### Type `FileBase`
+
+A file and the hash a delete expects it to have.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `base` | `string` |  |
+
+### Type `FolderMoveResult`
+
+A folder after a move.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` | The folder's new path. |
+| `moved` | `[]string` | The files moved, by their new paths. |
+| `rewritten` | `[]string` | The notes whose links were rewritten, by path. |
+
+### Type `FolderDeleteResult`
+
+What a folder delete did.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `deleted` | `[]string` | The files deleted, by path. |
+| `kept` | `[]string` | Files kept: changed since their base, or not named (made since the listing). An edit beats a delete (ADR-0005). |
+| `removed` | `bool` | The folder itself is gone: nothing was kept in it. |
+
 ### Enum `LinkKind`
 
 Where a link is written (docs/specs/markdown.md).
@@ -781,6 +1026,15 @@ Where a link is written (docs/specs/markdown.md).
 | `wiki` | A [[wikilink]] or ![[embed]] in the body. |
 | `markdown` | A markdown link or image to a vault file. |
 | `property` | A wikilink in a frontmatter value. |
+
+### Enum `FileKind`
+
+What the index makes of a file.
+
+| Value | Meaning |
+| --- | --- |
+| `note` | A markdown note (.md), parsed and indexed. |
+| `attachment` | Any other file: indexed by name and hash only. |
 
 ### Enum `VersionSource`
 
@@ -950,6 +1204,18 @@ The hub's revisions of a file, newest first.
 Result: `[]Revision`.
 Errors: `notFound`, `unavailable`.
 
+### `sync.readRevision`
+
+A hub revision's content, for the merge view: from this device's blob store when it has it, else fetched from the hub (ADR-0018).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `seq` | `int` | The revision's sequence number, from sync.history or sync.conflicts. |
+
+Result: `RevisionContent`.
+Errors: `notFound`, `unavailable`.
+
 ### Event `sync.changed` (transient)
 
 A synced vault's state changed.
@@ -1029,6 +1295,15 @@ A flagged file and the conflict revisions since its last resolve.
 | `path` | `string` |  |
 | `file` | `int` | The hub's file ID. |
 | `revisions` | `[]Revision` |  |
+
+### Type `RevisionContent`
+
+A hub revision's content.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `revision` | `Revision` |  |
+| `content` | `string` | As note.read gives content; empty for a delete or resolve. |
 
 ### Type `VerifyReport`
 
@@ -1123,6 +1398,41 @@ Read every file of a vault again and rebuild its index, as if none matched it. F
 Result: `ScanStatus`.
 Errors: `notFound`.
 
+### `vault.settings`
+
+A vault's settings, and where each comes from.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+
+Result: `VaultSettings`.
+Errors: `notFound`.
+
+### `vault.configure`
+
+Change a vault's settings: each field given is written to .frostnotes/vault.yaml, atomically, keeping the rest of the file; the others keep their values. This is the only method that writes .frostnotes/ (ADR-0021).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+| `dailyFolder` | `string` (optional) |  |
+| `dailyFormat` | `string` (optional) |  |
+| `dailyTemplate` | `string` (optional) |  |
+| `templateFolder` | `string` (optional) |  |
+| `templateDateFormat` | `string` (optional) |  |
+| `templateTimeFormat` | `string` (optional) |  |
+| `newNoteLocation` | `NewNoteLocation` (optional) |  |
+| `newNoteFolder` | `string` (optional) |  |
+| `attachmentFolder` | `string` (optional) |  |
+| `linkFormat` | `LinkFormat` (optional) |  |
+| `wikilinks` | `bool` (optional) |  |
+| `updateLinks` | `bool` (optional) |  |
+| `ignore` | `[]string` (optional) |  |
+
+Result: `VaultSettings`.
+Errors: `notFound`, `invalidParams`.
+
 ### Event `vault.scan` (transient)
 
 A vault's scan started, made progress (at most every 250 ms) or ended.
@@ -1139,6 +1449,14 @@ A vault was registered.
 | --- | --- | --- |
 | `vault` | `Vault` |  |
 
+### Event `vault.configured` (durable)
+
+A vault's settings changed, by vault.configure or in .frostnotes/vault.yaml.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `int` |  |
+
 ### Event `vault.removed` (durable)
 
 A vault was forgotten.
@@ -1146,6 +1464,27 @@ A vault was forgotten.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `id` | `int` |  |
+
+### Type `VaultSettings`
+
+A vault's settings (docs/design/vault.md#on-disk; ADR-0021): from .frostnotes/vault.yaml, else Obsidian's .obsidian/ files, else Obsidian's defaults.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `dailyFolder` | `string` | Where daily notes go; empty is the vault root. |
+| `dailyFormat` | `string` | A moment.js format for a daily note's name; may hold '/' to name subfolders. |
+| `dailyTemplate` | `string` | The daily-note template's path; empty for none. |
+| `templateFolder` | `string` | Where templates live; empty when unset. |
+| `templateDateFormat` | `string` | {{date}}'s moment.js format. |
+| `templateTimeFormat` | `string` | {{time}}'s moment.js format. |
+| `newNoteLocation` | `NewNoteLocation` |  |
+| `newNoteFolder` | `string` | With newNoteLocation folder: that folder; empty is the root. |
+| `attachmentFolder` | `string` | Where pasted and dropped files go, as Obsidian writes it: "/" the vault root, "./" the note's folder, "./NAME" a folder NAME beside the note, else a folder's path. |
+| `linkFormat` | `LinkFormat` |  |
+| `wikilinks` | `bool` | New links are [[wikilinks]] rather than markdown links. |
+| `updateLinks` | `bool` | Moves rewrite links without asking (Obsidian's Automatically update internal links). |
+| `ignore` | `[]string` | Gitignore-style patterns of files the vault leaves out (Obsidian's Excluded files). |
+| `sources` | `map[string]SettingSource` | Where each setting above comes from, by its field name. |
 
 ### Type `ScanStatus`
 
@@ -1183,3 +1522,33 @@ What a vault's scanner is doing.
 | `idle` | No scan is running; the index holds what the last scan and the watcher found. |
 | `scanning` | A scan is running. |
 | `failed` | The last scan failed and error says why; the index keeps what it held. |
+
+### Enum `NewNoteLocation`
+
+Where a new note goes (Obsidian's Default location for new notes).
+
+| Value | Meaning |
+| --- | --- |
+| `root` | The vault's root (Obsidian's default). |
+| `current` | The folder of the note open when it is made. |
+| `folder` | The folder newNoteFolder names. |
+
+### Enum `LinkFormat`
+
+How a new link names its file (Obsidian's New link format).
+
+| Value | Meaning |
+| --- | --- |
+| `shortest` | The file's name when that resolves to it, else its path (Obsidian's default). |
+| `relative` | Its path from the linking note's folder. |
+| `absolute` | Its path from the vault's root. |
+
+### Enum `SettingSource`
+
+Where a setting's value comes from.
+
+| Value | Meaning |
+| --- | --- |
+| `frostnotes` | The vault's .frostnotes/vault.yaml. |
+| `obsidian` | Obsidian's settings in .obsidian/, read while vault.yaml lacks the setting. |
+| `default` | Neither has it: Obsidian's default. |
