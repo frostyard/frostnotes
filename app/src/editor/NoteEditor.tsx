@@ -9,6 +9,7 @@ import { useFiles } from "../data/files";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { TabNotice, type TabNoticeAction } from "../features/workspace/TabNotice";
+import { completionCatalog } from "./catalog";
 import type { NoteDoc, Notice } from "./document";
 import {
   type EditorPrefs,
@@ -92,6 +93,13 @@ export function NoteEditor(props: NoteEditorProps) {
           prefs: editorPrefs(usePrefs.getState(), start.live),
           env: { resolve: resolver.resolve, command: (c) => latest.current.onCommand(c) },
           onBlur: () => void doc.save(),
+          catalog: completionCatalog({
+            vaultId,
+            path: () => doc.path,
+            state: () => view.current?.state ?? null,
+            client: () => client.current,
+            docs: registry,
+          }),
         }),
         start.cursor === undefined ? undefined : { anchor: start.cursor },
       ),
@@ -112,7 +120,7 @@ export function NoteEditor(props: NoteEditorProps) {
       v.destroy();
       view.current = null;
     };
-  }, [ready, doc, resolver, registry]);
+  }, [ready, doc, resolver, registry, vaultId]);
 
   // Modes and preferences reconfigure the view.
   useEffect(() => {

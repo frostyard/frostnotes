@@ -33,7 +33,7 @@ import { editorCommands, workspaceCommands } from "./commands";
 import { openConflictsMenu, openEditingModeMenu } from "./menus";
 import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
-import { statusSync, useBacklinkCount } from "./status";
+import { statusSync, useBacklinkCount, useNoteCounts } from "./status";
 import { WorkspaceView } from "./WorkspaceView";
 
 /** RIBBON is the ribbon's width; WORKSPACE_MIN the least the workspace keeps (docs/specs/ui.md#layout). */
@@ -91,7 +91,10 @@ export function MainWindow() {
   const clientRef = useRef(client);
   clientRef.current = client;
   const docs = useMemo(() => new DocumentRegistry(() => clientRef.current), []);
-  useEffect(() => registry.register(...workspaceCommands(client), ...editorCommands(client, docs)), [registry, client, docs]);
+  useEffect(
+    () => registry.register(...workspaceCommands(client), ...editorCommands(client, docs)),
+    [registry, client, docs],
+  );
   // The chrome asks which commands apply: draw it again as commands come and go.
   useSyncExternalStore(registry.subscribe, registry.version);
   useEffect(() => installKeyListener(registry), [registry]);
@@ -114,6 +117,7 @@ export function MainWindow() {
   const active = activeTab(ws);
   const activeNote = active.view.type === "note" ? active.view : null;
   const backlinks = useBacklinkCount(activeNote?.path ?? null);
+  const counts = useNoteCounts(docs);
   const widths = fitSidebars(useWindowWidth(), ws.left, ws.right);
   const shown = { left: widths.left > 0, right: widths.right > 0 };
   const controls = isTauri();
@@ -229,7 +233,7 @@ export function MainWindow() {
             connection={connection}
             sync={sync && statusSync(sync)}
             backlinks={activeNote ? backlinks : null}
-            counts={null}
+            counts={activeNote ? counts : null}
             mode={activeNote ? (activeNote.mode === "read" ? "read" : editingMode) : null}
             onConflicts={() => {
               if (vaultId === null) return;
