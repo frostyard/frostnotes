@@ -465,6 +465,27 @@ export class MockVault {
       .replace(/(^|\s)#([\p{L}\p{N}_/-]+)/gu, '$1<a class="tag" data-tag="$2">#$2</a>');
   }
 
+  /**
+   * daily is notesd's note.daily in small: the day's note at the daily
+   * folder and format (YYYY, MM and DD only), made from the daily template
+   * when missing.
+   */
+  daily(at: Date, who: Author): { note: Note; created: boolean } {
+    const ymd = isoDate(at);
+    const name = this.settings.dailyFormat
+      .replace("YYYY", ymd.slice(0, 4))
+      .replace("MM", ymd.slice(5, 7))
+      .replace("DD", ymd.slice(8, 10));
+    const folder = this.settings.dailyFolder.replace(/^\/+|\/+$/g, "");
+    const path = `${folder === "" ? "" : `${folder}/`}${name}.md`;
+    if (this.files.has(path)) return { note: this.read(path), created: false };
+    const template = this.settings.dailyTemplate.replace(/^\/+/, "");
+    const withMd = template === "" || template.endsWith(".md") ? template : `${template}.md`;
+    const content = withMd !== "" && this.files.has(withMd) ? this.template(withMd, { title: name, at }) : "";
+    this.create(path, encoder.encode(content), who);
+    return { note: this.read(path), created: true };
+  }
+
   template(p: string, values: { title: string; at: Date }): string {
     const content = this.read(p).content;
     const date = isoDate(values.at);

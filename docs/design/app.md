@@ -329,10 +329,29 @@ evidence.
 ### Properties
 
 The note's frontmatter shows in live preview as the properties block (a
-block widget): a row per key, its type's icon and its value, editable.
-An edit there is a transaction on the YAML text that changes only that
-key's value and keeps every other byte, as MCP's property edits do in Go
-([specs/mcp.md](../specs/mcp.md)). Source mode shows the YAML.
+block widget, `editor/preview/properties.tsx`, holding the React
+component `features/properties/PropertiesBlock.tsx`): a row per key, its
+type's icon and its value, editable. An edit there is a transaction on
+the YAML text that changes only that key's lines and keeps every other
+byte, as MCP's property edits do in Go ([specs/mcp.md](../specs/mcp.md)):
+`editor/properties.ts` ports them over the `yaml` package, writing a
+string that needs quotes in double quotes and a date plain, as Obsidian
+writes them. A key's type is the vault's (`note.properties`), else what
+its key or value says. The widget keeps its DOM while the frontmatter
+changes, so a field keeps its focus, and takes its own events. Add file
+property (Ctrl+;) makes an empty frontmatter where there is none and
+opens the block's new row. The Properties in document preference shows
+the block, hides the frontmatter, or leaves its YAML, as source mode
+does. A note opens with the cursor where its body starts.
+
+The inline title (`editor/title.tsx`, a block widget above the first
+line in both editing modes, and above the reading view) is the file's
+name; renaming it moves the file as the Files pane does, asking about
+links. Insert template lists the template folder's notes
+(`features/prompt/TemplateChooser.tsx`), has notesd expand the chosen one
+(`note.template`), adds its properties the note lacks, and puts its body
+at the cursor. Open today's daily note opens `note.daily`'s note, which
+notesd makes from the daily template when missing.
 
 ## Reading view
 

@@ -17,6 +17,7 @@ import { ReadingView } from "../reading/ReadingView";
 import { type MergeSide, tabTitle, type ViewState } from "../workspace/model";
 import type { OpenWhere } from "../workspace/ops";
 import { HistoryView } from "./HistoryView";
+import { renameNote } from "./panes/files";
 
 export interface ViewContentProps {
   tabId: string;
@@ -46,6 +47,7 @@ export function ViewContent(props: ViewContentProps) {
   const live = usePrefs((s) => s.editingMode === "live");
   const vaultId = useNotes((s) => s.vaultId);
   const commands = useCommands();
+  const client = useClient();
   if (view.type === "empty") {
     const action = (command: string, label: string, keys: string) => ({
       command,
@@ -79,6 +81,7 @@ export function ViewContent(props: ViewContentProps) {
         onCompare={props.onCompare}
         onClose={props.onClose}
         onCursor={props.onCursor}
+        onRename={(title) => void renameNote(client, vaultId, view.path, title)}
       />
     );
   }
@@ -93,6 +96,7 @@ export function ViewContent(props: ViewContentProps) {
             onFollow={props.onFollow}
             onCompare={props.onCompare}
             onClose={props.onClose}
+            onRename={(title) => void renameNote(client, vaultId, view.path, title)}
           />
         );
       case "merge":

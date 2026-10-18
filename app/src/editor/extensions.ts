@@ -13,8 +13,10 @@ import { type CompletionCatalog, linkCompletion, tagCompletion } from "./complet
 import { editorKeymap } from "./keymap";
 import { livePreview, type PreviewEnvInput, previewEnv } from "./preview/framework";
 import { PROVIDERS } from "./preview/index";
+import { propertiesState } from "./preview/properties";
 import { markdownSupport } from "./syntax/index";
 import { editorTheme } from "./theme";
+import { titleCompartment } from "./title";
 
 /** EditorPrefs are the preferences the editor follows (docs/specs/ui.md#settings-batch-2). */
 export interface EditorPrefs {
@@ -47,12 +49,14 @@ export function prefsExtension(p: EditorPrefs): Extension {
   ];
 }
 
-/** editorExtensions are a view's extensions; onBlur saves; catalog, when given, completes links and tags. */
+/** editorExtensions are a view's extensions; onBlur saves; catalog, when given, completes links and tags; title is the inline title. */
 export function editorExtensions(opts: {
   prefs: EditorPrefs;
   env: PreviewEnvInput;
   onBlur: () => void;
   catalog?: CompletionCatalog;
+  /** The inline title (title.tsx), when the view shows one. */
+  title?: Extension;
 }): Extension {
   return [
     markdownSupport(),
@@ -65,6 +69,8 @@ export function editorExtensions(opts: {
       ? autocompletion({ override: [linkCompletion(opts.catalog), tagCompletion(opts.catalog)], icons: false })
       : [],
     previewEnv.of(opts.env),
+    propertiesState,
+    titleCompartment.of(opts.title ?? []),
     modeCompartment.of(modeExtension(opts.prefs.live)),
     prefsCompartment.of(prefsExtension(opts.prefs)),
     EditorView.domEventHandlers({

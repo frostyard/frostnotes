@@ -65,10 +65,16 @@ export interface PreviewEnv {
   render: (el: HTMLElement, markdown: string) => void;
   /** Whether to load images from the web (the Load remote images preference, read when drawing). */
   remoteImages: () => boolean;
+  /** How the frontmatter shows: as the properties block, hidden, or as its YAML (the Properties in document preference). */
+  propertiesMode: () => "visible" | "hidden" | "source";
+  /** The vault's property types by key, lowercased (note.properties). */
+  propertyTypes: () => Readonly<Record<string, string>>;
 }
 
 /** PreviewEnvInput is what the app gives; what it leaves out has a default. */
 export type PreviewEnvInput = Pick<PreviewEnv, "resolve" | "command"> & Partial<PreviewEnv>;
+
+const NO_TYPES: Readonly<Record<string, string>> = {};
 
 const ENV_DEFAULTS: PreviewEnv = {
   resolve: () => null,
@@ -78,6 +84,8 @@ const ENV_DEFAULTS: PreviewEnv = {
     el.textContent = markdown;
   },
   remoteImages: () => false,
+  propertiesMode: () => "visible",
+  propertyTypes: () => NO_TYPES,
 };
 
 /** previewEnv provides the app's PreviewEnv to the providers. */

@@ -139,6 +139,8 @@ export function editorTheme(opts: { readable: boolean; fontSize: number }): Exte
       ".cm-pv-rendered": { cursor: "text", padding: "4px 0" },
       ".cm-pv-embed": { borderLeft: "2px solid var(--accent)", padding: "4px 24px" },
       ".cm-pv-media": { maxWidth: "100%", verticalAlign: "bottom" },
+      ".cm-pv-properties": { padding: "0 0 12px", cursor: "auto" },
+      ".cm-inline-title": { cursor: "auto" },
       // Completion, drawn as the app's menus are.
       ".cm-tooltip": {
         backgroundColor: "var(--bg-window)",

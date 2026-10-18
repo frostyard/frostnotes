@@ -148,6 +148,25 @@ async function updateLinks(name: string): Promise<boolean> {
   });
 }
 
+/**
+ * renameNote renames a note from its inline title: the same folder, the
+ * new name, asking about links as a move does. A name taken says so.
+ */
+export async function renameNote(c: Client, vaultId: number, path: string, title: string): Promise<void> {
+  const slash = path.lastIndexOf("/");
+  const to = `${slash < 0 ? "" : path.slice(0, slash + 1)}${title}.md`;
+  if (to === path) return;
+  if (useFiles.getState().files.has(to)) {
+    notify(`${to} exists already.`);
+    return;
+  }
+  try {
+    await move(c, vaultId, path, to, false);
+  } catch (err) {
+    notify(`Cannot rename ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /** move moves a file or folder to a new path, its links updated as the vault's setting says. */
 export async function move(c: Client, vaultId: number, from: string, to: string, folder: boolean): Promise<void> {
   if (from === to) return;

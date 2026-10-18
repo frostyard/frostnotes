@@ -7,13 +7,14 @@
 import { syntaxTree } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import type { EditorState, StateCommand } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
-import { ask, notify, openPrompt, openSettings } from "../data/overlays";
+import { ask, notify, openPrompt, openSettings, openTemplates } from "../data/overlays";
 import { setRenaming, usePanes } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
@@ -30,9 +31,12 @@ import {
   toggleItalics,
   toggleStrikethrough,
 } from "../editor/format";
-import { type PreviewCommand, previewEnv } from "../editor/preview/framework";
+import { titleOf } from "../editor/NoteEditor";
+import { type PreviewCommand, previewEnv, redraw } from "../editor/preview/framework";
+import { addProperty, replaceText } from "../editor/preview/properties";
+import { readFrontmatter, setProperties } from "../editor/properties";
 import type { DocumentRegistry } from "../editor/registry";
-import { findLinks } from "../editor/syntax/extract";
+import { findLinks, frontmatterEnd } from "../editor/syntax/extract";
 import type { Client } from "../rpc/gen/api";
 import type { ViewState } from "../workspace/model";
 import {
@@ -196,6 +200,36 @@ export async function followLink(
   await createNoteAt(c, name.includes("/") || folder === "" ? name : `${folder}/${name}`, cmd.where, tabId);
 }
 
+/**
+ * insertTemplate inserts a template at the active editor's cursor, as
+ * Obsidian's Insert template does: notesd expands it for the note's title
+ * and now (note.template); its properties the note lacks join the note's,
+ * and its body replaces the selection.
+ */
+export async function insertTemplate(c: Client, docs: DocumentRegistry, template: string): Promise<void> {
+  const tab = activeTab(ws());
+  const e = tab.view.type === "note" && tab.view.mode === "edit" ? docs.editors.get(tab.id) : undefined;
+  const vaultId = useNotes.getState().vaultId;
+  if (!e || vaultId === null) return;
+  try {
+    const { content } = await c.note.template({ vaultId, template, title: titleOf(e.doc.path) });
+    const fm = readFrontmatter(content);
+    if (fm.kind === "properties" && fm.properties.length > 0) {
+      const text = e.view.state.doc.toString();
+      const mine = readFrontmatter(text);
+      const has = new Set(mine.kind === "properties" ? mine.properties.map((p) => p.key) : []);
+      const add = Object.fromEntries(fm.properties.filter((p) => !has.has(p.key)).map((p) => [p.key, p.value]));
+      const next = Object.keys(add).length > 0 ? setProperties(text, add) : text;
+      if (next instanceof Error) notify(`Cannot add the template's properties: ${next.message}`);
+      else replaceText(e.view, next, "input.template");
+    }
+    e.view.dispatch(e.view.state.replaceSelection(content.slice(frontmatterEnd(content))));
+    e.view.focus();
+  } catch (err) {
+    notify(`Cannot insert the template: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /** previewCommand does what a view of a note asks from its tab: follows a link, searches (a tag), or copies (a code block). */
 export async function previewCommand(c: Client, cmd: PreviewCommand, tabId: string): Promise<void> {
   switch (cmd.kind) {
@@ -256,6 +290,47 @@ export function linkAt(state: EditorState, pos: number): { target: string; href?
   return null;
 }
 
+// whenDrawn runs then once the view holds an element matching selector, or gives up after a second.
+function whenDrawn(view: EditorView, selector: string, then: () => void): void {
+  if (view.dom.querySelector(selector)) {
+    then();
+    return;
+  }
+  const watch = new MutationObserver(() => {
+    if (!view.dom.querySelector(selector)) return;
+    watch.disconnect();
+    clearTimeout(timer);
+    then();
+  });
+  const timer = setTimeout(() => watch.disconnect(), 1000);
+  watch.observe(view.dom, { childList: true, subtree: true });
+}
+
+/**
+ * addFileProperty is Add file property (Ctrl+;): a note without
+ * frontmatter gets an empty one, then the properties block opens its new
+ * row; with the YAML shown instead, the cursor goes to a new line at its
+ * end.
+ */
+export function addFileProperty(view: EditorView): void {
+  const text = view.state.doc.toString();
+  const bom = text.startsWith("\ufeff") ? 1 : 0;
+  const fresh = readFrontmatter(text).kind === "none";
+  if (fresh) view.dispatch({ changes: { from: bom, insert: "---\n---\n" } });
+  if (usePrefs.getState().properties === "visible") {
+    const ask = () => view.dispatch({ effects: [addProperty.of(null), redraw.of(null)] });
+    // A new block opens its row for a request that comes after it first
+    // drew, which React does a moment after the editor asks it to.
+    if (fresh) whenDrawn(view, ".cm-pv-properties section", ask);
+    else ask();
+    return;
+  }
+  const end = frontmatterEnd(view.state.doc.sliceString(bom));
+  const close = view.state.doc.lineAt(bom + end - 1).from;
+  view.dispatch({ changes: { from: close, insert: "\n" }, selection: { anchor: close } });
+  view.focus();
+}
+
 /** editorCommands are the commands of the active tab's editor. */
 export function editorCommands(c: Client, docs: DocumentRegistry): Command[] {
   const editor = () => {
@@ -313,6 +388,32 @@ export function editorCommands(c: Client, docs: DocumentRegistry): Command[] {
     format("editor:delete-paragraph", "Delete paragraph", deleteParagraph),
     ...[1, 2, 3, 4, 5, 6].map((n) => format(`editor:set-heading-${n}`, `Set heading ${n}`, setHeading(n))),
     format("editor:set-heading-0", "Remove heading", setHeading(0)),
+    {
+      id: "markdown:add-metadata-property",
+      name: "Add file property",
+      applies: has,
+      run: () => {
+        const e = editor();
+        if (e) addFileProperty(e.view);
+      },
+    },
+    {
+      id: "insert-template",
+      name: "Insert template",
+      applies: has,
+      run: () => {
+        const folder = (useVaultState.getState().settings?.templateFolder ?? "").replace(/^\/+|\/+$/g, "");
+        if (folder === "") {
+          notify("Choose a template folder in Settings, under Templates.");
+          return;
+        }
+        const paths = [...useFiles.getState().files.keys()].filter(
+          (p) => p.startsWith(`${folder}/`) && p.endsWith(".md"),
+        );
+        if (paths.length === 0) notify(`There are no templates in ${folder}.`);
+        else openTemplates(paths);
+      },
+    },
     follow("editor:follow-link", "Follow link under cursor", "here"),
     follow("editor:open-link-in-new-leaf", "Open link under cursor in new tab", "tab"),
     follow("editor:open-link-in-new-split", "Open link under cursor to the right", "right"),
@@ -373,6 +474,21 @@ export function workspaceCommands(c: Client): Command[] {
     run: () => update((w) => gotoTab(w, i + 1)),
   }));
   return [
+    {
+      id: "daily-notes",
+      name: "Open today's daily note",
+      applies: hasVault,
+      run: async () => {
+        const vaultId = useNotes.getState().vaultId;
+        if (vaultId === null) return;
+        try {
+          const day = await c.note.daily({ vaultId });
+          update((w) => open(w, viewOf(day.note.path), "here"));
+        } catch (err) {
+          notify(`Cannot open today's daily note: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
+    },
     { id: "file-explorer:new-file", name: "Create new note", applies: hasVault, run: () => createNote(c, "here") },
     {
       id: "file-explorer:new-file-in-new-pane",

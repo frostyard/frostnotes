@@ -6,21 +6,32 @@ import { useMemo } from "react";
 
 import { useCommands } from "../commands/registry";
 import { useFiles } from "../data/files";
-import { closeMenu, closeMove, closePrompt, dismissNotice, notify, ranCommand, useOverlays } from "../data/overlays";
+import {
+  closeMenu,
+  closeMove,
+  closePrompt,
+  closeTemplates,
+  dismissNotice,
+  notify,
+  ranCommand,
+  useOverlays,
+} from "../data/overlays";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
+import { useDocuments } from "../editor/registry";
 import { ConfirmDialog } from "../features/dialog/ConfirmDialog";
 import { Menu } from "../features/menu/Menu";
 import { Notices } from "../features/notice/Notices";
 import { CommandPalette } from "../features/prompt/CommandPalette";
 import { FolderChooser } from "../features/prompt/FolderChooser";
 import { QuickSwitcher, type SwitcherWhere } from "../features/prompt/QuickSwitcher";
+import { TemplateChooser } from "../features/prompt/TemplateChooser";
 import { formatHotkey, type HotkeyCommand, hotkeysFor } from "../lib/keymap";
 import type { PaletteCommand } from "../lib/palette";
 import type { SwitcherNote } from "../lib/switcher";
 import { type OpenWhere, open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
-import { openOrCreate, viewOf } from "./commands";
+import { insertTemplate, openOrCreate, viewOf } from "./commands";
 import { move } from "./panes/files";
 import { SettingsContainer } from "./Settings";
 
@@ -33,10 +44,12 @@ export function Overlays() {
   const notices = useOverlays((s) => s.notices);
   const confirm = useOverlays((s) => s.confirm);
   const moving = useOverlays((s) => s.move);
+  const templates = useOverlays((s) => s.templates);
   return (
     <>
       <SettingsContainer />
       {moving && <Mover path={moving.path} folder={moving.folder} />}
+      {templates && <Templates paths={templates} />}
       {confirm && (
         <ConfirmDialog
           title={confirm.title}
@@ -112,6 +125,19 @@ function Palette() {
         registry.run(id);
       }}
       onClose={closePrompt}
+    />
+  );
+}
+
+// Templates is the template chooser inserting the template chosen into the active editor.
+function Templates({ paths }: { paths: readonly string[] }) {
+  const client = useClient();
+  const docs = useDocuments();
+  return (
+    <TemplateChooser
+      templates={paths}
+      onClose={closeTemplates}
+      onChoose={(path) => void insertTemplate(client, docs, path)}
     />
   );
 }
