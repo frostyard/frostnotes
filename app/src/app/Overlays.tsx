@@ -5,10 +5,12 @@
 import { useMemo } from "react";
 
 import { useCommands } from "../commands/registry";
+import { useAliases } from "../data/aliases";
 import { useFiles } from "../data/files";
 import {
   closeMenu,
   closeMove,
+  closePreview,
   closePrompt,
   closeTemplates,
   dismissNotice,
@@ -18,10 +20,12 @@ import {
 } from "../data/overlays";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
+import { titleOf } from "../editor/NoteEditor";
 import { useDocuments } from "../editor/registry";
 import { ConfirmDialog } from "../features/dialog/ConfirmDialog";
 import { Menu } from "../features/menu/Menu";
 import { Notices } from "../features/notice/Notices";
+import { PagePreview } from "../features/preview/PagePreview";
 import { CommandPalette } from "../features/prompt/CommandPalette";
 import { FolderChooser } from "../features/prompt/FolderChooser";
 import { QuickSwitcher, type SwitcherWhere } from "../features/prompt/QuickSwitcher";
@@ -45,11 +49,24 @@ export function Overlays() {
   const confirm = useOverlays((s) => s.confirm);
   const moving = useOverlays((s) => s.move);
   const templates = useOverlays((s) => s.templates);
+  const preview = useOverlays((s) => s.preview);
   return (
     <>
       <SettingsContainer />
       {moving && <Mover path={moving.path} folder={moving.folder} />}
       {templates && <Templates paths={templates} />}
+      {preview && (
+        <PagePreview
+          anchor={preview.anchor}
+          title={titleOf(preview.path)}
+          fill={preview.fill}
+          onClose={closePreview}
+          onOpen={() => {
+            closePreview();
+            useWorkspace.getState().update((w) => open(w, viewOf(preview.path), "here"));
+          }}
+        />
+      )}
       {confirm && (
         <ConfirmDialog
           title={confirm.title}
@@ -83,14 +100,14 @@ function Switcher() {
   const files = useFiles((s) => s.files);
   const recent = useWorkspace((s) => s.ws.recent);
   const update = useWorkspace((s) => s.update);
-  // Aliases join when note.list carries them; until then a note matches by its path.
+  const aliases = useAliases((s) => s.byPath);
   const notes = useMemo<SwitcherNote[]>(
     () =>
       [...files.values()]
         .filter((f) => f.kind === "note")
-        .map((f) => ({ path: f.path, aliases: [] }))
+        .map((f) => ({ path: f.path, aliases: aliases.get(f.path) ?? [] }))
         .sort((a, b) => a.path.localeCompare(b.path)),
-    [files],
+    [files, aliases],
   );
   return (
     <QuickSwitcher

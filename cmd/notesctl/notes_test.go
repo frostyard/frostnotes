@@ -219,8 +219,10 @@ func TestNoteVaultChoice(t *testing.T) {
 
 func TestNoteList(t *testing.T) {
 	fake := &fakeNotes{entries: []api.NoteEntry{
-		{Path: "Inbox.md", Title: "Inbox", Hash: "h1", Size: 3, ModifiedAt: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)},
-		{Path: "Orchard/Plan.md", Title: "Plan", Hash: "h2", Size: 9, ModifiedAt: time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC)},
+		{Path: "Inbox.md", Title: "Inbox", Hash: "h1", Size: 3, ModifiedAt: time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC),
+			Aliases: []string{}},
+		{Path: "Orchard/Plan.md", Title: "Plan", Hash: "h2", Size: 9, ModifiedAt: time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC),
+			Aliases: []string{"Roadmap"}},
 	}}
 	srv := notesServer(t, fake, "garden")
 	if out := notes(t, srv, "ls"); out != "Inbox.md\nOrchard/Plan.md\n" {

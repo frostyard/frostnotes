@@ -28,6 +28,13 @@ export interface OpenMove {
   folder: boolean;
 }
 
+/** OpenPreview is a link's page preview: where the link is, the note, and how to fill the preview with it. */
+export interface OpenPreview {
+  anchor: { left: number; top: number; bottom: number };
+  path: string;
+  fill: (el: HTMLElement) => void;
+}
+
 /** OpenConfirm is a question waiting for its answer. */
 export interface OpenConfirm {
   title: string;
@@ -49,6 +56,8 @@ export interface OverlayState {
   settings: string | null;
   /** The template chooser, open over the template folder's notes. */
   templates: readonly string[] | null;
+  /** A link's page preview, open while the pointer stays on it. */
+  preview: OpenPreview | null;
   notices: NoticeItem[];
   /** The IDs of the commands run from the palette, newest first. */
   recentCommands: string[];
@@ -76,6 +85,7 @@ export const useOverlays = create<OverlayState>(() => ({
   confirm: null,
   settings: null,
   templates: null,
+  preview: null,
   notices: [],
   recentCommands: loadRecent(storage),
   noticeSeq: 0,
@@ -131,6 +141,16 @@ export function ask(q: Omit<OpenConfirm, "answer">): Promise<boolean> {
     };
     useOverlays.setState({ confirm: { ...q, answer }, menu: null });
   });
+}
+
+/** openPreview shows a link's page preview, unless the note's preview is open already. */
+export function openPreview(preview: OpenPreview): void {
+  if (useOverlays.getState().preview?.path === preview.path) return;
+  useOverlays.setState({ preview });
+}
+
+export function closePreview(): void {
+  useOverlays.setState({ preview: null });
 }
 
 /** openTemplates opens the template chooser over the template folder's notes. */

@@ -7,12 +7,16 @@
 // searches for itself; a foldable callout's title folds it.
 import { type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { notify, openPreview } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import type { NoteDoc, Notice } from "../editor/document";
 import { NoticeBar, titleOf } from "../editor/NoteEditor";
 import type { PreviewCommand } from "../editor/preview/framework";
+import { textChange } from "../editor/preview/properties";
+import { propertyType, readFrontmatter, renameProperty, setProperties } from "../editor/properties";
 import { useNoteDoc } from "../editor/useNoteDoc";
+import { PropertiesBlock, type PropertyRow } from "../features/properties/PropertiesBlock";
 import { InlineTitle } from "../features/workspace/InlineTitle";
 import { type OpenWhere, whereFor } from "../workspace/ops";
 import { finish } from "./finish";
@@ -72,6 +76,7 @@ export function ReadingView(props: ReadingViewProps) {
 
   const readable = usePrefs((s) => s.readableLineLength);
   const showTitle = usePrefs((s) => s.inlineTitle);
+  const propertiesMode = usePrefs((s) => s.properties);
   const remoteImages = usePrefs((s) => s.loadRemoteImages);
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -84,6 +89,29 @@ export function ReadingView(props: ReadingViewProps) {
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
     if (doc) click(e, doc, props.onFollow);
   };
+  // Ctrl over a link shows the note it leads to (its page preview), as notesd renders it.
+  const onMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (!e.ctrlKey || !(e.target instanceof Element)) return;
+    const link = e.target.closest<HTMLElement>("a.internal-link[data-path]");
+    const to = link?.dataset.path ?? "";
+    if (!link || !to.endsWith(".md")) return;
+    const r = link.getBoundingClientRect();
+    openPreview({
+      anchor: { left: r.left, top: r.top, bottom: r.bottom },
+      path: to,
+      fill: (box) => {
+        client.current.note
+          .render({ vaultId, path: to })
+          .then((rendered) => {
+            box.innerHTML = sanitize(rendered.html);
+            finish(box, (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "", remoteImages);
+          })
+          .catch((err: unknown) => {
+            box.textContent = `Cannot show ${to}: ${err instanceof Error ? err.message : String(err)}`;
+          });
+      },
+    });
+  };
   return (
     <div className="flex h-full min-h-0 flex-col">
       {doc && snap.notice && <NoticeBar notice={snap.notice} doc={doc} props={props} />}
@@ -94,21 +122,55 @@ export function ReadingView(props: ReadingViewProps) {
       )}
       {snap.status === "missing" && <p className="text-empty px-8 py-8 text-secondary">{path} is not in the vault.</p>}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {showTitle && (
+        {(showTitle || (doc && propertiesMode === "visible")) && (
           <div className={`mx-auto px-8 pt-8 ${readable ? "max-w-[764px]" : ""}`}>
-            <InlineTitle title={titleOf(snap.path)} onRename={(t) => props.onRename?.(t)} />
+            {showTitle && <InlineTitle title={titleOf(snap.path)} onRename={(t) => props.onRename?.(t)} />}
+            {doc && propertiesMode === "visible" && <ReadingProperties doc={doc} />}
           </div>
         )}
         {/* biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: the clicks are on the links and checkboxes inside, which keep their own roles and keys */}
         <div
           ref={box}
           data-testid="reading-view"
-          className={`reading-view rendered mx-auto px-8 ${showTitle ? "" : "pt-8"} pb-[50vh] ${readable ? "max-w-[764px]" : ""}`}
+          className={`reading-view rendered mx-auto px-8 ${showTitle || (doc && propertiesMode === "visible") ? "" : "pt-8"} pb-[50vh] ${readable ? "max-w-[764px]" : ""}`}
           onClick={onClick}
           onAuxClick={onClick}
+          onMouseMove={onMouseMove}
         />
       </div>
     </div>
+  );
+}
+
+// ReadingProperties is the note's properties block over its rendering,
+// writing each change into the document as the editor's does.
+function ReadingProperties({ doc }: { doc: NoteDoc }) {
+  const [text, setText] = useState(() => doc.text.toString());
+  const [folded, setFolded] = useState(false);
+  useEffect(() => {
+    setText(doc.text.toString());
+    return doc.onText(() => setText(doc.text.toString()));
+  }, [doc]);
+  const fm = readFrontmatter(text);
+  if (fm.kind === "none") return null;
+  const rows: PropertyRow[] =
+    fm.kind === "properties"
+      ? fm.properties.map((p) => ({ key: p.key, value: p.value, type: propertyType(p.key, p.value) }))
+      : [];
+  const apply = (next: string | Error) => {
+    if (next instanceof Error) notify(`Cannot change the properties: ${next.message}`);
+    else if (next !== doc.text.toString()) doc.edit(textChange(doc.text.toString(), next));
+  };
+  return (
+    <PropertiesBlock
+      rows={rows}
+      error={fm.kind === "error" ? fm.message : null}
+      folded={folded}
+      onFold={setFolded}
+      onChange={(key, value) => apply(setProperties(doc.text.toString(), { [key]: value }))}
+      onRename={(from, to) => apply(renameProperty(doc.text.toString(), from, to))}
+      onRemove={(key) => apply(setProperties(doc.text.toString(), { [key]: null }))}
+    />
   );
 }
 

@@ -1,5 +1,6 @@
 // The app root: the connection to notesd around the main window.
 import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 
@@ -31,6 +32,12 @@ export function App(props: { connect: Connect }) {
     else root.dataset.theme = theme;
     root.style.setProperty("--note-font-size", `${fontSize}px`);
   }, [theme, fontSize]);
+  // The window's zoom: the webview's own in the desktop app, CSS zoom in a browser.
+  const zoom = usePrefs((s) => s.zoom);
+  useEffect(() => {
+    if (isTauri()) void getCurrentWebview().setZoom(zoom);
+    else document.documentElement.style.zoom = zoom === 1 ? "" : String(zoom);
+  }, [zoom]);
   return (
     <Session connect={props.connect} fallback={<Connecting />}>
       <MainWindow />

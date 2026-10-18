@@ -25,7 +25,7 @@ type NoteFilter struct {
 // ListNotes returns vault's notes that match f, by path. Task card T-0017.
 func (d *DB) ListNotes(ctx context.Context, vaultID int64, f NoteFilter) ([]api.NoteEntry, error) {
 	where, args := noteConditions(vaultID, f)
-	rows, err := d.db.QueryContext(ctx, `SELECT files.path, notes.title, files.hash, files.size, files.mtime
+	rows, err := d.db.QueryContext(ctx, `SELECT files.path, notes.title, files.hash, files.size, files.mtime, notes.aliases
 		FROM files JOIN notes ON notes.file_id = files.id
 		WHERE `+where+` ORDER BY files.path`, args...)
 	if err != nil {
@@ -36,10 +36,18 @@ func (d *DB) ListNotes(ctx context.Context, vaultID int64, f NoteFilter) ([]api.
 	for rows.Next() {
 		var entry api.NoteEntry
 		var mtime int64
-		if err := rows.Scan(&entry.Path, &entry.Title, &entry.Hash, &entry.Size, &mtime); err != nil {
+		var aliases string
+		if err := rows.Scan(&entry.Path, &entry.Title, &entry.Hash, &entry.Size, &mtime, &aliases); err != nil {
 			return nil, fmt.Errorf("scan note entry: %w", err)
 		}
 		entry.ModifiedAt = time.Unix(0, mtime).UTC()
+		entry.Aliases = []string{}
+		if err := json.Unmarshal([]byte(aliases), &entry.Aliases); err != nil {
+			return nil, fmt.Errorf("read %s's aliases: %w", entry.Path, err)
+		}
+		if entry.Aliases == nil {
+			entry.Aliases = []string{}
+		}
 		entries = append(entries, entry)
 	}
 	if err := rows.Err(); err != nil {

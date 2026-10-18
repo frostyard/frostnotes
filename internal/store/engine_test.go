@@ -25,6 +25,25 @@ func TestListNotesRootFolderIsTheWholeVault(t *testing.T) {
 	}
 }
 
+func TestListNotesCarriesAliases(t *testing.T) {
+	ft := newFileTest(t)
+	queryVault(t, ft, map[string]*markdown.Doc{
+		"Plan.md":  {Aliases: []string{"Roadmap", "The plan"}},
+		"Notes.md": {},
+	}, "Notes.md", "Plan.md")
+	got, err := ft.d.ListNotes(t.Context(), ft.vault, NoteFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliases := map[string][]string{}
+	for _, e := range got {
+		aliases[e.Path] = e.Aliases
+	}
+	if fmt.Sprint(aliases) != "map[Notes.md:[] Plan.md:[Roadmap The plan]]" || aliases["Notes.md"] == nil {
+		t.Errorf("ListNotes aliases = %v; want Plan's two, Notes' none (not nil)", aliases)
+	}
+}
+
 func TestRestoreFileKeepsItsID(t *testing.T) {
 	ft := newFileTest(t)
 	ctx := t.Context()

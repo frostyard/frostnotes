@@ -4,10 +4,11 @@
 // and follow the preferences without being made again.
 import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import { history } from "@codemirror/commands";
-import { indentUnit } from "@codemirror/language";
+import { markdownKeymap } from "@codemirror/lang-markdown";
+import { codeFolding, foldGutter, indentUnit } from "@codemirror/language";
 import { search } from "@codemirror/search";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import { drawSelection, EditorView, keymap } from "@codemirror/view";
+import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
+import { drawSelection, EditorView, keymap, lineNumbers } from "@codemirror/view";
 
 import { type CompletionCatalog, linkCompletion, tagCompletion } from "./complete";
 import { editorKeymap } from "./keymap";
@@ -17,6 +18,7 @@ import { propertiesState } from "./preview/properties";
 import { markdownSupport } from "./syntax/index";
 import { editorTheme } from "./theme";
 import { titleCompartment } from "./title";
+import { indentFolding, markdownPairs } from "./typing";
 
 /** EditorPrefs are the preferences the editor follows (docs/specs/ui.md#settings-batch-2). */
 export interface EditorPrefs {
@@ -25,8 +27,14 @@ export interface EditorPrefs {
   fontSize: number;
   spellcheck: boolean;
   autoPairBrackets: boolean;
+  autoPairMarkdown: boolean;
+  smartLists: boolean;
   indentWithTabs: boolean;
   tabSize: number;
+  lineNumbers: boolean;
+  foldHeadings: boolean;
+  foldIndent: boolean;
+  indentGuides: boolean;
 }
 
 /** The compartments a view reconfigures. */
@@ -44,8 +52,16 @@ export function prefsExtension(p: EditorPrefs): Extension {
     editorTheme({ readable: p.readable, fontSize: p.fontSize }),
     EditorView.contentAttributes.of({ spellcheck: p.spellcheck ? "true" : "false" }),
     p.autoPairBrackets ? closeBrackets() : [],
+    p.autoPairMarkdown ? markdownPairs : [],
+    // Smart lists: Enter continues a list or quote, Backspace takes its mark back.
+    p.smartLists ? Prec.high(keymap.of(markdownKeymap)) : [],
     EditorState.tabSize.of(p.tabSize),
     indentUnit.of(p.indentWithTabs ? "\t" : " ".repeat(p.tabSize)),
+    p.lineNumbers ? lineNumbers() : [],
+    // Headings fold with the markdown language; Fold indent adds folding by indentation.
+    p.foldHeadings || p.foldIndent ? [codeFolding(), foldGutter()] : [],
+    p.foldIndent ? indentFolding : [],
+    p.indentGuides ? [] : EditorView.editorAttributes.of({ class: "cm-no-guides" }),
   ];
 }
 
@@ -57,6 +73,8 @@ export function editorExtensions(opts: {
   catalog?: CompletionCatalog;
   /** The inline title (title.tsx), when the view shows one. */
   title?: Extension;
+  /** More extensions: the note editor's page previews. */
+  extra?: Extension;
 }): Extension {
   return [
     markdownSupport(),
@@ -71,6 +89,7 @@ export function editorExtensions(opts: {
     previewEnv.of(opts.env),
     propertiesState,
     titleCompartment.of(opts.title ?? []),
+    opts.extra ?? [],
     modeCompartment.of(modeExtension(opts.prefs.live)),
     prefsCompartment.of(prefsExtension(opts.prefs)),
     EditorView.domEventHandlers({

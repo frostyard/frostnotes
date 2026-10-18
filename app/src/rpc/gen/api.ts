@@ -532,6 +532,8 @@ export interface NoteEntry {
   size: number;
   /** The file's modification time. */
   modifiedAt: string /* RFC 3339 */;
+  /** The note's frontmatter aliases, in order; empty without any. */
+  aliases: string[];
 }
 
 /** A note's content and what the index found in it. */

@@ -35,6 +35,7 @@ types:
       - {name: hash, type: string, doc: "The SHA-256 of the content, lowercase hex: the base for the next write."}
       - {name: size, type: int, doc: "In bytes."}
       - {name: modifiedAt, type: time, doc: "The file's modification time."}
+      - {name: aliases, type: "[]string", doc: "The note's frontmatter aliases, in order; empty without any."}
   - name: Note
     doc: A note's content and what the index found in it.
     fields:

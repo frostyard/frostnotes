@@ -16,7 +16,7 @@ import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
 import { ask, notify, openPrompt, openSettings, openTemplates } from "../data/overlays";
 import { setRenaming, usePanes } from "../data/panes";
-import { usePrefs } from "../data/prefs";
+import { usePrefs, zoomStep } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
 import {
@@ -62,6 +62,7 @@ import {
 import { useWorkspace } from "../workspace/store";
 import { revealInFiles } from "./menus";
 import { searchFor } from "./panes/counts";
+import { openExternal } from "./system";
 
 const ws = () => useWorkspace.getState().ws;
 const update = (op: Parameters<ReturnType<typeof useWorkspace.getState>["update"]>[0]) =>
@@ -189,8 +190,7 @@ export async function followLink(
     return;
   }
   if (WEB.test(cmd.target)) {
-    // The desktop app hands web links to the system browser (tauri-plugin-opener, with the menus).
-    window.open(cmd.target, "_blank", "noopener,noreferrer");
+    await openExternal(cmd.target);
     return;
   }
   const target = cmd.target.trim().replace(/^\/+/, "");
@@ -229,6 +229,8 @@ export async function insertTemplate(c: Client, docs: DocumentRegistry, template
     notify(`Cannot insert the template: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
+
+const setZoom = (zoom: number) => usePrefs.getState().setPrefs({ zoom });
 
 /** previewCommand does what a view of a note asks from its tab: follows a link, searches (a tag), or copies (a code block). */
 export async function previewCommand(c: Client, cmd: PreviewCommand, tabId: string): Promise<void> {
@@ -474,6 +476,9 @@ export function workspaceCommands(c: Client): Command[] {
     run: () => update((w) => gotoTab(w, i + 1)),
   }));
   return [
+    { id: "window:zoom-in", name: "Zoom in", run: () => setZoom(zoomStep(usePrefs.getState().zoom, 1)) },
+    { id: "window:zoom-out", name: "Zoom out", run: () => setZoom(zoomStep(usePrefs.getState().zoom, -1)) },
+    { id: "window:reset-zoom", name: "Reset zoom", run: () => setZoom(1) },
     {
       id: "daily-notes",
       name: "Open today's daily note",
