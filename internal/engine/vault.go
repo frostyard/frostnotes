@@ -105,3 +105,16 @@ func within(path, dir string) bool {
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
+
+func (v vaults) Settings(_ context.Context, p *api.VaultSettingsParams) (*api.VaultSettings, error) {
+	actor, err := v.m.Vault(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	s, err := vault.LoadSettings(actor.Root())
+	if err != nil {
+		return nil, fmt.Errorf("vault %d's settings: %w", p.ID, err)
+	}
+	out := s.API()
+	return &out, nil
+}

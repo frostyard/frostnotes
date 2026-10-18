@@ -23,7 +23,8 @@ is done too, in three PRs against `main`: the API's contract with the
 store's cards T-0043 and T-0044; the renderer's contract with its cards
 T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
-and they are merged. Phases 4 and 5 are next.
+and they are merged. Phase 4's first part, the sanitizer and notesd's
+reads, is in review; its second part, the writes, and Phase 5 are next.
 
 ## Decisions taken for M3
 
@@ -310,6 +311,20 @@ the Phase 3 methods in [specs/rpc-api.md](../specs/rpc-api.md).
 - **Done when:** every method works against a generated vault through
   `rpctest`, the sanitizer's table passes, and `make vault-it` still
   passes.
+- **Result, part 1 (2026-10-17): the sanitizer and the reads.**
+  `render.Sanitize` is the spec's allowlist over `golang.org/x/net/html`'s
+  tokenizer, with the table above and every fixture sanitizing to itself
+  but R02's `onclick`; a table column's alignment is now an `align`
+  attribute, which it keeps, not a style (fixture R11). `note.files`,
+  `note.resolve`, `note.render`, `note.readVersion`, `note.tags`,
+  `note.properties` (property types from `types.yaml` or Obsidian's
+  `types.json`), `note.search`'s filters and `vault.settings` (the
+  Files and links settings from `vault.yaml` or `.obsidian/app.json`,
+  and where each comes from) work against a generated vault through
+  `rpctest` ([design/vault.md](../design/vault.md#on-disk)). The writes
+  (`note.upload`, `note.mkdir`, `note.moveFolder`, `note.deleteFolder`,
+  `note.template`, `vault.configure`, `sync.readRevision`) still answer
+  `unavailable`: part 2.
 
 ## Phase 5 — The app's core (planner)
 

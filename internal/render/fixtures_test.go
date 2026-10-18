@@ -133,9 +133,3 @@ func runFixtures(t *testing.T, tags ...string) {
 
 // TestBaseFixtures checks the fixtures render.go alone draws.
 func TestBaseFixtures(t *testing.T) { runFixtures(t, "base") }
-
-func TestSanitizeEscapesUntilPhase4(t *testing.T) {
-	if got := Sanitize(`<script>x</script>`); got != "&lt;script&gt;x&lt;/script&gt;" {
-		t.Fatalf("Sanitize = %q", got)
-	}
-}

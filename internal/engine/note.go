@@ -1,12 +1,17 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"path"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/markdown"
 	"github.com/frostyard/frostnotes/internal/store"
 	"github.com/frostyard/frostnotes/internal/vault"
 )
@@ -94,7 +99,7 @@ func (n notes) Search(ctx context.Context, p *api.NoteSearchParams) ([]api.Searc
 	if limit < 1 || limit > 100 {
 		return nil, api.InvalidParams("limit %d: at least 1 and at most 100", limit)
 	}
-	return n.db.Search(ctx, p.VaultID, store.SearchQuery(p.Query), int(limit))
+	return n.db.SearchNotes(ctx, p.VaultID, store.ParseQuery(p.Query), int(limit))
 }
 
 func (n notes) Backlinks(ctx context.Context, p *api.NoteBacklinksParams) ([]api.Backlink, error) {
@@ -227,4 +232,120 @@ func (n notes) Daily(ctx context.Context, p *api.NoteDailyParams) (*api.DailyNot
 		return nil, err
 	}
 	return v.Daily(ctx, date, who)
+}
+
+// Files lists the index's files and the vault's folders, with every
+// folder a listed file lies in, so the listing holds together while the
+// disk changes under it.
+func (n notes) Files(ctx context.Context, p *api.NoteFilesParams) (*api.VaultFiles, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	files, err := n.db.Files(ctx, p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	folders, err := v.Folders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(folders))
+	for _, f := range folders {
+		seen[f] = true
+	}
+	out := &api.VaultFiles{Files: make([]api.VaultFile, 0, len(files))}
+	for _, f := range files {
+		out.Files = append(out.Files, api.VaultFile{Path: f.Path, Kind: api.FileKind(f.Kind()),
+			Hash: f.Hash, Size: f.Size, ModifiedAt: f.ModTime})
+		for dir := path.Dir(f.Path); dir != "." && !seen[dir]; dir = path.Dir(dir) {
+			seen[dir] = true
+			folders = append(folders, dir)
+		}
+	}
+	slices.Sort(folders)
+	out.Folders = folders
+	return out, nil
+}
+
+// maxResolve is the most targets one note.resolve takes.
+const maxResolve = 1000
+
+func (n notes) Resolve(ctx context.Context, p *api.NoteResolveParams) ([]api.Resolution, error) {
+	if _, err := n.m.Vault(p.VaultID); err != nil {
+		return nil, err
+	}
+	if err := vault.CheckPath(p.From); err != nil {
+		return nil, api.InvalidParams("from: %v", err)
+	}
+	if len(p.Targets) > maxResolve {
+		return nil, api.InvalidParams("%d targets: at most %d", len(p.Targets), maxResolve)
+	}
+	var lookupErr error
+	files := func(name string) []string {
+		paths, err := n.db.FilesNamed(ctx, p.VaultID, name)
+		lookupErr = cmp.Or(lookupErr, err)
+		return paths
+	}
+	out := make([]api.Resolution, 0, len(p.Targets))
+	for _, target := range p.Targets {
+		r := api.Resolution{Target: target}
+		if to := markdown.Resolve(p.From, target, files); to != "" {
+			r.Path = &to
+		}
+		out = append(out, r)
+	}
+	if lookupErr != nil {
+		return nil, lookupErr
+	}
+	return out, nil
+}
+
+func (n notes) Render(ctx context.Context, p *api.NoteRenderParams) (*api.RenderedNote, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	var note string
+	if p.Content != nil {
+		note = *p.Content
+	} else {
+		got, err := v.Read(ctx, p.Path)
+		if err != nil {
+			return nil, err
+		}
+		note = got.Content
+	}
+	html, err := v.Render(ctx, p.Path, []byte(note))
+	if err != nil {
+		return nil, err
+	}
+	return &api.RenderedNote{HTML: html}, nil
+}
+
+func (n notes) ReadVersion(ctx context.Context, p *api.NoteReadVersionParams) (*api.VersionContent, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	return v.ReadVersion(ctx, p.Version)
+}
+
+func (n notes) Tags(ctx context.Context, p *api.NoteTagsParams) ([]api.TagCount, error) {
+	if _, err := n.m.Vault(p.VaultID); err != nil {
+		return nil, err
+	}
+	return n.db.TagCounts(ctx, p.VaultID)
+}
+
+func (n notes) Properties(ctx context.Context, p *api.NotePropertiesParams) ([]api.PropertyCount, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	types, err := vault.LoadTypes(v.Root())
+	if err != nil {
+		return nil, fmt.Errorf("vault %d's property types: %w", p.VaultID, err)
+	}
+	return n.db.PropertyCounts(ctx, p.VaultID, types)
 }

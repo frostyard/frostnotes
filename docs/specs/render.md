@@ -46,6 +46,8 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
 - A single newline inside a paragraph is a line break (`<br>`): Obsidian's
   Strict line breaks is off by default, as it is in the user's vault.
 - Raw HTML is passed to the sanitizer, which decides what stays.
+- A table column's alignment is an `align` attribute on its cells, not
+  a style, which the sanitizer drops.
 
 ### Links and embeds
 
@@ -136,10 +138,21 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
   `data-block`.
 - Every other attribute goes: `style`, every `on…` handler, `srcset`.
   A URL attribute whose scheme is not listed goes.
-- `script`, `style`, `template`, `iframe`, `frame`, `object`,
-  `embed`, `form` and its fields, `button`, `select`, `textarea`,
-  `link`, `meta`, `base`, `svg` and `math` go with their content; any
-  other element not listed goes and its content stays.
+- `script`, `style`, `template`, `iframe`, `frame`, `frameset`,
+  `object`, `embed`, `applet`, `param`, `portal`, `form` and its fields
+  (`input` but a checkbox, `button`, `select`, `option`, `optgroup`,
+  `datalist`, `textarea`), `link`, `meta`, `base`, `head`, `title`,
+  `svg`, `math`, `noscript`, `noembed`, `noframes`, `xmp` and
+  `plaintext` go with their content, an unclosed one with the rest of
+  the HTML; any other element not listed goes and its content stays.
+  Comments and doctypes go.
+- It reads the HTML with `golang.org/x/net/html`'s tokenizer, as a
+  browser does. Text passes as written, entities included; attribute
+  values are written again, escaped; a self-closing tag is written open
+  (`<br>`). A URL is read as a browser reads its scheme, without white
+  space or control characters (`jav&#x09;ascript:` is `javascript:`),
+  and one with no scheme goes: the app names vault files by `data-blob`
+  and `data-path`, never by URL.
 - Every fixture's HTML below sanitizes to itself, but R02's `onclick`.
 
 ## Fixture vault
@@ -392,7 +405,7 @@ Text ![[Plan]] inline, and two on their lines:
 
 ```md
 | a | b |
-| - | - |
+| :- | - |
 | 1 | [[Plan]] |
 
 Footnote[^1].
@@ -404,13 +417,13 @@ Footnote[^1].
 <table>
 <thead>
 <tr>
-<th>a</th>
+<th align="left">a</th>
 <th>b</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>1</td>
+<td align="left">1</td>
 <td><a class="internal-link" data-href="Plan" data-path="Notes/Plan.md">Plan</a></td>
 </tr>
 </tbody>
@@ -583,5 +596,5 @@ Text
 ## References
 
 - Rationale: [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md) (notesd renders, both sides sanitize), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (files by hash), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) (comments)
-- Context: [design/app.md](../design/app.md#reading-view); [markdown.md](markdown.md) (the syntax), [rpc-api.md](rpc-api.md) (`note.render`)
+- Context: [design/app.md](../design/app.md#reading-view), [design/vault.md](../design/vault.md#index) (what `note.render` reads); [markdown.md](markdown.md) (the syntax), [rpc-api.md](rpc-api.md) (`note.render`)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md), Phases 3 and 4

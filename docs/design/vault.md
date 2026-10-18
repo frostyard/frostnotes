@@ -45,13 +45,15 @@ in the vault except the settings in `.frostnotes/`.
   database for all vaults (WAL, `STRICT` tables, foreign keys on), and
   `blobs/`, content addressed by SHA-256.
 - **An Obsidian vault's settings:** while `.frostnotes/` lacks a setting,
-  notesd reads it from `.obsidian/daily-notes.json`, `templates.json` or
-  `types.json`, and writes `.frostnotes/` only when a setting changes, so
-  registering a vault writes nothing to it. M1 has no method that changes
-  a setting, so it only reads them (`vault.LoadSettings`), at each scan
-  and each `note.daily`. M3 adds `vault.configure`, which writes
-  `vault.yaml` atomically, and the settings the app's Files and links
-  section needs, read from `.obsidian/app.json` while unset ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md);
+  notesd reads it from `.obsidian/daily-notes.json`, `templates.json`,
+  `app.json` or `types.json`, and writes `.frostnotes/` only when a
+  setting changes, so registering a vault writes nothing to it.
+  `vault.LoadSettings` reads them at each scan, each `note.daily` and
+  each `vault.settings`, which also says where each setting came from:
+  `frostnotes`, `obsidian`, or `default`, Obsidian's own. M3 adds
+  `vault.configure`, which writes `vault.yaml` atomically, and the
+  settings the app's Files and links section needs, read from
+  `.obsidian/app.json` while unset ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md);
   [plan 0005](../plans/0005-m3-desktop-app.md), Phase 4):
 
   ```yaml
@@ -64,12 +66,38 @@ in the vault except the settings in `.frostnotes/`.
     folder: Templates
     dateFormat: YYYY-MM-DD   # {{date}} in templates
     timeFormat: HH:mm        # {{time}}
+  newNotes:                  # app.json: newFileLocation, newFileFolderPath
+    location: root           # root, current (the open note's folder) or folder
+    folder: Inbox            # with location folder
+  attachments:               # app.json: attachmentFolderPath
+    folder: /                # as Obsidian writes it: "/" the root, "./" beside the note, "./NAME", or a path
+  links:                     # app.json: newLinkFormat, useMarkdownLinks (negated), alwaysUpdateLinks
+    format: shortest         # shortest, relative or absolute
+    wikilinks: true          # new links are [[wikilinks]]
+    update: false            # a move rewrites links without asking
   ignore: ["Archive/", "*.tmp"]  # gitignore-style; no negation
   ```
 
-  A `vault.yaml` that does not parse fails the scan, as an unreadable
-  folder does; an Obsidian file that does not parse is skipped, since it
-  only gives defaults.
+  Only `vault.yaml` sets `ignore`: Obsidian's Excluded files hide files
+  from its search and graph but keep them in the vault, so they are not
+  ignore patterns. `types.yaml` maps a property to its type (`text`,
+  `multitext`, `number`, `checkbox`, `date`, `datetime`, `aliases`,
+  `tags`), ignoring case; while it does not exist, notesd reads
+  `.obsidian/types.json`'s `types`, and Obsidian's built-in types
+  (`aliases`, `cssclasses` as `multitext`, `tags`) hold under either.
+  `note.properties` reads them.
+
+  ```yaml
+  # .frostnotes/types.yaml
+  created: date
+  rating: number
+  ```
+
+  A `vault.yaml` that does not parse, or holds a value no setting takes
+  (`location: elsewhere`), fails the scan, as an unreadable folder does,
+  and `vault.settings` with it; a `types.yaml` that does not parse fails
+  `note.properties`. An Obsidian file that does not parse, or a value in
+  it that is no setting's, is skipped, since it only gives defaults.
 
 ### Scan and watch
 
@@ -149,6 +177,14 @@ name of its target that decides when it must resolve again); `headings`,
 content over the title, aliases, the body as written and the frontmatter
 text, so search returns snippets. `internal/store` reads and writes them
 (`PutFile`, `IndexNote`, `Search`, `ListNotes`, `Backlinks`, …).
+
+The app's listing, `note.files`, is the index's files with the vault's
+folders, which it walks reading no file's information (one listing per
+folder, cheap on a network share), so empty folders show; hidden,
+settings and ignored folders are left out, and every folder an indexed
+file lies in is listed. `note.render` resolves links over the index and
+reads embedded notes from their blobs by the index's hash, not from the
+vault's folder ([specs/render.md](../specs/render.md)).
 
 ### Link resolution
 
@@ -297,5 +333,5 @@ long-term history ([sync.md](sync.md)).
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)
 - Related: [overview.md](overview.md), [sync.md](sync.md), [app.md](app.md) (the editor as a writer)
-- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
+- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/render.md](../specs/render.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md); written settings in [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
