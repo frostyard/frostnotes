@@ -290,6 +290,8 @@ export class MockTransport implements Transport {
         return v.tagCounts();
       case "note.properties":
         return v.propertyCounts();
+      case "note.daily":
+        return v.daily(typeof p.date === "string" ? new Date(`${p.date}T12:00:00Z`) : this.now(), who);
       case "note.template":
         return {
           content: v.template(String(p.template ?? ""), {

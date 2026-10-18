@@ -47,6 +47,8 @@ export interface OverlayState {
   confirm: OpenConfirm | null;
   /** The settings dialog, open at a section. */
   settings: string | null;
+  /** The template chooser, open over the template folder's notes. */
+  templates: readonly string[] | null;
   notices: NoticeItem[];
   /** The IDs of the commands run from the palette, newest first. */
   recentCommands: string[];
@@ -73,6 +75,7 @@ export const useOverlays = create<OverlayState>(() => ({
   move: null,
   confirm: null,
   settings: null,
+  templates: null,
   notices: [],
   recentCommands: loadRecent(storage),
   noticeSeq: 0,
@@ -128,6 +131,15 @@ export function ask(q: Omit<OpenConfirm, "answer">): Promise<boolean> {
     };
     useOverlays.setState({ confirm: { ...q, answer }, menu: null });
   });
+}
+
+/** openTemplates opens the template chooser over the template folder's notes. */
+export function openTemplates(paths: readonly string[]): void {
+  useOverlays.setState({ templates: paths, menu: null, prompt: null });
+}
+
+export function closeTemplates(): void {
+  useOverlays.setState({ templates: null });
 }
 
 /** openMove opens the folder chooser to move path, a folder or a file. */

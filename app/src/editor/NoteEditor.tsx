@@ -26,6 +26,8 @@ import { LinkResolver } from "./links";
 import { type PreviewCommand, redraw } from "./preview/framework";
 import { useDocuments } from "./registry";
 import { BlockRenderer } from "./rendered";
+import { frontmatterEnd } from "./syntax/extract";
+import { inlineTitle, titleCompartment } from "./title";
 import { useNoteDoc } from "./useNoteDoc";
 
 export interface NoteEditorProps {
@@ -46,6 +48,13 @@ export interface NoteEditorProps {
   onClose: () => void;
   /** Keep where the cursor was in the note at path, for the tab. */
   onCursor?: (pos: number, path: string) => void;
+  /** Rename the note from its inline title. */
+  onRename?: (title: string) => void;
+}
+
+/** titleOf is a note's title: its file name without ".md". */
+export function titleOf(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 }
 
 /** REFRESH_DELAY is how long after the vault changes rendered blocks render again, in ms. */
@@ -96,6 +105,9 @@ export function NoteEditor(props: NoteEditorProps) {
       ),
     [doc, vaultId, sanitize],
   );
+  // The vault's property types, for the properties block, read with note.properties.
+  const types = useRef<Readonly<Record<string, string>>>({});
+  const rename = useMemo(() => (title: string) => latest.current.onRename?.(title), []);
   const resolver = useMemo(
     () =>
       doc &&
@@ -124,7 +136,10 @@ export function NoteEditor(props: NoteEditorProps) {
             },
             render: renderer.fill,
             remoteImages: () => usePrefs.getState().loadRemoteImages,
+            propertiesMode: () => usePrefs.getState().properties,
+            propertyTypes: () => types.current,
           },
+          title: inlineTitle(usePrefs.getState().inlineTitle, titleOf(doc.path), rename),
           onBlur: () => void doc.save(),
           catalog: completionCatalog({
             vaultId,
@@ -134,7 +149,8 @@ export function NoteEditor(props: NoteEditorProps) {
             docs: registry,
           }),
         }),
-        start.cursor === undefined ? undefined : { anchor: start.cursor },
+        // A note opens with the cursor where its body starts, after any frontmatter.
+        { anchor: start.cursor ?? frontmatterEnd(doc.text.sliceString(0, 1 << 20)) },
       ),
       dispatchTransactions: (trs, ev) => {
         ev.update(trs);
@@ -153,7 +169,7 @@ export function NoteEditor(props: NoteEditorProps) {
       v.destroy();
       view.current = null;
     };
-  }, [ready, doc, resolver, renderer, registry, vaultId]);
+  }, [ready, doc, resolver, renderer, registry, vaultId, rename]);
 
   // Modes and preferences reconfigure the view.
   useEffect(() => {
@@ -167,7 +183,8 @@ export function NoteEditor(props: NoteEditorProps) {
   }, [prefsKey]);
 
   // Rendered blocks show the vault as it is a moment after it changes,
-  // and remote images as the preference says.
+  // and remote images as the preference says; the properties block takes
+  // the vault's property types as they change.
   const files = useFiles((s) => s.files);
   const remoteImages = usePrefs((s) => s.loadRemoteImages);
   // biome-ignore lint/correctness/useExhaustiveDependencies: files and remoteImages are the triggers
@@ -176,9 +193,30 @@ export function NoteEditor(props: NoteEditorProps) {
     const timer = setTimeout(() => {
       renderer.refresh();
       view.current?.dispatch({ effects: redraw.of(null) });
+      client.current.note
+        .properties({ vaultId })
+        .then((counts) => {
+          types.current = Object.fromEntries(counts.map((c) => [c.key.toLowerCase(), c.type]));
+          view.current?.dispatch({ effects: redraw.of(null) });
+        })
+        .catch(() => {});
     }, REFRESH_DELAY);
     return () => clearTimeout(timer);
-  }, [renderer, files, remoteImages]);
+  }, [renderer, files, remoteImages, vaultId]);
+
+  // The frontmatter shows as the preference says; the inline title follows
+  // its preference and the note's name.
+  const propertiesMode = usePrefs((s) => s.properties);
+  useEffect(() => {
+    void propertiesMode;
+    view.current?.dispatch({ effects: redraw.of(null) });
+  }, [propertiesMode]);
+  const showTitle = usePrefs((s) => s.inlineTitle);
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: titleCompartment.reconfigure(inlineTitle(showTitle, titleOf(snap.path), rename)),
+    });
+  }, [showTitle, snap.path, rename]);
 
   // A file added, moved or removed changes what links lead to.
   const pathsVersion = useFiles((s) => s.pathsVersion);

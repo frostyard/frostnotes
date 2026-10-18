@@ -89,8 +89,8 @@ function ListEditor({ row, onChange }: { row: PropertyRow; onChange: PropertiesB
   const values = items(row.value);
   const occurrences = new Map<string, number>();
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-      <ul aria-label={row.key} className="flex shrink-0 items-center gap-1">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
+      <ul aria-label={row.key} className="contents">
         {values.map((item, index) => {
           const occurrence = occurrences.get(item) ?? 0;
           occurrences.set(item, occurrence + 1);
@@ -186,7 +186,7 @@ function PropertyFields({
       role="group"
       aria-label={row.key}
       data-property={row.key}
-      className="group flex h-[30px] items-center gap-2 rounded-md px-1 hover:bg-code"
+      className="group flex min-h-[30px] items-center gap-2 rounded-md px-1 hover:bg-code"
     >
       <div className="flex w-[9em] shrink-0 items-center gap-1 text-sidebar-row text-secondary">
         <Icon size={14} aria-hidden="true" data-type={row.type} className="shrink-0" />

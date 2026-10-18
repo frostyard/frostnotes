@@ -67,7 +67,11 @@ export function InlineTitle({ title, onRename, onDone }: InlineTitleProps) {
           onDone?.();
         }}
       />
-      {invalid && <p role="alert">{'A file name cannot contain \\ / : * ? " < > | # ^ [ ].'}</p>}
+      {invalid && (
+        <p role="alert" className="mb-2 text-sidebar-row text-secondary">
+          {'A file name cannot contain \\ / : * ? " < > | # ^ [ ].'}
+        </p>
+      )}
     </>
   );
 }

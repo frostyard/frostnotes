@@ -10,9 +10,10 @@ import { type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState 
 import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import type { NoteDoc, Notice } from "../editor/document";
-import { NoticeBar } from "../editor/NoteEditor";
+import { NoticeBar, titleOf } from "../editor/NoteEditor";
 import type { PreviewCommand } from "../editor/preview/framework";
 import { useNoteDoc } from "../editor/useNoteDoc";
+import { InlineTitle } from "../features/workspace/InlineTitle";
 import { type OpenWhere, whereFor } from "../workspace/ops";
 import { finish } from "./finish";
 import { createSanitizer } from "./sanitize";
@@ -26,6 +27,8 @@ export interface ReadingViewProps {
   onFollow: (c: PreviewCommand) => void;
   onCompare: (notice: Notice) => void;
   onClose: () => void;
+  /** Rename the note from its inline title. */
+  onRename?: (title: string) => void;
 }
 
 /** ReadingView shows a note as notesd renders it. */
@@ -68,6 +71,7 @@ export function ReadingView(props: ReadingViewProps) {
   }, [ready, doc, vaultId, sanitize]);
 
   const readable = usePrefs((s) => s.readableLineLength);
+  const showTitle = usePrefs((s) => s.inlineTitle);
   const remoteImages = usePrefs((s) => s.loadRemoteImages);
   const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -90,11 +94,16 @@ export function ReadingView(props: ReadingViewProps) {
       )}
       {snap.status === "missing" && <p className="text-empty px-8 py-8 text-secondary">{path} is not in the vault.</p>}
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {showTitle && (
+          <div className={`mx-auto px-8 pt-8 ${readable ? "max-w-[764px]" : ""}`}>
+            <InlineTitle title={titleOf(snap.path)} onRename={(t) => props.onRename?.(t)} />
+          </div>
+        )}
         {/* biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: the clicks are on the links and checkboxes inside, which keep their own roles and keys */}
         <div
           ref={box}
           data-testid="reading-view"
-          className={`reading-view rendered mx-auto px-8 pt-8 pb-[50vh] ${readable ? "max-w-[764px]" : ""}`}
+          className={`reading-view rendered mx-auto px-8 ${showTitle ? "" : "pt-8"} pb-[50vh] ${readable ? "max-w-[764px]" : ""}`}
           onClick={onClick}
           onAuxClick={onClick}
         />
