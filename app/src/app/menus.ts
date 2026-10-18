@@ -5,6 +5,7 @@
 import { openMenu, openMove } from "../data/overlays";
 import { setRenaming } from "../data/panes";
 import { usePrefs } from "../data/prefs";
+import { useNotes } from "../data/stores";
 import type { MenuItem } from "../features/menu/Menu";
 import type { Client, SyncConflict } from "../rpc/gen/api";
 import { tabTitle, type ViewState } from "../workspace/model";
@@ -25,6 +26,7 @@ import {
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { copyPath, deleteFile } from "./commands";
+import { openInDefaultApp } from "./system";
 
 const update = (op: Parameters<ReturnType<typeof useWorkspace.getState>["update"]>[0]) =>
   useWorkspace.getState().update(op);
@@ -108,7 +110,7 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
       item("move", "Move file to…"),
       item("copy-path", "Copy path"),
       item("reveal", "Reveal in Files"),
-      item("open-default", "Open in default app", { disabled: true }),
+      item("open-default", "Open in default app"),
       SEP,
       item("delete", "Delete file"),
     );
@@ -136,6 +138,11 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
         case "reveal":
           if (file !== null) revealInFiles(file);
           return;
+        case "open-default": {
+          const vaultId = useNotes.getState().vaultId;
+          if (file !== null && vaultId !== null) void openInDefaultApp(vaultId, file);
+          return;
+        }
         case "rename":
           if (file !== null) {
             revealInFiles(file);

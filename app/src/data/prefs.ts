@@ -31,6 +31,8 @@ export interface Prefs {
   theme: "system" | "light" | "dark";
   fontSize: number;
   showRibbon: boolean;
+  /** The window's zoom (View: Zoom in, Zoom out, Reset zoom), 1 at actual size. */
+  zoom: number;
   /** The path of the vault the window showed last; null before one. */
   lastVault: string | null;
 }
@@ -59,8 +61,18 @@ export const DEFAULT_PREFS: Prefs = {
   theme: "system",
   fontSize: 16,
   showRibbon: true,
+  zoom: 1,
   lastVault: null,
 };
+
+/** ZOOMS are the window's zoom steps, as a browser's. */
+export const ZOOMS: readonly [number, ...number[]] = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+
+/** zoomStep is the next zoom step from zoom in a direction: +1 in, -1 out; it stays at either end. */
+export function zoomStep(zoom: number, direction: 1 | -1): number {
+  const steps = direction > 0 ? ZOOMS : [...ZOOMS].reverse();
+  return steps.find((z) => (direction > 0 ? z > zoom + 1e-9 : z < zoom - 1e-9)) ?? zoom;
+}
 
 /** PREFS_KEY is the local-storage key of the record. */
 export const PREFS_KEY = "frostnotes.prefs.v1";
@@ -99,6 +111,7 @@ const CHECKS: { [K in keyof Prefs]: Check } = {
   theme: oneOf("system", "light", "dark"),
   fontSize: intIn(10, 30),
   showRibbon: isBool,
+  zoom: (v) => typeof v === "number" && v >= ZOOMS[0] && v <= (ZOOMS.at(-1) ?? ZOOMS[0]),
   lastVault: (v) => v === null || typeof v === "string",
 };
 
