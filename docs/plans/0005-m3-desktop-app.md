@@ -22,7 +22,8 @@ T-0042, which Codex passed and which are merged. Phase 3, the contracts,
 is done too, in three PRs against `main`: the API's contract with the
 store's cards T-0043 and T-0044; the renderer's contract with its cards
 T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
-Cards T-0043 to T-0046 are ready to run; Phases 4 and 5 are next.
+Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
+and they are merged. Phases 4 and 5 are next.
 
 ## Decisions taken for M3
 
@@ -248,8 +249,8 @@ does, so the plan records them without ADRs:
 
   | Card | Size | File | What | Runs after |
   | --- | --- | --- | --- | --- |
-  | [T-0043](../tasks/todo/0043-tag-and-property-counts.md) | S | `internal/store/counts.go` | every tag and frontmatter key of a vault, with how many notes have it | |
-  | [T-0044](../tasks/todo/0044-search-filters.md) | M | `internal/store/search.go` | `path:`, `file:` and `tag:` in searches, and listing by filters alone | T-0043 |
+  | [T-0043](../tasks/done/0043-tag-and-property-counts.md) | S | `internal/store/counts.go` | every tag and frontmatter key of a vault, with how many notes have it | |
+  | [T-0044](../tasks/done/0044-search-filters.md) | M | `internal/store/search.go` | `path:`, `file:` and `tag:` in searches, and listing by filters alone | T-0043 |
 
   Both cards are in `internal/store`, so they run one after the other.
 - **Result, part 2 (2026-10-17): the renderer's contract.**
@@ -270,8 +271,8 @@ does, so the plan records them without ADRs:
 
   | Card | Size | File | What | Runs after |
   | --- | --- | --- | --- | --- |
-  | [T-0045](../tasks/todo/0045-render-links.md) | M | `internal/render/links.go` | links, note embeds and their sections, files by hash, markdown images | |
-  | [T-0046](../tasks/todo/0046-render-syntax.md) | M | `internal/render/syntax.go` | tags, highlights, math, callouts, checkboxes and headings with lines, block IDs | T-0045 |
+  | [T-0045](../tasks/done/0045-render-links.md) | M | `internal/render/links.go` | links, note embeds and their sections, files by hash, markdown images | |
+  | [T-0046](../tasks/done/0046-render-syntax.md) | M | `internal/render/syntax.go` | tags, highlights, math, callouts, checkboxes and headings with lines, block IDs | T-0045 |
 
   The render cards share a package with neither store card, so the two
   pairs may run at once in separate executor worktrees.
@@ -371,6 +372,26 @@ into its container as it merges.
 - **Done when:** every card is merged, `make check` and `make ui-check`
   are green, and each section of [specs/ui.md](../specs/ui.md) works in
   the built app.
+- **Result so far (2026-10-17): batch 3's first four cards.** Codex
+  (codex-cli 0.161, the user's default model) passed T-0043 to T-0046 on
+  the first attempt each, in two executor worktrees at once: the store
+  pair in `exec-m3c` (`m3/batch3`), the render pair in `exec-m3d`
+  (`m3/batch3-b`), each card reviewed and merged before its partner
+  started. T-0046's card was corrected before it ran: T-0045 had named
+  its helpers `linkAttr` and `escapeLink`, not the `attr` and `writeText`
+  the card offered. On the merge, `make check` is green. Each card's
+  given tests were checked by mutation against Codex's code, and each
+  mutation failed them: property keys left unfolded (T-0043), the `file:`
+  filter ignored (T-0044), note embeds never made blocks (T-0045, 5
+  fixtures), and callouts transformed after embeds are looked for
+  (T-0046, 2 fixtures).
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0043 counts | 1 | 2 m 0 s | correct; one tag row per note makes `COUNT(*)` the note count, and property keys fold in Go |
+  | T-0044 search filters | 1 | 1 m 43 s | correct; words split at `"` as `SearchQuery` splits them, and filters run after SQL so the limit counts admitted notes |
+  | T-0045 links and embeds | 1 | 2 m 41 s | matches the spec; also makes a markdown image of a note alone in its paragraph a block embed, which the spec's "an embed of it as above" allows |
+  | T-0046 syntax | 1 | 1 m 45 s | correct; runs its callout transformer before T-0045's embed transformer, which R16 needs, and says why |
 
 ## Phase 7 — Review and exit evidence
 
@@ -429,6 +450,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/todo/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
