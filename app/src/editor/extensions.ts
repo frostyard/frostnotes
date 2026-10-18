@@ -73,6 +73,8 @@ export function editorExtensions(opts: {
   catalog?: CompletionCatalog;
   /** The inline title (title.tsx), when the view shows one. */
   title?: Extension;
+  /** More extensions: the note editor's page previews. */
+  extra?: Extension;
 }): Extension {
   return [
     markdownSupport(),
@@ -87,6 +89,7 @@ export function editorExtensions(opts: {
     previewEnv.of(opts.env),
     propertiesState,
     titleCompartment.of(opts.title ?? []),
+    opts.extra ?? [],
     modeCompartment.of(modeExtension(opts.prefs.live)),
     prefsCompartment.of(prefsExtension(opts.prefs)),
     EditorView.domEventHandlers({

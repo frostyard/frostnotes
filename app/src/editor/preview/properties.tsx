@@ -38,15 +38,19 @@ export const propertiesState = StateField.define<BlockState>({
   },
 });
 
-/** replaceText makes the view's document next with one change: the span between their common start and end. */
-export function replaceText(view: EditorView, next: string, userEvent: string): void {
-  const prev = view.state.doc.toString();
-  if (prev === next) return;
+/** textChange is the one change that makes prev next: the span between their common start and end. */
+export function textChange(prev: string, next: string): { from: number; to: number; insert: string } {
   let a = 0;
   while (a < prev.length && a < next.length && prev[a] === next[a]) a++;
   let b = 0;
   while (b < prev.length - a && b < next.length - a && prev[prev.length - 1 - b] === next[next.length - 1 - b]) b++;
-  view.dispatch({ changes: { from: a, to: prev.length - b, insert: next.slice(a, next.length - b) }, userEvent });
+  return { from: a, to: prev.length - b, insert: next.slice(a, next.length - b) };
+}
+
+/** replaceText makes the view's document next with one change. */
+export function replaceText(view: EditorView, next: string, userEvent: string): void {
+  const prev = view.state.doc.toString();
+  if (prev !== next) view.dispatch({ changes: textChange(prev, next), userEvent });
 }
 
 function apply(view: EditorView, next: string | Error) {

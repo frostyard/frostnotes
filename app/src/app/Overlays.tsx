@@ -10,6 +10,7 @@ import { useFiles } from "../data/files";
 import {
   closeMenu,
   closeMove,
+  closePreview,
   closePrompt,
   closeTemplates,
   dismissNotice,
@@ -19,10 +20,12 @@ import {
 } from "../data/overlays";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
+import { titleOf } from "../editor/NoteEditor";
 import { useDocuments } from "../editor/registry";
 import { ConfirmDialog } from "../features/dialog/ConfirmDialog";
 import { Menu } from "../features/menu/Menu";
 import { Notices } from "../features/notice/Notices";
+import { PagePreview } from "../features/preview/PagePreview";
 import { CommandPalette } from "../features/prompt/CommandPalette";
 import { FolderChooser } from "../features/prompt/FolderChooser";
 import { QuickSwitcher, type SwitcherWhere } from "../features/prompt/QuickSwitcher";
@@ -46,11 +49,24 @@ export function Overlays() {
   const confirm = useOverlays((s) => s.confirm);
   const moving = useOverlays((s) => s.move);
   const templates = useOverlays((s) => s.templates);
+  const preview = useOverlays((s) => s.preview);
   return (
     <>
       <SettingsContainer />
       {moving && <Mover path={moving.path} folder={moving.folder} />}
       {templates && <Templates paths={templates} />}
+      {preview && (
+        <PagePreview
+          anchor={preview.anchor}
+          title={titleOf(preview.path)}
+          fill={preview.fill}
+          onClose={closePreview}
+          onOpen={() => {
+            closePreview();
+            useWorkspace.getState().update((w) => open(w, viewOf(preview.path), "here"));
+          }}
+        />
+      )}
       {confirm && (
         <ConfirmDialog
           title={confirm.title}

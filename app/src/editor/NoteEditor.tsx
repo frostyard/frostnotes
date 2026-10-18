@@ -6,6 +6,7 @@ import { EditorView } from "@codemirror/view";
 import { useEffect, useMemo, useRef } from "react";
 
 import { useFiles } from "../data/files";
+import { openPreview } from "../data/overlays";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { TabNotice, type TabNoticeAction } from "../features/workspace/TabNotice";
@@ -146,6 +147,23 @@ export function NoteEditor(props: NoteEditorProps) {
             propertyTypes: () => types.current,
           },
           title: inlineTitle(usePrefs.getState().inlineTitle, titleOf(doc.path), rename),
+          // Ctrl over a link shows the note it leads to (its page preview).
+          extra: EditorView.domEventHandlers({
+            mousemove: (e) => {
+              if (!e.ctrlKey || !(e.target instanceof Element)) return false;
+              const el = e.target.closest<HTMLElement>(".cm-pv-link[data-target]");
+              const target = el?.dataset.target ?? "";
+              const to = target === "" ? undefined : resolver.resolve(target);
+              if (!el || typeof to !== "string" || !to.endsWith(".md")) return false;
+              const r = el.getBoundingClientRect();
+              openPreview({
+                anchor: { left: r.left, top: r.top, bottom: r.bottom },
+                path: to,
+                fill: (box) => renderer.fill(box, `![[${target}]]`),
+              });
+              return false;
+            },
+          }),
           onBlur: () => void doc.save(),
           catalog: completionCatalog({
             vaultId,
