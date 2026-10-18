@@ -1,6 +1,5 @@
 // Obsidian's callouts (docs/specs/markdown.md#callouts-highlights-and-footnotes):
-// a blockquote whose first line starts with [!type]. Task T-0066 replaces
-// this stub.
+// read a blockquote's first-line marker without changing how its body parses.
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode } from "@lezer/common";
 
@@ -18,6 +17,23 @@ export interface Callout {
 }
 
 /** readCallout reads the callout a Blockquote node is, or null when it is a plain quote. */
-export function readCallout(_state: EditorState, _quote: SyntaxNode): Callout | null {
-  return null;
+export function readCallout(state: EditorState, quote: SyntaxNode): Callout | null {
+  if (quote.name !== "Blockquote") return null;
+  const mark = quote.getChild("QuoteMark");
+  if (!mark) return null;
+  const line = state.doc.lineAt(mark.to);
+  const afterMark = state.doc.sliceString(mark.to, line.to);
+  const text = afterMark.replace(/^[ \t]*/, "");
+  const match = /^\[!([A-Za-z0-9_-]+)\]([+-]?)(?:[ \t]+(.*?))?[ \t]*$/.exec(text);
+  if (!match) return null;
+  const [, type = "", sign, title = ""] = match;
+  const fold = sign === "+" || sign === "-" ? sign : "";
+  const markFrom = mark.to + afterMark.length - text.length;
+  return {
+    type: type.toLowerCase(),
+    fold,
+    title: title.trim(),
+    markFrom,
+    markTo: markFrom + type.length + 3 + fold.length,
+  };
 }
