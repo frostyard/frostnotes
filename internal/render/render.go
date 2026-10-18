@@ -10,6 +10,7 @@ import (
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
@@ -54,7 +55,9 @@ func render(note []byte, opts Options, stack []string) string {
 	body, line := markdown.RenderSource(note)
 	ext := &obsidianHTML{opts: opts, stack: stack, line: line}
 	md := markdown.Goldmark(
-		goldmark.WithRendererOptions(html.WithHardWraps(), html.WithUnsafe()),
+		goldmark.WithRendererOptions(html.WithHardWraps(), html.WithUnsafe(),
+			// align, not a style attribute, which the sanitizer drops.
+			extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)),
 		goldmark.WithExtensions(ext),
 	)
 	var buf bytes.Buffer

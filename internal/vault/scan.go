@@ -519,18 +519,19 @@ func (v *Vault) storeBlob(ctx context.Context, r *os.Root, p string, c *content)
 }
 
 // ignored reports whether the vault's settings leave p out. v.mu must be
-// held. Before the first scan has read the settings, it reads them.
-func (v *Vault) ignored(p string) bool {
+// held.
+func (v *Vault) ignored(p string) bool { return v.patterns().Match(p, false) }
+
+// patterns returns the vault's ignore patterns. v.mu must be held. Before
+// the first scan has read the settings, it reads them; settings it cannot
+// read ignore nothing, and the scan fails on them and says why.
+func (v *Vault) patterns() *Ignore {
 	if v.ignore == nil {
-		s, err := LoadSettings(v.root)
-		if err != nil {
-			return false // the scan fails on it, and says why
-		}
-		if v.ignore, err = NewIgnore(s.Ignore); err != nil {
-			return false
+		if s, err := LoadSettings(v.root); err == nil {
+			v.ignore, _ = NewIgnore(s.Ignore) // LoadSettings checked them
 		}
 	}
-	return v.ignore.Match(p, false)
+	return v.ignore
 }
 
 // exactName reports whether every segment of p is spelled as its folder
