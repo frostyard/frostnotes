@@ -18,8 +18,8 @@ Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) 
 **Status: M0's shell is built** ([plan 0001](../plans/0001-m0-foundations.md#phase-4--app-shell)):
 the transports, the mock, the title bar, the status bar, and the
 CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
-dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout
-and commands below (Phase 5).
+dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
+commands and editor core below (Phase 5).
 Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
@@ -77,8 +77,12 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   events from the last durable sequence number the app applied
   ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)),
   loads the stores, and reconnects every second when the connection
-  ends. On reconnect it reloads the stores and reads each open document
-  again, applying any difference as another writer's change.
+  ends. After the first connection the window stays while it reconnects,
+  with the closed client, whose calls fail until the new one arrives, so
+  no editor goes away with what was typed; the status bar says why. On
+  reconnect it reloads the stores, and each open document saves what is
+  unsaved or reads its note again, applying any difference as another
+  writer's change.
 - **Events.** Every event, replays included, goes first to the event
   feed (`data/events.ts`), whose listeners keep state across runs (saved
   workspaces follow moves), and which records the last sequence number
@@ -155,13 +159,15 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
 ### Documents, saves and merges
 
 Per [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md),
-the document registry (`editor/documents.ts`) holds one `NoteDoc` per
-vault and path while any tab shows it:
+the document registry (`editor/registry.ts`) holds one `NoteDoc`
+(`editor/document.ts`) per vault and path while any tab shows it, and
+after the last tab goes until what it holds is saved:
 
 - `base`, the hash notesd last confirmed, and `baseText`, the text it
-  names; the `EditorState` of its primary view, other views kept in step
-  by forwarding each transaction with an annotation that stops it coming
-  back.
+  names, and the text itself; each view keeps its own state and history,
+  and a user's change in one is forwarded to the others with the
+  `forwarded` annotation and outside their histories, so each tab's
+  Ctrl+Z undoes only its own typing.
 - **States:** clean (the text is `baseText`), dirty, saving (one write in
   flight, holding the text it sent). A change marks it dirty and arms the
   timers: 1 s after the last change, 10 s after the first. Ctrl+S, blur,
@@ -178,20 +184,29 @@ vault and path while any tab shows it:
   (clean) or saves at once (dirty); `note.moved` renames the document and
   its tabs; `note.removed` creates it again with unsaved edits, else marks
   its tabs deleted.
-- **Errors:** a base notesd refuses opens the merge view against the
-  editor's text; a write that fails otherwise keeps the document dirty,
-  retries after 2, 4, 8 … 60 s, and shows the error in the tab; nothing
-  is dropped while the window is open, and closing it with unsaved text
-  asks first.
+- **Errors:** a base notesd refuses ("has no version … to merge from",
+  "… is gone") makes the document take the file's text and keep the
+  editor's, whose notice's Compare opens the merge view against it; a
+  write that fails otherwise keeps the document dirty, retries after 2,
+  4, 8 … 60 s, and shows the error in the tab; nothing is dropped while
+  the window is open, and closing it with unsaved text saves first and
+  asks if that fails.
+- **Tests:** every writer pair (an outside edit while typing, a pull, an
+  agent's write, a second tab) runs against the mock's scripted merges
+  with headless views (`editor/document.test.ts`).
 
 ### Extensions
 
 - **Syntax:** `@lezer/markdown` with GFM and Frostnotes' extensions for
   Obsidian's syntax ([specs/markdown.md](../specs/markdown.md)):
   wikilinks and embeds, tags, highlights, comments, callouts, block IDs,
-  inline and display math, footnotes. Where the two parsers must agree
-  (what is a link or a tag, and where code hides them), Vitest runs the
-  spec's `F` fixtures through Lezer as Go runs them through goldmark.
+  inline and display math, footnotes, one file each in `editor/syntax/`;
+  the frontmatter is one node, none of it markdown, for the properties
+  block to draw. Where the two parsers must agree (what is a link or a
+  tag, and where code hides them), Vitest runs the spec's `F` fixtures
+  through Lezer as Go runs them through goldmark
+  (`editor/syntax/fixtures.test.ts`): a fixture that waits on a batch 3
+  extension is listed as pending and must fail until its card lands.
 - **Keys:** CodeMirror's default keymap without the bindings Obsidian
   removes (Alt+↑ and Alt+↓ with and without Shift, Alt+L, Alt+V, Ctrl+M)
   and without any key the app's keymap binds (CodeMirror's Ctrl+D,
@@ -204,8 +219,11 @@ vault and path while any tab shows it:
   `#`, ranked by `lib/fuzzy.ts`.
 - **Links in the editor:** `note.resolve` resolves the links of the
   visible lines from the note's folder, as notesd's index does, in one
-  batched call cached until a file is added, moved or removed; unresolved
-  links show dimmed, and following one creates the note.
+  batched call cached until a file is added, moved or removed (the files
+  store's `pathsVersion`; `editor/links.ts`); unresolved links show
+  dimmed, and following one creates the note under its own folders when
+  it names any, else where new notes go. A web link opens outside the
+  app.
 - **Modes:** live preview (the default), source mode (the same editor
   without the preview decorations) and the reading view. Ctrl+E switches
   between editing and reading; source and live preview are a preference
@@ -234,7 +252,9 @@ The framework (`editor/preview/`) owns:
 
 M0's spike (`app/src/spike/livePreview.ts`) is its first draft: hidden
 marks, headings, links, wikilinks and checkboxes, measured at 9 ms at p95
-a keystroke on a 10,000-line note. The framework keeps that budget with
+a keystroke on a 10,000-line note. Its decorations are the framework's
+first providers (`editor/preview/basic.ts`); the framework is
+`editor/preview/framework.ts`. The framework keeps that budget with
 every provider on: providers are measured together in the exit evidence.
 
 ### Properties

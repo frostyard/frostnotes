@@ -6,8 +6,12 @@
 /** NoteMode is how a note tab shows its note. */
 export type NoteMode = "edit" | "read";
 
-/** MergeSide is the other side of a merge view: a version of the file, or a hub revision. */
-export type MergeSide = { kind: "version"; version: number } | { kind: "revision"; seq: number };
+/**
+ * MergeSide is the other side of a merge view: a version of the file, a
+ * hub revision, or the text the editor held when notesd refused its base
+ * (in memory only: a stored workspace drops it).
+ */
+export type MergeSide = { kind: "version"; version: number } | { kind: "revision"; seq: number } | { kind: "held" };
 
 /** ViewState is what a tab shows. */
 export type ViewState =

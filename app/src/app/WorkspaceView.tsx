@@ -6,16 +6,18 @@ import { createContext, type DragEvent, type ReactNode, useContext, useEffect, u
 
 import { useFiles } from "../data/files";
 import { usePrefs } from "../data/prefs";
+import { useClient } from "../data/session";
 import { Splitter } from "../features/workspace/Splitter";
 import { TabStrip } from "../features/workspace/TabStrip";
 import { ViewHeader } from "../features/workspace/ViewHeader";
-import { type Split, type TabGroup, tabTitle, type WorkspaceNode } from "../workspace/model";
+import { type MergeSide, type Split, type TabGroup, tabTitle, type WorkspaceNode } from "../workspace/model";
 import {
   activate,
   activateGroup,
   back,
   close,
   type Edge,
+  findTab,
   forward,
   type MoveTarget,
   moveTab,
@@ -25,6 +27,7 @@ import {
   setView,
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
+import { followLink } from "./commands";
 import { ViewContent } from "./ViewContent";
 
 /** Zone is where a dragged tab would land in a group. */
@@ -138,6 +141,7 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
   const viewHeader = usePrefs((s) => s.viewHeader);
   const files = useFiles((s) => s.files);
   const drag = useContext(DragContext);
+  const client = useClient();
   const [zone, setZone] = useState<Zone | null>(null);
   const strip = useRef<HTMLDivElement>(null);
   const tab = group.tabs[group.active] ?? group.tabs[0];
@@ -262,10 +266,26 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
       )}
       <div className="relative min-h-0 flex-1 overflow-auto">
         <ViewContent
+          tabId={tab.id}
           view={view}
           exists={path === undefined || files.has(path)}
+          active={focused}
           onOpen={(p, where) =>
             update((w) => open(activate(w, tab.id), { type: "note", path: p, mode: "edit" }, where))
+          }
+          onFollow={(c) => void followLink(client, c, tab.id)}
+          onCompare={(notice) => {
+            if (path === undefined || (notice.kind !== "conflict" && notice.kind !== "refused")) return;
+            const other: MergeSide =
+              notice.kind === "conflict" ? { kind: "version", version: notice.version ?? 0 } : { kind: "held" };
+            update((w) => open(activate(w, tab.id), { type: "merge", path, other }, "tab"));
+          }}
+          onClose={() => update((w) => close(w, tab.id))}
+          onCursor={(pos, p) =>
+            update((w) => {
+              const t = findTab(w, tab.id)?.tab.view;
+              return t?.type === "note" && t.path === p ? setView(w, tab.id, { ...t, cursor: pos }) : w;
+            })
           }
         />
         {zone && zone.kind !== "index" && <DropTint zone={zone} />}

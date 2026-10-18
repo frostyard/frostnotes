@@ -25,8 +25,8 @@ T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
 and they are merged. Phase 4, notesd's additions, is merged in two PRs.
 Phase 5 runs as four PRs against `main`, one at a time: the data layer
-(merged), the workspace and commands (in review), the editor core, and
-the reading view, merge view and history with the exit evidence.
+and the workspace and commands (merged), the editor core (in review),
+and the reading view, merge view and history with the exit evidence.
 
 ## Decisions taken for M3
 
@@ -406,6 +406,28 @@ of [specs/ui.md](../specs/ui.md) not marked for a batch.
   pane is a plain list of paths, a note tab shows its text read-only
   until the editor core, and the menus (tab menu, tab list, More
   options) and the panes' contents are not drawn.
+- **Result so far (2026-10-17): the editor core.** The document registry
+  (`editor/document.ts`, `editor/registry.ts`): saves 1 s after the last
+  change and at most 10 s after the first, one write in flight, merged
+  answers and other writers' changes applied as one remote transaction
+  mapped over what was typed since, out of the history; conflict,
+  refused-base, failed-save and deleted notices; a document kept until
+  it saves. Every writer pair of ADR-0022 is a Vitest test over the
+  mock's scripted merges. The editor (`editor/NoteEditor.tsx`): views
+  sharing a document, live preview and source mode, the keymap without
+  what Obsidian removes and what the app binds, search, link resolution
+  batched through `note.resolve`, and links that follow or create their
+  note. The live-preview framework (`editor/preview/`): inline and block
+  providers, the reveal rule, clicks to providers, with the spike's
+  decorations as its first providers; typing in a generated 10,000-line
+  note took 3.4 ms at p95 a keystroke in a browser over the mock (the
+  exit evidence measures WebKitGTK). The Lezer skeleton
+  (`editor/syntax/`): wikilinks with subpaths and the frontmatter as one
+  node, and the `F` fixtures through Lezer, 8 agreeing and 7 pending
+  batch 3's extensions. `Session` now keeps the window through a
+  reconnect, so no editor goes away with what was typed.
+  `@codemirror/merge` 6.12.2, `@codemirror/autocomplete` 6.20.3 and
+  `@codemirror/search` 6.7.2 joined, pinned.
 
 ## Phase 6 — Executor batches 2 and 3, and wiring
 

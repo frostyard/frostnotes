@@ -7,9 +7,8 @@ import type { ReactNode } from "react";
 
 import { useFiles } from "../data/files";
 import type { PaneId } from "../workspace/model";
-import { activeTab, open } from "../workspace/ops";
+import { activeTab, open, whereFor } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
-import { whereFor } from "./open";
 
 /** PANE_INFO names each pane and gives its icon. */
 export const PANE_INFO: Record<PaneId, { name: string; icon: ReactNode }> = {
