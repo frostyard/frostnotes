@@ -2,12 +2,15 @@
 // wrote, or what a hand edit left, is read for what it holds that this app
 // understands, and the rest is dropped, so a stored layout never wedges
 // the window. Nothing here throws.
+import type { SortOrder } from "../lib/fileTree";
 import {
   type ClosedTab,
   emptyWorkspace,
+  type FilesPaneState,
   groups,
   LEFT_WIDTH,
   MAX_CLOSED,
+  MAX_EXPANDED,
   MAX_HISTORY,
   MAX_RECENT,
   type MergeSide,
@@ -61,8 +64,19 @@ export function validate(input: unknown): Workspace {
     right: sidebar(input.right, "right", RIGHT_WIDTH),
     closed,
     recent,
+    files: filesPane(input.files),
     nextId,
   };
+}
+
+const SORTS: readonly SortOrder[] = ["alphabetical", "alphabeticalReverse", "byModifiedTime", "byModifiedTimeReverse"];
+
+// filesPane reads the Files pane's state; a missing or strange one is the first one.
+function filesPane(v: unknown): FilesPaneState {
+  if (!isObj(v)) return { sort: "alphabetical", expanded: [] };
+  const sort = SORTS.find((s) => s === v.sort) ?? "alphabetical";
+  const expanded = Array.isArray(v.expanded) ? [...new Set(v.expanded.filter(isPath))].slice(0, MAX_EXPANDED) : [];
+  return { sort, expanded };
 }
 
 // node reads a split or tab group, or nothing; IDs must be unique.

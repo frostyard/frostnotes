@@ -2,11 +2,13 @@
 // from a workspace to a workspace, each a unit test. Empty splits
 // collapse, and the last tab of the last group becomes an empty tab
 // rather than closing.
+import type { SortOrder } from "../lib/fileTree";
 import {
   type ClosedTab,
   type Direction,
   groups,
   MAX_CLOSED,
+  MAX_EXPANDED,
   MAX_HISTORY,
   MAX_RECENT,
   newTab,
@@ -333,6 +335,32 @@ export function selectPane(ws: Workspace, side: Side, pane: PaneId): Workspace {
   return active < 0 ? ws : { ...ws, [side]: { ...ws[side], active, open: true } };
 }
 
+// --- the Files pane
+
+/** setFileSort sets the Files pane's sort order. */
+export function setFileSort(ws: Workspace, sort: SortOrder): Workspace {
+  return { ...ws, files: { ...ws.files, sort } };
+}
+
+/** setFolderOpen opens or closes a folder in the Files pane. */
+export function setFolderOpen(ws: Workspace, folder: string, open: boolean): Workspace {
+  const rest = ws.files.expanded.filter((p) => p !== folder);
+  const expanded = open ? [...rest, folder].slice(-MAX_EXPANDED) : rest;
+  return { ...ws, files: { ...ws.files, expanded } };
+}
+
+/** setFoldersOpen opens exactly folders: Expand all with every folder, Collapse all with none. */
+export function setFoldersOpen(ws: Workspace, folders: readonly string[]): Workspace {
+  return { ...ws, files: { ...ws.files, expanded: [...new Set(folders)].slice(0, MAX_EXPANDED) } };
+}
+
+/** revealPath opens every folder holding path, so its row shows. */
+export function revealPath(ws: Workspace, path: string): Workspace {
+  const parts = path.split("/").slice(0, -1);
+  const folders = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+  return folders.reduce((w, f) => (w.files.expanded.includes(f) ? w : setFolderOpen(w, f, true)), ws);
+}
+
 // --- following the vault
 
 /** applyMove follows a file or folder moved from one path to another, in every view, history and list. */
@@ -347,6 +375,7 @@ export function applyMove(ws: Workspace, from: string, to: string): Workspace {
     ...mapTabs(ws, tab),
     closed: ws.closed.map((c) => ({ ...c, tab: tab(c.tab) })),
     recent: ws.recent.map(move),
+    files: { ...ws.files, expanded: ws.files.expanded.map(move) },
   };
 }
 

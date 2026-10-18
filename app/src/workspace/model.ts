@@ -1,7 +1,9 @@
 // The workspace model (docs/design/app.md#workspace): a tree of splits and
-// tab groups, two sidebars of panes, the tabs closed lately and the files
-// opened lately. Operations on it are pure functions (ops.ts); the
-// workspace store keeps one per vault in local storage (store.ts).
+// tab groups, two sidebars of panes, the tabs closed lately, the files
+// opened lately and the Files pane's sort and open folders. Operations on
+// it are pure functions (ops.ts); the workspace store keeps one per vault
+// in local storage (store.ts).
+import type { SortOrder } from "../lib/fileTree";
 
 /** NoteMode is how a note tab shows its note. */
 export type NoteMode = "edit" | "read";
@@ -76,6 +78,13 @@ export interface ClosedTab {
   index: number;
 }
 
+/** FilesPaneState is the Files pane's: its sort order and its open folders. */
+export interface FilesPaneState {
+  sort: SortOrder;
+  /** The open folders, by path. */
+  expanded: string[];
+}
+
 /** Workspace is one vault's layout. */
 export interface Workspace {
   version: 1;
@@ -88,6 +97,7 @@ export interface Workspace {
   closed: ClosedTab[];
   /** The files opened lately, the newest first; at most MAX_RECENT. */
   recent: string[];
+  files: FilesPaneState;
   /** The next number for an ID: IDs are "t<n>", "g<n>" and "s<n>". */
   nextId: number;
 }
@@ -95,6 +105,7 @@ export interface Workspace {
 export const MAX_HISTORY = 50;
 export const MAX_CLOSED = 20;
 export const MAX_RECENT = 50;
+export const MAX_EXPANDED = 1000;
 
 /** Sidebar widths (docs/specs/ui.md#layout). */
 export const SIDEBAR_MIN = 200;
@@ -118,6 +129,7 @@ export function emptyWorkspace(): Workspace {
     right: { panes: [...PANES.right], active: 0, width: RIGHT_WIDTH, open: true },
     closed: [],
     recent: [],
+    files: { sort: "alphabetical", expanded: [] },
     nextId: 3,
   };
 }
