@@ -432,6 +432,9 @@ it acts:
    pane.
 3. **Words and characters** of the active note, or of the selection
    while there is one: "N words", "N characters" (grouped thousands).
+   Both count the body outside comments: words as notesd counts them
+   ([specs/markdown.md](markdown.md#words)), characters as every
+   character but line breaks.
 4. **Editing mode:** an icon for live preview (`pencil`), source mode
    (`code-xml`) or reading (`book-open`); a menu switches it.
 
