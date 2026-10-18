@@ -346,6 +346,21 @@ func (s logService) History(ctx context.Context, p *api.LogHistoryParams) ([]api
 	return revs, err
 }
 
+func (s logService) Revision(ctx context.Context, p *api.LogRevisionParams) (*api.Revision, error) {
+	hv, err := s.served(ctx, p.Vault)
+	if err != nil {
+		return nil, err
+	}
+	r, err := s.h.cfg.DB.NamedRevision(ctx, hv.VaultID, p.Seq)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, api.NotFound("the vault has no revision %d", p.Seq)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 func (s logService) Pushes(ctx context.Context, p *api.LogPushesParams) ([]api.PushRecord, error) {
 	if len(p.Pushes) > maxBatch {
 		return nil, api.InvalidParams("at most %d pushes at once", maxBatch)

@@ -3,7 +3,9 @@ package syncer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/store"
@@ -435,8 +437,37 @@ func (s *Syncer) recorded(ctx context.Context, sess *session, r store.Remote, p 
 	return slices.ContainsFunc(revs, func(rv api.Revision) bool { return rv.Hash == p.Hash }), nil
 }
 
-// ReadRevision answers unavailable until M3's Phase 4 builds it
-// (docs/plans/0005-m3-desktop-app.md).
-func (sv service) ReadRevision(context.Context, *api.SyncReadRevisionParams) (*api.RevisionContent, error) {
-	return nil, api.Unavailable("sync.readRevision is not built yet")
+// maxRead is the most content a read gives, as note.read reads.
+const maxRead = 10 << 20
+
+// ReadRevision returns a hub revision with its content: from the blob
+// store when it holds it, else downloaded into it from the hub.
+func (sv service) ReadRevision(ctx context.Context, p *api.SyncReadRevisionParams) (*api.RevisionContent, error) {
+	r, sess, err := sv.connect(ctx, p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sess.client.Close() }()
+	rev, err := sess.client.Log().Revision(ctx, &api.LogRevisionParams{Vault: r.SyncID, Seq: p.Seq})
+	if err != nil {
+		return nil, err
+	}
+	out := &api.RevisionContent{Revision: *rev}
+	switch {
+	case rev.Hash == "":
+		return out, nil // a delete or a resolve
+	case rev.Pruned:
+		return nil, api.NotFound("revision %d's content is pruned (ADR-0019)", p.Seq)
+	case rev.Size > maxRead:
+		return nil, api.InvalidParams("revision %d is %d bytes; the API reads files of at most %d", p.Seq, rev.Size, maxRead)
+	}
+	if err := sess.blobs(sv.s).Download(ctx, rev.Hash); err != nil {
+		return nil, api.Unavailable("fetch revision %d's content from the hub: %v", p.Seq, err)
+	}
+	data, err := sv.s.cfg.Blobs.Get(rev.Hash)
+	if err != nil {
+		return nil, fmt.Errorf("read revision %d's content: %w", p.Seq, err)
+	}
+	out.Content = strings.ToValidUTF8(string(data), "\uFFFD")
+	return out, nil
 }

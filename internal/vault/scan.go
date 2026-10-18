@@ -104,12 +104,19 @@ func (v *Vault) scan(ctx context.Context, reindex bool) (Listing, error) {
 	defer func() { _ = r.Close() }()
 	v.mu.Lock()
 	v.ignore = ignore
+	configured := v.settingsSeen && settings.digest != v.settingsDigest
+	v.settingsDigest, v.settingsSeen = settings.digest, true
 	for _, tmp := range listing.Temps {
 		if err := r.Remove(tmp); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			v.log.Warn("remove a write's temporary file", "path", tmp, "err", err)
 		}
 	}
 	v.mu.Unlock()
+	if configured { // vault.yaml changed outside notesd
+		if err := v.emitConfigured(ctx); err != nil {
+			return Listing{}, err
+		}
+	}
 
 	indexed, err := v.cfg.DB.Files(ctx, v.id)
 	if err != nil {

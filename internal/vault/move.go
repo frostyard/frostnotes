@@ -55,9 +55,10 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 	if _, err := r.Lstat(to); err == nil {
 		return nil, api.Conflict("%s exists and is not a regular file", to)
 	}
+	moves := map[string]string{from: to}
 	var plans []rewritePlan
 	if updateLinks {
-		if plans, err = v.planRewrites(ctx, r, row, to); err != nil {
+		if plans, err = v.planRewrites(ctx, r, []store.File{row}, moves); err != nil {
 			return nil, err
 		}
 	}
@@ -101,16 +102,21 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 	if err != nil {
 		return nil, err
 	}
-	res := &api.MoveResult{Path: to, Rewritten: []string{}}
+	return &api.MoveResult{Path: to, Rewritten: v.rewrite(ctx, r, plans, moves, who)}, nil
+}
+
+// rewrite carries out plans after the moves (old path to new) they were
+// planned for, and returns the notes it rewrote, by path. Each rewrite is
+// a write with its base; one that fails is logged and skipped, since the
+// moves have happened.
+func (v *Vault) rewrite(ctx context.Context, r *os.Root, plans []rewritePlan, moves map[string]string, who Author) []string {
+	rewritten := []string{}
 	for _, plan := range plans {
 		source := plan.source
-		if source == from {
+		if to, ok := moves[source]; ok {
 			source = to
 		}
-		content, changed, err := v.rewriteLinks(ctx, source, plan)
-		if err != nil {
-			return nil, err
-		}
+		content, changed := v.rewriteLinks(ctx, source, plan)
 		if !changed {
 			continue
 		}
@@ -118,10 +124,10 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 			v.log.Warn("rewrite links after a move", "note", source, "err", err)
 			continue
 		}
-		res.Rewritten = append(res.Rewritten, source)
+		rewritten = append(rewritten, source)
 	}
-	slices.Sort(res.Rewritten)
-	return res, nil
+	slices.Sort(rewritten)
+	return rewritten
 }
 
 // rewritePlan is a note whose links a move retargets, as read before it.
@@ -150,19 +156,22 @@ func (v *Vault) lookup(ctx context.Context) func(string) []string {
 	}
 }
 
-// planRewrites finds, before moved goes to to, the notes that link to it
-// and, when it is a note, its own links.
-func (v *Vault) planRewrites(ctx context.Context, r *os.Root, moved store.File, to string) ([]rewritePlan, error) {
-	backlinks, err := v.cfg.DB.Backlinks(ctx, moved.ID)
-	if err != nil {
-		return nil, err
-	}
+// planRewrites finds, before the files moved go to their paths in moves
+// (old path to new), the notes that link to them and, for the notes among
+// them, their own links.
+func (v *Vault) planRewrites(ctx context.Context, r *os.Root, moved []store.File, moves map[string]string) ([]rewritePlan, error) {
 	var sources []string
-	for _, b := range backlinks {
-		sources = append(sources, b.Source)
-	}
-	if moved.Kind() == store.FileNote {
-		sources = append(sources, moved.Path)
+	for _, f := range moved {
+		backlinks, err := v.cfg.DB.Backlinks(ctx, f.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range backlinks {
+			sources = append(sources, b.Source)
+		}
+		if f.Kind() == store.FileNote {
+			sources = append(sources, f.Path)
+		}
 	}
 	slices.Sort(sources)
 	sources = slices.Compact(sources)
@@ -178,10 +187,11 @@ func (v *Vault) planRewrites(ctx context.Context, r *os.Root, moved store.File, 
 			if l.Target == "" {
 				continue // the note itself, wherever it is
 			}
-			switch dest := markdown.Resolve(source, l.Target, lookup); {
-			case dest == moved.Path:
+			dest := markdown.Resolve(source, l.Target, lookup)
+			_, sourceMoves := moves[source]
+			if to, ok := moves[dest]; ok {
 				plan.links = append(plan.links, retarget{l, to})
-			case source == moved.Path && dest != "":
+			} else if sourceMoves && dest != "" {
 				plan.links = append(plan.links, retarget{l, dest})
 			}
 		}
@@ -196,7 +206,7 @@ func (v *Vault) planRewrites(ctx context.Context, r *os.Root, moved store.File, 
 // longer resolves to its file retargeted, and whether any was. Each
 // rewrite replaces only the link's target, so links that nest, as a
 // clickable image's do, are rewritten both.
-func (v *Vault) rewriteLinks(ctx context.Context, source string, plan rewritePlan) ([]byte, bool, error) {
+func (v *Vault) rewriteLinks(ctx context.Context, source string, plan rewritePlan) ([]byte, bool) {
 	lookup := v.lookup(ctx)
 	type edit struct {
 		start, end int
@@ -230,7 +240,7 @@ func (v *Vault) rewriteLinks(ctx context.Context, source string, plan rewritePla
 		last = e.end
 	}
 	out = append(out, plan.data[last:]...)
-	return out, last > 0, nil
+	return out, last > 0
 }
 
 // shortestTarget is how a link from source names want, as Obsidian's

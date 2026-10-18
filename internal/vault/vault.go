@@ -87,6 +87,11 @@ type Vault struct {
 	// removed is set, under mu, before the vault's row is deleted: no
 	// change may start on a vault that is going away.
 	removed bool
+	// settingsDigest is vault.yaml's content hash as notesd last read or
+	// wrote it, once settingsSeen; mu guards both. A scan that finds
+	// another emits vault.configured.
+	settingsDigest string
+	settingsSeen   bool
 
 	smu      sync.Mutex
 	status   api.ScanStatus

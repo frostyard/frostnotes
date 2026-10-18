@@ -677,6 +677,12 @@ type LogHistoryParams struct {
 	Limit *int64 `json:"limit,omitzero"`
 }
 
+// LogRevisionParams holds the params of log.revision.
+type LogRevisionParams struct {
+	Vault string `json:"vault"`
+	Seq   int64  `json:"seq"`
+}
+
 // LogPushesParams holds the params of log.pushes.
 type LogPushesParams struct {
 	Vault   string `json:"vault"`
@@ -718,6 +724,9 @@ type LogService interface {
 	Match(ctx context.Context, p *LogMatchParams) ([]LogMatch, error)
 	// History implements log.history. A file's revisions, newest first.
 	History(ctx context.Context, p *LogHistoryParams) ([]Revision, error)
+	// Revision implements log.revision. One revision by its sequence number, for
+	// sync.readRevision (M3).
+	Revision(ctx context.Context, p *LogRevisionParams) (*Revision, error)
 	// Pushes implements log.pushes. The revisions the hub appended for each of a
 	// replica's pushes, for sync.verify.
 	Pushes(ctx context.Context, p *LogPushesParams) ([]PushRecord, error)
@@ -777,6 +786,13 @@ func registerLog(r *Router, s LogService) {
 			return nil, err
 		}
 		return s.History(ctx, &p)
+	})
+	r.handle("log.revision", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogRevisionParams
+		if err := decodeParams(raw, &p, []string{"vault", "seq"}); err != nil {
+			return nil, err
+		}
+		return s.Revision(ctx, &p)
 	})
 	r.handle("log.pushes", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogPushesParams
@@ -855,6 +871,16 @@ func (x LogClient) History(ctx context.Context, p *LogHistoryParams) ([]Revision
 	var r []Revision
 	err := x.c.Call(ctx, "log.history", p, &r)
 	return r, err
+}
+
+// Revision calls log.revision.
+func (x LogClient) Revision(ctx context.Context, p *LogRevisionParams) (*Revision, error) {
+	var r Revision
+	err := x.c.Call(ctx, "log.revision", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // Pushes calls log.pushes.
@@ -2201,7 +2227,8 @@ type SyncService interface {
 	History(ctx context.Context, p *SyncHistoryParams) ([]Revision, error)
 	// ReadRevision implements sync.readRevision. A hub revision's content, for
 	// the merge view: from this device's blob store when it has it, else fetched
-	// from the hub (ADR-0018).
+	// from the hub (ADR-0018). Content the hub has pruned is notFound (ADR-0019);
+	// like note.read, it reads at most 10 MB.
 	ReadRevision(ctx context.Context, p *SyncReadRevisionParams) (*RevisionContent, error)
 }
 
@@ -2875,6 +2902,7 @@ var Methods = []string{
 	"log.pull",
 	"log.match",
 	"log.history",
+	"log.revision",
 	"log.pushes",
 	"log.resolve",
 	"note.list",

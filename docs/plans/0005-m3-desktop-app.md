@@ -24,7 +24,8 @@ store's cards T-0043 and T-0044; the renderer's contract with its cards
 T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
 and they are merged. Phase 4's first part, the sanitizer and notesd's
-reads, is in review; its second part, the writes, and Phase 5 are next.
+reads, is merged; its second part, the writes, is in review, and Phase 5
+is next.
 
 ## Decisions taken for M3
 
@@ -325,6 +326,22 @@ the Phase 3 methods in [specs/rpc-api.md](../specs/rpc-api.md).
   (`note.upload`, `note.mkdir`, `note.moveFolder`, `note.deleteFolder`,
   `note.template`, `vault.configure`, `sync.readRevision`) still answer
   `unavailable`: part 2.
+- **Result, part 2 (2026-10-17): the writes.** `note.upload` creates a
+  file from base64 through the write path, at most 10 MB. `note.mkdir`
+  makes folders; `note.moveFolder` renames a folder once and moves each
+  indexed file's row in one `Tx`, a revision and `note.moved` each, with
+  `note.move`'s link rewriting, now planned for many files at once;
+  `note.deleteFolder` deletes each listed file with its base and keeps the
+  rest; `note.template` expands a template note. `vault.configure` writes
+  `vault.yaml` atomically, keeping its other keys and comments, and
+  `vault.configured` follows it or a hand edit a scan finds.
+  `sync.readRevision` needed the hub's `log.revision`, an additive
+  method, since a revision cannot be fetched by its sequence number
+  alone. Every method works through `rpctest`, against a generated vault
+  for folder moves (every manifest link still leads to its file), and a
+  hub and two devices for `sync.readRevision`; `make vault-it` passes
+  ([design/vault.md](../design/vault.md#writes),
+  [specs/sync-protocol.md](../specs/sync-protocol.md)). Phase 4 is done.
 
 ## Phase 5 — The app's core (planner)
 
