@@ -1,6 +1,15 @@
-// Link and tag completion (docs/design/app.md#extensions). Task T-0069
-// replaces this stub.
-import type { CompletionSource } from "@codemirror/autocomplete";
+// Link and tag completion over the vault catalog (docs/design/app.md#extensions),
+// ranked with the quick switcher's fuzzy search.
+import {
+  type Completion,
+  type CompletionContext,
+  type CompletionSource,
+  pickedCompletion,
+} from "@codemirror/autocomplete";
+import { syntaxTree } from "@codemirror/language";
+
+import { prepareFuzzySearch, sortByScore } from "../lib/fuzzy";
+import { stripMd, switcherResults } from "../lib/switcher";
 
 /** COMPLETION_LIMIT is the most options a completion lists. */
 export const COMPLETION_LIMIT = 50;
@@ -28,11 +37,98 @@ export interface CompletionCatalog {
 }
 
 /** linkCompletion completes a wikilink's target, heading or block ID. */
-export function linkCompletion(_catalog: CompletionCatalog): CompletionSource {
-  return () => null;
+export function linkCompletion(catalog: CompletionCatalog): CompletionSource {
+  return async (context) => {
+    if (excluded(context)) return null;
+    const query = /\[\[([^[\]|]*)$/.exec(lineBeforeCursor(context))?.[1];
+    if (query === undefined) return null;
+    const from = context.pos - query.length;
+    const hash = query.indexOf("#");
+    if (hash !== -1) {
+      const target = query.slice(0, hash);
+      const block = query[hash + 1] === "^";
+      const offset = hash + (block ? 2 : 1);
+      const options = block
+        ? (await catalog.blocks(target)).map(({ id, text }) => linkOption(id, id, text))
+        : (await catalog.headings(target)).map(({ text }) => linkOption(text, text));
+      return { from: from + offset, options: rankOptions(options, query.slice(offset)), filter: false };
+    }
+    const files = catalog.files();
+    const options = query.trim()
+      ? switcherResults(files, query, []).map((result) =>
+          result.kind === "alias"
+            ? linkOption(result.alias, `${catalog.linkText(result.path)}|${result.alias}`, stripMd(result.path))
+            : linkOption(stripMd(result.path), catalog.linkText(result.path)),
+        )
+      : files.slice(0, COMPLETION_LIMIT).map(({ path }) => linkOption(stripMd(path), catalog.linkText(path)));
+    return { from, options: options.slice(0, COMPLETION_LIMIT), filter: false };
+  };
 }
 
 /** tagCompletion completes a tag after its "#". */
-export function tagCompletion(_catalog: CompletionCatalog): CompletionSource {
-  return () => null;
+export function tagCompletion(catalog: CompletionCatalog): CompletionSource {
+  return (context) => {
+    if (excluded(context)) return null;
+    const query = /(?:^|\s)#([\p{L}\p{M}\p{Nd}_/-]+)$/u.exec(lineBeforeCursor(context))?.[1];
+    if (query === undefined) return null;
+    const search = prepareFuzzySearch(query);
+    const matches = catalog.tags().flatMap((tag) => {
+      const match = search(tag.name);
+      return match ? [{ ...tag, match }] : [];
+    });
+    matches.sort((a, b) => b.match.score - a.match.score || b.count - a.count || a.name.localeCompare(b.name));
+    return {
+      from: context.pos - query.length,
+      options: matches.slice(0, COMPLETION_LIMIT).map(({ name, count }) => ({
+        label: name,
+        apply: name,
+        detail: String(count),
+      })),
+      filter: false,
+    };
+  };
+}
+
+function excluded(context: CompletionContext): boolean {
+  for (let node = syntaxTree(context.state).resolveInner(context.pos, -1); node; ) {
+    if (/^(InlineCode|FencedCode|CodeBlock|InlineMath|BlockMath|HTMLBlock|CommentBlock)$/.test(node.name)) {
+      return true;
+    }
+    if (!node.parent) break;
+    node = node.parent;
+  }
+  return false;
+}
+
+function lineBeforeCursor(context: CompletionContext): string {
+  const line = context.state.doc.lineAt(context.pos);
+  return line.text.slice(0, context.pos - line.from);
+}
+
+function linkOption(label: string, text: string, detail?: string): Completion {
+  return {
+    label,
+    detail,
+    apply(view, completion, from, to) {
+      const closed = view.state.doc.sliceString(to, to + 2) === "]]";
+      view.dispatch({
+        changes: { from, to, insert: closed ? text : `${text}]]` },
+        selection: { anchor: from + text.length + 2 },
+        annotations: pickedCompletion.of(completion),
+        userEvent: "input.complete",
+      });
+    },
+  };
+}
+
+function rankOptions(options: readonly Completion[], query: string): Completion[] {
+  if (!query.trim()) return options.slice(0, COMPLETION_LIMIT);
+  const search = prepareFuzzySearch(query);
+  const matches = options.flatMap((option) => {
+    const match = search(option.label);
+    return match ? [{ option, match }] : [];
+  });
+  return sortByScore(matches)
+    .slice(0, COMPLETION_LIMIT)
+    .map(({ option }) => option);
 }
