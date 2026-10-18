@@ -38,6 +38,9 @@ properties; T-0080 and T-0081) is merged. Phase 7, the review's fixes
 and evidence 1 to 3, is in review: typing, the hotkeys and the writer
 pairs meet their targets in the built app, and scrolling falls just
 short of its own (a follow-up). Evidence 4 is the user's 7-day trial.
+It waits for Phase 8, which lets the app open and create vaults
+([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
+Proposed): batch 2's vault switcher only ever switched vaults.
 
 ## Decisions taken for M3
 
@@ -70,6 +73,17 @@ Phase 1 before any code:
   the Tauri side, the dev gateway serves `/blobs/` in a browser, and the
   hub will in M4; pasted and dropped files go up through `note.upload`,
   base64, at most 10 MB.
+
+A fourth came with Phase 8 (2026-10-18):
+
+- **The app opens and creates vaults, and a window switches between
+  them**
+  ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
+  Proposed). Open folder as vault, Create new vault and Remove from
+  list go through notesd's `vault.add` (which gains `create`) and
+  `vault.remove`; the folder comes from the system's picker
+  (`tauri-plugin-dialog`, open only); one window shows one vault and
+  switches in place; without a vault the window is the vault manager.
 
 These follow from ADRs 0003 to 0023 and from what the user's Obsidian
 does, so the plan records them without ADRs:
@@ -493,7 +507,9 @@ into its container as it merges.
   Backlinks, Outgoing links, Tags, All properties and the Outline pane;
   the quick switcher and the command palette over T-0039; the status
   bar; menus and notices; the settings dialog's sections; the history
-  list; the vault switcher.
+  list; the vault switcher (its menu came with the vault row; opening,
+  creating and removing vaults never got a card, and moved to
+  [Phase 8](#phase-8--vaults-from-the-app) on 2026-10-18).
 - **Batch 3** (after Phase 3's contracts and Phase 5's framework): the
   Lezer extensions (embeds, tags, highlights, comments, callouts, block
   IDs, math, footnotes) against the spec's fixtures; live-preview
@@ -857,7 +873,8 @@ against the built app.
     window over the Tauri bridge.
 
   **The user's steps for evidence 4** (the real vault, so the human runs
-  them, ADR-0010):
+  them, ADR-0010), once [Phase 8](#phase-8--vaults-from-the-app) is
+  merged:
 
   1. Decide the open question of the two trials (below): M3's 7 days
      alongside M2's, or after.
@@ -873,7 +890,94 @@ against the built app.
      its button and paste elsewhere; open a web link (the browser opens)
      and Open in default app on a PDF and an image; play and seek a video
      over 8 MiB embedded in a note (`notesblob://` now answers 8 MiB at a
-     time); and type with an input method, if you use one.
+     time); type with an input method, if you use one; and Open folder as
+     vault, which opens the system's folder picker (Phase 8).
+
+## Phase 8 — Vaults from the app
+
+The app opens, creates and forgets vaults, so the user can begin with it
+alone
+([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)).
+Today only `notesctl vault add` registers one, and a window without a
+vault says to run it. Batch 2 listed the vault switcher; the vault
+row's menu switches between registered vaults, but opening, creating
+and removing them never got a card, and the plan did not say so. It
+comes before evidence 4, since a day's use starts here. Builds
+[design/app.md](../design/app.md#data) (one vault per window) and the
+vault manager in [specs/ui.md](../specs/ui.md#sidebars-and-panes), over
+`vault.add` and `vault.remove` in [specs/rpc-api.md](../specs/rpc-api.md).
+
+Obsidian is the model. Its start screen lists the vaults it knows (name
+and path, each with a menu) beside Create new vault (a name and a
+location picked with Browse) and Open folder as vault (the system's
+folder picker). The vault menu at the foot of its left sidebar lists
+the vaults and ends with Manage vaults…, which opens the same screen
+as a dialog. Choosing a vault there switches the window in place
+(Obsidian opens another window).
+
+- **Planner, first** (the contract, the spec and the shell, so the
+  cards have what they draw):
+  - `schema/rpc/vault.yaml`: `vault.add` gains `create` (bool,
+    optional): "Make the directory first; its parent must exist and it
+    must not." notesd implements it with the same overlap check, made
+    before the folder is; `notesctl vault add` gains `--create`; the
+    mock does the same. Tests: a made folder registers; an existing
+    one answers `conflict`; a missing parent `invalidParams`; an
+    overlap answers `conflict` and makes no folder; `vault.remove`
+    leaves the folder as it was.
+  - `specs/ui.md`: the vault manager (as the whole window, and as a
+    dialog), the vault menu's Manage vaults…, the create form, Remove
+    from list's confirmation, and the window's title.
+  - The shell: `tauri-plugin-dialog` and `@tauri-apps/plugin-dialog`
+    2.8.1 (released 2026-10-01, Apache-2.0 OR MIT, frostmail's pin;
+    the crate brings `tauri-plugin-fs`'s, which the app does not
+    register), registered in `main.rs`. The capability adds
+    `dialog:allow-open` and `core:window:allow-set-title`, and its test
+    lists them. `app/system.ts` gains `pickFolder(title)`, the open
+    dialog choosing a folder; it returns null in a browser, where the
+    manager asks for a path instead.
+- **Cards (batch 4)**, presentational, over the spec:
+  - **T-0082 the vault manager** (`features/vaults/VaultManager.tsx`):
+    the vaults by name, each with its path, the window's vault marked;
+    a row opens its vault, and its menu holds Remove from list. Beside
+    the list are Create new vault, Open folder as vault, and how to
+    join a vault on a hub (`notesctl hub join`). It draws as the whole
+    window or as a dialog with Close.
+  - **T-0083 the create form** (`features/vaults/CreateVault.tsx` and
+    `lib/vaultName.ts`): a name, checked as notesd and Obsidian check a
+    folder's name (not empty, no `/`, `\` or leading `.`, none of
+    Obsidian's forbidden characters); a location, a folder chosen with
+    Browse, or typed where there is no picker; Create, enabled once
+    both are good; Back.
+- **Planner wiring:**
+  - `data/vaults.ts`: Open folder as vault, Create new vault and Remove
+    from list over `vault.add` and `vault.remove`. The window switches
+    to a vault it opens or creates (`openVault`); notesd's errors show
+    as notices in the person's words; Remove asks first (`ask`),
+    naming what goes (notesd's history of the vault and, if it syncs,
+    its place on the hub; never its files).
+  - `MainWindow`: the manager in place of today's notesctl hint when
+    there is no vault. The vault menu's Manage vaults…, and the command
+    Open another vault (Obsidian's `app:open-vault`), open it as a
+    dialog.
+  - The window's title, `<note> - <vault> - Frostnotes` (the vault
+    alone when no note is active): `setTitle` in the desktop app, the
+    document's title in a browser.
+- **Done when:**
+  - With no vault, the window is the manager. Create new vault makes
+    `<location>/<name>`, registers it and shows it. Open folder as
+    vault registers a folder and shows it. A folder inside a vault,
+    one holding a vault, or a name that exists shows notesd's reason
+    as a notice and changes nothing. Each is a window test over the
+    mock.
+  - Manage vaults… lists the vaults and opens one in place. Remove from
+    list asks, then forgets the vault and shows another, or the
+    manager. Window tests, and notesd's test that the folder stays.
+  - The window's title names the note and the vault (a window test).
+  - In the built app, Open folder as vault opens the system's folder
+    picker and its choice becomes the window's vault: a hand check in
+    the user's steps for evidence 4.
+  - Evidence 4 starts once this phase is merged.
 
 ## Later / ideas
 
@@ -891,6 +995,9 @@ against the built app.
 - Saves that send changes instead of whole text, if large notes prove
   slow (ADR-0022).
 - Unlinked mentions' Link action, which writes to another note.
+- Obsidian's other vault actions: Rename vault, Move vault, Reveal in
+  the file manager, Open in new window (with more windows), and joining
+  a vault on a hub from the app (Obsidian's Open vault from Sync).
 
 ## Open questions
 
@@ -906,7 +1013,7 @@ against the built app.
 ## References
 
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
-- Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
+- Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
 - Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
