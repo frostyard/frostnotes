@@ -29,7 +29,8 @@ commands, the editor core, and the reading view, merge view and history
 with the exit evidence. Phase 6 is under way: batch 2 is merged in three
 PRs (T-0047 to T-0063 and their wiring); batch 3's first part, the
 editor's syntax, formatting commands, word counts and completion
-(T-0064 to T-0069 and their wiring), is in review.
+(T-0064 to T-0069), is merged, and its second, the live-preview widgets
+(T-0070 to T-0075 and their wiring), is in review.
 
 ## Decisions taken for M3
 
@@ -657,6 +658,44 @@ into its container as it merges.
   | T-0068 formatting commands | 1 (a first run stopped) | 2 m 40 s | correct but for a task box at a line's end, fixed by the planner |
   | T-0069 completion | 1 (a first run failed 3, the planner's fault) | 1 m 48 s | correct |
 
+- **Result so far (2026-10-18): batch 3's live-preview widgets.** Codex
+  passed T-0070 to T-0075 on the first attempt each, four at once and
+  then two (from `m3/batch3-preview`). The planner first gave each kind
+  its file in `editor/preview/`, registered in `PROVIDERS`, and gave the
+  preview's environment what widgets need: a vault file's URL, the Load
+  remote images preference, and rendering markdown into an element.
+  Callouts, tables and embeds of notes are drawn by that rendering:
+  `note.render` with the block's source, sanitized as the reading view
+  sanitizes it, its files and math filled in, cached by markdown and
+  filled again a second after the vault changes
+  (`editor/rendered.ts`), so no card builds HTML from a note's text and
+  the blocks look exactly like the reading view, whose content styles
+  became a shared `rendered` class. A mutation of each card failed its
+  given tests: tags in a link's text drawn as pills (1 test), a closing
+  fence left showing (2), bullets drawn over tasks (1), no text when
+  KaTeX throws (1), callouts drawn inside a line (1), and web images
+  loaded against the preference (1). KaTeX draws nothing in happy-dom,
+  which it takes for a page in quirks mode, so the math card's tests and
+  the window's run in jsdom, and a math widget shows its TeX when KaTeX
+  throws. The planner's part also styled the widgets, made a tag's click
+  search (in the reading view too) and a foldable callout's title fold
+  it, added search and copy commands, and taught the mock's renderer
+  callouts, tables and embeds. In a browser over the mock, a callout, a
+  table, math, inline code, a footnote, a code block, a bullet, a done
+  task and a rule drew as the spec says, and a click on the callout
+  showed its source; the copy button's command ran, but the browser pane
+  refused the clipboard, so copying waits for the built app.
+  Indentation guides are left for later.
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0070 highlights, tags, code, footnotes | 1 | 1 m 42 s | correct |
+  | T-0071 code blocks | 1 | 1 m 26 s | correct |
+  | T-0072 quotes, lists, rules, done tasks | 1 | 1 m 36 s | correct |
+  | T-0073 math | 1 | 1 m 52 s | correct; its two providers share an id and a click |
+  | T-0074 callouts, tables, note embeds | 1 | 1 m 40 s | correct |
+  | T-0075 images, audio, video | 1 | 1 m 44 s | correct; leaves an image whose text spans lines as source |
+
 ## Phase 7 — Review and exit evidence
 
 Checks [specs/ui.md](../specs/ui.md) (the keyboard map, the rules) and
@@ -715,6 +754,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0069](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0075](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
