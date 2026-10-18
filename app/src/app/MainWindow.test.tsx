@@ -1,3 +1,4 @@
+import { EditorView } from "@codemirror/view";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,6 +35,11 @@ const tabs = (group = 0) =>
   within(screen.getAllByRole("tablist", { name: "Tabs" })[group] as HTMLElement)
     .getAllByRole("tab")
     .map((t) => t.getAttribute("aria-label"));
+/** editorText is the active editor's document. */
+const editorText = () => {
+  const el = screen.queryByTestId("note-editor")?.querySelector(".cm-editor");
+  return el ? EditorView.findFromDOM(el as HTMLElement)?.state.doc.toString() : undefined;
+};
 const fileButton = (path: string) =>
   within(screen.getByRole("region", { name: "Files" })).getByRole("button", { name: path });
 
@@ -48,11 +54,11 @@ describe("the main window over the mock", () => {
     expect(screen.getByRole("button", { name: "Open quick switcher" }).hasAttribute("disabled")).toBe(true);
   });
 
-  it("opens files from the Files pane as links open, and shows their text", async () => {
+  it("opens files from the Files pane as links open, a note in its editor", async () => {
     await start();
     await userEvent.setup().click(await screen.findByRole("button", { name: "a.md" }));
     expect(tabs()).toEqual(["a"]);
-    expect(await screen.findByText("Alpha links [[b]].")).toBeTruthy();
+    await waitFor(() => expect(editorText()).toBe("Alpha links [[b]].\n"));
     fireEvent.click(fileButton("Deep/b.md"), { ctrlKey: true });
     expect(tabs()).toEqual(["a", "b"]);
     expect(
@@ -139,11 +145,24 @@ describe("the main window over the mock", () => {
     await screen.findByRole("main", { name: "Workspace" });
     mock = new MockTransport([], { server: "notesd again" });
     act(() => first.close("notesd stopped"));
-    expect(await screen.findByText("Reconnecting to notesd… (notesd stopped)", { selector: "div" })).toBeTruthy();
+    // The window stays, so open editors keep what was typed; the status bar says why.
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain("Reconnecting to notesd… (notesd stopped)"),
+    );
+    expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Connected to notesd again"), {
       timeout: 3000,
     });
     expect(screen.getByText(/No vaults yet/)).toBeTruthy();
+  });
+
+  it("saves what is typed in a note's editor", async () => {
+    const mock = await start();
+    await userEvent.setup().click(await screen.findByRole("button", { name: "a.md" }));
+    await waitFor(() => expect(editorText()).toBe("Alpha links [[b]].\n"));
+    const view = EditorView.findFromDOM(screen.getByTestId("note-editor").querySelector(".cm-editor") as HTMLElement);
+    act(() => view?.dispatch({ changes: { from: 0, insert: "Typed. " }, userEvent: "input.type" }));
+    await waitFor(() => expect(mock.vault(3).text("a.md")).toBe("Typed. Alpha links [[b]].\n"), { timeout: 3000 });
   });
 });
 

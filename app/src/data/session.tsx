@@ -32,8 +32,10 @@ export const CLIENT_NAME = "frostnotes-app";
 
 /**
  * Session connects with connect, completes rpc.hello, subscribes to events,
- * loads the stores, and renders children with the client. When the
- * connection ends it reconnects every RETRY_MS, rendering fallback meanwhile.
+ * loads the stores, and renders children with the client; fallback until
+ * the first connection. When the connection ends it reconnects every
+ * RETRY_MS; the children stay, with the closed client, whose calls fail
+ * until the new one arrives, so open editors keep what was typed.
  */
 export function Session(props: { connect: Connect; children: ReactNode; fallback: ReactNode }) {
   const { connect } = props;
@@ -47,7 +49,6 @@ export function Session(props: { connect: Connect; children: ReactNode; fallback
     const lost = (reason: string) => {
       cleanup?.();
       cleanup = undefined;
-      setClient(null);
       useNotes.setState({ connection: { state: "lost", reason } });
       retry = setTimeout(attempt, RETRY_MS);
     };

@@ -1,8 +1,10 @@
 // The window's commands (docs/design/app.md#commands-and-keys): the
-// workspace's, the sidebars', and creating a note. Each reads the stores
-// when it runs, so the registry holds them once. The commands batch 2's
-// prompts, settings and panes add join as those land.
+// workspace's, the sidebars', the active editor's, creating a note, and
+// following a link an editor drew. Each reads the stores when it runs, so
+// the registry holds them once. The commands batch 2's prompts, settings
+// and panes add join as those land.
 
+import { openSearchPanel } from "@codemirror/search";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -10,9 +12,12 @@ import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
+import type { PreviewCommand } from "../editor/preview/framework";
+import type { DocumentRegistry } from "../editor/registry";
 import type { Client } from "../rpc/gen/api";
 import type { ViewState } from "../workspace/model";
 import {
+  activate,
   activeGroup,
   activeTab,
   back,
@@ -60,12 +65,47 @@ function newNoteFolder(): string {
 
 /** createNote creates an empty note where the settings say and opens it. */
 export async function createNote(c: Client, where: OpenWhere): Promise<void> {
+  const files = useFiles.getState().files;
+  await createNoteAt(
+    c,
+    newNotePath((p) => files.has(p), newNoteFolder()),
+    where,
+  );
+}
+
+// createNoteAt creates an empty note at path and opens it, from tabId's tab when given.
+async function createNoteAt(c: Client, path: string, where: OpenWhere, tabId?: string): Promise<void> {
   const vaultId = useNotes.getState().vaultId;
   if (vaultId === null) return;
-  const files = useFiles.getState().files;
-  const path = newNotePath((p) => files.has(p), newNoteFolder());
   await c.note.create({ vaultId, path, content: "" });
-  update((w) => open(w, { type: "note", path, mode: "edit" }, where));
+  update((w) => open(tabId ? activate(w, tabId) : w, { type: "note", path, mode: "edit" }, where));
+}
+
+const WEB = /^(https?|mailto):/i;
+
+/**
+ * followLink follows a link an editor drew, from its tab: a vault file
+ * opens; a web link opens outside the app; an unresolved note link creates
+ * the note, as Obsidian does: under its own folders when it names any,
+ * else where new notes go.
+ */
+export async function followLink(c: Client, cmd: PreviewCommand, tabId: string): Promise<void> {
+  if (cmd.path !== null) {
+    const path = cmd.path;
+    const view: ViewState = path.endsWith(".md") ? { type: "note", path, mode: "edit" } : { type: "file", path };
+    update((w) => open(activate(w, tabId), view, cmd.where));
+    return;
+  }
+  if (WEB.test(cmd.target)) {
+    // The desktop app hands web links to the system browser (tauri-plugin-opener, with the menus).
+    window.open(cmd.target, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const target = cmd.target.trim().replace(/^\/+/, "");
+  if (target === "" || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target)) return;
+  const name = target.endsWith(".md") ? target : `${target}.md`;
+  const folder = newNoteFolder();
+  await createNoteAt(c, name.includes("/") || folder === "" ? name : `${folder}/${name}`, cmd.where, tabId);
 }
 
 const hasVault = () => useNotes.getState().vaultId !== null;
@@ -73,6 +113,38 @@ const noteView = (): Extract<ViewState, { type: "note" }> | undefined => {
   const v = activeTab(ws()).view;
   return v.type === "note" ? v : undefined;
 };
+
+/** editorCommands are the commands of the active tab's editor. */
+export function editorCommands(docs: DocumentRegistry): Command[] {
+  const editor = () => {
+    const tab = activeTab(ws());
+    return tab.view.type === "note" && tab.view.mode === "edit" ? docs.editors.get(tab.id) : undefined;
+  };
+  const has = () => editor() !== undefined;
+  return [
+    { id: "editor:save-file", name: "Save current file", applies: has, run: () => editor()?.doc.save() },
+    {
+      id: "editor:open-search",
+      name: "Search current file",
+      applies: has,
+      run: () => {
+        const e = editor();
+        if (e) openSearchPanel(e.view);
+      },
+    },
+    {
+      id: "editor:open-search-replace",
+      name: "Search & replace in current file",
+      applies: has,
+      run: () => {
+        const e = editor();
+        if (!e) return;
+        openSearchPanel(e.view);
+        e.view.dom.querySelector<HTMLInputElement>(".cm-search input[name=replace]")?.focus();
+      },
+    },
+  ];
+}
 
 /** workspaceCommands are the commands this window has now. */
 export function workspaceCommands(c: Client): Command[] {

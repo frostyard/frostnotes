@@ -30,6 +30,24 @@ export type OpenWhere = "here" | "tab" | "right" | "down";
 /** Edge is a tab group's edge, where a dropped tab makes a new split. */
 export type Edge = "left" | "right" | "top" | "bottom";
 
+/** ClickInput is what of a click decides where it opens. */
+export interface ClickInput {
+  ctrlKey: boolean;
+  altKey: boolean;
+  button: number;
+}
+
+/**
+ * whereFor returns where a click opens what it names, as Obsidian opens
+ * links (docs/design/app.md#workspace): in the current tab, Ctrl in a new
+ * tab, Ctrl+Alt to the right, a middle click in a new tab.
+ */
+export function whereFor(e: ClickInput): OpenWhere {
+  if (e.ctrlKey && e.altKey) return "right";
+  if (e.ctrlKey || e.button === 1) return "tab";
+  return "here";
+}
+
 /** MoveTarget is where a moved tab goes: a place in a group's tabs, or a group's edge. */
 export type MoveTarget = { group: string; index: number } | { group: string; edge: Edge };
 

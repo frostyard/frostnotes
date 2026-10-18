@@ -336,9 +336,11 @@ files (Ctrl + O), Close (Ctrl + W).
 A 32-high bar under the view header, `--bg-banner`, 12/16, 12px side
 padding, with buttons at its right (12/16 `--accent`, no background),
 `role="status"`: a conflict ("2 changes conflicted with
-<author or source>; your text is kept as a version." Compare), a deleted
-note ("This note was deleted." Restore, Close), a failed save ("Not
-saved: <reason>. Retrying." Retry now).
+<author or source>; your text is kept as a version." Compare, Dismiss), a
+refused base ("Not saved: notesd no longer has the version this text
+started from. Your text is kept." Compare), a deleted note ("This note
+was deleted." Restore, Close), a failed save ("Not saved: <reason>.
+Retrying." Retry now).
 
 ### Editor and reading view
 

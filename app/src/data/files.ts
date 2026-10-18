@@ -24,11 +24,22 @@ export interface FilesState {
   queued: readonly Event[];
   /** Which load the state is from: an older load's answer is dropped. */
   generation: number;
+  /** Counts changes to the set of paths (a file added, moved or removed), not to contents: link resolution's cache key. */
+  pathsVersion: number;
 }
 
 /** emptyFiles is the state of vault before its listing arrives. */
 export function emptyFiles(vaultId: number | null, since = 0, generation = 0): FilesState {
-  return { vaultId, files: new Map(), folders: [], loaded: vaultId === null, since, queued: [], generation };
+  return {
+    vaultId,
+    files: new Map(),
+    folders: [],
+    loaded: vaultId === null,
+    since,
+    queued: [],
+    generation,
+    pathsVersion: 0,
+  };
 }
 
 export const useFiles = create<FilesState>(() => emptyFiles(null));
@@ -59,6 +70,7 @@ export function fromListing(vaultId: number, listing: VaultFiles, since: number,
     since,
     queued: [],
     generation,
+    pathsVersion: 0,
   };
 }
 
@@ -78,7 +90,7 @@ export function applyFileEvent(s: FilesState, e: Event, now: () => string): File
       if (old?.hash === hash) return s;
       const files = new Map(s.files);
       files.set(path, { path, kind: kindOf(path), hash, size: old?.size ?? 0, modifiedAt: now() });
-      return { ...s, files, folders: withParents(s.folders, path) };
+      return { ...s, files, folders: withParents(s.folders, path), pathsVersion: s.pathsVersion + (old ? 0 : 1) };
     }
     case "note.moved": {
       const { vaultId, from, to } = e.data;
@@ -87,14 +99,14 @@ export function applyFileEvent(s: FilesState, e: Event, now: () => string): File
       const files = new Map(s.files);
       files.delete(from);
       files.set(to, { ...f, path: to, kind: kindOf(to) });
-      return { ...s, files, folders: withParents(s.folders, to) };
+      return { ...s, files, folders: withParents(s.folders, to), pathsVersion: s.pathsVersion + 1 };
     }
     case "note.removed": {
       const { vaultId, path } = e.data;
       if (vaultId !== s.vaultId || !s.files.has(path)) return s;
       const files = new Map(s.files);
       files.delete(path);
-      return { ...s, files };
+      return { ...s, files, pathsVersion: s.pathsVersion + 1 };
     }
     default:
       return s;
@@ -114,8 +126,9 @@ export function noteEvent(e: Event): void {
  * events after it are applied over the listing, in order.
  */
 export async function loadFiles(c: Client, vaultId: number, since: number): Promise<void> {
-  const generation = useFiles.getState().generation + 1;
-  useFiles.setState(emptyFiles(vaultId, since, generation));
+  const prev = useFiles.getState();
+  const generation = prev.generation + 1;
+  useFiles.setState({ ...emptyFiles(vaultId, since, generation), pathsVersion: prev.pathsVersion + 1 });
   let listing: VaultFiles;
   try {
     listing = await c.note.files({ vaultId });
@@ -127,7 +140,7 @@ export async function loadFiles(c: Client, vaultId: number, since: number): Prom
   }
   useFiles.setState((s) => {
     if (s.generation !== generation) return s;
-    let next = fromListing(vaultId, listing, since, generation);
+    let next = { ...fromListing(vaultId, listing, since, generation), pathsVersion: s.pathsVersion + 1 };
     for (const e of s.queued) next = applyFileEvent(next, e, now);
     return next;
   });

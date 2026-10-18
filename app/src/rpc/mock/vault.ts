@@ -539,9 +539,9 @@ export class MockVault {
 
   // --- changes made outside notesd, for tests and the demo
 
-  /** outside makes a change as another program would: content null deletes. */
-  outside(p: string, content: string | null): void {
-    const who: Author = { source: "outside", name: "" };
+  /** outside makes a change as another program would, or sync with source "sync": content null deletes. */
+  outside(p: string, content: string | null, source: "outside" | "sync" = "outside"): void {
+    const who: Author = { source, name: "" };
     const e = this.files.get(p);
     if (content === null) {
       if (e) this.remove(e, who);

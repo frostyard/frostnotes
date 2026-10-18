@@ -3,14 +3,17 @@
 // the title bar row, and the status bar under them. It holds the window's
 // command registry and its one key listener.
 import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CalendarDays, FileSearch, Files, PanelLeft, Terminal } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
+import { feed } from "../data/events";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
 import { useNotes } from "../data/stores";
+import { DocumentRegistry, DocumentsContext } from "../editor/registry";
 import { IconButton } from "../features/chrome/IconButton";
 import { Ribbon } from "../features/chrome/Ribbon";
 import { TitleBar } from "../features/chrome/TitleBar";
@@ -24,7 +27,7 @@ import { type PaneId, SIDEBAR_MIN, type Side } from "../workspace/model";
 import { selectPane, setSidebarWidth } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { useMaximized, windowCommand } from "./chrome";
-import { workspaceCommands } from "./commands";
+import { editorCommands, workspaceCommands } from "./commands";
 import { PANE_INFO, Pane } from "./Panes";
 import { WorkspaceView } from "./WorkspaceView";
 
@@ -79,8 +82,19 @@ export function fitSidebars(
 export function MainWindow() {
   const client = useClient();
   const registry = useMemo(() => new CommandRegistry(), []);
-  useEffect(() => registry.register(...workspaceCommands(client)), [registry, client]);
+  // The documents outlive a reconnect: the client they write with is read when they write.
+  const clientRef = useRef(client);
+  clientRef.current = client;
+  const docs = useMemo(() => new DocumentRegistry(() => clientRef.current), []);
+  useEffect(() => registry.register(...workspaceCommands(client), ...editorCommands(docs)), [registry, client, docs]);
   useEffect(() => installKeyListener(registry), [registry]);
+  useEffect(() => feed.listen((e) => docs.event(e)), [docs]);
+  // A new client is a reconnect: catch every document up.
+  const firstClient = useRef(client);
+  useEffect(() => {
+    if (client !== firstClient.current) docs.reconnected();
+  }, [client, docs]);
+  useEffect(() => keepUnsaved(docs), [docs]);
 
   const ws = useWorkspace((s) => s.ws);
   const update = useWorkspace((s) => s.update);
@@ -168,40 +182,73 @@ export function MainWindow() {
   });
   return (
     <CommandsContext.Provider value={registry}>
-      <div className="flex h-full flex-col bg-window">
-        <div className="relative flex min-h-0 flex-1">
-          <div className="flex shrink-0 flex-col border-r border-separator bg-sidebar" style={{ width: RIBBON }}>
-            <div data-tauri-drag-region className="flex shrink-0 justify-center border-b border-separator bg-toolbar">
-              <div className="flex h-11 items-center">
-                <IconButton
-                  label="Toggle left sidebar"
-                  icon={<PanelLeft size={16} />}
-                  pressed={shown.left}
-                  onClick={() => registry.run("app:toggle-left-sidebar")}
-                />
+      <DocumentsContext.Provider value={docs}>
+        <div className="flex h-full flex-col bg-window">
+          <div className="relative flex min-h-0 flex-1">
+            <div className="flex shrink-0 flex-col border-r border-separator bg-sidebar" style={{ width: RIBBON }}>
+              <div data-tauri-drag-region className="flex shrink-0 justify-center border-b border-separator bg-toolbar">
+                <div className="flex h-11 items-center">
+                  <IconButton
+                    label="Toggle left sidebar"
+                    icon={<PanelLeft size={16} />}
+                    pressed={shown.left}
+                    onClick={() => registry.run("app:toggle-left-sidebar")}
+                  />
+                </div>
               </div>
+              {showRibbon && (
+                <Ribbon
+                  items={[
+                    ribbonItem("switcher:open", "Open quick switcher", <FileSearch size={16} />),
+                    ribbonItem("daily-notes", "Open today's daily note", <CalendarDays size={16} />),
+                    ribbonItem("insert-template", "Insert template", <Files size={16} />),
+                    ribbonItem("command-palette:open", "Open command palette", <Terminal size={16} />),
+                  ]}
+                  onRun={(c) => registry.run(c)}
+                />
+              )}
             </div>
-            {showRibbon && (
-              <Ribbon
-                items={[
-                  ribbonItem("switcher:open", "Open quick switcher", <FileSearch size={16} />),
-                  ribbonItem("daily-notes", "Open today's daily note", <CalendarDays size={16} />),
-                  ribbonItem("insert-template", "Insert template", <Files size={16} />),
-                  ribbonItem("command-palette:open", "Open command palette", <Terminal size={16} />),
-                ]}
-                onRun={(c) => registry.run(c)}
-              />
-            )}
+            {shown.left && sidebar("left")}
+            {vaultId === null ? <NoVault /> : <WorkspaceView reserve={shown.right ? 0 : controls ? 140 : 44} />}
+            {shown.right && sidebar("right")}
+            {!shown.right && <div className="absolute top-0 right-0">{windowControls}</div>}
           </div>
-          {shown.left && sidebar("left")}
-          {vaultId === null ? <NoVault /> : <WorkspaceView reserve={shown.right ? 0 : controls ? 140 : 44} />}
-          {shown.right && sidebar("right")}
-          {!shown.right && <div className="absolute top-0 right-0">{windowControls}</div>}
+          <StatusBar connection={connection} hello={hello} vaultCount={vaults.length} />
         </div>
-        <StatusBar connection={connection} hello={hello} vaultCount={vaults.length} />
-      </div>
+      </DocumentsContext.Provider>
     </CommandsContext.Provider>
   );
+}
+
+/**
+ * keepUnsaved saves every document when the window goes, and asks before
+ * a window with unsaved text closes (docs/design/app.md#operational-notes).
+ */
+function keepUnsaved(docs: DocumentRegistry): () => void {
+  const beforeUnload = (e: BeforeUnloadEvent) => {
+    if (!docs.unsaved()) return;
+    void docs.flushAll();
+    e.preventDefault();
+  };
+  window.addEventListener("beforeunload", beforeUnload);
+  let offClose: (() => void) | undefined;
+  if (isTauri()) {
+    void getCurrentWindow()
+      .onCloseRequested(async (e) => {
+        if (!docs.unsaved()) return;
+        e.preventDefault();
+        await docs.flushAll();
+        if (!docs.unsaved() || window.confirm("Some notes are not saved. Close anyway?"))
+          void getCurrentWindow().destroy();
+      })
+      .then((off) => {
+        offClose = off;
+      });
+  }
+  return () => {
+    window.removeEventListener("beforeunload", beforeUnload);
+    offClose?.();
+  };
 }
 
 function NoVault() {

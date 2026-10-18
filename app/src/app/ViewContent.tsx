@@ -1,29 +1,45 @@
 // What a tab shows under its view header. An empty tab's links run
-// commands; a file shows by its hash; a note shows its text read-only
-// until the editor (Phase 5's editor core) takes its place, and the
-// history and merge views come with Phase 5's last part.
+// commands; a file shows by its hash; a note is its editor, or while
+// reading its text until the reading view (Phase 5's last part) takes that
+// place, as do the history and merge views.
 import { useEffect, useState } from "react";
 
 import { useCommands } from "../commands/registry";
 import { useFiles } from "../data/files";
+import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
+import type { Notice } from "../editor/document";
+import { NoteEditor } from "../editor/NoteEditor";
+import type { PreviewCommand } from "../editor/preview/framework";
 import { EmptyTab } from "../features/workspace/EmptyTab";
 import { extensionOf, fileType } from "../lib/fileTree";
 import { tabTitle, type ViewState } from "../workspace/model";
-import type { OpenWhere } from "../workspace/ops";
-import { whereFor } from "./open";
+import { type OpenWhere, whereFor } from "../workspace/ops";
 
 export interface ViewContentProps {
+  tabId: string;
   view: ViewState;
   /** The file the view shows is in the vault. */
   exists: boolean;
+  /** The tab is the window's active one: its editor takes focus. */
+  active: boolean;
   /** Open a note from this tab. */
   onOpen: (path: string, where: OpenWhere) => void;
+  /** An editor followed a link. */
+  onFollow: (c: PreviewCommand) => void;
+  /** A notice's Compare: open the merge view. */
+  onCompare: (notice: Notice) => void;
+  onClose: () => void;
+  /** Keep where the cursor was in the note at path, for the tab. */
+  onCursor: (pos: number, path: string) => void;
 }
 
 /** ViewContent draws a tab's view. */
-export function ViewContent({ view, exists, onOpen }: ViewContentProps) {
+export function ViewContent(props: ViewContentProps) {
+  const { view, exists, onOpen } = props;
+  const live = usePrefs((s) => s.editingMode === "live");
+  const vaultId = useNotes((s) => s.vaultId);
   const commands = useCommands();
   if (view.type === "empty") {
     const action = (command: string, label: string, keys: string) => ({
@@ -41,6 +57,23 @@ export function ViewContent({ view, exists, onOpen }: ViewContentProps) {
           action("workspace:close", "Close", "Ctrl + W"),
         ]}
         onRun={(c) => commands.run(c)}
+      />
+    );
+  }
+  if (view.type === "note" && view.mode === "edit" && vaultId !== null) {
+    return (
+      <NoteEditor
+        key={`${vaultId}:${props.tabId}`}
+        tabId={props.tabId}
+        vaultId={vaultId}
+        path={view.path}
+        live={live}
+        cursor={view.cursor}
+        autoFocus={props.active}
+        onCommand={props.onFollow}
+        onCompare={props.onCompare}
+        onClose={props.onClose}
+        onCursor={props.onCursor}
       />
     );
   }
