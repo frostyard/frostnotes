@@ -587,6 +587,12 @@ export interface Backlink {
   /** The linking note's path. */
   source: string;
   link: Link;
+  /**
+   * The link's line in the source, the link itself marked as matching, cut
+   * with '…' about 120 characters from it; empty when the source's text is
+   * not at hand.
+   */
+  context: SnippetPart[];
 }
 
 /** A piece of a search snippet. */

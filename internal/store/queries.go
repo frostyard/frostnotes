@@ -147,6 +147,44 @@ func (d *DB) Links(ctx context.Context, fileID int64) ([]api.Link, error) {
 	return links, nil
 }
 
+// BacklinkSpan is a backlink with where it sits in its source: the byte
+// offsets of the link in the content whose hash is SourceHash.
+type BacklinkSpan struct {
+	Backlink   api.Backlink
+	SourceHash string
+	Start      int
+	Stop       int
+}
+
+// BacklinkSpans returns Backlinks' links with their spans, in the same
+// order, for showing each link's line.
+func (d *DB) BacklinkSpans(ctx context.Context, fileID int64) ([]BacklinkSpan, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT source.path, source.hash, l.start, l.stop, l.kind,
+		l.target, l.subpath, l.alias, l.embed, l.key, l.line, dest.path
+		FROM links l JOIN files source ON source.id = l.file_id
+		JOIN files dest ON dest.id = l.dest_id
+		WHERE l.dest_id = ? AND l.file_id != l.dest_id
+		ORDER BY source.path, l.line, l.start`, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("list backlink spans for file %d: %w", fileID, err)
+	}
+	defer rows.Close()
+	spans := []BacklinkSpan{}
+	for rows.Next() {
+		var sp BacklinkSpan
+		link := &sp.Backlink.Link
+		if err := rows.Scan(&sp.Backlink.Source, &sp.SourceHash, &sp.Start, &sp.Stop, &link.Kind,
+			&link.Target, &link.Subpath, &link.Alias, &link.Embed, &link.Key, &link.Line, &link.Resolved); err != nil {
+			return nil, fmt.Errorf("scan backlink span for file %d: %w", fileID, err)
+		}
+		spans = append(spans, sp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read backlink spans for file %d: %w", fileID, err)
+	}
+	return spans, nil
+}
+
 // Backlinks returns the links that resolve to file fileID, by the linking
 // note's path, then line, then position. Task card T-0017.
 func (d *DB) Backlinks(ctx context.Context, fileID int64) ([]api.Backlink, error) {

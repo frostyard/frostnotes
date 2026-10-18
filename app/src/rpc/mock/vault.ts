@@ -5,6 +5,7 @@
 // version and emits its event. Its merges are scripted: a test supplies
 // what a merge gives, and without a script the newer side stands.
 import {
+  type Backlink,
   ErrorCode,
   type Event,
   type FileKind,
@@ -454,14 +455,19 @@ export class MockVault {
   }
 
   links(p: string): Link[] {
+    return this.scanLinks(p).map((s) => s.link);
+  }
+
+  // scanLinks finds a note's wikilinks with their lines' text and where in it they sit.
+  private scanLinks(p: string): { link: Link; text: string; at: number; end: number }[] {
     const e = this.entry(p);
     if (kindOf(p) !== "note") return [];
-    const out: Link[] = [];
+    const out: { link: Link; text: string; at: number; end: number }[] = [];
     decoder
       .decode(e.data)
       .split("\n")
-      .forEach((line, i) => {
-        for (const m of line.matchAll(/(!?)\[\[([^\]|#]*)(#[^\]|]*)?(\|[^\]]*)?\]\]/g)) {
+      .forEach((text, i) => {
+        for (const m of text.matchAll(/(!?)\[\[([^\]|#]*)(#[^\]|]*)?(\|[^\]]*)?\]\]/g)) {
           const link: Link = {
             kind: "wiki",
             target: m[2] ?? "",
@@ -473,17 +479,30 @@ export class MockVault {
           };
           const resolved = this.resolve(p, m[2] ?? "");
           if (resolved !== undefined) link.resolved = resolved;
-          out.push(link);
+          const at = m.index ?? 0;
+          out.push({ link, text, at, end: at + m[0].length });
         }
       });
     return out;
   }
 
-  backlinks(p: string): { source: string; link: Link }[] {
+  // backlinks are notesd's: each link to p with its line, the link marked.
+  backlinks(p: string): Backlink[] {
     this.entry(p);
-    const out: { source: string; link: Link }[] = [];
+    const out: Backlink[] = [];
     for (const n of this.entries()) {
-      for (const link of this.links(n.path)) if (link.resolved === p) out.push({ source: n.path, link });
+      if (n.path === p) continue;
+      for (const { link, text, at, end } of this.scanLinks(n.path)) {
+        if (link.resolved !== p) continue;
+        const before = text.slice(0, at).trimStart();
+        const after = text.slice(end).trimEnd();
+        const context = [
+          ...(before ? [{ text: before, match: false }] : []),
+          { text: text.slice(at, end), match: true },
+          ...(after ? [{ text: after, match: false }] : []),
+        ];
+        out.push({ source: n.path, link, context });
+      }
     }
     return out;
   }

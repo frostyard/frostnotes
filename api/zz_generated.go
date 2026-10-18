@@ -1039,6 +1039,10 @@ type Backlink struct {
 	// The linking note's path.
 	Source string `json:"source"`
 	Link   Link   `json:"link"`
+	// The link's line in the source, the link itself marked as matching, cut with
+	// '…' about 120 characters from it; empty when the source's text is not at
+	// hand.
+	Context []SnippetPart `json:"context"`
 }
 
 // SnippetPart: A piece of a search snippet.

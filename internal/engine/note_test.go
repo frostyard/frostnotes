@@ -132,6 +132,9 @@ func TestNoteAPI(t *testing.T) {
 	if err != nil || len(back) != 1 || back[0].Source != "Inbox.md" {
 		t.Fatalf("Backlinks = %+v, %v", back, err)
 	}
+	if got := fmt.Sprint(back[0].Context); got != "[{plant the  false} {[[Orchard/Quince]] true}]" {
+		t.Errorf("the backlink's context = %s, want its line with the link marked", got)
+	}
 
 	// A write's author defaults to the client name given to rpc.hello.
 	res, err := note.Write(ctx, &api.NoteWriteParams{VaultID: av.id, Path: "Inbox.md", Base: n.Hash,

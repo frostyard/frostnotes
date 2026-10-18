@@ -304,6 +304,11 @@ func TestNoteBacklinks(t *testing.T) {
 		{Source: "C.md", Link: link(api.LinkKindProperty, "Plan", "", "", "up", false, 2)},
 		{Source: "Plan.md", Link: link(api.LinkKindWiki, "", "#Top", "", "", false, 9)},
 	}}
+	// notesd sends each link's line; the CLI's JSON passes it through.
+	for i := range fake.backlinks {
+		fake.backlinks[i].Context = []api.SnippetPart{}
+	}
+	fake.backlinks[0].Context = []api.SnippetPart{{Text: "see "}, {Text: "[[Plan#Goals|the plan]]", Match: true}}
 	srv := notesServer(t, fake, "garden")
 	want := "A.md:3\t[[Plan#Goals|the plan]]\n" +
 		"A.md:4\t![[Plan.md]]\n" +
