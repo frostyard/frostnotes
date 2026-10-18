@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useSyncExternalStore } from
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { feed } from "../data/events";
+import { ask } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
 import { useNotes } from "../data/stores";
@@ -264,8 +265,15 @@ function keepUnsaved(docs: DocumentRegistry): () => void {
         if (!docs.unsaved()) return;
         e.preventDefault();
         await docs.flushAll();
-        if (!docs.unsaved() || window.confirm("Some notes are not saved. Close anyway?"))
-          void getCurrentWindow().destroy();
+        const close =
+          !docs.unsaved() ||
+          (await ask({
+            title: "Close anyway?",
+            text: "Some notes are not saved yet; what was typed in them is lost.",
+            confirmLabel: "Close",
+            danger: true,
+          }));
+        if (close) void getCurrentWindow().destroy();
       })
       .then((off) => {
         offClose = off;

@@ -142,16 +142,16 @@ describe("More options", () => {
   });
 
   it("deletes the file with its base once the user agrees", async () => {
-    const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-    Object.defineProperty(window, "confirm", { value: confirm, configurable: true });
     const { mock, user } = await start();
     await user.click(fileRow("a.md"));
-    for (let i = 0; i < 2; i++) {
+    for (const label of ["Cancel", "Delete"]) {
       await user.click(screen.getByRole("button", { name: "More options" }));
       await user.click(screen.getByRole("menuitem", { name: "Delete file" }));
+      const dialog = await screen.findByRole("alertdialog", { name: 'Delete "a"?' });
+      expect(within(dialog).getByText("You can restore it from its version history.")).toBeTruthy();
+      if (label === "Cancel") expect(mock.vault(3).text("a.md")).toBe("Alpha links [[b]].\n");
+      await user.click(within(dialog).getByRole("button", { name: label }));
     }
-    expect(confirm).toHaveBeenCalledTimes(2);
-    expect(confirm.mock.calls[0]?.[0]).toContain('Delete "a"?');
     await waitFor(() => expect(mock.vault(3).text("a.md")).toBeUndefined());
     expect(await screen.findByText("Deleted a.")).toBeTruthy();
   });

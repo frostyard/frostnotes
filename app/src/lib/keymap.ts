@@ -171,3 +171,56 @@ export function formatHotkey(hotkey: Hotkey): string {
   const order: Modifier[] = ["Ctrl", "Alt", "Shift"];
   return [...order.filter((modifier) => hotkey.modifiers.includes(modifier)), key].join(" + ");
 }
+
+/** HOTKEY_NAMES are the bound commands' names, as the keyboard map's table gives them (the Hotkeys settings). */
+export const HOTKEY_NAMES: Readonly<Record<HotkeyCommand, string>> = {
+  "switcher:open": "Open quick switcher",
+  "command-palette:open": "Open command palette",
+  "file-explorer:new-file": "Create new note",
+  "file-explorer:new-file-in-new-pane": "Create new note to the right",
+  "workspace:new-tab": "New tab",
+  "workspace:close": "Close current tab",
+  "workspace:close-window": "Close window",
+  "workspace:undo-close-pane": "Undo close tab",
+  "workspace:next-tab": "Go to next tab",
+  "workspace:previous-tab": "Go to previous tab",
+  "workspace:goto-tab-1": "Go to tab 1",
+  "workspace:goto-tab-2": "Go to tab 2",
+  "workspace:goto-tab-3": "Go to tab 3",
+  "workspace:goto-tab-4": "Go to tab 4",
+  "workspace:goto-tab-5": "Go to tab 5",
+  "workspace:goto-tab-6": "Go to tab 6",
+  "workspace:goto-tab-7": "Go to tab 7",
+  "workspace:goto-tab-8": "Go to tab 8",
+  "workspace:goto-last-tab": "Go to last tab",
+  "app:go-back": "Navigate back",
+  "app:go-forward": "Navigate forward",
+  "app:open-settings": "Open settings",
+  "app:open-help": "Open help",
+  "workspace:edit-file-title": "Rename file",
+  "markdown:toggle-preview": "Toggle reading view",
+  "markdown:add-metadata-property": "Add file property",
+  "global-search:open": "Search in all files",
+  "editor:open-search": "Search current file",
+  "editor:open-search-replace": "Search & replace in current file",
+  "editor:save-file": "Save current file",
+  "editor:toggle-bold": "Toggle bold",
+  "editor:toggle-italics": "Toggle italics",
+  "editor:insert-link": "Insert Markdown link",
+  "editor:toggle-checklist-status": "Toggle checkbox status",
+  "editor:toggle-comments": "Toggle comment",
+  "editor:delete-paragraph": "Delete paragraph",
+  "editor:follow-link": "Follow link under cursor",
+  "editor:open-link-in-new-leaf": "Open link under cursor in new tab",
+  "editor:open-link-in-new-split": "Open link under cursor to the right",
+  "editor:open-link-in-new-window": "Open link under cursor in new window",
+  "graph:open": "Open graph view",
+  "window:zoom-in": "Zoom in",
+  "window:zoom-out": "Zoom out",
+  "window:reset-zoom": "Reset zoom",
+};
+
+/** boundCommands lists the keyboard map's commands in its order. */
+export function boundCommands(): HotkeyCommand[] {
+  return KEYBOARD_MAP.map((entry) => entry.command);
+}

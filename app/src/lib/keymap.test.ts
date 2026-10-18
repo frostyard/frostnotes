@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { commandFor, formatHotkey, type Hotkey, type HotkeyCommand, hotkeysFor, type KeyInput } from "./keymap";
+import {
+  boundCommands,
+  commandFor,
+  formatHotkey,
+  HOTKEY_NAMES,
+  type Hotkey,
+  type HotkeyCommand,
+  hotkeysFor,
+  type KeyInput,
+} from "./keymap";
 
 const press = (
   key: string,
@@ -160,5 +169,17 @@ describe("formatHotkey", () => {
     expect(hotkeysFor("workspace:next-tab").map(formatHotkey)).toEqual(["Ctrl + Tab", "Ctrl + Page Down"]);
     expect(hotkeysFor("workspace:previous-tab").map(formatHotkey)).toEqual(["Ctrl + Shift + Tab", "Ctrl + Page Up"]);
     expect(hotkeysFor("window:zoom-out").map(formatHotkey)).toEqual(["Ctrl + -"]);
+  });
+});
+
+describe("the bound commands' names", () => {
+  it("names every command the map binds, in its order", () => {
+    const bound = boundCommands();
+    expect(bound[0]).toBe("switcher:open");
+    expect(bound.at(-1)).toBe("window:reset-zoom");
+    expect(new Set(bound).size).toBe(bound.length);
+    expect(bound.every((c) => HOTKEY_NAMES[c] !== "")).toBe(true);
+    expect(Object.keys(HOTKEY_NAMES).sort()).toEqual([...bound].sort());
+    expect(HOTKEY_NAMES["editor:open-search-replace"]).toBe("Search & replace in current file");
   });
 });

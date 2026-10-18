@@ -22,9 +22,31 @@ export interface OpenMenu {
 /** PromptKind is a prompt the window can show. */
 export type PromptKind = "switcher" | "palette";
 
+/** OpenMove is the folder chooser, open to move a file or a folder. */
+export interface OpenMove {
+  path: string;
+  folder: boolean;
+}
+
+/** OpenConfirm is a question waiting for its answer. */
+export interface OpenConfirm {
+  title: string;
+  text: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  answer: (yes: boolean) => void;
+}
+
 export interface OverlayState {
   menu: OpenMenu | null;
   prompt: PromptKind | null;
+  /** The folder chooser, open for a move. */
+  move: OpenMove | null;
+  /** The confirmation shown; one at a time. */
+  confirm: OpenConfirm | null;
+  /** The settings dialog, open at a section. */
+  settings: string | null;
   notices: NoticeItem[];
   /** The IDs of the commands run from the palette, newest first. */
   recentCommands: string[];
@@ -48,6 +70,9 @@ const storage = localStore();
 export const useOverlays = create<OverlayState>(() => ({
   menu: null,
   prompt: null,
+  move: null,
+  confirm: null,
+  settings: null,
   notices: [],
   recentCommands: loadRecent(storage),
   noticeSeq: 0,
@@ -88,4 +113,37 @@ export function ranCommand(id: string): void {
   const recent = [id, ...useOverlays.getState().recentCommands.filter((r) => r !== id)].slice(0, PALETTE_RECENT);
   useOverlays.setState({ recentCommands: recent });
   storage.set(RECENT_KEY, JSON.stringify(recent));
+}
+
+/**
+ * ask shows a confirmation and resolves to the answer: true when it is
+ * confirmed. A question asked while another waits answers the other no.
+ */
+export function ask(q: Omit<OpenConfirm, "answer">): Promise<boolean> {
+  return new Promise((resolve) => {
+    useOverlays.getState().confirm?.answer(false);
+    const answer = (yes: boolean) => {
+      useOverlays.setState((s) => (s.confirm?.answer === answer ? { confirm: null } : {}));
+      resolve(yes);
+    };
+    useOverlays.setState({ confirm: { ...q, answer }, menu: null });
+  });
+}
+
+/** openMove opens the folder chooser to move path, a folder or a file. */
+export function openMove(path: string, folder: boolean): void {
+  useOverlays.setState({ move: { path, folder }, menu: null, prompt: null });
+}
+
+export function closeMove(): void {
+  useOverlays.setState({ move: null });
+}
+
+/** openSettings opens the settings dialog at a section. */
+export function openSettings(section = "editor"): void {
+  useOverlays.setState({ settings: section, menu: null, prompt: null });
+}
+
+export function closeSettings(): void {
+  useOverlays.setState({ settings: null });
 }
