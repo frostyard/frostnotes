@@ -173,7 +173,11 @@ const WEB = /^(https?|mailto):/i;
  * the note, as Obsidian does: under its own folders when it names any,
  * else where new notes go.
  */
-export async function followLink(c: Client, cmd: PreviewCommand, tabId: string): Promise<void> {
+export async function followLink(
+  c: Client,
+  cmd: Extract<PreviewCommand, { kind: "follow" }>,
+  tabId: string,
+): Promise<void> {
   if (cmd.path !== null) {
     const path = cmd.path;
     const view: ViewState = path.endsWith(".md") ? { type: "note", path, mode: "edit" } : { type: "file", path };
@@ -190,6 +194,25 @@ export async function followLink(c: Client, cmd: PreviewCommand, tabId: string):
   const name = target.endsWith(".md") ? target : `${target}.md`;
   const folder = newNoteFolder();
   await createNoteAt(c, name.includes("/") || folder === "" ? name : `${folder}/${name}`, cmd.where, tabId);
+}
+
+/** previewCommand does what a view of a note asks from its tab: follows a link, searches (a tag), or copies (a code block). */
+export async function previewCommand(c: Client, cmd: PreviewCommand, tabId: string): Promise<void> {
+  switch (cmd.kind) {
+    case "follow":
+      await followLink(c, cmd, tabId);
+      return;
+    case "search":
+      searchFor(cmd.query);
+      return;
+    case "copy":
+      try {
+        await navigator.clipboard.writeText(cmd.text);
+        notify("Copied to the clipboard.");
+      } catch {
+        notify("Cannot copy to the clipboard.");
+      }
+  }
 }
 
 const hasVault = () => useNotes.getState().vaultId !== null;

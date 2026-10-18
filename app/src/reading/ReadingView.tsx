@@ -3,10 +3,8 @@
 // the app sanitizes the HTML again, gives each data-blob element its blob
 // URL, draws math with KaTeX from data-tex alone, and puts the result in
 // the view. Links and embeds follow as the editor's do; a checkbox
-// toggles its line in the document, which saves as typing does.
-import "katex/dist/katex.min.css";
-
-import katex from "katex";
+// toggles its line in the document, which saves as typing does; a tag
+// searches for itself; a foldable callout's title folds it.
 import { type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { usePrefs } from "../data/prefs";
@@ -16,6 +14,7 @@ import { NoticeBar } from "../editor/NoteEditor";
 import type { PreviewCommand } from "../editor/preview/framework";
 import { useNoteDoc } from "../editor/useNoteDoc";
 import { type OpenWhere, whereFor } from "../workspace/ops";
+import { finish } from "./finish";
 import { createSanitizer } from "./sanitize";
 
 /** RENDER_DELAY is how long after a change the view renders again. */
@@ -95,7 +94,7 @@ export function ReadingView(props: ReadingViewProps) {
         <div
           ref={box}
           data-testid="reading-view"
-          className={`reading-view mx-auto px-8 pt-8 pb-[50vh] ${readable ? "max-w-[764px]" : ""}`}
+          className={`reading-view rendered mx-auto px-8 pt-8 pb-[50vh] ${readable ? "max-w-[764px]" : ""}`}
           onClick={onClick}
           onAuxClick={onClick}
         />
@@ -104,37 +103,28 @@ export function ReadingView(props: ReadingViewProps) {
   );
 }
 
-/**
- * finish fills in what the HTML names but does not load: each data-blob
- * element's URL, math drawn with KaTeX, and remote images unless the
- * preference loads them. A task's checkbox, which notesd renders disabled
- * (docs/specs/render.md), is enabled: a click toggles its line.
- */
-export function finish(el: HTMLElement, blobURL: (hash: string, ext: string) => string, remoteImages: boolean): void {
-  for (const box of el.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-line]')) box.disabled = false;
-  for (const node of el.querySelectorAll<HTMLElement>("[data-blob]")) {
-    const blob = node.dataset.blob ?? "";
-    const dot = blob.lastIndexOf(".");
-    const url = blobURL(dot < 0 ? blob : blob.slice(0, dot), dot < 0 ? "" : blob.slice(dot + 1));
-    if (node instanceof HTMLImageElement || node instanceof HTMLMediaElement) node.src = url;
-  }
-  if (!remoteImages) {
-    for (const img of el.querySelectorAll<HTMLImageElement>("img[src]:not([data-blob])")) img.removeAttribute("src");
-  }
-  for (const node of el.querySelectorAll<HTMLElement>(".math[data-tex]")) {
-    katex.render(node.dataset.tex ?? "", node, { displayMode: node.tagName === "DIV", throwOnError: false });
-  }
-}
-
 // click follows a link or toggles a checkbox the reading view drew.
 function click(e: MouseEvent<HTMLElement>, doc: NoteDoc, onFollow: (c: PreviewCommand) => void): void {
   const target = e.target instanceof Element ? e.target : null;
   if (!target) return;
   const where: OpenWhere = whereFor(e);
+  // A foldable callout's title folds it, here only, as Obsidian does.
+  const title = target.closest<HTMLElement>(".callout[data-fold] > .callout-title");
+  if (title?.parentElement) {
+    const callout = title.parentElement;
+    callout.dataset.fold = callout.dataset.fold === "-" ? "+" : "-";
+    return;
+  }
   const box = target.closest<HTMLInputElement>('input[type="checkbox"][data-line]');
   if (box) {
     e.preventDefault();
     toggleLine(doc, Number(box.dataset.line));
+    return;
+  }
+  const tag = target.closest<HTMLAnchorElement>("a.tag[data-tag]");
+  if (tag) {
+    e.preventDefault();
+    onFollow({ kind: "search", query: `tag:#${tag.dataset.tag ?? ""}` });
     return;
   }
   const link = target.closest<HTMLAnchorElement>("a.internal-link, a.file-embed, a.external-link");

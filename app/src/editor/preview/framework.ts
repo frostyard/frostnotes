@@ -25,26 +25,64 @@ import type { SyntaxNodeRef } from "@lezer/common";
 
 import type { OpenWhere } from "../../workspace/ops";
 
-/** PreviewCommand is what a provider asks of the app: follow a link to a file, or to a note to create. */
-export type PreviewCommand = { kind: "follow"; target: string; path: string | null; where: OpenWhere };
+/**
+ * PreviewCommand is what a provider asks of the app: follow a link to a
+ * file (or to a note to create, path null), search the vault (a tag's
+ * click), or copy text (a code block's button).
+ */
+export type PreviewCommand =
+  | { kind: "follow"; target: string; path: string | null; where: OpenWhere }
+  | { kind: "search"; query: string }
+  | { kind: "copy"; text: string };
 
-/** PreviewAction is a provider's answer to a click. */
+/**
+ * PreviewAction is a provider's answer to a click: a transaction (the view
+ * takes focus after it), a command for the app, or "handled" when the
+ * provider dealt with the click itself (a callout's fold).
+ */
 export type PreviewAction =
   | { kind: "transaction"; spec: TransactionSpec }
-  | { kind: "command"; command: PreviewCommand };
+  | { kind: "command"; command: PreviewCommand }
+  | { kind: "handled" };
 
 /** Resolve gives the file a link target leads to: a path, null when unresolved, undefined while it is asked. */
 export type Resolve = (target: string) => string | null | undefined;
 
-/** PreviewEnv is what the app gives the preview: link resolution and where commands go. */
+/** PreviewEnv is what the app gives the preview. */
 export interface PreviewEnv {
+  /** Link resolution from the note's folder. */
   resolve: Resolve;
+  /** Where commands go. */
   command: (c: PreviewCommand) => void;
+  /** fileURL is the URL that loads a vault file (an image), or null when the vault has no file at path. */
+  fileURL: (path: string) => string | null;
+  /**
+   * render fills el with markdown rendered as the note renders it
+   * (note.render), sanitized, its files' URLs and math filled in, at once
+   * when it was rendered before, else when notesd answers. The app keeps
+   * what it filled up to date as the vault changes.
+   */
+  render: (el: HTMLElement, markdown: string) => void;
+  /** Whether to load images from the web (the Load remote images preference, read when drawing). */
+  remoteImages: () => boolean;
 }
 
+/** PreviewEnvInput is what the app gives; what it leaves out has a default. */
+export type PreviewEnvInput = Pick<PreviewEnv, "resolve" | "command"> & Partial<PreviewEnv>;
+
+const ENV_DEFAULTS: PreviewEnv = {
+  resolve: () => null,
+  command: () => {},
+  fileURL: () => null,
+  render: (el, markdown) => {
+    el.textContent = markdown;
+  },
+  remoteImages: () => false,
+};
+
 /** previewEnv provides the app's PreviewEnv to the providers. */
-export const previewEnv = Facet.define<PreviewEnv, PreviewEnv>({
-  combine: (values) => values[0] ?? { resolve: () => null, command: () => {} },
+export const previewEnv = Facet.define<PreviewEnvInput, PreviewEnv>({
+  combine: (values) => ({ ...ENV_DEFAULTS, ...values[0] }),
 });
 
 /** DrawContext is what a provider draws with. */
@@ -250,8 +288,10 @@ const clicks = EditorView.domEventHandlers({
     const action = p?.click?.(el, view, e);
     if (!action) return false;
     e.preventDefault();
-    if (action.kind === "transaction") view.dispatch(action.spec);
-    else view.state.facet(previewEnv).command(action.command);
+    if (action.kind === "transaction") {
+      view.dispatch(action.spec);
+      view.focus();
+    } else if (action.kind === "command") view.state.facet(previewEnv).command(action.command);
     return true;
   },
 });

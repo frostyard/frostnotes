@@ -11,8 +11,8 @@ import { drawSelection, EditorView, keymap } from "@codemirror/view";
 
 import { type CompletionCatalog, linkCompletion, tagCompletion } from "./complete";
 import { editorKeymap } from "./keymap";
-import { BASIC } from "./preview/basic";
-import { livePreview, type PreviewEnv, previewEnv } from "./preview/framework";
+import { livePreview, type PreviewEnvInput, previewEnv } from "./preview/framework";
+import { PROVIDERS } from "./preview/index";
 import { markdownSupport } from "./syntax/index";
 import { editorTheme } from "./theme";
 
@@ -33,7 +33,7 @@ export const prefsCompartment = new Compartment();
 
 /** modeExtension is live preview, or nothing for source mode. */
 export function modeExtension(live: boolean): Extension {
-  return live ? livePreview(BASIC) : [];
+  return live ? livePreview(PROVIDERS) : [];
 }
 
 /** prefsExtension is what the preferences set. */
@@ -50,7 +50,7 @@ export function prefsExtension(p: EditorPrefs): Extension {
 /** editorExtensions are a view's extensions; onBlur saves; catalog, when given, completes links and tags. */
 export function editorExtensions(opts: {
   prefs: EditorPrefs;
-  env: PreviewEnv;
+  env: PreviewEnvInput;
   onBlur: () => void;
   catalog?: CompletionCatalog;
 }): Extension {

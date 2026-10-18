@@ -28,7 +28,7 @@ import {
   setView,
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
-import { followLink, mergeDone } from "./commands";
+import { mergeDone, previewCommand } from "./commands";
 import { openMoreOptions, openTabList, openTabMenu, revealInFiles } from "./menus";
 import { ViewContent } from "./ViewContent";
 
@@ -277,7 +277,7 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
           onOpen={(p, where) =>
             update((w) => open(activate(w, tab.id), { type: "note", path: p, mode: "edit" }, where))
           }
-          onFollow={(c) => void followLink(client, c, tab.id)}
+          onFollow={(c) => void previewCommand(client, c, tab.id)}
           onCompare={(notice) => {
             if (path === undefined || (notice.kind !== "conflict" && notice.kind !== "refused")) return;
             // A notesd that does not name the conflict version: the

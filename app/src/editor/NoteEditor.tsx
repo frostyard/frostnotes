@@ -9,6 +9,9 @@ import { useFiles } from "../data/files";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { TabNotice, type TabNoticeAction } from "../features/workspace/TabNotice";
+import { extensionOf } from "../lib/fileTree";
+import { finish } from "../reading/finish";
+import { createSanitizer } from "../reading/sanitize";
 import { completionCatalog } from "./catalog";
 import type { NoteDoc, Notice } from "./document";
 import {
@@ -22,6 +25,7 @@ import {
 import { LinkResolver } from "./links";
 import { type PreviewCommand, redraw } from "./preview/framework";
 import { useDocuments } from "./registry";
+import { BlockRenderer } from "./rendered";
 import { useNoteDoc } from "./useNoteDoc";
 
 export interface NoteEditorProps {
@@ -43,6 +47,9 @@ export interface NoteEditorProps {
   /** Keep where the cursor was in the note at path, for the tab. */
   onCursor?: (pos: number, path: string) => void;
 }
+
+/** REFRESH_DELAY is how long after the vault changes rendered blocks render again, in ms. */
+export const REFRESH_DELAY = 1000;
 
 function editorPrefs(p: Prefs, live: boolean): EditorPrefs {
   return {
@@ -72,6 +79,23 @@ export function NoteEditor(props: NoteEditorProps) {
   latest.current = props;
   const prefs = usePrefs();
   const ep = editorPrefs(prefs, props.live);
+  const sanitize = useMemo(() => createSanitizer(window), []);
+  const renderer = useMemo(
+    () =>
+      doc &&
+      new BlockRenderer(
+        async (markdown) =>
+          sanitize((await client.current.note.render({ vaultId, path: doc.path, content: markdown })).html),
+        (el) =>
+          finish(
+            el,
+            (hash, ext) => client.current.transport.blobURL?.(hash, ext) ?? "",
+            usePrefs.getState().loadRemoteImages,
+          ),
+        () => view.current?.requestMeasure(),
+      ),
+    [doc, vaultId, sanitize],
+  );
   const resolver = useMemo(
     () =>
       doc &&
@@ -84,14 +108,23 @@ export function NoteEditor(props: NoteEditorProps) {
 
   // The view: made once the document has loaded, gone with the tab.
   useEffect(() => {
-    if (!ready || !doc || !resolver || !host.current) return;
+    if (!ready || !doc || !resolver || !renderer || !host.current) return;
     const start = latest.current;
     const v = new EditorView({
       parent: host.current,
       state: doc.createState(
         editorExtensions({
           prefs: editorPrefs(usePrefs.getState(), start.live),
-          env: { resolve: resolver.resolve, command: (c) => latest.current.onCommand(c) },
+          env: {
+            resolve: resolver.resolve,
+            command: (c) => latest.current.onCommand(c),
+            fileURL: (p) => {
+              const file = useFiles.getState().files.get(p);
+              return file ? (client.current.transport.blobURL?.(file.hash, extensionOf(p)) ?? null) : null;
+            },
+            render: renderer.fill,
+            remoteImages: () => usePrefs.getState().loadRemoteImages,
+          },
           onBlur: () => void doc.save(),
           catalog: completionCatalog({
             vaultId,
@@ -120,7 +153,7 @@ export function NoteEditor(props: NoteEditorProps) {
       v.destroy();
       view.current = null;
     };
-  }, [ready, doc, resolver, registry, vaultId]);
+  }, [ready, doc, resolver, renderer, registry, vaultId]);
 
   // Modes and preferences reconfigure the view.
   useEffect(() => {
@@ -132,6 +165,20 @@ export function NoteEditor(props: NoteEditorProps) {
       effects: prefsCompartment.reconfigure(prefsExtension(JSON.parse(prefsKey) as EditorPrefs)),
     });
   }, [prefsKey]);
+
+  // Rendered blocks show the vault as it is a moment after it changes,
+  // and remote images as the preference says.
+  const files = useFiles((s) => s.files);
+  const remoteImages = usePrefs((s) => s.loadRemoteImages);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: files and remoteImages are the triggers
+  useEffect(() => {
+    if (!renderer) return;
+    const timer = setTimeout(() => {
+      renderer.refresh();
+      view.current?.dispatch({ effects: redraw.of(null) });
+    }, REFRESH_DELAY);
+    return () => clearTimeout(timer);
+  }, [renderer, files, remoteImages]);
 
   // A file added, moved or removed changes what links lead to.
   const pathsVersion = useFiles((s) => s.pathsVersion);
