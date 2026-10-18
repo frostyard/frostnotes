@@ -67,8 +67,14 @@ function editorPrefs(p: Prefs, live: boolean): EditorPrefs {
     fontSize: p.fontSize,
     spellcheck: p.spellcheck,
     autoPairBrackets: p.autoPairBrackets,
+    autoPairMarkdown: p.autoPairMarkdown,
+    smartLists: p.smartLists,
     indentWithTabs: p.indentWithTabs,
     tabSize: p.tabSize,
+    lineNumbers: p.lineNumbers,
+    foldHeadings: p.foldHeadings,
+    foldIndent: p.foldIndent,
+    indentGuides: p.indentGuides,
   };
 }
 

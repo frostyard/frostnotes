@@ -53,6 +53,10 @@ describe("indentation guides", () => {
     expect(guides(open("- a\n\t- b\n\nend"))).toEqual([[], [0], [], []]);
   });
 
+  it("are not drawn on a line no deeper than the bullet, as a lazy continuation is", () => {
+    expect(guides(open("- a\n  - b\nlazy\n\nend"))).toEqual([[], [0], [], [], []]);
+  });
+
   it("are not drawn for an item without a nested list, or across blank lines", () => {
     expect(guides(open("- a\n- b\n\nend")).flat()).toEqual([]);
     expect(guides(open("- a\n\n  - b\n\nend"))).toEqual([[], [], [0], [], []]);

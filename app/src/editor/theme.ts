@@ -140,6 +140,10 @@ export function editorTheme(opts: { readable: boolean; fontSize: number }): Exte
       ".cm-pv-embed": { borderLeft: "2px solid var(--accent)", padding: "4px 24px" },
       ".cm-pv-media": { maxWidth: "100%", verticalAlign: "bottom" },
       ".cm-pv-properties": { padding: "0 0 12px", cursor: "auto" },
+      ".cm-pv-guide": { boxShadow: "inset 1px 0 var(--separator)" },
+      "&.cm-no-guides .cm-pv-guide": { boxShadow: "none" },
+      ".cm-gutters": { backgroundColor: "var(--bg-window)", color: "var(--text-tertiary)", border: "none" },
+      ".cm-foldPlaceholder": { backgroundColor: "var(--bg-code)", border: "none", color: "var(--text-secondary)" },
       ".cm-inline-title": { cursor: "auto" },
       // Completion, drawn as the app's menus are.
       ".cm-tooltip": {

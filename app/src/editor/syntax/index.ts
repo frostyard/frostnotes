@@ -32,5 +32,6 @@ export const OBSIDIAN: MarkdownConfig[] = [
 
 /** markdownSupport is the editor's language: GFM with Obsidian's syntax, and its comments marked. */
 export function markdownSupport(): Extension {
-  return [markdown({ base: markdownLanguage, extensions: OBSIDIAN }), commentStyle];
+  // Smart lists' keys are a preference (extensions.ts), not the language's.
+  return [markdown({ base: markdownLanguage, extensions: OBSIDIAN, addKeymap: false }), commentStyle];
 }
