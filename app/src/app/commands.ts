@@ -10,7 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
-import { notify, openPrompt } from "../data/overlays";
+import { ask, notify, openPrompt, openSettings } from "../data/overlays";
 import { setRenaming, usePanes } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
@@ -132,7 +132,12 @@ export async function deleteFile(c: Client, path: string): Promise<void> {
   const name = nameOf(path);
   if (
     usePrefs.getState().confirmDelete &&
-    !window.confirm(`Delete "${name}"?\n\nYou can restore it from its version history.`)
+    !(await ask({
+      title: `Delete "${name}"?`,
+      text: "You can restore it from its version history.",
+      confirmLabel: "Delete",
+      danger: true,
+    }))
   ) {
     return;
   }
@@ -271,6 +276,8 @@ export function workspaceCommands(c: Client): Command[] {
     { id: "workspace:new-tab", name: "New tab", run: () => update(openNewTab) },
     { id: "switcher:open", name: "Open quick switcher", applies: hasVault, run: () => openPrompt("switcher") },
     { id: "command-palette:open", name: "Open command palette", run: () => openPrompt("palette") },
+    { id: "app:open-settings", name: "Open settings", run: () => openSettings() },
+    { id: "app:open-help", name: "Open help", run: () => openSettings("hotkeys") },
     {
       id: "sync:view-version-history",
       name: "Open version history",

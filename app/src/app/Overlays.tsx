@@ -6,11 +6,14 @@ import { useMemo } from "react";
 
 import { useCommands } from "../commands/registry";
 import { useFiles } from "../data/files";
-import { closeMenu, closePrompt, dismissNotice, ranCommand, useOverlays } from "../data/overlays";
+import { closeMenu, closeMove, closePrompt, dismissNotice, notify, ranCommand, useOverlays } from "../data/overlays";
 import { useClient } from "../data/session";
+import { useNotes } from "../data/stores";
+import { ConfirmDialog } from "../features/dialog/ConfirmDialog";
 import { Menu } from "../features/menu/Menu";
 import { Notices } from "../features/notice/Notices";
 import { CommandPalette } from "../features/prompt/CommandPalette";
+import { FolderChooser } from "../features/prompt/FolderChooser";
 import { QuickSwitcher, type SwitcherWhere } from "../features/prompt/QuickSwitcher";
 import { formatHotkey, type HotkeyCommand, hotkeysFor } from "../lib/keymap";
 import type { PaletteCommand } from "../lib/palette";
@@ -18,6 +21,8 @@ import type { SwitcherNote } from "../lib/switcher";
 import { type OpenWhere, open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { openOrCreate, viewOf } from "./commands";
+import { move } from "./panes/files";
+import { SettingsContainer } from "./Settings";
 
 const WHERE: Record<SwitcherWhere, OpenWhere> = { current: "here", tab: "tab", right: "right" };
 
@@ -26,8 +31,23 @@ export function Overlays() {
   const menu = useOverlays((s) => s.menu);
   const prompt = useOverlays((s) => s.prompt);
   const notices = useOverlays((s) => s.notices);
+  const confirm = useOverlays((s) => s.confirm);
+  const moving = useOverlays((s) => s.move);
   return (
     <>
+      <SettingsContainer />
+      {moving && <Mover path={moving.path} folder={moving.folder} />}
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.title}
+          text={confirm.text}
+          confirmLabel={confirm.confirmLabel}
+          cancelLabel={confirm.cancelLabel}
+          danger={confirm.danger}
+          onConfirm={() => confirm.answer(true)}
+          onCancel={() => confirm.answer(false)}
+        />
+      )}
       {menu && (
         <Menu
           label={menu.label}
@@ -92,6 +112,32 @@ function Palette() {
         registry.run(id);
       }}
       onClose={closePrompt}
+    />
+  );
+}
+
+// Mover is the folder chooser moving a file or folder into the folder chosen.
+function Mover({ path, folder }: { path: string; folder: boolean }) {
+  const client = useClient();
+  const vaultId = useNotes((s) => s.vaultId);
+  const folders = useFiles((s) => s.folders);
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  // A folder cannot go into itself or below it.
+  const choices = useMemo(
+    () => (folder ? folders.filter((f) => f !== path && !f.startsWith(`${path}/`)) : folders),
+    [folders, folder, path],
+  );
+  return (
+    <FolderChooser
+      folders={choices}
+      placeholder={`Move "${name.replace(/\.md$/, "")}" to…`}
+      onClose={closeMove}
+      onChoose={(to) => {
+        if (vaultId === null) return;
+        move(client, vaultId, path, to === "" ? name : `${to}/${name}`, folder).catch((err: unknown) =>
+          notify(err instanceof Error ? err.message : String(err)),
+        );
+      }}
     />
   );
 }

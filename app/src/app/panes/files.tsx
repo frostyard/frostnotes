@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 
 import { refreshFolders, useFiles } from "../../data/files";
-import { notify, openMenu } from "../../data/overlays";
+import { ask, notify, openMenu, openMove } from "../../data/overlays";
 import { setRenaming, usePanes } from "../../data/panes";
 import { usePrefs } from "../../data/prefs";
 import { useClient } from "../../data/session";
@@ -138,15 +138,20 @@ async function newNoteIn(c: Client, vaultId: number, folder: string): Promise<vo
 }
 
 // updateLinks says whether a move rewrites links: the vault's setting, or the user's answer.
-function updateLinks(what: string): boolean {
+async function updateLinks(name: string): Promise<boolean> {
   if (useVaultState.getState().settings?.updateLinks) return true;
-  return window.confirm(`Update the links to ${what}?`);
+  return ask({
+    title: "Update links?",
+    text: `Update the links to "${name}" so they still lead to it?`,
+    confirmLabel: "Update",
+    cancelLabel: "Don't update",
+  });
 }
 
-// move moves a file or folder to a new path.
-async function move(c: Client, vaultId: number, from: string, to: string, folder: boolean): Promise<void> {
+/** move moves a file or folder to a new path, its links updated as the vault's setting says. */
+export async function move(c: Client, vaultId: number, from: string, to: string, folder: boolean): Promise<void> {
   if (from === to) return;
-  const links = updateLinks(`"${nameOf(from).replace(/\.md$/, "")}"`);
+  const links = await updateLinks(nameOf(from).replace(/\.md$/, ""));
   if (folder) {
     await c.note.moveFolder({ vaultId, path: from, to, updateLinks: links });
     await refreshFolders(c, vaultId);
@@ -202,7 +207,7 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
           : [
               sep,
               item("rename", "Rename…", { keys: "F2" }),
-              item("move", "Move folder to…", { disabled: true }),
+              item("move", "Move folder to…"),
               sep,
               item("delete", "Delete"),
             ]),
@@ -212,7 +217,7 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
         item("open-right", "Open to the right"),
         sep,
         item("rename", "Rename…", { keys: "F2" }),
-        item("move", "Move file to…", { disabled: true }),
+        item("move", "Move file to…"),
         sep,
         item("copy-path", "Copy path"),
         item("history", "Open version history"),
@@ -235,6 +240,8 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
             return newFolder(c, vaultId, at);
           case "rename":
             return setRenaming(at);
+          case "move":
+            return openMove(at, folder);
           case "open-tab":
             return openFile(at, { ctrl: true, alt: false, middle: false });
           case "open-right":
@@ -258,7 +265,12 @@ async function deleteFolder(c: Client, vaultId: number, path: string): Promise<v
   const name = nameOf(path);
   if (
     usePrefs.getState().confirmDelete &&
-    !window.confirm(`Delete "${name}"?\n\nIts ${files.length} files can be restored from their version history.`)
+    !(await ask({
+      title: `Delete "${name}"?`,
+      text: `Its ${files.length} files can be restored from their version history.`,
+      confirmLabel: "Delete",
+      danger: true,
+    }))
   ) {
     return;
   }

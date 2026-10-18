@@ -2,7 +2,7 @@
 // bar, Sidebars and panes): what each lists and what choosing an item
 // does. Each opens through the overlays store at a point; app/Overlays.tsx
 // draws it.
-import { openMenu } from "../data/overlays";
+import { openMenu, openMove } from "../data/overlays";
 import { setRenaming } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import type { MenuItem } from "../features/menu/Menu";
@@ -105,7 +105,7 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
     items.push(
       SEP,
       item("rename", "Rename…", { keys: "F2" }),
-      item("move", "Move file to…", { disabled: true }),
+      item("move", "Move file to…"),
       item("copy-path", "Copy path"),
       item("reveal", "Reveal in Files"),
       item("open-default", "Open in default app", { disabled: true }),
@@ -129,6 +129,9 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
           return update((w) => split(w, tabId, "down"));
         case "copy-path":
           if (file !== null) void copyPath(file);
+          return;
+        case "move":
+          if (file !== null) openMove(file, false);
           return;
         case "reveal":
           if (file !== null) revealInFiles(file);

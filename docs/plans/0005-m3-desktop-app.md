@@ -27,8 +27,9 @@ and they are merged. Phase 4, notesd's additions, is merged in two PRs.
 Phase 5 is merged in four PRs: the data layer, the workspace and
 commands, the editor core, and the reading view, merge view and history
 with the exit evidence. Phase 6 is under way: batch 2's shared pieces,
-T-0047 to T-0052 and their wiring, are merged; its sidebar panes,
-T-0053 to T-0059 and their wiring, are in review.
+T-0047 to T-0052, and its sidebar panes, T-0053 to T-0059, each with
+their wiring, are merged; its settings, history list and dialogs,
+T-0060 to T-0063 and their wiring, are in review.
 
 ## Decisions taken for M3
 
@@ -591,6 +592,29 @@ into its container as it merges.
   | T-0057 Backlinks | 1 | 2 m 42 s | correct; some rows lack the 8px inset, left as is |
   | T-0058 Search | 1 | 2 m 19 s | correct; opens on a middle click too |
   | T-0059 Files | 1 | 3 m 2 s | correct; drag targets found from the event at the tree; Enter sends a blank name, which the container ignores |
+
+- **Result so far (2026-10-18): batch 2's settings, history and
+  dialogs.** Codex passed T-0060 to T-0063 on the first attempt each, all
+  four at once in the executor worktrees (from `m3/batch2-settings`). A
+  mutation of each failed its given tests: a text setting sent when
+  unchanged (1 test), a history that never says Yesterday (3), Escape
+  that confirms (1), a folder chooser without the root (3). The
+  planner's part: the confirmation replaces every `window.confirm`
+  (deleting files and folders, the link question on moves, closing with
+  unsaved notes); Move file to and Move folder to open the folder
+  chooser; the settings dialog's container maps rows to the preferences
+  and `vault.configure`, lists the keyboard map's commands by name
+  (`HOTKEY_NAMES` joined `lib/keymap.ts`), and the theme and font size
+  preferences now reach the page; the history tab shows a version with
+  the editor's styles and its changes from the current text. Batch 2 is
+  done but for Open in default app, which waits for the opener plugin.
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0060 Settings dialog | 1 | 2 m 10 s | correct; one draft field serves text and number settings |
+  | T-0061 History list | 1 | 1 m 42 s | correct; also sorts entries newest first itself |
+  | T-0062 Confirmation | 1 | 2 m 2 s | correct |
+  | T-0063 Folder chooser | 1 | 1 m 23 s | correct |
 
 ## Phase 7 — Review and exit evidence
 

@@ -357,12 +357,12 @@ serves `/blobs/` from Vite there if it must.
   `note.versions`, each readable with `note.readVersion`, and for a
   synced vault the hub's revisions from `sync.history`, each readable
   with `sync.readRevision`, which fetches another device's content from
-  the hub. Selecting one
-  shows it, or its difference from the current text; Restore is
-  `note.revert` with the document's base, and Compare opens the merge
-  view. Until batch 2's history list, `app/HistoryView.tsx` draws the
-  lists plainly and shows a version's text; the command Open version
-  history opens the tab.
+  the hub. `app/HistoryView.tsx` draws them with the history list
+  (`features/history/`); selecting one shows it read-only with the
+  editor's styles, or, with Show changes, `@codemirror/merge`'s unified
+  view of how it differs from the current text. Restore is `note.revert`
+  with the document's base, and Compare opens the merge view. The
+  command Open version history and More options open the tab.
 - **Merge** (a `merge` tab, `editor/MergePane.tsx`): `@codemirror/merge`'s
   side-by-side view, the document on the left, a view of it like any
   other, editable, and the other version on the right, read-only: a
@@ -395,8 +395,18 @@ serves `/blobs/` from Vite there if it must.
   one menu at a time, the quick switcher or the command palette, and the
   notices. The menus (`app/menus.ts`) are the tab's, the tab list, More
   options, the vault menu, the status bar's editing mode and conflicts,
-  the Files pane's sort order and its rows'; Move file to and Open in
-  default app wait for their prompt and the opener plugin. The quick switcher lists the
+  the Files pane's sort order and its rows'; Open in default app waits
+  for the opener plugin. Move file to and Move folder to open the folder
+  chooser (a folder never into itself). Questions are the confirmation
+  dialog (`ask`, a promise of the answer): Delete asks while Confirm
+  file deletion is on, a move asks whether to update links while the
+  vault does not update them on its own, and closing a window with
+  unsaved notes asks. The settings dialog (`app/Settings.tsx`; Ctrl+,,
+  F1 at Hotkeys, the vault row's button) builds its sections from the
+  preferences, the vault's settings (changed with `vault.configure`),
+  the keyboard map and the sync state, and applies each change at once;
+  the theme sets `data-theme` on the root and the font size the editor's
+  and the reading view's body. The quick switcher lists the
   vault's notes and the workspace's recent files (aliases join when
   `note.list` carries them); Shift+Enter creates the note where new notes
   go. The palette lists the commands that apply as it opens, the ten run

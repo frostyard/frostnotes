@@ -62,11 +62,10 @@ const rows = () =>
   within(screen.getByRole("tree", { name: "Files" }))
     .getAllByRole("treeitem")
     .map((r) => r.getAttribute("data-path"));
-const confirmWith = (...answers: boolean[]) => {
-  const fn = vi.fn();
-  for (const a of answers) fn.mockReturnValueOnce(a);
-  Object.defineProperty(window, "confirm", { value: fn, configurable: true });
-  return fn;
+// answer clicks a button of the confirmation that shows.
+const answer = async (user: ReturnType<typeof userEvent.setup>, label: string) => {
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: label }));
 };
 const pane = (name: string) => screen.getByRole("tab", { name });
 const editor = () => {
@@ -94,44 +93,46 @@ describe("the Files pane", () => {
   });
 
   it("renames a file in place from its menu, keeping its extension", async () => {
-    confirmWith(false); // do not update links
     const { mock, user } = await start();
     fireEvent.contextMenu(fileRow("Deep/Seeds.md"));
     await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
     const field = screen.getByRole("textbox", { name: "Name" });
     await user.clear(field);
     await user.type(field, "Beans{Enter}");
+    expect(screen.getByRole("alertdialog", { name: "Update links?" })).toBeTruthy();
+    await answer(user, "Don't update");
     await waitFor(() => expect(mock.vault(3).text("Deep/Beans.md")).toBe("Beans.\n"));
     expect(mock.vault(3).text("Deep/Seeds.md")).toBeUndefined();
   });
 
   it("makes a folder and names it", async () => {
-    confirmWith(false);
     const { user } = await start();
     await user.click(screen.getByRole("button", { name: "New folder" }));
     const field = await screen.findByRole("textbox", { name: "Name" });
     expect((field as HTMLInputElement).value).toBe("Untitled");
     await user.clear(field);
     await user.type(field, "Archive{Enter}");
+    await answer(user, "Don't update");
     await waitFor(() => expect(useFiles.getState().folders).toContain("Archive"));
     expect(useFiles.getState().folders).not.toContain("Untitled");
   });
 
   it("moves a file dropped on a folder", async () => {
-    confirmWith(true);
-    const { mock } = await start();
+    const { mock, user } = await start();
     const data = new Map([[DRAG_TYPE, JSON.stringify(["Notes.md"])]]);
     const dataTransfer = { types: [DRAG_TYPE], getData: (t: string) => data.get(t) ?? "", dropEffect: "" };
     fireEvent.dragOver(fileRow("Deep"), { dataTransfer });
     fireEvent.drop(fileRow("Deep"), { dataTransfer });
+    await answer(user, "Update");
     await waitFor(() => expect(mock.vault(3).text("Deep/Notes.md")).toBe("Ask about quince prices.\n"));
   });
 
   it("deletes a file from its menu once the user agrees", async () => {
-    confirmWith(true);
     const { mock, user } = await start();
     fireEvent.contextMenu(fileRow("Notes.md"));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(screen.getByRole("alertdialog", { name: 'Delete "Notes"?' })).toBeTruthy();
+    await answer(user, "Delete");
     await waitFor(() => expect(mock.vault(3).text("Notes.md")).toBeUndefined());
     await waitFor(() => expect(rows()).not.toContain("Notes.md"));
   });
