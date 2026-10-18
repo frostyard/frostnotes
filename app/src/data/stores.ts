@@ -13,12 +13,15 @@ export interface NotesState {
   hello: Hello | null;
   /** Every registered vault, ordered as vault.list orders them. */
   vaults: Vault[];
+  /** The vault the window shows; null when there is none. */
+  vaultId: number | null;
 }
 
 export const useNotes = create<NotesState>(() => ({
   connection: { state: "connecting" },
   hello: null,
   vaults: [],
+  vaultId: null,
 }));
 
 /** UIState is the window's own state. */

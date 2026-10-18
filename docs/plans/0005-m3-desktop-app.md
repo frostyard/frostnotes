@@ -14,7 +14,7 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-17): **Phases 1 to 3 done**, and the user accepted
+Status (2026-10-17): **Phases 1 to 4 done**, and the user accepted
 ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
@@ -23,9 +23,10 @@ is done too, in three PRs against `main`: the API's contract with the
 store's cards T-0043 and T-0044; the renderer's contract with its cards
 T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
-and they are merged. Phase 4's first part, the sanitizer and notesd's
-reads, is merged; its second part, the writes, is in review, and Phase 5
-is next.
+and they are merged. Phase 4, notesd's additions, is merged in two PRs.
+Phase 5 runs as four PRs against `main`, one at a time: the data layer
+(in review), the workspace and commands, the editor core, and the
+reading view, merge view and history with the exit evidence.
 
 ## Decisions taken for M3
 
@@ -375,6 +376,23 @@ of [specs/ui.md](../specs/ui.md) not marked for a batch.
   Compare opens the merge view; the reading view shows the same note; and typing in a generated
   10,000-line note with the framework on stays under 16 ms a keystroke at
   p95 on the host.
+- **Result so far (2026-10-17): the data layer.** `Session` subscribes
+  from the last sequence number the window applied (`frostnotes.seq`),
+  loads the vaults and the window's vault (the last one it showed,
+  `lastVault` in `frostnotes.prefs.v1`), and passes every event, replays
+  included, to the event feed (`data/events.ts`), which is how saved
+  workspaces will follow moves made while the app was closed. The files
+  store (`data/files.ts`) applies note events after its listing's
+  starting point over the listing, in order, and queues those that
+  arrive while it loads; the vault's settings, sync and index state are
+  `data/vaultState.ts`; the preferences, with Obsidian's defaults, are
+  `data/prefs.ts`. Each transport gives a blob's URL (`notesblob://`,
+  the gateway's `/blobs/` with its token, or a `data:` URL from the
+  mock). `MockTransport` gained a vault per vault ID
+  (`rpc/mock/vault.ts`): the note and vault domains with notesd's bases,
+  merges (scripted with `scriptMerges`, else the newer side stands with a
+  conflict version), versions, folders, events, and a replay after
+  `sinceSeq`; `VITE_MOCK=1` shows a made-up vault (`rpc/mock/fixture.ts`).
 
 ## Phase 6 — Executor batches 2 and 3, and wiring
 

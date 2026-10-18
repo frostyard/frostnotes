@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Client } from "../gen/api";
-import { connectWS } from "./ws";
+import { connectWS, gatewayBlobs } from "./ws";
 
 // FakeSocket stands in for the browser's WebSocket: tests open and close it
 // and push frames.
@@ -70,5 +70,13 @@ describe("connectWS", () => {
     transport.onClose((r) => (reason = r));
     socket().onclose?.({ code: 1001 });
     expect(reason).toBe("dev gateway closed (1001)");
+  });
+});
+
+describe("gatewayBlobs", () => {
+  it("serves blobs from the gateway's /blobs/ with its token", () => {
+    const url = gatewayBlobs("ws://127.0.0.1:7788/?token=a%2Bb");
+    expect(url("ab12", "png")).toBe("http://127.0.0.1:7788/blobs/ab12.png?token=a%2Bb");
+    expect(gatewayBlobs("wss://hub.example/ws?token=t")("cd", "mp4")).toBe("https://hub.example/blobs/cd.mp4?token=t");
   });
 });
