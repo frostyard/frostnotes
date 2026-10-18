@@ -7,6 +7,7 @@
 import {
   Annotation,
   ChangeSet,
+  type ChangeSpec,
   EditorState,
   type Extension,
   type SelectionRange,
@@ -82,6 +83,7 @@ export class NoteDoc {
   private retry: ReturnType<typeof setTimeout> | undefined;
   private retryDelay = RETRY_FIRST;
   private readonly listeners = new Set<() => void>();
+  private readonly textListeners = new Set<() => void>();
   private snap: DocSnapshot;
   private disposed = false;
 
@@ -101,6 +103,16 @@ export class NoteDoc {
   };
 
   snapshot = (): DocSnapshot => this.snap;
+
+  /** onText calls fn whenever the text changes, by any writer; it returns the unsubscribe. */
+  onText(fn: () => void): () => void {
+    this.textListeners.add(fn);
+    return () => this.textListeners.delete(fn);
+  }
+
+  private textChanged(): void {
+    for (const fn of this.textListeners) fn();
+  }
 
   private notify(): void {
     const status: DocStatus = !this.loaded
@@ -189,6 +201,7 @@ export class NoteDoc {
     if (!tr.docChanged || tr.annotation(remote) || tr.annotation(forwarded)) return;
     this.text = tr.state.doc;
     if (this.inFlight) this.inFlight.since = this.inFlight.since.compose(tr.changes);
+    this.textChanged();
     const userEvent = tr.annotation(Transaction.userEvent);
     for (const v of this.views) {
       if (v === from) continue;
@@ -220,6 +233,26 @@ export class NoteDoc {
       v.dispatch({ changes, annotations: [remote.of(true), Transaction.addToHistory.of(false)] });
     }
     this.text = changes.apply(this.text);
+    this.textChanged();
+  }
+
+  /**
+   * edit makes a user's change from outside an editor (a checkbox in the
+   * reading view): through a view when there is one, so its history has
+   * it, else on the text.
+   */
+  edit(changes: ChangeSpec): void {
+    if (!this.loaded) return;
+    const view = this.views.values().next().value;
+    if (view) {
+      view.dispatch({ changes, userEvent: "input.toggle" });
+      return;
+    }
+    const set = ChangeSet.of(changes, this.text.length);
+    this.text = set.apply(this.text);
+    if (this.inFlight) this.inFlight.since = this.inFlight.since.compose(set);
+    this.textChanged();
+    this.markDirty();
   }
 
   // --- saving
@@ -457,5 +490,6 @@ export class NoteDoc {
     clearTimeout(this.maxWait);
     clearTimeout(this.retry);
     this.listeners.clear();
+    this.textListeners.clear();
   }
 }

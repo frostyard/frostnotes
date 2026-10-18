@@ -14,7 +14,7 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-17): **Phases 1 to 4 done**, and the user accepted
+Status (2026-10-18): **Phases 1 to 4 done**, and the user accepted
 ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
@@ -24,9 +24,10 @@ store's cards T-0043 and T-0044; the renderer's contract with its cards
 T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
 and they are merged. Phase 4, notesd's additions, is merged in two PRs.
-Phase 5 runs as four PRs against `main`, one at a time: the data layer
-and the workspace and commands (merged), the editor core (in review),
-and the reading view, merge view and history with the exit evidence.
+Phase 5 runs as four PRs against `main`, one at a time: the data layer,
+the workspace and commands, and the editor core (merged), and the
+reading view, merge view and history with the exit evidence (in
+review).
 
 ## Decisions taken for M3
 
@@ -428,6 +429,48 @@ of [specs/ui.md](../specs/ui.md) not marked for a batch.
   reconnect, so no editor goes away with what was typed.
   `@codemirror/merge` 6.12.2, `@codemirror/autocomplete` 6.20.3 and
   `@codemirror/search` 6.7.2 joined, pinned.
+- **Result (2026-10-18): the reading view, the merge view, the history,
+  and the exit evidence.** The reading view (`reading/`) renders the
+  document's text with `note.render` and again 300 ms after it changes,
+  sanitizes it again with DOMPurify and render.md's allowlist (every
+  fixture sanitizes to itself; an attack table checks the rest), gives
+  each `data-blob` element its blob URL, drops remote images unless they
+  load, draws math with KaTeX, follows links as the editor does, and
+  toggles a task's line in the document. Under happy-dom DOMPurify keeps
+  `<script>`, so the sanitizer checks itself and falls back to escaping,
+  and its tests run in jsdom. The merge view (`editor/MergePane.tsx`)
+  attaches its left editor to the document; the history
+  (`app/HistoryView.tsx`, plain until batch 2) lists versions and hub
+  revisions, restores with the document's base, and compares; the
+  command Open version history opens it. DOMPurify 3.4.16, KaTeX 0.18.11
+  and, for tests, jsdom 30.1.1 joined, pinned. The exit evidence:
+  - Against a real notesd (a scratch vault, its own data directory and
+    socket, `-devgw`) with the app from Vite in a browser over the dev
+    gateway, a note opened from the Files pane took typing and saved it;
+    an outside edit (`sed -i` on another line) made while typing was
+    unsaved landed 2 ms before the save, which notesd merged with the
+    cursor where it was; Ctrl+Z took back all the typing and left both
+    outside edits, and the undo saved. An outside edit of the line being
+    typed on showed the conflict notice with nothing lost (the conflict
+    version held all 53 typed characters); Compare opened the merge view
+    on it, taking the right side's chunk saved, and Done closed it. The
+    reading view showed the same note; its checkbox toggled the line on
+    disk and its link opened the other note; a callout, highlight, a
+    tag, inline and display math, a table, code, an embedded note and a
+    footnote rendered. The run found two bugs, fixed here with tests:
+    notesd's write answer never named its conflict version (`Compare`
+    asked for version 0), and a task's checkbox, which notesd renders
+    disabled, took no clicks in a browser.
+  - Typing in a generated 10,000-line note in the built app with the
+    framework on (`FROSTNOTES_SPIKE=editor build/frostnotes-app`): 10 ms
+    at p95 from keystroke to paint on the host's GPU (dispatch 5 ms;
+    scrolling at 59 fps, frame p95 18 ms), and 17 ms under Xvfb in nsl,
+    which renders in software (dispatch 9 ms).
+  - Not yet run by hand: the same editor flow in the built app's window
+    over the Tauri bridge (it reads `FROSTNOTES_SOCKET`), and whether
+    WebKitGTK loads `notesblob://` into Vite's page under `make app-dev`
+    (see [Attachments](../design/app.md#attachments)). Phase 7's
+    `make m3-evidence` drives the built app.
 
 ## Phase 6 — Executor batches 2 and 3, and wiring
 
@@ -525,7 +568,8 @@ against the built app.
 
 - **The latency budget with every provider on:** if 16 ms breaks, which
   providers update when typing pauses instead of per keystroke? Phase 5
-  measures.
+  measured 10 ms at p95 on the host with the spike's providers; Phase 7
+  measures again with batch 3's.
 - **The two trials:** M3's needs M2's hub on the user's two machines.
   Run M2's 7 days first and M3's after, or overlap them once Phase 6
   ends? The user decides by Phase 7.

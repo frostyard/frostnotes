@@ -249,7 +249,9 @@ that ignores case is not a second file.
 4. In one `Tx`: index the new content, append a version, emit
    `note.changed`. Once the file has changed, this runs to the end even if
    the client has gone away.
-5. Return the new hash and, if a merge happened, the merged content.
+5. Return the new hash and, if a merge happened, the merged content,
+   with the conflict version's ID when it conflicted (what the editor's
+   Compare opens).
 
 A write records its version's source (`editor` for a client, `agent` for
 MCP) and author (the client's name, or the MCP client's). When a merge

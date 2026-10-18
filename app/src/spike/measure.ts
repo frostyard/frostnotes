@@ -208,14 +208,17 @@ export interface Checks {
   toggleExact: boolean;
 }
 
-/** check verifies live preview at the top of the note. */
-export async function check(view: EditorView): Promise<Checks> {
+/** check verifies live preview at the top of the note; hidden counts its hidden ranges, the spike's by default. */
+export async function check(view: EditorView, hidden?: (view: EditorView) => number): Promise<Checks> {
   view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(0, { y: "start" }) });
   await frames(5);
   let hiddenRanges = 0;
-  const decorations = view.plugin(livePreview)?.decorations ?? Decoration.none;
-  for (const it = decorations.iter(); it.value; it.next()) {
-    if (it.value.spec.preview === "hide") hiddenRanges++;
+  if (hidden) hiddenRanges = hidden(view);
+  else {
+    const decorations = view.plugin(livePreview)?.decorations ?? Decoration.none;
+    for (const it = decorations.iter(); it.value; it.next()) {
+      if (it.value.spec.preview === "hide") hiddenRanges++;
+    }
   }
   const checkboxes = view.contentDOM.querySelectorAll("input.cm-pv-task").length;
   const before = view.state.doc.toString();

@@ -114,6 +114,27 @@ const noteView = (): Extract<ViewState, { type: "note" }> | undefined => {
   return v.type === "note" ? v : undefined;
 };
 
+/**
+ * mergeDone finishes a merge: the note's conflict notice goes, the file's
+ * conflict flag on its hub clears when the vault syncs (sync.resolve), and
+ * the merge tab closes.
+ */
+export async function mergeDone(c: Client, docs: DocumentRegistry, path: string, closeTab: () => void): Promise<void> {
+  const vaultId = useNotes.getState().vaultId;
+  if (vaultId !== null) {
+    const doc = docs.find(vaultId, path);
+    if (doc?.notice?.kind === "conflict" || doc?.notice?.kind === "refused") doc.dismiss();
+    if (useVaultState.getState().sync) {
+      try {
+        await c.sync.resolve({ vaultId, path });
+      } catch {
+        // A file the hub has no flag for, or no hub to reach: nothing to clear.
+      }
+    }
+  }
+  closeTab();
+}
+
 /** editorCommands are the commands of the active tab's editor. */
 export function editorCommands(docs: DocumentRegistry): Command[] {
   const editor = () => {
@@ -162,6 +183,19 @@ export function workspaceCommands(c: Client): Command[] {
       run: () => createNote(c, "right"),
     },
     { id: "workspace:new-tab", name: "New tab", run: () => update(openNewTab) },
+    {
+      id: "sync:view-version-history",
+      name: "Open version history",
+      applies: () => {
+        const v = activeTab(ws()).view;
+        return v.type === "note" || v.type === "file";
+      },
+      run: () =>
+        update((w) => {
+          const v = activeTab(w).view;
+          return v.type === "note" || v.type === "file" ? open(w, { type: "history", path: v.path }, "tab") : w;
+        }),
+    },
     { id: "workspace:close", name: "Close current tab", run: () => update((w) => close(w, activeTab(w).id)) },
     {
       id: "workspace:close-others",
