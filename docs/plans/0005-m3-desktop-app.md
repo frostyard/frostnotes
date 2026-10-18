@@ -21,7 +21,8 @@ spec's tokens in the app's styles, and the batch-1 cards T-0038 to
 T-0042, which Codex passed and which are merged. Phase 3, the contracts,
 is under way in three parts, each its own PR against `main`: the API's
 contract with the store's cards T-0043 and T-0044 (done); the renderer's
-contract; and the blob scheme with the mock's vault.
+contract with its cards T-0045 and T-0046 (done); and the blob scheme
+with the mock's vault.
 
 ## Decisions taken for M3
 
@@ -250,6 +251,26 @@ does, so the plan records them without ADRs:
   | [T-0044](../tasks/todo/0044-search-filters.md) | M | `internal/store/search.go` | `path:`, `file:` and `tag:` in searches, and listing by filters alone | T-0043 |
 
   Both cards are in `internal/store`, so they run one after the other.
+- **Result, part 2 (2026-10-17): the renderer's contract.**
+  [specs/render.md](../specs/render.md) pins the HTML for each piece of
+  syntax, the sanitizer's allowlist, a fixture vault and 18 fixtures, read
+  by `internal/render`'s tests. `internal/markdown` gives the renderer the
+  index's goldmark, the Obsidian nodes and the body to render (comments
+  out, their newlines kept, so `data-line` counts the note's lines);
+  `internal/render` has `Render`, `HTML`, embeds' depth and cycles, a
+  fallback that keeps unknown nodes from crashing goldmark, and a
+  sanitizer that escapes everything until Phase 4 builds it. Writing the
+  references settled two rules: a note embed alone in its paragraph
+  replaces the paragraph as a block, since a `div` in a `p` is split
+  apart by every HTML parser, and one among text is a link; and an
+  embedded note names no lines. Each card was checked against a reference
+  that is then deleted, T-0045's alone and then both, with `make check`
+  green; against the stubs every `[links]` and `[syntax]` fixture fails.
+
+  | Card | Size | File | What | Runs after |
+  | --- | --- | --- | --- | --- |
+  | [T-0045](../tasks/todo/0045-render-links.md) | M | `internal/render/links.go` | links, note embeds and their sections, files by hash, markdown images | |
+  | [T-0046](../tasks/todo/0046-render-syntax.md) | M | `internal/render/syntax.go` | tags, highlights, math, callouts, checkboxes and headings with lines, block IDs | T-0045 |
 
 ## Phase 4 — notesd's additions (planner, alongside Phase 5)
 
@@ -392,6 +413,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 and T-0044](../tasks/todo/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/todo/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
