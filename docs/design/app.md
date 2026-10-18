@@ -259,6 +259,14 @@ after the last tab goes until what it holds is saved:
   keymap, Tab and Shift+Tab to indent, and its search panel restyled. The
   app's commands (Ctrl+B, Ctrl+L, …) are commands, not editor keymaps
   ([Commands and keys](#commands-and-keys)).
+- **Settings:** the Editor section's switches reach the view through a
+  compartment: line numbers, folding (headings with the markdown
+  language, by indentation with Fold indent, behind a fold gutter), smart
+  lists (the markdown keymap), auto-pairing brackets and Markdown's marks
+  around a selection, indentation, and the indentation guides.
+- **Page previews:** Ctrl over a link in the editor or the reading view
+  shows the note it leads to (`features/preview/PagePreview.tsx`),
+  rendered by notesd as an embed of it; its title opens the note.
 - **Completion:** `@codemirror/autocomplete` suggests files and notes'
   aliases after `[[`, ranked as the quick switcher ranks them, headings
   (`[[note#`) and blocks (`[[note#^`), and tags after a tag's `#`, by
@@ -266,8 +274,8 @@ after the last tab goes until what it holds is saved:
   editor gives it a catalog (`editor/catalog.ts`): the files store's
   files, link text by the vault's New link format, another note's
   headings and block IDs from its open document or `note.read`, and
-  `note.tags`, kept 10 s. Aliases wait for note listings that carry
-  them.
+  `note.tags`, kept 10 s, and the notes' aliases from `note.list`
+  (`data/aliases.ts`), which the quick switcher reads too.
 - **Links in the editor:** `note.resolve` resolves the links of the
   visible lines from the note's folder, as notesd's index does, in one
   batched call cached until a file is added, moved or removed (the files
@@ -342,7 +350,9 @@ changes, so a field keeps its focus, and takes its own events. Add file
 property (Ctrl+;) makes an empty frontmatter where there is none and
 opens the block's new row. The Properties in document preference shows
 the block, hides the frontmatter, or leaves its YAML, as source mode
-does. A note opens with the cursor where its body starts.
+does. A note opens with the cursor where its body starts. The reading
+view draws the same block over the rendered note and writes its edits
+into the note's document.
 
 The inline title (`editor/title.tsx`, a block widget above the first
 line in both editing modes, and above the reading view) is the file's
@@ -390,8 +400,8 @@ the transport's `blobURL(hash, ext)` gives a file's URL:
 `notesblob://localhost/…` in Tauri, the dev gateway's `/blobs/…` in a
 browser, a `data:` URL from the mock. Images, audio and video show
 inline in live preview, in the reading view and in a `file` tab; a PDF
-shows as a chip that opens it with the system's application
-(`tauri-plugin-opener`). With the Load remote images preference off,
+shows with a button that opens it with the system's application (the
+shell's `open_file`; [Window](#window)). With the Load remote images preference off,
 the reading view drops remote `img` sources. Pasting or
 dropping an image calls `note.upload` and inserts `![[name]]`.
 
@@ -492,7 +502,16 @@ serves `/blobs/` from Vite there if it must.
   commands.
 - The webview's own context menu is off; the app draws its own menus.
 - Links to the web open in the system browser (`http`, `https`, `mailto`
-  only); the webview never navigates away from the app.
+  only); the webview never navigates away from the app. The shell's two
+  commands (`src-tauri/src/open.rs`) are the only ways the page reaches
+  the system: `open_url` checks a link's scheme, and `open_file` (Open in
+  default app) opens a vault file only when it is a regular,
+  non-executable file inside the vault folder, of a document or media
+  type, never a script, a `.desktop` entry or HTML. Both run `xdg-open`
+  with one argument and no shell. In a browser, a web link opens in a new
+  tab and files do not open.
+- View's Zoom in, Zoom out and Reset zoom step through a browser's zoom
+  levels with the webview's own zoom, kept as a preference.
 
 ## Dev and test
 

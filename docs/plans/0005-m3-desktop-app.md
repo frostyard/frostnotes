@@ -29,9 +29,12 @@ commands, the editor core, and the reading view, merge view and history
 with the exit evidence. Phase 6 is under way: batch 2 is merged in three
 PRs (T-0047 to T-0063 and their wiring); batch 3's first part, the
 editor's syntax, formatting commands, word counts and completion
-(T-0064 to T-0069), and its second, the live-preview widgets (T-0070 to
-T-0075), are merged; its last, properties, the inline title, templates
-and daily notes (T-0076 to T-0079 and their wiring), is in review.
+(T-0064 to T-0069), its second, the live-preview widgets (T-0070 to
+T-0075), and its last, properties, the inline title, templates and daily
+notes (T-0076 to T-0079), are merged. What the spec still asked of Phase
+6 (opening links and files outside the app, zoom, the Editor settings,
+aliases, page previews, indentation guides and the reading view's
+properties; T-0080 and T-0081) is in review.
 
 ## Decisions taken for M3
 
@@ -726,6 +729,28 @@ into its container as it merges.
   | T-0078 inline title | 1 | 1 m 21 s | correct; the planner styled its alert |
   | T-0079 template chooser | 1 | 1 m 22 s | correct |
 
+- **Result (2026-10-18): Phase 6's last pieces.** An audit of the spec
+  against the app found what Phase 6 still owed: web links did not open
+  in the built app (the shell denies `window.open`), Open in default app
+  waited, the zoom keys ran nothing, six Editor settings were never read
+  (line numbers, folding, smart lists, auto-pairing Markdown's marks,
+  indentation guides), aliases were missing from the quick switcher and
+  completion, Ctrl+hover showed no page preview, and the reading view
+  drew no properties. Instead of `tauri-plugin-opener`, the shell has two
+  commands of its own (`open.rs`) that check what they open, so a page
+  cannot reach anything but web links and vault documents (Rust tests
+  for both). `note.list`'s entries carry aliases (additive). Codex passed
+  T-0080 (guides) and T-0081 (the page preview box) on the first
+  attempt each; a mutation failed T-0081's tests, but one of T-0080's
+  (a guide on a line no deeper than its bullet) passed its given tests,
+  so the planner added the test that fails it. A window test covers each
+  piece over the mock.
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0080 indentation guides | 1 | 2 m 2 s | correct; its given tests missed a lazy continuation line, added since |
+  | T-0081 page preview | 1 | 1 m 19 s | correct |
+
 ## Phase 7 — Review and exit evidence
 
 Checks [specs/ui.md](../specs/ui.md) (the keyboard map, the rules) and
@@ -784,6 +809,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0079](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
