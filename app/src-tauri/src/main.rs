@@ -1,8 +1,10 @@
 //! The Frostnotes app shell: one instance with one main window, a line
 //! bridge to notesd's socket, notesblob://, notesd's blob store by
-//! content hash (ADR-0023), and the two checked ways to open things
-//! outside the app (open.rs). All notes logic lives in notesd; see
-//! docs/design/overview.md and docs/specs/rpc-protocol.md.
+//! content hash (ADR-0023), the two checked ways to open things outside
+//! the app (open.rs), and the system's folder picker, through which a
+//! person names a folder to open or create a vault in (ADR-0024). All
+//! notes logic lives in notesd; see docs/design/overview.md and
+//! docs/specs/rpc-protocol.md.
 
 mod bridge;
 mod open;
@@ -26,6 +28,8 @@ fn main() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| second_launch(app)));
     }
     builder
+        // Only its open dialog, for folders (capabilities/default.json).
+        .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol("notesblob", protocol::notesblob)
         .manage(bridge::Bridge::default())
         .manage(spike)
@@ -119,7 +123,8 @@ mod tests {
 
     // Review finding 12 (plan 0005, Phase 7): the window holds only what
     // the page uses of Tauri's own commands; destroy is how a close that
-    // waited for unsaved notes ends (onCloseRequested).
+    // waited for unsaved notes ends (onCloseRequested). Phase 8 adds the
+    // window's title and the folder picker (ADR-0024).
     #[test]
     fn grants_only_what_the_page_uses() {
         let caps = include_str!("../capabilities/default.json");
@@ -138,7 +143,9 @@ mod tests {
                 "core:window:allow-show",
                 "core:window:allow-close",
                 "core:window:allow-destroy",
+                "core:window:allow-set-title",
                 "core:webview:allow-set-webview-zoom",
+                "dialog:allow-open",
             ]
         );
     }
