@@ -51,7 +51,9 @@ describe("the main window over the mock", () => {
     expect(screen.getByRole("button", { name: "Create new note (Ctrl + N)" })).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe(""); // ready: nothing to say
     expect(screen.getByRole("button", { name: "Open quick switcher" }).hasAttribute("disabled")).toBe(false);
-    expect(screen.getByRole("button", { name: "Open today's daily note" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Open today's daily note" }).hasAttribute("disabled")).toBe(false);
+    // Insert template needs a note open in an editor.
+    expect(screen.getByRole("button", { name: "Insert template" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("opens files from the Files pane as links open, a note in its editor", async () => {
