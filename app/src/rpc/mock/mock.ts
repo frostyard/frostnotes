@@ -253,7 +253,7 @@ export class MockTransport implements Transport {
       case "note.read":
         return v.read(path);
       case "note.list":
-        return v.entries();
+        return v.list(p as { folder?: string; tag?: string; property?: string; value?: string });
       case "note.search":
         return v.search(String(p.query ?? ""), typeof p.limit === "number" ? p.limit : 20);
       case "note.links":

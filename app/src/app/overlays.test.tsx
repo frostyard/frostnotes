@@ -10,6 +10,7 @@ import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { emptyVault, useVaultState } from "../data/vaultState";
 import { MockTransport, mockVaults } from "../rpc/mock/mock";
+import { fileRow, findFileRow } from "../testing/files";
 import { emptyWorkspace } from "../workspace/model";
 import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
@@ -31,7 +32,7 @@ async function start() {
   const mock = new MockTransport(mockVaults(), { files });
   render(<App connect={async () => mock} />);
   await screen.findByRole("main", { name: "Workspace" });
-  await screen.findByRole("button", { name: "a.md" });
+  await findFileRow("a.md");
   return { mock, user: userEvent.setup() };
 }
 
@@ -57,7 +58,7 @@ describe("the quick switcher", () => {
 
   it("lists the recent files with no query, and creates a note named as typed", async () => {
     const { mock, user } = await start();
-    await user.click(screen.getByRole("button", { name: "a.md" }));
+    await user.click(fileRow("a.md"));
     await user.keyboard("{Control>}o{/Control}");
     expect(options().map((o) => o.textContent)).toEqual(["a"]);
     await user.type(field("Quick switcher"), "Seed swap");
@@ -102,8 +103,8 @@ describe("the command palette", () => {
 describe("the tab menus", () => {
   it("closes a tab from its context menu", async () => {
     const { user } = await start();
-    await user.click(screen.getByRole("button", { name: "a.md" }));
-    fireEvent.click(screen.getByRole("button", { name: "Deep/b.md" }), { ctrlKey: true });
+    await user.click(fileRow("a.md"));
+    fireEvent.click(fileRow("Deep/b.md"), { ctrlKey: true });
     expect(tabs()).toEqual(["a", "b"]);
     fireEvent.contextMenu(screen.getByRole("tab", { name: "a" }));
     const menu = screen.getByRole("menu", { name: "Tab" });
@@ -117,8 +118,8 @@ describe("the tab menus", () => {
 
   it("lists a group's tabs, the active one checked, and activates the one chosen", async () => {
     const { user } = await start();
-    await user.click(screen.getByRole("button", { name: "a.md" }));
-    fireEvent.click(screen.getByRole("button", { name: "Deep/b.md" }), { ctrlKey: true });
+    await user.click(fileRow("a.md"));
+    fireEvent.click(fileRow("Deep/b.md"), { ctrlKey: true });
     await user.click(screen.getByRole("button", { name: "Tab list" }));
     const items = within(screen.getByRole("menu", { name: "Tab list" })).getAllByRole("menuitemcheckbox");
     expect(items.map((i) => [i.getAttribute("aria-label"), i.getAttribute("aria-checked")])).toEqual([
@@ -133,7 +134,7 @@ describe("the tab menus", () => {
 describe("More options", () => {
   it("copies the path and says so", async () => {
     const { user } = await start(); // user-event puts its own clipboard in place
-    await user.click(screen.getByRole("button", { name: "Deep/b.md" }));
+    await user.click(fileRow("Deep/b.md"));
     await user.click(screen.getByRole("button", { name: "More options" }));
     await user.click(screen.getByRole("menuitem", { name: "Copy path" }));
     expect(await screen.findByText("Copied the path.")).toBeTruthy();
@@ -144,7 +145,7 @@ describe("More options", () => {
     const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
     Object.defineProperty(window, "confirm", { value: confirm, configurable: true });
     const { mock, user } = await start();
-    await user.click(screen.getByRole("button", { name: "a.md" }));
+    await user.click(fileRow("a.md"));
     for (let i = 0; i < 2; i++) {
       await user.click(screen.getByRole("button", { name: "More options" }));
       await user.click(screen.getByRole("menuitem", { name: "Delete file" }));
@@ -157,7 +158,7 @@ describe("More options", () => {
 
   it("opens the version history in a new tab", async () => {
     const { user } = await start();
-    await user.click(screen.getByRole("button", { name: "a.md" }));
+    await user.click(fileRow("a.md"));
     await user.click(screen.getByRole("button", { name: "More options" }));
     await user.click(screen.getByRole("menuitem", { name: "Open version history" }));
     expect(tabs()).toEqual(["a", "History of a"]);
@@ -167,7 +168,7 @@ describe("More options", () => {
 describe("the status bar", () => {
   it("counts the active note's backlinks and opens the Backlinks pane", async () => {
     const { user } = await start();
-    await user.click(screen.getByRole("button", { name: "Deep/b.md" }));
+    await user.click(fileRow("Deep/b.md"));
     const count = await screen.findByRole("button", { name: "1 backlink" });
     await user.click(count);
     expect(screen.getByRole("tab", { name: "Backlinks" }).getAttribute("aria-selected")).toBe("true");
@@ -175,7 +176,7 @@ describe("the status bar", () => {
 
   it("switches the editing mode from its menu", async () => {
     const { user } = await start();
-    await user.click(screen.getByRole("button", { name: "a.md" }));
+    await user.click(fileRow("a.md"));
     await user.click(screen.getByRole("button", { name: "Editing mode: Live Preview" }));
     const menu = screen.getByRole("menu", { name: "Editing mode" });
     expect(within(menu).getByRole("menuitemcheckbox", { name: "Live Preview" }).getAttribute("aria-checked")).toBe(

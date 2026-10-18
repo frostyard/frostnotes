@@ -259,7 +259,7 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
           mode={view.type === "note" ? view.mode : undefined}
           onBack={() => update((w) => back(activate(w, tab.id)))}
           onForward={() => update((w) => forward(activate(w, tab.id)))}
-          onFolder={revealInFiles}
+          onFolder={(folder) => revealInFiles(`${folder}/`)}
           onToggleMode={() =>
             update((w) =>
               view.type === "note" ? setView(w, tab.id, { ...view, mode: view.mode === "edit" ? "read" : "edit" }) : w,

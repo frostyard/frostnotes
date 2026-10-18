@@ -9,6 +9,7 @@ import { useNotes } from "../data/stores";
 import { emptyVault, useVaultState } from "../data/vaultState";
 import { Client, PROTOCOL } from "../rpc/gen/api";
 import { MockTransport, mockVaults } from "../rpc/mock/mock";
+import { fileRow, findFileRow } from "../testing/files";
 import { emptyWorkspace } from "../workspace/model";
 import { useWorkspace, workspaceKey } from "../workspace/store";
 import { App } from "./App";
@@ -40,14 +41,12 @@ const editorText = () => {
   const el = screen.queryByTestId("note-editor")?.querySelector(".cm-editor");
   return el ? EditorView.findFromDOM(el as HTMLElement)?.state.doc.toString() : undefined;
 };
-const fileButton = (path: string) =>
-  within(screen.getByRole("region", { name: "Files" })).getByRole("button", { name: path });
 
 describe("the main window over the mock", () => {
   it("shows the window's vault, its files, and an empty tab", async () => {
     await start(new MockTransport(mockVaults(), { files, server: "notesd test" }));
     expect(screen.getByRole("button", { name: /garden/ })).toBeTruthy(); // the vault row: "garden" sorts first
-    await waitFor(() => expect(fileButton("Deep/b.md")).toBeTruthy());
+    await waitFor(() => expect(fileRow("Deep/b.md")).toBeTruthy());
     expect(tabs()).toEqual(["New tab"]);
     expect(screen.getByRole("button", { name: "Create new note (Ctrl + N)" })).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe(""); // ready: nothing to say
@@ -57,15 +56,15 @@ describe("the main window over the mock", () => {
 
   it("opens files from the Files pane as links open, a note in its editor", async () => {
     await start();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "a.md" }));
+    await userEvent.setup().click(await findFileRow("a.md"));
     expect(tabs()).toEqual(["a"]);
     await waitFor(() => expect(editorText()).toBe("Alpha links [[b]].\n"));
-    fireEvent.click(fileButton("Deep/b.md"), { ctrlKey: true });
+    fireEvent.click(fileRow("Deep/b.md"), { ctrlKey: true });
     expect(tabs()).toEqual(["a", "b"]);
     expect(
       within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("button", { name: "Deep" }),
     ).toBeTruthy();
-    fireEvent.click(fileButton("pic.png"), { ctrlKey: true, altKey: true });
+    fireEvent.click(fileRow("pic.png"), { ctrlKey: true, altKey: true });
     expect(screen.getAllByRole("tablist", { name: "Tabs" })).toHaveLength(2);
     expect(tabs(1)).toEqual(["pic.png"]);
     expect(screen.getByRole("img", { name: "pic.png" }).getAttribute("src")).toMatch(/^data:image\/png;base64,/);
@@ -74,7 +73,7 @@ describe("the main window over the mock", () => {
   it("runs the keymap's commands and the chrome's buttons", async () => {
     await start();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "a.md" }));
+    await user.click(await findFileRow("a.md"));
     await user.keyboard("{Control>}t{/Control}");
     expect(tabs()).toEqual(["a", "New tab"]);
     await user.keyboard("{Control>}w{/Control}");
@@ -89,7 +88,7 @@ describe("the main window over the mock", () => {
 
   it("creates a note with Ctrl+N and opens it", async () => {
     const mock = await start();
-    await screen.findByRole("button", { name: "a.md" });
+    await findFileRow("a.md");
     await userEvent.setup().keyboard("{Control>}n{/Control}");
     await waitFor(() => expect(tabs()).toEqual(["Untitled"]));
     expect(mock.vault(3).text("Untitled.md")).toBe("");
@@ -98,11 +97,11 @@ describe("the main window over the mock", () => {
   it("keeps a workspace per vault, and switches vaults from the vault row", async () => {
     await start();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "a.md" }));
+    await user.click(await findFileRow("a.md"));
     await waitFor(() => expect(localStorage.getItem(workspaceKey("/home/demo/garden"))).toContain('"a.md"'));
     await user.click(screen.getByRole("button", { name: /garden/ }));
     await user.click(screen.getByRole("menuitemcheckbox", { name: "Notes" }));
-    await waitFor(() => expect(fileButton("n.md")).toBeTruthy());
+    await waitFor(() => expect(fileRow("n.md")).toBeTruthy());
     expect(tabs()).toEqual(["New tab"]);
     await user.click(screen.getByRole("button", { name: /Notes/ }));
     await user.click(screen.getByRole("menuitemcheckbox", { name: "garden" }));
@@ -111,7 +110,7 @@ describe("the main window over the mock", () => {
 
   it("follows a move into its tabs", async () => {
     const mock = await start();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "a.md" }));
+    await userEvent.setup().click(await findFileRow("a.md"));
     const notesctl = new Client(mock);
     await notesctl.rpc.hello({ protocol: PROTOCOL, client: "notesctl" });
     await act(async () => {
@@ -122,9 +121,9 @@ describe("the main window over the mock", () => {
 
   it("moves a dragged tab to another group", async () => {
     await start();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "a.md" }));
-    fireEvent.click(fileButton("Deep/b.md"), { ctrlKey: true });
-    fireEvent.click(fileButton("pic.png"), { ctrlKey: true, altKey: true });
+    await userEvent.setup().click(await findFileRow("a.md"));
+    fireEvent.click(fileRow("Deep/b.md"), { ctrlKey: true });
+    fireEvent.click(fileRow("pic.png"), { ctrlKey: true, altKey: true });
     const [left, right] = screen.getAllByRole("tablist", { name: "Tabs" }) as HTMLElement[];
     const dataTransfer = { setData: () => {}, effectAllowed: "", dropEffect: "" };
     fireEvent.dragStart(within(left as HTMLElement).getByRole("tab", { name: "b" }), { dataTransfer });
@@ -157,7 +156,7 @@ describe("the main window over the mock", () => {
 
   it("saves what is typed in a note's editor", async () => {
     const mock = await start();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "a.md" }));
+    await userEvent.setup().click(await findFileRow("a.md"));
     await waitFor(() => expect(editorText()).toBe("Alpha links [[b]].\n"));
     const view = EditorView.findFromDOM(screen.getByTestId("note-editor").querySelector(".cm-editor") as HTMLElement);
     act(() => view?.dispatch({ changes: { from: 0, insert: "Typed. " }, userEvent: "input.type" }));

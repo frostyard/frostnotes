@@ -11,6 +11,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
 import { notify, openPrompt } from "../data/overlays";
+import { setRenaming, usePanes } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
@@ -39,6 +40,8 @@ import {
   toggleSidebar,
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
+import { revealInFiles } from "./menus";
+import { searchFor } from "./panes/counts";
 
 const ws = () => useWorkspace.getState().ws;
 const update = (op: Parameters<ReturnType<typeof useWorkspace.getState>["update"]>[0]) =>
@@ -203,6 +206,29 @@ export function editorCommands(docs: DocumentRegistry): Command[] {
   };
   const has = () => editor() !== undefined;
   return [
+    {
+      id: "global-search:open",
+      name: "Search in all files",
+      applies: hasVault,
+      run: () => {
+        // The editor's selection becomes the query, quoted when it holds a space.
+        const e = editor();
+        const sel = e ? e.view.state.sliceDoc(e.view.state.selection.main.from, e.view.state.selection.main.to) : "";
+        const q = sel.trim();
+        searchFor(q === "" ? usePanes.getState().searchQuery : /\s/.test(q) ? `"${q}"` : q);
+      },
+    },
+    {
+      id: "workspace:edit-file-title",
+      name: "Rename file",
+      applies: () => activeTab(ws()).view.type === "note" || activeTab(ws()).view.type === "file",
+      run: () => {
+        const v = activeTab(ws()).view;
+        if (v.type !== "note" && v.type !== "file") return;
+        revealInFiles(v.path);
+        setRenaming(v.path);
+      },
+    },
     { id: "editor:save-file", name: "Save current file", applies: has, run: () => editor()?.doc.save() },
     {
       id: "editor:open-search",

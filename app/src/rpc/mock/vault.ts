@@ -430,28 +430,82 @@ export class MockVault {
       }));
   }
 
+  // search is notesd's in spirit: words and "quoted phrases" must all
+  // appear in the title or text, ignoring case; path:, file: and tag:#
+  // filter; a filter alone lists the matching notes by path.
   search(query: string, limit = 20): SearchHit[] {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [];
+    const terms: string[] = [];
+    const filters: { kind: string; value: string }[] = [];
+    for (const m of query.matchAll(/"([^"]*)"|(\S+)/g)) {
+      const word = (m[1] ?? m[2] ?? "").toLowerCase();
+      const f = m[2] ? /^(path|file|tag):(.+)$/.exec(word) : null;
+      if (f) filters.push({ kind: f[1] ?? "", value: (f[2] ?? "").replace(/^#/, "") });
+      else if (word.trim()) terms.push(word);
+    }
+    if (terms.length === 0 && filters.length === 0) return [];
     const hits: SearchHit[] = [];
-    for (const n of this.entries()) {
+    for (const n of [...this.entries()].sort((a, b) => cmp(a.path, b.path))) {
+      if (!filters.every((f) => this.matches(n.path, f.kind, f.value))) continue;
       const text = this.text(n.path) ?? "";
       const lower = `${n.title}\n${text}`.toLowerCase();
-      if (!words.every((w) => lower.includes(w))) continue;
-      const first = words[0] ?? "";
-      const at = text.toLowerCase().indexOf(first);
+      if (!terms.every((w) => lower.includes(w))) continue;
+      const first = terms[0] ?? "";
+      const at = first ? text.toLowerCase().indexOf(first) : -1;
       const snippet =
-        at < 0
-          ? [{ text: text.slice(0, 80), match: false }]
-          : [
-              { text: text.slice(Math.max(0, at - 30), at), match: false },
-              { text: text.slice(at, at + first.length), match: true },
-              { text: text.slice(at + first.length, at + first.length + 50), match: false },
-            ];
+        first === ""
+          ? []
+          : at < 0
+            ? [{ text: text.slice(0, 80), match: false }]
+            : [
+                { text: text.slice(Math.max(0, at - 30), at), match: false },
+                { text: text.slice(at, at + first.length), match: true },
+                { text: text.slice(at + first.length, at + first.length + 50), match: false },
+              ];
       hits.push({ path: n.path, title: n.title, snippet });
       if (hits.length >= limit) break;
     }
     return hits;
+  }
+
+  // matches applies one search filter, or list's tag filter, to a note.
+  private matches(path: string, kind: string, value: string): boolean {
+    const v = value.toLowerCase();
+    switch (kind) {
+      case "path":
+        return path.toLowerCase().includes(v);
+      case "file":
+        return path
+          .slice(path.lastIndexOf("/") + 1)
+          .toLowerCase()
+          .includes(v);
+      case "tag":
+        return this.read(path).tags.some((t) => {
+          const l = t.toLowerCase();
+          return l === v || l.startsWith(`${v}/`);
+        });
+      default:
+        return true;
+    }
+  }
+
+  // list is note.list: the notes, by path, in a folder, with a tag, or with a property (and value).
+  list(p: { folder?: string; tag?: string; property?: string; value?: string }): NoteEntry[] {
+    const folder = (p.folder ?? "").replace(/^\/+|\/+$/g, "");
+    return this.entries().filter((n) => {
+      if (folder !== "" && folder !== "." && !n.path.startsWith(`${folder}/`)) return false;
+      if (p.tag && !this.matches(n.path, "tag", p.tag.replace(/^#/, ""))) return false;
+      if (p.property) {
+        const fm = frontmatter(this.text(n.path) ?? "");
+        const key = Object.keys(fm).find((k) => k.toLowerCase() === p.property?.toLowerCase());
+        if (key === undefined) return false;
+        if (p.value !== undefined) {
+          const val = fm[key];
+          const vals = (Array.isArray(val) ? val : [val]).map((x) => String(x).toLowerCase());
+          if (!vals.includes(p.value.toLowerCase())) return false;
+        }
+      }
+      return true;
+    });
   }
 
   links(p: string): Link[] {
