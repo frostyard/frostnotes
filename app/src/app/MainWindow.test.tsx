@@ -50,7 +50,7 @@ describe("the main window over the mock", () => {
     await waitFor(() => expect(fileButton("Deep/b.md")).toBeTruthy());
     expect(tabs()).toEqual(["New tab"]);
     expect(screen.getByRole("button", { name: "Create new note (Ctrl + N)" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Connected to notesd test");
+    expect(screen.getByRole("status").textContent).toBe(""); // ready: nothing to say
     expect(screen.getByRole("button", { name: "Open quick switcher" }).hasAttribute("disabled")).toBe(true);
   });
 
@@ -150,10 +150,8 @@ describe("the main window over the mock", () => {
       expect(screen.getByRole("status").textContent).toContain("Reconnecting to notesd… (notesd stopped)"),
     );
     expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Connected to notesd again"), {
-      timeout: 3000,
-    });
-    expect(screen.getByText(/No vaults yet/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/No vaults yet/)).toBeTruthy(), { timeout: 3000 });
+    expect(screen.getByRole("status").textContent).toBe("");
   });
 
   it("saves what is typed in a note's editor", async () => {

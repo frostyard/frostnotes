@@ -42,6 +42,7 @@
   --bg-tag: rgb(0 122 255 / 0.1);
   --callout-cyan: #30b0c7;
   --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  --backdrop: rgb(0 0 0 / 0.2);
 }
 
 /* Dark values: from the system while the Theme preference is System, and
@@ -78,6 +79,7 @@
     --bg-tag: rgb(10 132 255 / 0.2);
     --callout-cyan: #40c8e0;
     --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+    --backdrop: rgb(0 0 0 / 0.4);
   }
 }
 
@@ -112,6 +114,7 @@
   --bg-tag: rgb(10 132 255 / 0.2);
   --callout-cyan: #40c8e0;
   --popover-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+  --backdrop: rgb(0 0 0 / 0.4);
 }
 
 :root[data-theme="light"] {

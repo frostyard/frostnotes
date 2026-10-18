@@ -99,7 +99,7 @@ export function MainWindow() {
   const ws = useWorkspace((s) => s.ws);
   const update = useWorkspace((s) => s.update);
   const showRibbon = usePrefs((s) => s.showRibbon);
-  const { connection, hello, vaults, vaultId } = useNotes();
+  const { connection, vaults, vaultId } = useNotes();
   const openVault = useOpenVault();
   const maximized = useMaximized();
   const widths = fitSidebars(useWindowWidth(), ws.left, ws.right);
@@ -213,7 +213,16 @@ export function MainWindow() {
             {shown.right && sidebar("right")}
             {!shown.right && <div className="absolute top-0 right-0">{windowControls}</div>}
           </div>
-          <StatusBar connection={connection} hello={hello} vaultCount={vaults.length} />
+          <StatusBar
+            connection={connection}
+            sync={null}
+            backlinks={null}
+            counts={null}
+            mode={null}
+            onConflicts={() => {}}
+            onBacklinks={() => {}}
+            onMode={() => {}}
+          />
         </div>
       </DocumentsContext.Provider>
     </CommandsContext.Provider>
@@ -265,7 +274,6 @@ function NoVault() {
 /** Connecting stands in for MainWindow until notesd answers; the title bar stays usable. */
 export function Connecting() {
   const connection = useNotes((s) => s.connection);
-  const hello = useNotes((s) => s.hello);
   const maximized = useMaximized();
   const text = connection.state === "lost" ? `Reconnecting to notesd… (${connection.reason})` : "Connecting to notesd…";
   return (
@@ -280,7 +288,16 @@ export function Connecting() {
       <div data-tauri-drag-region className="text-empty flex flex-1 items-center justify-center px-8 text-secondary">
         {text}
       </div>
-      <StatusBar connection={connection} hello={hello} vaultCount={0} />
+      <StatusBar
+        connection={connection}
+        sync={null}
+        backlinks={null}
+        counts={null}
+        mode={null}
+        onConflicts={() => {}}
+        onBacklinks={() => {}}
+        onMode={() => {}}
+      />
     </div>
   );
 }
