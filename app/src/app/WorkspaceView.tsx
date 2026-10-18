@@ -7,6 +7,7 @@ import { createContext, type DragEvent, type ReactNode, useContext, useEffect, u
 import { useFiles } from "../data/files";
 import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
+import { useDocuments } from "../editor/registry";
 import { Splitter } from "../features/workspace/Splitter";
 import { TabStrip } from "../features/workspace/TabStrip";
 import { ViewHeader } from "../features/workspace/ViewHeader";
@@ -27,7 +28,7 @@ import {
   setView,
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
-import { followLink } from "./commands";
+import { followLink, mergeDone } from "./commands";
 import { ViewContent } from "./ViewContent";
 
 /** Zone is where a dragged tab would land in a group. */
@@ -142,6 +143,7 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
   const files = useFiles((s) => s.files);
   const drag = useContext(DragContext);
   const client = useClient();
+  const docs = useDocuments();
   const [zone, setZone] = useState<Zone | null>(null);
   const strip = useRef<HTMLDivElement>(null);
   const tab = group.tabs[group.active] ?? group.tabs[0];
@@ -276,11 +278,21 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
           onFollow={(c) => void followLink(client, c, tab.id)}
           onCompare={(notice) => {
             if (path === undefined || (notice.kind !== "conflict" && notice.kind !== "refused")) return;
+            // A notesd that does not name the conflict version: the
+            // history lists it.
+            if (notice.kind === "conflict" && notice.version === undefined) {
+              update((w) => open(activate(w, tab.id), { type: "history", path }, "tab"));
+              return;
+            }
             const other: MergeSide =
               notice.kind === "conflict" ? { kind: "version", version: notice.version ?? 0 } : { kind: "held" };
             update((w) => open(activate(w, tab.id), { type: "merge", path, other }, "tab"));
           }}
           onClose={() => update((w) => close(w, tab.id))}
+          onCompareWith={(p, other) =>
+            update((w) => open(activate(w, tab.id), { type: "merge", path: p, other }, "tab"))
+          }
+          onMergeDone={(p) => void mergeDone(client, docs, p, () => update((w) => close(w, tab.id)))}
           onCursor={(pos, p) =>
             update((w) => {
               const t = findTab(w, tab.id)?.tab.view;

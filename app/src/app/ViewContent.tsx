@@ -1,8 +1,6 @@
 // What a tab shows under its view header. An empty tab's links run
-// commands; a file shows by its hash; a note is its editor, or while
-// reading its text until the reading view (Phase 5's last part) takes that
-// place, as do the history and merge views.
-import { useEffect, useState } from "react";
+// commands; a note is its editor or its reading view; a file shows by its
+// hash; history and merge tabs are their views.
 
 import { useCommands } from "../commands/registry";
 import { useFiles } from "../data/files";
@@ -10,12 +8,15 @@ import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
 import type { Notice } from "../editor/document";
+import { MergePane } from "../editor/MergePane";
 import { NoteEditor } from "../editor/NoteEditor";
 import type { PreviewCommand } from "../editor/preview/framework";
 import { EmptyTab } from "../features/workspace/EmptyTab";
 import { extensionOf, fileType } from "../lib/fileTree";
-import { tabTitle, type ViewState } from "../workspace/model";
-import { type OpenWhere, whereFor } from "../workspace/ops";
+import { ReadingView } from "../reading/ReadingView";
+import { type MergeSide, tabTitle, type ViewState } from "../workspace/model";
+import type { OpenWhere } from "../workspace/ops";
+import { HistoryView } from "./HistoryView";
 
 export interface ViewContentProps {
   tabId: string;
@@ -33,11 +34,15 @@ export interface ViewContentProps {
   onClose: () => void;
   /** Keep where the cursor was in the note at path, for the tab. */
   onCursor: (pos: number, path: string) => void;
+  /** Compare the note with another version: open the merge view. */
+  onCompareWith: (path: string, other: MergeSide) => void;
+  /** A merge view's Done. */
+  onMergeDone: (path: string) => void;
 }
 
 /** ViewContent draws a tab's view. */
 export function ViewContent(props: ViewContentProps) {
-  const { view, exists, onOpen } = props;
+  const { view, exists } = props;
   const live = usePrefs((s) => s.editingMode === "live");
   const vaultId = useNotes((s) => s.vaultId);
   const commands = useCommands();
@@ -77,73 +82,46 @@ export function ViewContent(props: ViewContentProps) {
       />
     );
   }
+  if (vaultId !== null) {
+    switch (view.type) {
+      case "note":
+        return (
+          <ReadingView
+            key={`${vaultId}:${props.tabId}`}
+            vaultId={vaultId}
+            path={view.path}
+            onFollow={props.onFollow}
+            onCompare={props.onCompare}
+            onClose={props.onClose}
+          />
+        );
+      case "merge":
+        return (
+          <MergePane
+            vaultId={vaultId}
+            path={view.path}
+            other={view.other}
+            onDone={() => props.onMergeDone(view.path)}
+          />
+        );
+      case "history":
+        return (
+          <HistoryView
+            vaultId={vaultId}
+            path={view.path}
+            onCompare={(other) => props.onCompareWith(view.path, other)}
+          />
+        );
+    }
+  }
   if (!exists) {
     return <Message text={`${view.path} is not in the vault: it was deleted or moved outside the app.`} />;
   }
-  switch (view.type) {
-    case "note":
-      return <NoteText path={view.path} title={tabTitle(view)} onOpen={onOpen} />;
-    case "file":
-      return <FileView path={view.path} />;
-    case "history":
-    case "merge":
-      return <Message text={`${tabTitle(view)} opens with the history and merge views.`} />;
-  }
+  return view.type === "file" ? <FileView path={view.path} /> : <Message text={`${tabTitle(view)} needs a vault.`} />;
 }
 
 function Message({ text }: { text: string }) {
   return <p className="text-empty mx-auto max-w-[700px] px-8 py-8 text-secondary">{text}</p>;
-}
-
-// NoteText shows a note's text as notesd reads it, again whenever its hash
-// changes; wikilinks open their targets as a click on a link would.
-function NoteText({ path, title, onOpen }: { path: string; title: string; onOpen: ViewContentProps["onOpen"] }) {
-  const c = useClient();
-  const vaultId = useNotes((s) => s.vaultId);
-  const hash = useFiles((s) => s.files.get(path)?.hash);
-  const [text, setText] = useState<string | null>(null);
-  useEffect(() => {
-    if (vaultId === null || hash === undefined) return;
-    let stale = false;
-    c.note
-      .read({ vaultId, path })
-      .then((n) => !stale && setText(n.content))
-      .catch((err: unknown) => !stale && setText(`Cannot read ${path}: ${err instanceof Error ? err.message : err}`));
-    return () => {
-      stale = true;
-    };
-  }, [c, vaultId, path, hash]);
-  const links = text === null ? [] : [...new Set([...text.matchAll(/\[\[([^\]|#]+)/g)].map((m) => m[1] ?? ""))];
-  const files = useFiles((s) => s.files);
-  const resolve = (target: string) =>
-    [...files.keys()].find(
-      (p) => p === target || p === `${target}.md` || p.endsWith(`/${target}.md`) || p.endsWith(`/${target}`),
-    );
-  return (
-    <article className="mx-auto max-w-[700px] px-8 pt-8 pb-[50vh]">
-      <h1 className="mb-[0.5em] text-[1.618em] leading-[1.2] font-bold">{title}</h1>
-      <pre className="font-[inherit] text-[16px] leading-normal whitespace-pre-wrap select-text">{text ?? ""}</pre>
-      {links.length > 0 && (
-        <nav aria-label="Links" className="mt-6 flex flex-wrap gap-2 border-t border-separator pt-3 text-[13px]">
-          {links.map((target) => {
-            const to = resolve(target);
-            return (
-              <button
-                key={target}
-                type="button"
-                disabled={to === undefined}
-                className="text-accent hover:underline disabled:text-tertiary"
-                onClick={(e) => to && onOpen(to, whereFor(e))}
-                onAuxClick={(e) => to && e.button === 1 && onOpen(to, "tab")}
-              >
-                {target}
-              </button>
-            );
-          })}
-        </nav>
-      )}
-    </article>
-  );
 }
 
 // FileView shows an attachment by its hash: an image, audio or video

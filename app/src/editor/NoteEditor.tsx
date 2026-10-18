@@ -3,13 +3,13 @@
 // notice above it. The view saves when it loses focus, and its document
 // saves when the last view of it goes.
 import { EditorView } from "@codemirror/view";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useFiles } from "../data/files";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { TabNotice, type TabNoticeAction } from "../features/workspace/TabNotice";
-import type { DocSnapshot, NoteDoc, Notice } from "./document";
+import type { NoteDoc, Notice } from "./document";
 import {
   type EditorPrefs,
   editorExtensions,
@@ -21,6 +21,7 @@ import {
 import { LinkResolver } from "./links";
 import { type PreviewCommand, redraw } from "./preview/framework";
 import { useDocuments } from "./registry";
+import { useNoteDoc } from "./useNoteDoc";
 
 export interface NoteEditorProps {
   tabId: string;
@@ -42,9 +43,6 @@ export interface NoteEditorProps {
   onCursor?: (pos: number, path: string) => void;
 }
 
-const LOADING: DocSnapshot = { status: "loading", notice: null, path: "" };
-const noSubscribe = () => () => {};
-
 function editorPrefs(p: Prefs, live: boolean): EditorPrefs {
   return {
     live,
@@ -65,14 +63,7 @@ export function NoteEditor(props: NoteEditorProps) {
   const current = useClient();
   const client = useRef(current);
   client.current = current;
-  const [doc, setDoc] = useState<NoteDoc | null>(null);
-  useEffect(() => {
-    const d = registry.acquire(vaultId, path);
-    setDoc(d);
-    return () => registry.release(d);
-  }, [registry, vaultId, path]);
-  const snap = useSyncExternalStore(doc?.subscribe ?? noSubscribe, doc?.snapshot ?? (() => LOADING));
-  const ready = doc !== null && snap.status !== "loading" && snap.status !== "missing";
+  const { doc, snap, ready } = useNoteDoc(vaultId, path);
 
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -151,7 +142,16 @@ export function NoteEditor(props: NoteEditorProps) {
   );
 }
 
-function NoticeBar({ notice, doc, props }: { notice: Notice; doc: NoteDoc; props: NoteEditorProps }) {
+/** NoticeBar draws a document's notice over a view of it. */
+export function NoticeBar({
+  notice,
+  doc,
+  props,
+}: {
+  notice: Notice;
+  doc: NoteDoc;
+  props: { onCompare: (notice: Notice) => void; onClose: () => void };
+}) {
   let text: string;
   let actions: TabNoticeAction[];
   switch (notice.kind) {

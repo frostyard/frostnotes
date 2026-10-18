@@ -3,15 +3,36 @@
 // ?spike=cm6 shows it in any browser (add &run to measure at once); with
 // FROSTNOTES_SPIKE=cm6 the desktop app measures, prints the results as one
 // JSON line and exits (src-tauri/src/spike.rs). IME input cannot be
-// automated: check it by hand in this view.
+// automated: check it by hand in this view. "editor" measures the app's
+// own editor, every live-preview provider on, the same way
+// (docs/plans/0005-m3-desktop-app.md, Phase 5's exit).
 import type { EditorView } from "@codemirror/view";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 
+import { editorExtensions } from "../editor/extensions";
+import { buildInline } from "../editor/preview/framework";
 import { noteExtensions } from "./editor";
 import { generateNote } from "./generate";
 import { check, frames, fullParse, mount, scrolling, typing } from "./measure";
+
+/** appEditor is the app's editor with its defaults: live preview, Obsidian's preferences. */
+function appEditor() {
+  return editorExtensions({
+    prefs: {
+      live: true,
+      readable: true,
+      fontSize: 16,
+      spellcheck: true,
+      autoPairBrackets: true,
+      indentWithTabs: true,
+      tabSize: 4,
+    },
+    env: { resolve: () => null, command: () => {} },
+    onBlur: () => {},
+  });
+}
 
 export const LINES = 10_000;
 export const KEYSTROKES = 200;
@@ -65,7 +86,7 @@ export function Spike({ name, auto, report }: SpikeProps) {
       setStatus("Scrolling the whole note…");
       const scroll = await scrolling(v);
       setStatus("Checking live preview…");
-      const checks = await check(v);
+      const checks = await check(v, name === "editor" ? (x) => countHidden(x) : undefined);
       const fullParseMs = fullParse(base.note);
       setStatus("Done");
       await finish({ ...base.result, keystroke, scroll, checks, parse: { fullParseMs } });
@@ -82,7 +103,7 @@ export function Spike({ name, auto, report }: SpikeProps) {
     if (started.current) return;
     started.current = true;
     void (async () => {
-      if (name !== "cm6") {
+      if (name !== "cm6" && name !== "editor") {
         setStatus(`Unknown spike "${name}"`);
         if (report) await finish({ spike: name, ok: false, error: "unknown spike" });
         return;
@@ -95,10 +116,10 @@ export function Spike({ name, auto, report }: SpikeProps) {
       const g0 = performance.now();
       const note = generateNote(LINES);
       const generateMs = Math.round((performance.now() - g0) * 100) / 100;
-      const load = await mount(parent, note, noteExtensions());
+      const load = await mount(parent, note, name === "editor" ? appEditor() : noteExtensions());
       view.current = load.view;
       const result: Report = {
-        spike: "cm6",
+        spike: name,
         ok: true,
         env: environment(),
         doc: { lines: load.view.state.doc.lines, chars: note.length, exact: load.view.state.doc.toString() === note },
@@ -138,4 +159,13 @@ export function Spike({ name, auto, report }: SpikeProps) {
       </div>
     </div>
   );
+}
+
+// countHidden counts the app editor's hidden ranges where the note shows.
+function countHidden(view: EditorView): number {
+  let n = 0;
+  for (const it = buildInline(view.state, view.visibleRanges).iter(); it.value; it.next()) {
+    if (!it.value.spec.class && !it.value.spec.widget) n++;
+  }
+  return n;
 }

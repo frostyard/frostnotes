@@ -19,7 +19,8 @@ Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) 
 the transports, the mock, the title bar, the status bar, and the
 CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
 dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
-commands and editor core below (Phase 5).
+commands, editor core, reading view, merge view and history below
+(Phase 5).
 Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
@@ -282,11 +283,17 @@ rendered content, three levels deep at most; a callout is
 `data-tex`; a tag is `a.tag[data-tag]`; a task's checkbox carries
 `data-line`.
 
-The app sanitizes again with DOMPurify and the same allowlist, sets each
-`data-blob` element's `src` to its blob URL, renders math with KaTeX, and
-inserts the result into the view's element, styled by `editor.css`.
-Clicks on links and tags become commands; a checkbox toggles its line in
-the document, as live preview does. The CSP forbids inline script
+The app sanitizes again with DOMPurify and the same allowlist
+(`reading/sanitize.ts`), sets each `data-blob` element's `src` to its
+blob URL, renders math with KaTeX, enables each task's checkbox (notesd
+renders it disabled), and inserts the result into the view's element,
+styled by `styles/editor.css`. It renders again 300 ms after the
+document's text changes, so the view shows what was typed, saved or
+not. A DOMPurify that fails its first sanitization (as under happy-dom,
+whose DOM it does not trust) is replaced by escaping: the view then
+shows the HTML as text, never unsanitized. Clicks on links and tags
+become commands; a checkbox toggles its line in the document, as live
+preview does. The CSP forbids inline script
 ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
 
 ## Attachments
@@ -326,12 +333,22 @@ serves `/blobs/` from Vite there if it must.
   with `sync.readRevision`, which fetches another device's content from
   the hub. Selecting one
   shows it, or its difference from the current text; Restore is
-  `note.revert` with the current base.
-- **Merge** (a `merge` tab): `@codemirror/merge`'s side-by-side view,
-  the document on the left, editable, and the other version on the
-  right. It opens from a conflict notice, from the history, and from the
-  status bar's conflicts (`sync.conflicts`). Done calls `sync.resolve`
-  when the file is flagged on the hub.
+  `note.revert` with the document's base, and Compare opens the merge
+  view. Until batch 2's history list, `app/HistoryView.tsx` draws the
+  lists plainly and shows a version's text; the command Open version
+  history opens the tab.
+- **Merge** (a `merge` tab, `editor/MergePane.tsx`): `@codemirror/merge`'s
+  side-by-side view, the document on the left, a view of it like any
+  other, editable, and the other version on the right, read-only: a
+  conflict version, a hub revision, a version from the history, or the
+  text the editor held when notesd refused its base. Taking a chunk from
+  the right is an edit of the document, so it saves with its base and
+  Ctrl+Z undoes it. It opens from a conflict notice (which names the
+  conflict version notesd kept; from a notesd that does not, Compare
+  opens the history), from the history, and from the status bar's
+  conflicts (`sync.conflicts`). Done dismisses the notice, calls
+  `sync.resolve` when the vault syncs (a file not flagged on the hub
+  answers an error, which is ignored), and closes the tab.
 
 ## Commands and keys
 
@@ -371,7 +388,9 @@ serves `/blobs/` from Vite there if it must.
   Vite, and the same UI in a browser on the host.
 - `make ui-check`: Biome, the TypeScript check and Vitest (happy-dom,
   Testing Library). Editor logic is tested on `EditorState` without a view
-  where it can be; views run in happy-dom where a test needs one.
+  where it can be; views run in happy-dom where a test needs one, and in
+  jsdom (`// @vitest-environment jsdom`) where DOMPurify must sanitize:
+  the sanitizer's tests and the reading, merge and history views'.
 - App tests drive the built app in WebKitGTK through `WebKitWebDriver`,
   as spike 1 did (`app/src/spike/measure.ts`, `make spike-cm6`): typing
   latency in the real editor on a generated 10,000-line note, saves and
