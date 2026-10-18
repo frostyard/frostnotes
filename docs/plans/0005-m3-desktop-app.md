@@ -34,7 +34,10 @@ T-0075), and its last, properties, the inline title, templates and daily
 notes (T-0076 to T-0079), are merged. What the spec still asked of Phase
 6 (opening links and files outside the app, zoom, the Editor settings,
 aliases, page previews, indentation guides and the reading view's
-properties; T-0080 and T-0081) is in review.
+properties; T-0080 and T-0081) is merged. Phase 7, the review's fixes
+and evidence 1 to 3, is in review: typing, the hotkeys and the writer
+pairs meet their targets in the built app, and scrolling falls just
+short of its own (a follow-up). Evidence 4 is the user's 7-day trial.
 
 ## Decisions taken for M3
 
@@ -777,6 +780,101 @@ against the built app.
      anything they went back to Obsidian for.
 - `make m3-evidence` records evidence 1 to 3; evidence 4 is the user's.
 
+- **Result (2026-10-18): the review.** An agent that had not written the
+  code read what renders and loads (13 findings: 1 high, 3 medium, 4
+  low, 5 for information) and found the shell's checks, the CSP, the
+  navigation guard and DOMPurify sound. Each finding is fixed with a
+  test, but three noted below; a fuzz test of notesd's sanitizer, added
+  for finding 1, found a second way past it.
+
+  | Finding | Fix | Test |
+  | --- | --- | --- |
+  | 1 (high) notesd's sanitizer wrote everything after a self-closing raw-text tag (`<xmp/>`, `<script/>`, `<iframe/>`) unsanitized; the fuzz test then found text joined across a dropped tag opening a new one (`<<x>script>`) | A non-void element that goes, written self-closing, goes with its content as a browser reads it; a `<` in text is written `&lt;` | Table rows, every raw-text name, a check that a browser's parse of the output holds nothing off the allowlist (the table and every fixture), and `FuzzSanitize` (9.3 million inputs in 90 s; its find kept as a seed); a mutation fails them |
+  | 2 (medium) note embeds fanned out without bound; replies and the bridge's lines had no size limit | A render draws at most 100 note embeds and 4 MiB of their notes, every level together, then links; a note's existence is asked of the index, and a note larger than that is never read; notesd answers a reply over 16 MiB with `internal`; the bridge ends a connection that sends a longer line | Render tests of a 20×20×20 fan-out and of 1 MiB notes, an engine test, an rpcserver test, a bridge test; mutations fail the first and the third |
+  | 3 (medium) `notesblob://` read whole files, also for open-ended ranges | A 206 carries at most 8 MiB; a request without a range is answered whole up to 64 MiB, else 413 | A protocol test with a small window and limit |
+  | 4 (medium) `class`, `id` and `role` let a note's HTML use the app's styles and name window properties | Both sanitizers keep only the classes the renderer draws, footnotes' ids and roles; `.rendered` contains its layout | Rows in both sanitizers' tests |
+  | 5 (low) the webview's own context menu showed, offering downloads | The page keeps it from showing from its first line; the webview downloads nothing | A test of the listener |
+  | 6 (low) KaTeX's errors other than parse errors went uncaught, and nothing caught a view's failure | `finish` shows such math as its TeX (KaTeX's `maxSize` 50 em); each tab's view has an error boundary | Tests of both |
+  | 7 (low) `mailto:` links passed any query (`attach=`) to the mail client | Only `to`, `cc`, `bcc`, `subject` and `body` stay | A shell test |
+  | 8 (low) a remote image's request could start before `finish` removed its source | Rendered HTML is finished in a template, which loads nothing, then placed | A test that the page never has the HTML |
+  | 9 (info) `open_file` takes the vault's folder from the page | Not changed: a page that could run script already drives notesd through the bridge; the shell's checks stand | — |
+  | 10 (info) a CIFS mount's default `file_mode` makes every file look executable | The user's share mounts with `file_mode=0644`; `open.rs` says so, and that its type list guards types, not handlers | — |
+  | 11 (info) `xdg-open`'s processes were never reaped | Each is waited for in a thread | — (a process's zombie) |
+  | 12 (info) `core:default` granted menus, tray, images and paths | The capability lists only what the page uses; the audit found `destroy` missing, which `onCloseRequested` calls, so Close window never closed the app (evidence 2 confirmed it) | A shell test of the list, and evidence 2 |
+  | 13 (info) docs and code disagreed (paste and drop, where rendered HTML goes, the message limit), and `[x](//host)` in live preview made a note | The docs say what the code does; a protocol-relative link makes no note | A test of following it |
+
+- **Result (2026-10-18): evidence 1, typing met, scrolling not quite.**
+  `FROSTNOTES_SPIKE=editor` measures the app's editor with every
+  live-preview provider on a generated 10,000-line note (678 KB), which
+  now holds batch 3's syntax too: callouts, tables, display and inline
+  math, highlights, tags, comments, footnotes, embeds and rules. On the
+  host's GPU (scale 2) typing is 12 ms at p95 from keystroke to paint
+  (dispatch 8 ms; 11 and 13 ms in two more runs), within 16 ms, and
+  live preview's checks hold (a task's checkbox toggles one character
+  and back). A fling
+  of 300 px a frame through the whole note runs at 52 to 54 fps over
+  three runs, its frame p95 34 ms: 5 to 8 percent of frames take two
+  vsyncs, where the target is 60 fps and a p95 under 20 ms. The same
+  editor with no provider scrolls at 59.6 fps (p95 18 ms), as M0's spike
+  does on this note (59.8 fps), and Phase 5 measured 59 fps with the
+  first providers. No group of providers is the cause: without any one
+  of them, or with any half, the editor scrolls at 57 to 59 fps (p95 18
+  or 19 ms; 28 ms with only the basic, inline, code, lists and guides
+  groups); only all of them together tip a frame now and then into a
+  second vsync. Rebuilding every provider's decorations costs 0.4 ms a
+  viewport (V8), so the time goes to drawing and laying out what they
+  make. Under Xvfb in nsl, which renders in software, typing is 17 to
+  25 ms at p95 and scrolling 22 fps; leaving out one group there gains
+  at most 6 fps (basic). The follow-up profiles the scroll in WebKit and
+  makes what live preview draws cheaper.
+
+- **Result (2026-10-18): evidence 2 and 3** (`make m3-evidence`, the
+  built app under Xvfb in nsl; `internal/appevidence`, whose drivers are
+  in `app/src/spike/`). xdotool presses the keys, so they reach the page
+  through X, GTK and WebKit as a person's do; the page asks for them in
+  lines the shell prints (`spike_say`).
+  - **Evidence 2:** before each binding of the keyboard map the driver
+    lays out a workspace where its command applies (a note in the editor
+    with history both ways, its cursor on a link, more tabs, a closed
+    tab), over the mock's vault. 45 of the 46 bindings run their command;
+    the 46th, Ctrl+G, opens the graph view, which is M5's. Its first runs
+    found two bugs, fixed here with tests: WebKitGTK names Shift+Tab
+    (X's ISO_Left_Tab) `Unidentified`, so Ctrl+Shift+Tab ran nothing
+    (the key listener now reads its code, `Tab`, as CodeMirror and React
+    already do); and Close window left the app open, because the
+    capability file did not grant `destroy`, which `onCloseRequested`
+    calls. The run ends by closing the window, and the app exits.
+  - **Evidence 3:** three notesd processes, a hub and devices a and b,
+    share `Writers.md`; the built app, on a over the Tauri bridge, opens
+    it in two tabs side by side and types 40 tokens at the end of a line
+    in each, by turns. Meanwhile vim saves the note on a's disk (17
+    times, in place and by vim's rename by turns), an agent appends to it
+    through `notesctl mcp`'s `edit_note` (17), and b edits its own line
+    (17), which reaches a through the hub. Before every token each tab's
+    cursor was still at the end of its line; a's file and b's hold every
+    token of every writer, in order, and a kept no conflict version. This
+    is also Phase 5's hand check of the editor in the built app's own
+    window over the Tauri bridge.
+
+  **The user's steps for evidence 4** (the real vault, so the human runs
+  them, ADR-0010):
+
+  1. Decide the open question of the two trials (below): M3's 7 days
+     alongside M2's, or after.
+  2. On each of the two machines, whose notesd is joined to the hub (M2's
+     trial): from this repository, `make app-build`, then
+     `install -m 0755 build/frostnotes-app ~/.local/bin/frostnotes`, and
+     start `frostnotes`; it connects to the running notesd.
+  3. For 7 days, write in Frostnotes on both machines instead of
+     Obsidian.
+  4. Each day, on both: `notesctl sync verify`; note the result, any edit
+     found missing, and anything you went back to Obsidian for.
+  5. Once, check by hand what no test reaches: copy from a code block with
+     its button and paste elsewhere; open a web link (the browser opens)
+     and Open in default app on a PDF and an image; play and seek a video
+     over 8 MiB embedded in a note (`notesblob://` now answers 8 MiB at a
+     time); and type with an input method, if you use one.
+
 ## Later / ideas
 
 - Bookmarks, canvas, note composer, and workspaces (the user has none
@@ -796,10 +894,11 @@ against the built app.
 
 ## Open questions
 
-- **The latency budget with every provider on:** if 16 ms breaks, which
-  providers update when typing pauses instead of per keystroke? Phase 5
-  measured 10 ms at p95 on the host with the spike's providers; Phase 7
-  measures again with batch 3's.
+- *Answered 2026-10-18:* **the latency budget with every provider on.**
+  Typing holds it (12 ms at p95 on the host with batch 3's providers), so
+  no provider waits for typing to pause. Scrolling is what misses its
+  target, by a frame now and then (Phase 7, evidence 1); that is the
+  follow-up's.
 - **The two trials:** M3's needs M2's hub on the user's two machines.
   Run M2's 7 days first and M3's after, or overlap them once Phase 6
   ends? The user decides by Phase 7.
