@@ -1,9 +1,9 @@
 // The status bar (docs/specs/ui.md#status-bar): the connection's state at
 // the left while it is not ready; at the right the vault's sync state and
 // conflicts, the active note's backlinks, its words and characters, and
-// the editing mode. Task T-0050 replaces this stub, which shows the
-// connection only.
+// the editing mode. The container supplies the counts and handles actions.
 
+import { BookOpen, CircleAlert, Cloud, CloudOff, CodeXml, Pencil, RefreshCw } from "lucide-react";
 import type { Connection } from "../../data/stores";
 import type { SyncState } from "../../rpc/gen/api";
 
@@ -38,8 +38,32 @@ export interface StatusBarProps {
   onMode: (x: number, y: number) => void;
 }
 
+const syncIcons = { idle: Cloud, syncing: RefreshCw, offline: CloudOff, revoked: CircleAlert, reset: CircleAlert };
+const editingModes = {
+  live: { name: "Live Preview", icon: Pencil },
+  source: { name: "Source mode", icon: CodeXml },
+  read: { name: "Reading view", icon: BookOpen },
+};
+const buttonClass = "rounded px-1 hover:bg-selection-inactive hover:text-primary";
+
+function countText(count: number, noun: string): string {
+  return `${count.toLocaleString("en-US")} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 /** StatusBar draws the window's status bar. */
-export function StatusBar({ connection }: StatusBarProps) {
+export function StatusBar({
+  connection,
+  sync,
+  backlinks,
+  counts,
+  mode,
+  onConflicts,
+  onBacklinks,
+  onMode,
+}: StatusBarProps) {
+  const SyncIcon = sync === null ? null : syncIcons[sync.state];
+  const editingMode = mode === null ? null : editingModes[mode];
+  const ModeIcon = editingMode?.icon;
   return (
     <footer
       role="status"
@@ -49,6 +73,44 @@ export function StatusBar({ connection }: StatusBarProps) {
         {connection.state === "connecting" && "Connecting to notesd…"}
         {connection.state === "lost" && `Reconnecting to notesd… (${connection.reason})`}
       </span>
+      {sync !== null && SyncIcon !== null && (
+        <>
+          <span role="img" aria-label={sync.text} title={sync.text} data-sync-state={sync.state}>
+            <SyncIcon size={14} className={sync.state === "syncing" ? "animate-spin" : undefined} />
+          </span>
+          {sync.conflicts > 0 && (
+            <button type="button" className={buttonClass} onClick={onConflicts}>
+              {countText(sync.conflicts, "conflict")}
+            </button>
+          )}
+        </>
+      )}
+      {backlinks !== null && (
+        <button type="button" className={buttonClass} onClick={onBacklinks}>
+          {countText(backlinks, "backlink")}
+        </button>
+      )}
+      {counts !== null && (
+        <>
+          <span>{countText(counts.words, "word")}</span>
+          <span>{countText(counts.characters, "character")}</span>
+        </>
+      )}
+      {editingMode !== null && ModeIcon && (
+        <button
+          type="button"
+          className={buttonClass}
+          aria-haspopup="menu"
+          aria-label={`Editing mode: ${editingMode.name}`}
+          title={editingMode.name}
+          onClick={(event) => {
+            const { left, top } = event.currentTarget.getBoundingClientRect();
+            onMode(left, top);
+          }}
+        >
+          <ModeIcon size={14} />
+        </button>
+      )}
     </footer>
   );
 }
