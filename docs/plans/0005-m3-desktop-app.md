@@ -26,10 +26,10 @@ Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
 and they are merged. Phase 4, notesd's additions, is merged in two PRs.
 Phase 5 is merged in four PRs: the data layer, the workspace and
 commands, the editor core, and the reading view, merge view and history
-with the exit evidence. Phase 6 is under way: batch 2's shared pieces,
-T-0047 to T-0052, and its sidebar panes, T-0053 to T-0059, each with
-their wiring, are merged; its settings, history list and dialogs,
-T-0060 to T-0063 and their wiring, are in review.
+with the exit evidence. Phase 6 is under way: batch 2 is merged in three
+PRs (T-0047 to T-0063 and their wiring); batch 3's first part, the
+editor's syntax, formatting commands, word counts and completion
+(T-0064 to T-0069 and their wiring), is in review.
 
 ## Decisions taken for M3
 
@@ -508,6 +508,11 @@ into its container as it merges.
   bar's items); the sidebar panes (Files, Search, Backlinks, Outgoing
   links, Tags, All properties, Outline); and the settings dialog, the
   history list and the dialogs they need.
+- **Batch 3 runs as three PRs against `main`,** like batch 2: the
+  editor's syntax (the Lezer extensions), Obsidian's formatting
+  commands, word counts and link and tag completion; the live-preview
+  widgets; and properties (the block and its edits), daily notes and
+  templates.
 - **Result so far (2026-10-17): batch 3's first four cards.** Codex
   (codex-cli 0.161, the user's default model) passed T-0043 to T-0046 on
   the first attempt each, in two executor worktrees at once: the store
@@ -616,6 +621,42 @@ into its container as it merges.
   | T-0062 Confirmation | 1 | 2 m 2 s | correct |
   | T-0063 Folder chooser | 1 | 1 m 23 s | correct |
 
+- **Result so far (2026-10-18): batch 3's syntax, commands, counts and
+  completion.** Codex passed T-0064 to T-0069, four at once in the
+  executor worktrees (from `m3/batch3-syntax`), then two. The planner
+  gave each syntax its file and node names first, registered as stubs,
+  and made the fixture test hold a fixture pending while a node it needs
+  is undefined, so the cards landed in any order; with them, every one
+  of the spec's 14 fixtures agrees in Lezer, block IDs and each
+  fixture's word count included. Comments are ranges found as notesd
+  finds them (a node could not cross blocks), and callouts are read from
+  a quote's first line. A mutation of each card failed its given tests:
+  all-digit tags (1 test), block IDs after any character (1), math
+  closed after a space (1), U+0085 not white space (1), italics read as
+  any star run (1), and completion that always adds `]]` (1). T-0069's
+  first run failed all three attempts on the planner's mistake, a line
+  of `MainWindow.tsx` committed unformatted, which Biome flagged in a
+  file outside the card; T-0068's first run was stopped for the same
+  reason, and both passed from the fixed base. Review found that a task
+  whose box ends its line was not read as one; the planner fixed it with
+  a test. The planner's part: the formatting commands and Follow link
+  under cursor in the registry, the status bar's words and characters
+  (150 ms after the last change; about 8 ms on a 10,000-line note), the
+  completion catalog (`editor/catalog.ts`), and the styles of tags,
+  highlights, comments and the completion list. In a browser over the
+  mock, `[[` and a tag's `#` listed and wrote completions, Ctrl+B and
+  Ctrl+L formatted, and the counts followed typing. Aliases in
+  completion wait with the switcher's for note listings that carry them.
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0064 tags and highlights | 1 | 1 m 34 s | correct |
+  | T-0065 embeds, block IDs, footnotes | 1 | 1 m 48 s | correct; a footnote definition's leaf parser is a plain object |
+  | T-0066 math and callouts | 1 | 2 m 5 s | correct |
+  | T-0067 comments and words | 1 | 2 m 50 s | correct; caches comments per tree and document, as the empty tree is shared |
+  | T-0068 formatting commands | 1 (a first run stopped) | 2 m 40 s | correct but for a task box at a line's end, fixed by the planner |
+  | T-0069 completion | 1 (a first run failed 3, the planner's fault) | 1 m 48 s | correct |
+
 ## Phase 7 — Review and exit evidence
 
 Checks [specs/ui.md](../specs/ui.md) (the keyboard map, the rules) and
@@ -674,6 +715,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0069](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)

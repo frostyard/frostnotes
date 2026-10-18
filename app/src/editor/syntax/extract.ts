@@ -54,18 +54,12 @@ export function findLinks(state: EditorState, from = 0, to = state.doc.length): 
     to,
     enter: (ref) => {
       switch (ref.name) {
-        case "WikiLink": {
-          const n = ref.node;
-          out.push({
-            kind: "wiki",
-            target: text(n.getChild("WikiLinkTarget")).trim(),
-            subpath: text(n.getChild("WikiLinkSubpath")).trim(),
-            alias: text(n.getChild("WikiLinkAlias")),
-            embed: false,
-            line: line(n.from),
-            from: n.from,
-            to: n.to,
-          });
+        case "WikiLink":
+          wiki(ref.node, ref.node, false);
+          return false;
+        case "Embed": {
+          const link = ref.node.getChild("WikiLink");
+          if (link) wiki(link, ref.node, true);
           return false;
         }
         case "LinkReference": {
@@ -99,6 +93,20 @@ export function findLinks(state: EditorState, from = 0, to = state.doc.length): 
   }
   return out.sort((a, b) => a.from - b.from);
 
+  // wiki adds the WikiLink n; at is n itself, or the Embed around it.
+  function wiki(n: SyntaxNode, at: SyntaxNode, embed: boolean) {
+    out.push({
+      kind: "wiki",
+      target: text(n.getChild("WikiLinkTarget")).trim(),
+      subpath: text(n.getChild("WikiLinkSubpath")).trim(),
+      alias: text(n.getChild("WikiLinkAlias")),
+      embed,
+      line: line(at.from),
+      from: at.from,
+      to: at.to,
+    });
+  }
+
   function push(n: SyntaxNode, dest: string, embed: boolean, alias: string) {
     if (SCHEME.test(dest) || dest.startsWith("//")) return;
     const hash = dest.indexOf("#");
@@ -119,13 +127,53 @@ function unangle(url: string): string {
   return url.startsWith("<") && url.endsWith(">") ? url.slice(1, -1) : url;
 }
 
-/** findTags lists the body's tags: the nodes the tags extension (batch 3) names Hashtag. */
+/** findTags lists the body's tags: the Hashtag nodes (tags.ts), except those in a link's text. */
 export function findTags(state: EditorState): FoundTag[] {
   const out: FoundTag[] = [];
   syntaxTree(state).iterate({
     enter: (ref) => {
+      if (ref.name === "Link" || ref.name === "Image") return false;
       if (ref.name !== "Hashtag") return;
       out.push({ name: state.doc.sliceString(ref.from + 1, ref.to), line: state.doc.lineAt(ref.from).number });
+      return false;
+    },
+  });
+  return out;
+}
+
+/** FoundBlock is a block ID the tree holds, as Parse reports one. */
+export interface FoundBlock {
+  /** Without its "^". */
+  id: string;
+  line: number;
+  from: number;
+  to: number;
+}
+
+// AFTER_LONE are the blocks a block ID may follow as a paragraph of its own.
+const AFTER_LONE = new Set(["BulletList", "OrderedList", "Blockquote", "Table"]);
+
+/**
+ * findBlocks lists the body's block IDs: a BlockId node (blockIds.ts) that
+ * ends a paragraph, or that is a paragraph of its own right after a list,
+ * a quote or a table (docs/specs/markdown.md#block-ids).
+ */
+export function findBlocks(state: EditorState): FoundBlock[] {
+  const doc = state.doc;
+  const out: FoundBlock[] = [];
+  syntaxTree(state).iterate({
+    enter: (ref) => {
+      if (ref.name !== "BlockId") return;
+      const para = ref.node.parent;
+      if (para?.name !== "Paragraph") return false;
+      const lone = doc.sliceString(para.from, para.to).trim() === doc.sliceString(ref.from, ref.to);
+      if (lone && !AFTER_LONE.has(para.prevSibling?.name ?? "")) return false;
+      out.push({
+        id: doc.sliceString(ref.from + 1, ref.to),
+        line: doc.lineAt(ref.from).number,
+        from: ref.from,
+        to: ref.to,
+      });
       return false;
     },
   });

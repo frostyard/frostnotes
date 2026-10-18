@@ -1,14 +1,15 @@
 // The editor's extensions (docs/design/app.md#extensions): the parser, the
-// keymap, history, search, live preview (or source mode, without it), and
-// the preferences that shape typing. Compartments let a view switch modes
+// keymap, history, search, link and tag completion, live preview (or
+// source mode, without it), and the preferences that shape typing. Compartments let a view switch modes
 // and follow the preferences without being made again.
-import { closeBrackets } from "@codemirror/autocomplete";
+import { autocompletion, closeBrackets } from "@codemirror/autocomplete";
 import { history } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import { search } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, keymap } from "@codemirror/view";
 
+import { type CompletionCatalog, linkCompletion, tagCompletion } from "./complete";
 import { editorKeymap } from "./keymap";
 import { BASIC } from "./preview/basic";
 import { livePreview, type PreviewEnv, previewEnv } from "./preview/framework";
@@ -46,8 +47,13 @@ export function prefsExtension(p: EditorPrefs): Extension {
   ];
 }
 
-/** editorExtensions are a view's extensions; onBlur saves. */
-export function editorExtensions(opts: { prefs: EditorPrefs; env: PreviewEnv; onBlur: () => void }): Extension {
+/** editorExtensions are a view's extensions; onBlur saves; catalog, when given, completes links and tags. */
+export function editorExtensions(opts: {
+  prefs: EditorPrefs;
+  env: PreviewEnv;
+  onBlur: () => void;
+  catalog?: CompletionCatalog;
+}): Extension {
   return [
     markdownSupport(),
     history(),
@@ -55,6 +61,9 @@ export function editorExtensions(opts: { prefs: EditorPrefs; env: PreviewEnv; on
     EditorView.lineWrapping,
     keymap.of(editorKeymap()),
     search({ top: true }),
+    opts.catalog
+      ? autocompletion({ override: [linkCompletion(opts.catalog), tagCompletion(opts.catalog)], icons: false })
+      : [],
     previewEnv.of(opts.env),
     modeCompartment.of(modeExtension(opts.prefs.live)),
     prefsCompartment.of(prefsExtension(opts.prefs)),

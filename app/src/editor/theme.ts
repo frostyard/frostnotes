@@ -17,6 +17,9 @@ const highlight = HighlightStyle.define([
   { tag: t.monospace, fontFamily: 'ui-monospace, "DejaVu Sans Mono", monospace', fontSize: "0.875em" },
   { tag: t.quote, color: "var(--text-secondary)" },
   { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: "var(--text-tertiary)" },
+  // Tags and footnote labels; highlights.
+  { tag: t.labelName, color: "var(--accent)" },
+  { tag: t.special(t.content), backgroundColor: "var(--bg-highlight)" },
 ]);
 
 /** editorTheme is the editor's styles; readable caps the page at 700px, fontSize is the body's. */
@@ -56,6 +59,28 @@ export function editorTheme(opts: { readable: boolean; fontSize: number }): Exte
       ".cm-panels": { backgroundColor: "var(--bg-toolbar)", color: "var(--text-primary)" },
       ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--separator)" },
       ".cm-searchMatch": { backgroundColor: "var(--bg-highlight)" },
+      ".cm-fn-comment": { color: "var(--text-tertiary)" },
+      // Completion, drawn as the app's menus are.
+      ".cm-tooltip": {
+        backgroundColor: "var(--bg-window)",
+        border: "1px solid var(--separator)",
+        borderRadius: "8px",
+        boxShadow: "var(--popover-shadow)",
+      },
+      ".cm-tooltip.cm-tooltip-autocomplete > ul": { fontFamily: "inherit", padding: "4px", maxHeight: "18em" },
+      ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+        borderRadius: "4px",
+        padding: "4px 8px",
+        fontSize: "13px",
+        lineHeight: "20px",
+      },
+      ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+        backgroundColor: "var(--accent)",
+        color: "var(--accent-contrast)",
+      },
+      ".cm-completionDetail": { marginLeft: "12px", fontStyle: "normal", color: "var(--text-tertiary)" },
+      ".cm-tooltip-autocomplete li[aria-selected] .cm-completionDetail": { color: "inherit" },
+      ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "600" },
     }),
   ];
 }

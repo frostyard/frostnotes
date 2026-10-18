@@ -225,15 +225,33 @@ after the last tab goes until what it holds is saved:
 ### Extensions
 
 - **Syntax:** `@lezer/markdown` with GFM and Frostnotes' extensions for
-  Obsidian's syntax ([specs/markdown.md](../specs/markdown.md)):
-  wikilinks and embeds, tags, highlights, comments, callouts, block IDs,
-  inline and display math, footnotes, one file each in `editor/syntax/`;
-  the frontmatter is one node, none of it markdown, for the properties
-  block to draw. Where the two parsers must agree (what is a link or a
-  tag, and where code hides them), Vitest runs the spec's `F` fixtures
-  through Lezer as Go runs them through goldmark
-  (`editor/syntax/fixtures.test.ts`): a fixture that waits on a batch 3
-  extension is listed as pending and must fail until its card lands.
+  Obsidian's syntax ([specs/markdown.md](../specs/markdown.md)), one
+  file each in `editor/syntax/`: wikilinks, embeds (an `Embed` around a
+  `WikiLink`), tags (`Hashtag`), highlights, block IDs, inline and
+  block math (`InlineMath`, `BlockMath`, by notesd's rules, so neither
+  holds a link or tag), and footnote references and one-line
+  definitions; the frontmatter is one node, none of it markdown, for the
+  properties block to draw. Two of the spec's syntaxes are not nodes.
+  Comments are ranges (`editor/syntax/comments.ts`), found as notesd
+  finds them: a `%%` outside code, math and HTML opens one that the next
+  `%%` closes, across blocks, so a node could not hold one; they show in
+  the tertiary color in both modes. Callouts are blockquotes whose first
+  line `readCallout` reads (type, fold, title), their content parsed as
+  usual. `extract.ts` reads links, tags (not those in a link's text) and
+  block IDs (alone only after a list, quote or table) as Parse reports
+  them. Where the two parsers must agree (links, tags, block IDs, and
+  where code and math hide them), Vitest runs every one of the spec's
+  `F` fixtures through Lezer as Go runs them through goldmark
+  (`editor/syntax/fixtures.test.ts`), and the word count
+  (`editor/words.ts`, the body outside comments) against each fixture's
+  `words`.
+- **Formatting:** Obsidian's editing commands are `StateCommand`s
+  (`editor/format.ts`) the registry runs on the active editor: toggling
+  bold, italics, strikethrough, highlight, code and comments around the
+  selection or the word at the cursor, inserting a link, toggling a
+  task's checkbox, deleting lines and setting headings. Follow link
+  under cursor (and its new tab and split forms) follows the link at
+  the cursor as a click would.
 - **Keys:** CodeMirror's default keymap without the bindings Obsidian
   removes (Alt+↑ and Alt+↓ with and without Shift, Alt+L, Alt+V, Ctrl+M)
   and without any key the app's keymap binds (CodeMirror's Ctrl+D,
@@ -241,9 +259,15 @@ after the last tab goes until what it holds is saved:
   keymap, Tab and Shift+Tab to indent, and its search panel restyled. The
   app's commands (Ctrl+B, Ctrl+L, …) are commands, not editor keymaps
   ([Commands and keys](#commands-and-keys)).
-- **Completion:** `@codemirror/autocomplete` suggests notes, aliases,
-  headings (`[[note#`) and blocks (`[[note#^`) after `[[`, and tags after
-  `#`, ranked by `lib/fuzzy.ts`.
+- **Completion:** `@codemirror/autocomplete` suggests files and notes'
+  aliases after `[[`, ranked as the quick switcher ranks them, headings
+  (`[[note#`) and blocks (`[[note#^`), and tags after a tag's `#`, by
+  `lib/fuzzy.ts`, never in code or math (`editor/complete.ts`). A note's
+  editor gives it a catalog (`editor/catalog.ts`): the files store's
+  files, link text by the vault's New link format, another note's
+  headings and block IDs from its open document or `note.read`, and
+  `note.tags`, kept 10 s. Aliases wait for note listings that carry
+  them.
 - **Links in the editor:** `note.resolve` resolves the links of the
   visible lines from the note's folder, as notesd's index does, in one
   batched call cached until a file is added, moved or removed (the files
@@ -413,7 +437,8 @@ serves `/blobs/` from Vite there if it must.
   from it last first. A menu or prompt gives focus back to what had it
   when it closes. The status bar (`app/status.ts`) shows the sync state
   in words, the active note's backlinks (`note.backlinks`, again as the
-  vault changes) and its mode; word counts wait for batch 3's card.
+  vault changes), its words and characters, or its selection's, counted
+  150 ms after the last change, and its mode.
 - **The window has one key listener,** in the bubble phase, so
   CodeMirror and fields handle their own keys first. It skips events
   already handled, maps the rest with `lib/keymap.ts` (Obsidian's default
