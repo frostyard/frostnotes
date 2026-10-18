@@ -18,13 +18,31 @@ export interface Command {
 /** CommandRegistry holds the window's commands. */
 export class CommandRegistry {
   private readonly commands = new Map<string, Command>();
+  private readonly listeners = new Set<() => void>();
+  private changes = 0;
 
   /** register adds commands, replacing any with the same ID; it returns their removal. */
   register(...commands: Command[]): () => void {
     for (const c of commands) this.commands.set(c.id, c);
+    this.changed();
     return () => {
       for (const c of commands) if (this.commands.get(c.id) === c) this.commands.delete(c.id);
+      this.changed();
     };
+  }
+
+  /** subscribe calls fn whenever commands are added or removed; it returns the unsubscribe. */
+  subscribe = (fn: () => void): (() => void) => {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  };
+
+  /** version counts the changes to the set of commands, for useSyncExternalStore. */
+  version = (): number => this.changes;
+
+  private changed(): void {
+    this.changes++;
+    for (const fn of this.listeners) fn();
   }
 
   get(id: string): Command | undefined {

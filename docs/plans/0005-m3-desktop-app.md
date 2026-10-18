@@ -14,7 +14,7 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-18): **Phases 1 to 4 done**, and the user accepted
+Status (2026-10-18): **Phases 1 to 5 done**, and the user accepted
 ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
@@ -24,10 +24,10 @@ store's cards T-0043 and T-0044; the renderer's contract with its cards
 T-0045 and T-0046; and the blob scheme. The mock's vault moved to Phase 5.
 Codex has passed cards T-0043 to T-0046, the first of Phase 6's batch 3,
 and they are merged. Phase 4, notesd's additions, is merged in two PRs.
-Phase 5 runs as four PRs against `main`, one at a time: the data layer,
-the workspace and commands, and the editor core (merged), and the
-reading view, merge view and history with the exit evidence (in
-review).
+Phase 5 is merged in four PRs: the data layer, the workspace and
+commands, the editor core, and the reading view, merge view and history
+with the exit evidence. Phase 6 is under way: batch 2's shared pieces,
+T-0047 to T-0052 and their wiring, are in review.
 
 ## Decisions taken for M3
 
@@ -500,6 +500,12 @@ into its container as it merges.
 - **Done when:** every card is merged, `make check` and `make ui-check`
   are green, and each section of [specs/ui.md](../specs/ui.md) works in
   the built app.
+- **Batch 2 runs as three PRs against `main`,** one at a time, each
+  with its cards and their wiring: the shared pieces (menus, notices,
+  the prompt frame, the quick switcher, the command palette, the status
+  bar's items); the sidebar panes (Files, Search, Backlinks, Outgoing
+  links, Tags, All properties, Outline); and the settings dialog, the
+  history list and the dialogs they need.
 - **Result so far (2026-10-17): batch 3's first four cards.** Codex
   (codex-cli 0.161, the user's default model) passed T-0043 to T-0046 on
   the first attempt each, in two executor worktrees at once: the store
@@ -520,6 +526,39 @@ into its container as it merges.
   | T-0044 search filters | 1 | 1 m 43 s | correct; words split at `"` as `SearchQuery` splits them, and filters run after SQL so the limit counts admitted notes |
   | T-0045 links and embeds | 1 | 2 m 41 s | matches the spec; also makes a markdown image of a note alone in its paragraph a block embed, which the spec's "an embed of it as above" allows |
   | T-0046 syntax | 1 | 1 m 45 s | correct; runs its callout transformer before T-0045's embed transformer, which R16 needs, and says why |
+
+- **Result so far (2026-10-18): batch 2's shared pieces.** Codex
+  (codex-cli 0.161, the user's default model) passed T-0047 to T-0052 on
+  the first attempt each: the menu, the notices, the prompt frame and
+  the status bar at once in four executor worktrees (`exec-m3e` to
+  `exec-m3h`, from `m3/batch2`), then the quick switcher and the command
+  palette, whose given tests render T-0049's frame, once it merged. Each
+  card's given tests were checked by mutation against Codex's code: a
+  menu that stops at its ends (3 tests failed), keys that reach the
+  window from the prompt (1), a status bar without singulars (2), a
+  switcher without aliases (4) and a palette without its recent
+  commands (4) failed them; timers restarted on every render passed
+  the notices' tests, so a test of a notice drawn again joined them.
+  The wiring (`data/overlays.ts`, `app/Overlays.tsx`, `app/menus.ts`,
+  `app/status.ts`) opens the tab menu, the tab list, More options, the
+  vault menu, the editing mode and conflicts menus, both prompts from
+  their keys and the ribbon, and the notices; it found that the ribbon
+  never enabled a command registered after the window drew (the
+  registry now tells the window), and the planner made a menu or prompt
+  give focus back when it closes and drew key caps in the interface
+  font. A `--backdrop` token dims the window behind a prompt. Left for
+  later: aliases in the switcher (`note.list` carries none yet), word
+  counts (batch 3), Rename, Move file to and Open in default app (their
+  prompts and the opener plugin).
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0047 menu | 1 | 3 m 50 s | correct; nested lists in one portal, a press outside the portal closes, ← and Escape close only a submenu |
+  | T-0048 notices | 1 | 2 m 12 s | correct; a notice closed early keeps its timer entry until it leaves, so a render cannot restart it |
+  | T-0049 prompt frame | 1 | 2 m 35 s | correct; a row's `mousedown` keeps focus in the field |
+  | T-0050 status bar | 1 | 2 m 16 s | correct |
+  | T-0051 quick switcher | 1 | 2 m 16 s | correct |
+  | T-0052 command palette | 1 | 1 m 21 s | correct; its key caps took the monospace font Tailwind gives `kbd`, which the planner set back |
 
 ## Phase 7 — Review and exit evidence
 

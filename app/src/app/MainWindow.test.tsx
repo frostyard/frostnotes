@@ -50,8 +50,9 @@ describe("the main window over the mock", () => {
     await waitFor(() => expect(fileButton("Deep/b.md")).toBeTruthy());
     expect(tabs()).toEqual(["New tab"]);
     expect(screen.getByRole("button", { name: "Create new note (Ctrl + N)" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Connected to notesd test");
-    expect(screen.getByRole("button", { name: "Open quick switcher" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("status").textContent).toBe(""); // ready: nothing to say
+    expect(screen.getByRole("button", { name: "Open quick switcher" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Open today's daily note" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("opens files from the Files pane as links open, a note in its editor", async () => {
@@ -100,11 +101,11 @@ describe("the main window over the mock", () => {
     await user.click(await screen.findByRole("button", { name: "a.md" }));
     await waitFor(() => expect(localStorage.getItem(workspaceKey("/home/demo/garden"))).toContain('"a.md"'));
     await user.click(screen.getByRole("button", { name: /garden/ }));
-    await user.click(screen.getByRole("menuitemradio", { name: "Notes" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Notes" }));
     await waitFor(() => expect(fileButton("n.md")).toBeTruthy());
     expect(tabs()).toEqual(["New tab"]);
     await user.click(screen.getByRole("button", { name: /Notes/ }));
-    await user.click(screen.getByRole("menuitemradio", { name: "garden" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "garden" }));
     await waitFor(() => expect(tabs()).toEqual(["a"]));
   });
 
@@ -150,10 +151,8 @@ describe("the main window over the mock", () => {
       expect(screen.getByRole("status").textContent).toContain("Reconnecting to notesd… (notesd stopped)"),
     );
     expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Connected to notesd again"), {
-      timeout: 3000,
-    });
-    expect(screen.getByText(/No vaults yet/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/No vaults yet/)).toBeTruthy(), { timeout: 3000 });
+    expect(screen.getByRole("status").textContent).toBe("");
   });
 
   it("saves what is typed in a note's editor", async () => {

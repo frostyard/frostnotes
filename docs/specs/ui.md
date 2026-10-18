@@ -52,6 +52,7 @@ New for Frostnotes:
 | `--bg-tag` | `rgb(0 122 255 / 0.1)` | `rgb(10 132 255 / 0.2)` | tag pills (text `--accent`) |
 | `--callout-cyan` | `#30b0c7` | `#40c8e0` | tip, important and summary callouts |
 | `--popover-shadow` | `0 8px 24px rgb(0 0 0 / 0.16)` | `0 8px 24px rgb(0 0 0 / 0.5)` | menus, prompts, notices |
+| `--backdrop` | `rgb(0 0 0 / 0.2)` | `rgb(0 0 0 / 0.4)` | the window behind a prompt or dialog (`bg-backdrop`) |
 
 **Callout colors**, by the callout's type, ignoring case; an unknown type
 is `note`:
@@ -394,7 +395,7 @@ Retrying." Retry now).
 - **The frame:** a dialog, 700 wide (at most 80% of the window),
   centered, its top 60 from the window's, at most 70% of the window's
   height; `--bg-window`, 1px `--separator`, rounded 12,
-  `--popover-shadow`; the window behind dimmed (black at 20%). A
+  `--popover-shadow`; the window behind dimmed (`--backdrop`). A
   44-high input (15/20, 16px side padding, 1px `--separator` bottom),
   then the results, then a 28-high instructions footer (11/14
   `--text-tertiary`, items 16 apart: "↑↓ to navigate", "↵ to open", …).

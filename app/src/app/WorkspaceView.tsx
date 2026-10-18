@@ -29,6 +29,7 @@ import {
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { followLink, mergeDone } from "./commands";
+import { openMoreOptions, openTabList, openTabMenu, revealInFiles } from "./menus";
 import { ViewContent } from "./ViewContent";
 
 /** Zone is where a dragged tab would land in a group. */
@@ -231,7 +232,12 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
               case "newTab":
                 update((w) => openNewTab(activateGroup(w, group.id)));
                 break;
-              // The tab menu and the tab list are batch 2's menus.
+              case "menu":
+                openTabMenu(c.id, c.x, c.y);
+                break;
+              case "list":
+                openTabList(group.id, c.x, c.y);
+                break;
             }
           }}
           onDragStart={(id, e) => {
@@ -253,17 +259,13 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
           mode={view.type === "note" ? view.mode : undefined}
           onBack={() => update((w) => back(activate(w, tab.id)))}
           onForward={() => update((w) => forward(activate(w, tab.id)))}
-          onFolder={() => {
-            // Revealing a folder in the Files pane is batch 2's.
-          }}
+          onFolder={revealInFiles}
           onToggleMode={() =>
             update((w) =>
               view.type === "note" ? setView(w, tab.id, { ...view, mode: view.mode === "edit" ? "read" : "edit" }) : w,
             )
           }
-          onMore={() => {
-            // More options is batch 2's menu.
-          }}
+          onMore={(x, y) => openMoreOptions(client, tab.id, view, x, y)}
         />
       )}
       <div className="relative min-h-0 flex-1 overflow-auto">

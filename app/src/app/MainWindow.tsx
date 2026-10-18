@@ -13,6 +13,7 @@ import { feed } from "../data/events";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
 import { useNotes } from "../data/stores";
+import { useVaultState } from "../data/vaultState";
 import { DocumentRegistry, DocumentsContext } from "../editor/registry";
 import { IconButton } from "../features/chrome/IconButton";
 import { Ribbon } from "../features/chrome/Ribbon";
@@ -24,11 +25,14 @@ import { Splitter } from "../features/workspace/Splitter";
 import { VaultRow } from "../features/workspace/VaultRow";
 import { formatHotkey, type HotkeyCommand, hotkeysFor } from "../lib/keymap";
 import { type PaneId, SIDEBAR_MIN, type Side } from "../workspace/model";
-import { selectPane, setSidebarWidth } from "../workspace/ops";
+import { activeTab, selectPane, setSidebarWidth } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { useMaximized, windowCommand } from "./chrome";
 import { editorCommands, workspaceCommands } from "./commands";
+import { openConflictsMenu, openEditingModeMenu } from "./menus";
+import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
+import { statusSync, useBacklinkCount } from "./status";
 import { WorkspaceView } from "./WorkspaceView";
 
 /** RIBBON is the ribbon's width; WORKSPACE_MIN the least the workspace keeps (docs/specs/ui.md#layout). */
@@ -87,6 +91,8 @@ export function MainWindow() {
   clientRef.current = client;
   const docs = useMemo(() => new DocumentRegistry(() => clientRef.current), []);
   useEffect(() => registry.register(...workspaceCommands(client), ...editorCommands(docs)), [registry, client, docs]);
+  // The chrome asks which commands apply: draw it again as commands come and go.
+  useSyncExternalStore(registry.subscribe, registry.version);
   useEffect(() => installKeyListener(registry), [registry]);
   useEffect(() => feed.listen((e) => docs.event(e)), [docs]);
   // A new client is a reconnect: catch every document up.
@@ -99,9 +105,14 @@ export function MainWindow() {
   const ws = useWorkspace((s) => s.ws);
   const update = useWorkspace((s) => s.update);
   const showRibbon = usePrefs((s) => s.showRibbon);
-  const { connection, hello, vaults, vaultId } = useNotes();
+  const { connection, vaults, vaultId } = useNotes();
   const openVault = useOpenVault();
   const maximized = useMaximized();
+  const sync = useVaultState((s) => s.sync);
+  const editingMode = usePrefs((s) => s.editingMode);
+  const active = activeTab(ws);
+  const activeNote = active.view.type === "note" ? active.view : null;
+  const backlinks = useBacklinkCount(activeNote?.path ?? null);
   const widths = fitSidebars(useWindowWidth(), ws.left, ws.right);
   const shown = { left: widths.left > 0, right: widths.right > 0 };
   const controls = isTauri();
@@ -213,7 +224,22 @@ export function MainWindow() {
             {shown.right && sidebar("right")}
             {!shown.right && <div className="absolute top-0 right-0">{windowControls}</div>}
           </div>
-          <StatusBar connection={connection} hello={hello} vaultCount={vaults.length} />
+          <StatusBar
+            connection={connection}
+            sync={sync && statusSync(sync)}
+            backlinks={activeNote ? backlinks : null}
+            counts={null}
+            mode={activeNote ? (activeNote.mode === "read" ? "read" : editingMode) : null}
+            onConflicts={() => {
+              if (vaultId === null) return;
+              void client.sync
+                .conflicts({ vaultId })
+                .then((list) => openConflictsMenu(list, window.innerWidth, window.innerHeight));
+            }}
+            onBacklinks={() => update((w) => selectPane(w, "right", "backlinks"))}
+            onMode={(x, y) => openEditingModeMenu(active.id, x, y)}
+          />
+          <Overlays />
         </div>
       </DocumentsContext.Provider>
     </CommandsContext.Provider>
@@ -265,7 +291,6 @@ function NoVault() {
 /** Connecting stands in for MainWindow until notesd answers; the title bar stays usable. */
 export function Connecting() {
   const connection = useNotes((s) => s.connection);
-  const hello = useNotes((s) => s.hello);
   const maximized = useMaximized();
   const text = connection.state === "lost" ? `Reconnecting to notesd… (${connection.reason})` : "Connecting to notesd…";
   return (
@@ -280,7 +305,16 @@ export function Connecting() {
       <div data-tauri-drag-region className="text-empty flex flex-1 items-center justify-center px-8 text-secondary">
         {text}
       </div>
-      <StatusBar connection={connection} hello={hello} vaultCount={0} />
+      <StatusBar
+        connection={connection}
+        sync={null}
+        backlinks={null}
+        counts={null}
+        mode={null}
+        onConflicts={() => {}}
+        onBacklinks={() => {}}
+        onMode={() => {}}
+      />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
+import { notify, openPrompt } from "../data/overlays";
+import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
 import type { PreviewCommand } from "../editor/preview/framework";
@@ -79,6 +81,64 @@ async function createNoteAt(c: Client, path: string, where: OpenWhere, tabId?: s
   if (vaultId === null) return;
   await c.note.create({ vaultId, path, content: "" });
   update((w) => open(tabId ? activate(w, tabId) : w, { type: "note", path, mode: "edit" }, where));
+}
+
+/**
+ * openOrCreate opens the note named name (as typed, with or without
+ * ".md"; folders it names are kept), creating it where new notes go when
+ * it does not exist: the quick switcher's Shift+Enter.
+ */
+export async function openOrCreate(c: Client, name: string, where: OpenWhere): Promise<void> {
+  const bare = name.trim().replace(/^\/+/, "");
+  if (bare === "") return;
+  const file = bare.toLowerCase().endsWith(".md") ? bare : `${bare}.md`;
+  const folder = newNoteFolder();
+  const path = file.includes("/") || folder === "" ? file : `${folder}/${file}`;
+  if (useFiles.getState().files.has(path)) {
+    update((w) => open(w, viewOf(path), where));
+    return;
+  }
+  await createNoteAt(c, path, where);
+}
+
+/** viewOf is how a vault file opens: a note in the default view, anything else by its hash. */
+export function viewOf(path: string): ViewState {
+  return path.endsWith(".md") ? { type: "note", path, mode: usePrefs.getState().defaultView } : { type: "file", path };
+}
+
+const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+
+/** copyPath puts a file's vault path on the clipboard. */
+export async function copyPath(path: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(path);
+    notify("Copied the path.");
+  } catch (err) {
+    notify(`Cannot copy the path: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * deleteFile deletes a file with its base, asking first while the Confirm
+ * file deletion preference is on; notesd keeps its versions.
+ */
+export async function deleteFile(c: Client, path: string): Promise<void> {
+  const vaultId = useNotes.getState().vaultId;
+  const file = useFiles.getState().files.get(path);
+  if (vaultId === null || !file) return;
+  const name = nameOf(path);
+  if (
+    usePrefs.getState().confirmDelete &&
+    !window.confirm(`Delete "${name}"?\n\nYou can restore it from its version history.`)
+  ) {
+    return;
+  }
+  try {
+    await c.note.delete({ vaultId, path, base: file.hash });
+    notify(`Deleted ${name}.`);
+  } catch (err) {
+    notify(`Cannot delete ${name}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 const WEB = /^(https?|mailto):/i;
@@ -183,6 +243,8 @@ export function workspaceCommands(c: Client): Command[] {
       run: () => createNote(c, "right"),
     },
     { id: "workspace:new-tab", name: "New tab", run: () => update(openNewTab) },
+    { id: "switcher:open", name: "Open quick switcher", applies: hasVault, run: () => openPrompt("switcher") },
+    { id: "command-palette:open", name: "Open command palette", run: () => openPrompt("palette") },
     {
       id: "sync:view-version-history",
       name: "Open version history",

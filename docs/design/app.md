@@ -20,7 +20,7 @@ the transports, the mock, the title bar, the status bar, and the
 CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
 dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
 commands, editor core, reading view, merge view and history below
-(Phase 5).
+(Phase 5), and Phase 6's menus, notices, prompts and status bar.
 Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
 rewritten as each phase lands.
 
@@ -360,9 +360,24 @@ serves `/blobs/` from Vite there if it must.
 - The registry (`commands/registry.ts`) holds the workspace's commands
   now (`app/commands.ts`): tabs, groups, history, sidebars, creating a
   note where the vault's settings say (`Untitled.md`, then `Untitled 1.md`
-  …), and Reset workspace layout (`frostnotes:reset-workspace-layout`,
-  Frostnotes' own); a button whose command is not registered yet (the
-  switcher, the palette, settings) is disabled until its card lands.
+  …), the quick switcher and the palette, and Reset workspace layout
+  (`frostnotes:reset-workspace-layout`, Frostnotes' own); a button whose
+  command is not registered yet (settings, daily notes, templates) is
+  disabled until its card lands. The registry tells its subscribers when
+  commands come and go, and the window draws its chrome again then.
+- **Over the layout** (`data/overlays.ts`, drawn by `app/Overlays.tsx`):
+  one menu at a time, the quick switcher or the command palette, and the
+  notices. The menus (`app/menus.ts`) are the tab's, the tab list, More
+  options, the vault menu, the status bar's editing mode and conflicts;
+  More options' Rename, Move file to and Open in default app wait for
+  their prompts and the opener plugin. The quick switcher lists the
+  vault's notes and the workspace's recent files (aliases join when
+  `note.list` carries them); Shift+Enter creates the note where new notes
+  go. The palette lists the commands that apply as it opens, the ten run
+  from it last first. A menu or prompt gives focus back to what had it
+  when it closes. The status bar (`app/status.ts`) shows the sync state
+  in words, the active note's backlinks (`note.backlinks`, again as the
+  vault changes) and its mode; word counts wait for batch 3's card.
 - **The window has one key listener,** in the bubble phase, so
   CodeMirror and fields handle their own keys first. It skips events
   already handled, maps the rest with `lib/keymap.ts` (Obsidian's default
@@ -399,7 +414,8 @@ serves `/blobs/` from Vite there if it must.
 ## Operational notes
 
 - Local storage holds `frostnotes.workspace.v1:<vault path>`,
-  `frostnotes.prefs.v1` and `frostnotes.seq`. The command Reset workspace
+  `frostnotes.prefs.v1`, `frostnotes.seq` and `frostnotes.recentCommands`
+  (the palette's). The command Reset workspace
   layout clears the current vault's; clearing the app's site data clears
   them all, and no note is lost.
 - If notesd is not running, the window shows the connection state and

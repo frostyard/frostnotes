@@ -48,6 +48,7 @@
   --color-highlight: var(--bg-highlight);
   --color-tag: var(--bg-tag);
   --color-callout-cyan: var(--callout-cyan);
+  --color-backdrop: var(--backdrop);
   --shadow-popover: var(--popover-shadow);
 }
 
