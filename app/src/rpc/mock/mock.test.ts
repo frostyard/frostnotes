@@ -69,6 +69,22 @@ describe("MockTransport", () => {
     await expect(client.events.subscribe()).rejects.toHaveProperty("code", ErrorCode.conflict);
   });
 
+  it("makes a vault's folder with create, as notesd does", async () => {
+    const { client } = await connected();
+    await expect(client.vault.add({ path: "/home/demo/Garden", create: true })).resolves.toHaveProperty(
+      "path",
+      "/home/demo/Garden",
+    );
+    for (const [path, code] of [
+      ["/home/demo/Garden", ErrorCode.conflict],
+      ["/home/demo/Notes", ErrorCode.conflict],
+      ["/home/demo/Documents/Work/Inner", ErrorCode.conflict],
+      ["/home/missing/Vault", ErrorCode.invalidParams],
+    ] as const) {
+      await expect(client.vault.add({ path, create: true }), path).rejects.toHaveProperty("code", code);
+    }
+  });
+
   it("removes a vault and emits vault.removed", async () => {
     const { mock, client } = await connected();
     await client.events.subscribe();

@@ -31,6 +31,8 @@ export interface MockOptions {
   now?: () => Date;
   /** Each vault's files by vault ID: a path and its content, or a folder as "path/". */
   files?: Record<number, Record<string, string | Uint8Array>>;
+  /** Folders on the mock's disk besides the vaults and their parents, for vault.add's create. */
+  folders?: string[];
 }
 
 type Params = Record<string, unknown>;
@@ -42,6 +44,8 @@ export class MockTransport implements Transport {
   private readonly vaults: Vault[];
   private readonly contents = new Map<number, MockVault>();
   private nextVault: number;
+  /** The folders on the mock's disk: its vaults', their parents', and MockOptions.folders. */
+  private readonly folders = new Set<string>();
   private nextId = 1;
   private seq = 0;
   private readonly log: Event[] = [];
@@ -59,6 +63,7 @@ export class MockTransport implements Transport {
   ) {
     this.vaults = vaults.map((v) => ({ ...v }));
     this.nextVault = Math.max(0, ...vaults.map((v) => v.id)) + 1;
+    for (const f of [...this.vaults.map((v) => v.path), ...(opts.folders ?? [])]) this.addFolder(f);
     for (const v of this.vaults) this.contents.set(v.id, this.newVault(v.id, opts.files?.[v.id]));
   }
 
@@ -334,9 +339,27 @@ export class MockTransport implements Transport {
     return { source, name: typeof p.author === "string" ? p.author.trim() : this.client };
   }
 
+  // addFolder records a folder on the mock's disk, with its parents.
+  private addFolder(path: string): void {
+    for (let p = path; p !== ""; p = p.slice(0, p.lastIndexOf("/"))) this.folders.add(p);
+    this.folders.add("/");
+  }
+
   private add(p: Params): Vault {
     const path = typeof p.path === "string" ? p.path.replace(/\/+$/, "") || "/" : "";
     if (!path.startsWith("/")) throw new RPCError(ErrorCode.invalidParams, `vault path "${path}" is not absolute`);
+    // With create, notesd makes the folder: its parent must exist and it must not.
+    if (p.create === true) {
+      const parent = path.slice(0, path.lastIndexOf("/")) || "/";
+      if (path === "/") throw new RPCError(ErrorCode.invalidParams, `vault path "${path}" names no folder to make`);
+      if (!this.folders.has(parent)) {
+        throw new RPCError(
+          ErrorCode.invalidParams,
+          `the folder to hold the vault: ${parent}: no such file or directory`,
+        );
+      }
+      if (this.folders.has(path)) throw new RPCError(ErrorCode.conflict, `${path} already exists`);
+    }
     const name = typeof p.name === "string" ? p.name.trim() : (path.split("/").pop() ?? "");
     if (name === "") throw new RPCError(ErrorCode.invalidParams, "vault name is empty");
     for (const v of this.vaults) {
@@ -344,6 +367,7 @@ export class MockTransport implements Transport {
         throw new RPCError(ErrorCode.conflict, `vault "${path}" overlaps vault "${v.name}" at ${v.path}`);
       }
     }
+    this.addFolder(path);
     const vault: Vault = { id: this.nextVault++, name, path, createdAt: this.now().toISOString() };
     this.vaults.push(vault);
     this.contents.set(vault.id, this.newVault(vault.id));

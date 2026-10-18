@@ -61,6 +61,15 @@ func TestVaultCommands(t *testing.T) {
 		t.Fatalf("list --json = %+v", vaults)
 	}
 
+	garden := filepath.Join(dir, "garden")
+	if out := run("vault", "add", "--create", garden); out != fmt.Sprintf("added vault 3 \"garden\" at %s\n", garden) {
+		t.Fatalf("add --create = %q", out)
+	}
+	if fi, err := os.Stat(garden); err != nil || !fi.IsDir() {
+		t.Fatalf("add --create made %v, %v", fi, err)
+	}
+	run("vault", "rm", "3")
+
 	if out := run("vault", "rm", "1"); out != "removed vault 1\n" {
 		t.Fatalf("rm = %q", out)
 	}

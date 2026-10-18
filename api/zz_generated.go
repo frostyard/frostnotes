@@ -2610,6 +2610,8 @@ type VaultAddParams struct {
 	Path string `json:"path"`
 	// Display name; defaults to the directory's base name.
 	Name *string `json:"name,omitzero"`
+	// Make the directory first; its parent must exist and it must not.
+	Create *bool `json:"create,omitzero"`
 }
 
 // VaultRemoveParams holds the params of vault.remove.
@@ -2651,13 +2653,16 @@ type VaultConfigureParams struct {
 }
 
 // VaultService: The vaults this notesd owns: directories of markdown notes
-// (ADR-0003). Registering a vault never writes to it.
+// (ADR-0003). Registering a vault never writes to it; add with create makes
+// its empty directory first (ADR-0024).
 type VaultService interface {
 	// List implements vault.list. Every registered vault, by name.
 	List(ctx context.Context, p *VaultListParams) ([]Vault, error)
 	// Add implements vault.add. Register a directory as a vault. The path must be
 	// absolute and name an existing directory, and no registered vault may
-	// contain it or lie inside it.
+	// contain it or lie inside it. With create, notesd makes the directory first
+	// (Create new vault, ADR-0024): its parent must exist and it must not; it is
+	// made only when it may be registered.
 	Add(ctx context.Context, p *VaultAddParams) (*Vault, error)
 	// Remove implements vault.remove. Forget a vault. Its directory and files are
 	// untouched.

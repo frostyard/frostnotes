@@ -51,6 +51,7 @@ func newVaultListCmd(opts *rootOptions) *cobra.Command {
 
 func newVaultAddCmd(opts *rootOptions) *cobra.Command {
 	var name string
+	var create bool
 	cmd := &cobra.Command{
 		Use:   "add PATH",
 		Short: "Register a vault directory",
@@ -63,6 +64,9 @@ func newVaultAddCmd(opts *rootOptions) *cobra.Command {
 			params := &api.VaultAddParams{Path: path}
 			if cmd.Flags().Changed("name") {
 				params.Name = &name
+			}
+			if create {
+				params.Create = &create
 			}
 			c, _, err := opts.dial(cmd.Context())
 			if err != nil {
@@ -81,6 +85,7 @@ func newVaultAddCmd(opts *rootOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Vault display name (default: directory base name)")
+	cmd.Flags().BoolVar(&create, "create", false, "Make the vault's directory first; its parent must exist and it must not")
 	return cmd
 }
 
