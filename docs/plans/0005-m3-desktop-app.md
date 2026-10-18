@@ -29,8 +29,9 @@ commands, the editor core, and the reading view, merge view and history
 with the exit evidence. Phase 6 is under way: batch 2 is merged in three
 PRs (T-0047 to T-0063 and their wiring); batch 3's first part, the
 editor's syntax, formatting commands, word counts and completion
-(T-0064 to T-0069), is merged, and its second, the live-preview widgets
-(T-0070 to T-0075 and their wiring), is in review.
+(T-0064 to T-0069), and its second, the live-preview widgets (T-0070 to
+T-0075), are merged; its last, properties, the inline title, templates
+and daily notes (T-0076 to T-0079 and their wiring), is in review.
 
 ## Decisions taken for M3
 
@@ -696,6 +697,35 @@ into its container as it merges.
   | T-0074 callouts, tables, note embeds | 1 | 1 m 40 s | correct |
   | T-0075 images, audio, video | 1 | 1 m 44 s | correct; leaves an image whose text spans lines as source |
 
+- **Result so far (2026-10-18): batch 3's properties, inline title,
+  templates and daily notes.** Codex passed T-0076 to T-0079 on the first
+  attempt each, all four at once (from `m3/batch3-props`). `yaml` 2.9.1
+  (2026-09-11, ISC, no dependencies) joined, pinned, for T-0076's port of
+  MCP's property edits, which keeps MCP's cases but writes strings and
+  dates as Obsidian does. A mutation of each card failed its given tests:
+  CRLF lost in edits (2 tests), a tag kept with its `#` (1), a forbidden
+  name accepted (1), and repeated templates listed twice (3); the
+  reference for T-0077 was itself caught by its test letting Escape's
+  blur commit. The planner's part: the properties block as a block
+  widget holding the React component, its DOM kept while the
+  frontmatter changes; Add file property (Ctrl+;), whose request waits
+  for a new block's first render; the Properties in document
+  preference; the cursor starting after the frontmatter; the inline
+  title in the editor and the reading view, renaming as the Files pane
+  does; Insert template with the chooser and the template's properties
+  merged; Open today's daily note; and a `note.daily` in the mock. A
+  window test runs each over the mock, and in a browser the block drew
+  text, tag and alias rows, added a property, and wrapped its pills.
+  Left for later: the properties block in the reading view, and
+  indentation guides.
+
+  | Card | Attempts | Wall time | Review |
+  | --- | --- | --- | --- |
+  | T-0076 properties in the frontmatter's text | 1 | 1 m 46 s | correct |
+  | T-0077 properties block | 1 | 2 m 15 s | correct; ignores Enter while an IME composes; the planner let its pills wrap |
+  | T-0078 inline title | 1 | 1 m 21 s | correct; the planner styled its alert |
+  | T-0079 template chooser | 1 | 1 m 22 s | correct |
+
 ## Phase 7 — Review and exit evidence
 
 Checks [specs/ui.md](../specs/ui.md) (the keyboard map, the rules) and
@@ -754,6 +784,6 @@ against the built app.
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
 - Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0075](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0079](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
