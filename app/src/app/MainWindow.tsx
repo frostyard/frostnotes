@@ -9,6 +9,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useSyncExternalStore } from
 
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
+import { useAliasesSync } from "../data/aliases";
 import { feed } from "../data/events";
 import { ask } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
@@ -110,6 +111,7 @@ export function MainWindow() {
   const update = useWorkspace((s) => s.update);
   const showRibbon = usePrefs((s) => s.showRibbon);
   const { connection, vaults, vaultId } = useNotes();
+  useAliasesSync();
   const openVault = useOpenVault();
   const maximized = useMaximized();
   const sync = useVaultState((s) => s.sync);

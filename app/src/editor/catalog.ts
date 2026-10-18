@@ -2,11 +2,12 @@
 // docs/design/app.md#extensions): the files store's files, link text by
 // the vault's New link format, another note's headings and block IDs from
 // its text (its open document's, else notesd's), and the vault's tags
-// from note.tags, read again at most every 10 s. Notes' aliases wait for
-// note listings that carry them.
+// from note.tags, read again at most every 10 s, and the notes' aliases
+// (data/aliases.ts).
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 
+import { useAliases } from "../data/aliases";
 import { byPath, useFiles } from "../data/files";
 import { useVaultState } from "../data/vaultState";
 import type { Client, VaultFile } from "../rpc/gen/api";
@@ -57,7 +58,11 @@ export interface CatalogSource {
 
 /** completionCatalog is a note's editor's catalog. */
 export function completionCatalog(src: CatalogSource): CompletionCatalog {
-  let listed: { from: ReadonlyMap<string, VaultFile>; files: LinkFile[] } | null = null;
+  let listed: {
+    from: ReadonlyMap<string, VaultFile>;
+    aliases: ReadonlyMap<string, readonly string[]>;
+    files: LinkFile[];
+  } | null = null;
   let tags: { name: string; count: number }[] = [];
   let tagsAt = Number.NEGATIVE_INFINITY;
 
@@ -75,8 +80,13 @@ export function completionCatalog(src: CatalogSource): CompletionCatalog {
   const catalog: CompletionCatalog = {
     files: () => {
       const files = useFiles.getState().files;
-      if (listed?.from !== files) {
-        listed = { from: files, files: [...files.keys()].sort(byPath).map((path) => ({ path, aliases: [] })) };
+      const aliases = useAliases.getState().byPath;
+      if (listed?.from !== files || listed.aliases !== aliases) {
+        listed = {
+          from: files,
+          aliases,
+          files: [...files.keys()].sort(byPath).map((path) => ({ path, aliases: aliases.get(path) ?? [] })),
+        };
       }
       return listed.files;
     },

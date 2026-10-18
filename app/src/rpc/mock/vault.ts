@@ -506,6 +506,7 @@ export class MockVault {
         hash: e.hash,
         size: e.data.length,
         modifiedAt: e.modifiedAt,
+        aliases: list(frontmatter(decoder.decode(e.data)).aliases),
       }));
   }
 

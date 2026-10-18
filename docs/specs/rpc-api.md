@@ -817,6 +817,7 @@ A note in a listing.
 | `hash` | `string` | The SHA-256 of the content, lowercase hex: the base for the next write. |
 | `size` | `int` | In bytes. |
 | `modifiedAt` | `time` | The file's modification time. |
+| `aliases` | `[]string` | The note's frontmatter aliases, in order; empty without any. |
 
 ### Type `Note`
 

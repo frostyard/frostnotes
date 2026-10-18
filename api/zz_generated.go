@@ -990,6 +990,8 @@ type NoteEntry struct {
 	Size int64 `json:"size"`
 	// The file's modification time.
 	ModifiedAt time.Time `json:"modifiedAt"`
+	// The note's frontmatter aliases, in order; empty without any.
+	Aliases []string `json:"aliases"`
 }
 
 // Note: A note's content and what the index found in it.
