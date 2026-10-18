@@ -7,6 +7,8 @@ import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
+const MONO = 'ui-monospace, "DejaVu Sans Mono", monospace';
+
 const highlight = HighlightStyle.define([
   { tag: t.heading, fontWeight: "600" },
   { tag: t.emphasis, fontStyle: "italic" },
@@ -14,7 +16,7 @@ const highlight = HighlightStyle.define([
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.link, color: "var(--accent)" },
   { tag: t.url, color: "var(--text-tertiary)" },
-  { tag: t.monospace, fontFamily: 'ui-monospace, "DejaVu Sans Mono", monospace', fontSize: "0.875em" },
+  { tag: t.monospace, fontFamily: MONO, fontSize: "0.875em" },
   { tag: t.quote, color: "var(--text-secondary)" },
   { tag: [t.processingInstruction, t.meta, t.contentSeparator], color: "var(--text-tertiary)" },
   // Tags and footnote labels; highlights.
@@ -45,7 +47,7 @@ export function editorTheme(opts: { readable: boolean; fontSize: number }): Exte
       ".cm-pv-h6": { fontSize: "1em", fontWeight: "600" },
       ".cm-pv-link": { color: "var(--accent)", textDecoration: "underline", cursor: "pointer" },
       ".cm-pv-unresolved": { opacity: "0.7" },
-      ".cm-pv-code": { fontFamily: 'ui-monospace, "DejaVu Sans Mono", monospace', backgroundColor: "var(--bg-code)" },
+      ".cm-pv-code": { fontFamily: MONO, backgroundColor: "var(--bg-code)" },
       ".cm-pv-task": {
         width: "16px",
         height: "16px",
@@ -60,6 +62,83 @@ export function editorTheme(opts: { readable: boolean; fontSize: number }): Exte
       ".cm-panels.cm-panels-top": { borderBottom: "1px solid var(--separator)" },
       ".cm-searchMatch": { backgroundColor: "var(--bg-highlight)" },
       ".cm-fn-comment": { color: "var(--text-tertiary)" },
+      // Live preview's widgets (docs/specs/ui.md#editor-and-reading-view).
+      ".cm-pv-tag": {
+        backgroundColor: "var(--bg-tag)",
+        color: "var(--accent)",
+        borderRadius: "1em",
+        padding: "0.1em 0.5em",
+        fontSize: "0.875em",
+        cursor: "pointer",
+      },
+      ".cm-pv-inline-code": {
+        fontFamily: MONO,
+        fontSize: "0.875em",
+        backgroundColor: "var(--bg-code)",
+        borderRadius: "4px",
+        padding: "0.1em 0.25em",
+      },
+      ".cm-pv-footnote": { color: "var(--accent)", fontSize: "0.75em", cursor: "pointer" },
+      ".cm-line.cm-pv-code": { padding: "0 16px" },
+      ".cm-line.cm-pv-code-first": {
+        position: "relative",
+        paddingTop: "12px",
+        borderTopLeftRadius: "6px",
+        borderTopRightRadius: "6px",
+      },
+      ".cm-line.cm-pv-code-last": {
+        paddingBottom: "12px",
+        borderBottomLeftRadius: "6px",
+        borderBottomRightRadius: "6px",
+      },
+      ".cm-pv-code-header": {
+        position: "absolute",
+        top: "6px",
+        right: "12px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+      },
+      ".cm-pv-code-lang": {
+        fontFamily: "inherit",
+        fontSize: "11px",
+        lineHeight: "14px",
+        color: "var(--text-tertiary)",
+      },
+      ".cm-pv-code-copy": {
+        fontFamily: "inherit",
+        fontSize: "11px",
+        lineHeight: "14px",
+        padding: "2px 6px",
+        borderRadius: "4px",
+        border: "1px solid var(--separator)",
+        backgroundColor: "var(--bg-window)",
+        color: "var(--text-secondary)",
+        cursor: "pointer",
+        opacity: "0",
+      },
+      ".cm-line.cm-pv-code:hover .cm-pv-code-copy, .cm-pv-code-copy:focus-visible": { opacity: "1" },
+      ".cm-line.cm-pv-quote": { borderLeft: "2px solid var(--accent)", paddingLeft: "16px" },
+      ".cm-pv-bullet": {
+        display: "inline-block",
+        width: "6px",
+        height: "6px",
+        borderRadius: "50%",
+        backgroundColor: "var(--text-secondary)",
+        verticalAlign: "0.2em",
+        margin: "0 0.35em",
+      },
+      ".cm-pv-hr": {
+        display: "inline-block",
+        width: "100%",
+        verticalAlign: "middle",
+        borderTop: "2px solid var(--separator)",
+      },
+      ".cm-pv-task-done": { color: "var(--text-secondary)", textDecoration: "line-through" },
+      ".cm-pv-math-block": { textAlign: "center", padding: "8px 0" },
+      ".cm-pv-rendered": { cursor: "text", padding: "4px 0" },
+      ".cm-pv-embed": { borderLeft: "2px solid var(--accent)", padding: "4px 24px" },
+      ".cm-pv-media": { maxWidth: "100%", verticalAlign: "bottom" },
       // Completion, drawn as the app's menus are.
       ".cm-tooltip": {
         backgroundColor: "var(--bg-window)",

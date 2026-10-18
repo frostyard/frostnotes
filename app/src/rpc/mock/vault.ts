@@ -374,8 +374,13 @@ export class MockVault {
     });
   }
 
-  /** render draws a note's text as a small subset of notesd's HTML (docs/specs/render.md). */
-  render(p: string, content?: string): string {
+  /**
+   * render draws a note's text as a small subset of notesd's HTML
+   * (docs/specs/render.md): headings, paragraphs, quotes and callouts,
+   * tables, and embeds alone in their paragraph of notes (one level) and
+   * images.
+   */
+  render(p: string, content?: string, depth = 0): string {
     checkPath(p);
     if (kindOf(p) !== "note") fail(ErrorCode.invalidParams, `${p} is not a note: only notes render`);
     const text = content ?? this.read(p).content;
@@ -389,10 +394,63 @@ export class MockVault {
         out.push(`<h${level}>${this.inline(p, h[2] ?? "")}</h${level}>`);
         continue;
       }
-      const lines = block.split("\n").map((l) => this.inline(p, l));
-      out.push(`<p>${lines.join("<br>\n")}</p>`);
+      out.push(this.block(p, block, depth));
     }
     return out.join("\n");
+  }
+
+  private block(p: string, block: string, depth: number): string {
+    const lines = block.split("\n");
+    const para = (ls: string[]) => `<p>${ls.map((l) => this.inline(p, l)).join("<br>\n")}</p>`;
+    if (lines.every((l) => l.startsWith(">"))) {
+      const inner = lines.map((l) => l.replace(/^> ?/, ""));
+      const c = /^\[!([A-Za-z0-9_-]+)\]([+-]?)(?:[ \t]+(.*))?$/.exec(inner[0] ?? "");
+      if (!c) return `<blockquote>${para(inner)}</blockquote>`;
+      const type = (c[1] ?? "").toLowerCase();
+      const fold = c[2] ? ` data-fold="${c[2]}"` : "";
+      const title = escapeHTML(c[3] ?? type.charAt(0).toUpperCase() + type.slice(1));
+      const rest = inner.slice(1);
+      return `<div class="callout" data-callout="${type}"${fold}><div class="callout-title">${title}</div><div class="callout-content">${rest.length > 0 ? para(rest) : ""}</div></div>`;
+    }
+    if (lines.length >= 2 && lines.every((l) => l.trim().startsWith("|")) && /^\|?[\s:|-]+$/.test(lines[1] ?? "")) {
+      const cells = (l: string) =>
+        l
+          .trim()
+          .replace(/^\||\|$/g, "")
+          .split("|")
+          .map((c) => this.inline(p, c.trim()));
+      const head = cells(lines[0] ?? "")
+        .map((c) => `<th>${c}</th>`)
+        .join("");
+      const rows = lines
+        .slice(2)
+        .map(
+          (l) =>
+            `<tr>${cells(l)
+              .map((c) => `<td>${c}</td>`)
+              .join("")}</tr>`,
+        )
+        .join("");
+      return `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    const embed = /^!\[\[([^\]|#]*)(#[^\]|]*)?(\|[^\]]*)?\]\]$/.exec(block.trim());
+    if (embed) {
+      const target = embed[1] ?? "";
+      const href = escapeHTML(target + (embed[2] ?? ""));
+      const path = this.resolve(p, target);
+      const e = path === undefined ? undefined : this.files.get(path);
+      if (path === undefined || !e)
+        return `<p><span class="embed is-unresolved" data-href="${href}">${href}</span></p>`;
+      if (kindOf(path) === "note" && depth < 1) {
+        return `<div class="embed" data-href="${href}" data-path="${escapeHTML(path)}">\n${this.render(path, undefined, depth + 1)}\n</div>`;
+      }
+      const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+      if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp"].includes(ext)) {
+        const name = escapeHTML(path.slice(path.lastIndexOf("/") + 1));
+        return `<p><img class="embed" data-blob="${e.hash}.${ext}" data-path="${escapeHTML(path)}" alt="${name}"></p>`;
+      }
+    }
+    return para(lines);
   }
 
   private inline(from: string, line: string): string {

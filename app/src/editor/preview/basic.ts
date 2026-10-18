@@ -1,8 +1,8 @@
 // Live preview's first providers, from M0's spike (docs/specs/ui.md#editor-and-reading-view):
 // emphasis and strikethrough marks hidden, headings in their sizes, links
 // and wikilinks as links (an unresolved one dimmed) that follow on click,
-// task checkboxes that toggle one character, code blocks on their color.
-// Batch 3's cards add the rest, a provider each.
+// task checkboxes that toggle one character. Batch 3's cards add the rest
+// (index.ts lists them all).
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState, TransactionSpec } from "@codemirror/state";
 import { Decoration, WidgetType } from "@codemirror/view";
@@ -212,19 +212,5 @@ export function toggleTask(state: EditorState, pos: number): TransactionSpec | n
   return { changes: { from: at, to: at + 1, insert }, userEvent: "input.toggle" };
 }
 
-const codeLine = Decoration.line({ class: "cm-pv-code" });
-
-/** code draws a fenced code block's lines on the code color. */
-export const code: Provider = {
-  id: "code",
-  kind: "inline",
-  nodes: ["FencedCode"],
-  draw(node, cx) {
-    const doc = cx.state.doc;
-    for (let pos = node.from; pos <= node.to; pos = doc.lineAt(pos).to + 1) cx.line(pos, codeLine);
-    return false;
-  },
-};
-
 /** BASIC are the first providers, in drawing order. */
-export const BASIC: readonly Provider[] = [headings, marks, links, wikilinks, tasks, code];
+export const BASIC: readonly Provider[] = [headings, marks, links, wikilinks, tasks];

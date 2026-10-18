@@ -296,17 +296,35 @@ The framework (`editor/preview/`) owns:
   touches; a block widget (a callout, a table, an embed, display math, the
   properties block) shows its source when a selection enters its range.
 - **Events.** A widget's clicks go to its provider, which answers with a
-  transaction (a checkbox toggles one character) or a command (follow a
-  link, open an embed).
+  transaction (a checkbox toggles one character; a click on a block
+  shows its source), a command (follow a link, search for a tag, copy a
+  code block), or that it handled the click itself (a callout's fold).
 - **Caching.** Widgets compare equal by their source text and inputs, so
   a keystroke elsewhere redraws nothing.
+- **The environment** (`PreviewEnv`) is what the app gives the
+  providers: link resolution, where commands go, a vault file's URL
+  (its hash's blob URL), the Load remote images preference, and
+  rendering markdown into an element.
 
 M0's spike (`app/src/spike/livePreview.ts`) is its first draft: hidden
 marks, headings, links, wikilinks and checkboxes, measured at 9 ms at p95
 a keystroke on a 10,000-line note. Its decorations are the framework's
 first providers (`editor/preview/basic.ts`); the framework is
-`editor/preview/framework.ts`. The framework keeps that budget with
-every provider on: providers are measured together in the exit evidence.
+`editor/preview/framework.ts`, and `editor/preview/index.ts` lists every
+provider: highlights, tags as pills, inline code and footnote references
+(`inline.ts`); code blocks with their language and a copy button
+(`code.ts`); quotes, bullets, rules and done tasks (`lists.ts`); math
+with KaTeX (`math.ts`); embedded images, audio and video (`media.ts`);
+and callouts, tables and embeds of notes (`rendered.ts`). Those last
+three are blocks drawn exactly as the reading view draws them: the
+environment renders a block's source with `note.render` as the note
+would render it, sanitizes it as the reading view does, and fills in its
+files and math (`editor/rendered.ts`), so no provider builds HTML from
+the note's text. A note's editor keeps those renderings by markdown and
+renders what is on screen again a second after the vault changes, so an
+embedded note follows its edits. The framework keeps the typing budget
+with every provider on: providers are measured together in the exit
+evidence.
 
 ### Properties
 
