@@ -113,8 +113,11 @@ func checkFile(r *os.Root, p string) (fs.FileInfo, error) {
 
 // mkdirs creates p's missing parent folders under r, refusing to pass
 // through a symlink or a file.
-func mkdirs(r *os.Root, p string) error {
-	dir := path.Dir(p)
+func mkdirs(r *os.Root, p string) error { return mkdirAll(r, path.Dir(p)) }
+
+// mkdirAll creates folder dir and its missing parents under r, refusing to
+// pass through a symlink or a file.
+func mkdirAll(r *os.Root, dir string) error {
 	if dir == "." {
 		return nil
 	}

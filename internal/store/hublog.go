@@ -181,6 +181,19 @@ func (d *DB) History(ctx context.Context, vaultID, fileID, before int64, limit i
 		vaultID, fileID, before, before, limit)
 }
 
+// NamedRevision returns revision seq of vault vaultID as History gives
+// revisions, with its device's name, or ErrNotFound.
+func (d *DB) NamedRevision(ctx context.Context, vaultID, seq int64) (api.Revision, error) {
+	revs, err := d.namedRevisions(ctx, namedRevisionSelect+` WHERE r.vault_id = ? AND r.seq = ?`, vaultID, seq)
+	if err != nil {
+		return api.Revision{}, err
+	}
+	if len(revs) == 0 {
+		return api.Revision{}, fmt.Errorf("revision %d: %w", seq, ErrNotFound)
+	}
+	return revs[0], nil
+}
+
 func scanReplica(sc interface{ Scan(...any) error }) (Replica, error) {
 	var r Replica
 	var at string

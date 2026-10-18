@@ -83,7 +83,10 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   last one.
 - **Files:** `note.files` lists a vault's files and folders (path, kind,
   hash, size, modification time) once, and `note.changed`, `note.moved`
-  and `note.removed` keep the list current. It feeds the file tree, the
+  and `note.removed` keep the list current. Folders have no events: after
+  its own `note.mkdir`, `note.moveFolder` or `note.deleteFolder` the app
+  lists again, and an empty folder made elsewhere shows at the next
+  listing. It feeds the file tree, the
   quick switcher, link suggestions and attachments' hashes. 666 notes is
   about 100 KB of JSON.
 - **Sync:** `sync.status` per vault, kept current by `sync.changed`.

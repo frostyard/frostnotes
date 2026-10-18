@@ -441,6 +441,11 @@ func (v *Vault) Delete(ctx context.Context, p, base string, who Author) error {
 	if err := v.checkIgnored(p); err != nil {
 		return err
 	}
+	return v.delete(ctx, r, p, base, who)
+}
+
+// delete is Delete under the vault's lock.
+func (v *Vault) delete(ctx context.Context, r *os.Root, p, base string, who Author) error {
 	row, _, err := v.refresh(ctx, r, p)
 	if err != nil {
 		return apiError(p, err)

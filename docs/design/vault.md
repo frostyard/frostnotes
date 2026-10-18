@@ -93,6 +93,13 @@ in the vault except the settings in `.frostnotes/`.
   rating: number
   ```
 
+  `vault.configure` changes the keys it is given, keeping the file's other
+  keys and its comments (`go.yaml.in/yaml/v3` writes it again, so its
+  spacing may change), creates `.frostnotes/` when it must, and refuses
+  settings notesd could not use, such as a daily format whose paths leave
+  the vault. It emits the durable `vault.configured`, and so does a scan
+  that finds `vault.yaml` changed outside notesd.
+
   A `vault.yaml` that does not parse, or holds a value no setting takes
   (`location: elsewhere`), fails the scan, as an unreadable folder does,
   and `vault.settings` with it; a `types.yaml` that does not parse fails
@@ -261,6 +268,21 @@ clickable image's do, are rewritten both, and is an ordinary write with a
 base. A move emits `note.moved`; the file keeps its ID and versions, and a
 note's title follows its new name.
 
+Folders (M3, [plan 0005](../plans/0005-m3-desktop-app.md) Phase 4) go
+through the same lock and guard, and the settings' ignore patterns refuse
+folders too. `note.mkdir` creates a folder and its parents.
+`note.moveFolder` renames the folder once, with everything in it, then
+moves each indexed file's row as a move does, in one `Tx` (a revision and
+`note.moved` each), and with `updateLinks` rewrites links as a move of
+each file would; rows the index still has under the destination, for
+files gone from the disk, go first. `note.deleteFolder` deletes each file
+the caller listed with its base, as `note.delete` does, keeping a file
+changed since its base or not listed, then removes the folders left empty,
+the folder itself included unless something was kept. Folders have no
+events: a client lists `note.files` again. `note.upload` creates a file
+from bytes as `note.create` does
+([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)).
+
 Deletes (`note.delete`) name their base too. A note changed since is not
 deleted (an edit beats a delete, as on the hub). Otherwise notesd removes
 the file, never moving it to `.trash/`, after reading it once more, and
@@ -284,7 +306,10 @@ name subfolders. A missing daily note is created from the template, whose
 `{{date-1d:YYYY-MM-DD}}` are expanded as Obsidian does
 (`internal/templates`): `{{title}}` is the note's name, `{{date}}` the date
 in the daily-note format, and the date carries the time of day it is now.
-A template that cannot be read gives an empty note, as in Obsidian. MCP's
+A template that cannot be read gives an empty note, as in Obsidian.
+`note.template` expands any template note the same way for the app's
+Insert template, `{{date}}` and `{{time}}` in the template settings'
+formats. MCP's
 `append_to_daily_note` ([specs/mcp.md](../specs/mcp.md)) creates it that way, as the agent's version, then appends with a base like
 any write.
 

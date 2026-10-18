@@ -254,6 +254,18 @@ A file's revisions, newest first.
 Result: `[]Revision`.
 Errors: `notFound`, `invalidParams`.
 
+### `log.revision`
+
+One revision by its sequence number, for sync.readRevision (M3).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vault` | `string` |  |
+| `seq` | `int` |  |
+
+Result: `Revision`.
+Errors: `notFound`.
+
 ### `log.pushes`
 
 The revisions the hub appended for each of a replica's pushes, for sync.verify.
@@ -1206,7 +1218,7 @@ Errors: `notFound`, `unavailable`.
 
 ### `sync.readRevision`
 
-A hub revision's content, for the merge view: from this device's blob store when it has it, else fetched from the hub (ADR-0018).
+A hub revision's content, for the merge view: from this device's blob store when it has it, else fetched from the hub (ADR-0018). Content the hub has pruned is notFound (ADR-0019); like note.read, it reads at most 10 MB.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -1214,7 +1226,7 @@ A hub revision's content, for the merge view: from this device's blob store when
 | `seq` | `int` | The revision's sequence number, from sync.history or sync.conflicts. |
 
 Result: `RevisionContent`.
-Errors: `notFound`, `unavailable`.
+Errors: `notFound`, `invalidParams`, `unavailable`.
 
 ### Event `sync.changed` (transient)
 

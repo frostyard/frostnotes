@@ -3,6 +3,7 @@ package engine
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"path"
@@ -348,4 +349,80 @@ func (n notes) Properties(ctx context.Context, p *api.NotePropertiesParams) ([]a
 		return nil, fmt.Errorf("vault %d's property types: %w", p.VaultID, err)
 	}
 	return n.db.PropertyCounts(ctx, p.VaultID, types)
+}
+
+// maxUpload is the most bytes note.upload takes (ADR-0023).
+const maxUpload = 10 << 20
+
+func (n notes) Upload(ctx context.Context, p *api.NoteUploadParams) (*api.WriteResult, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	who, err := author(ctx, p.Source, p.Author)
+	if err != nil {
+		return nil, err
+	}
+	if len(p.Data) > base64.StdEncoding.EncodedLen(maxUpload) {
+		return nil, api.InvalidParams("an upload is at most %d bytes: copy a larger file into the vault's folder, where the scan finds it", maxUpload)
+	}
+	data, err := base64.StdEncoding.DecodeString(p.Data)
+	if err != nil {
+		return nil, api.InvalidParams("data is not base64: %v", err)
+	}
+	if len(data) > maxUpload {
+		return nil, api.InvalidParams("an upload is at most %d bytes: copy a larger file into the vault's folder, where the scan finds it", maxUpload)
+	}
+	return v.Create(ctx, p.Path, data, who)
+}
+
+func (n notes) Template(ctx context.Context, p *api.NoteTemplateParams) (*api.ExpandedTemplate, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	title, at := "", time.Now()
+	if p.Title != nil {
+		title = *p.Title
+	}
+	if p.At != nil {
+		at = *p.At
+	}
+	content, err := v.Template(ctx, p.Template, title, at)
+	if err != nil {
+		return nil, err
+	}
+	return &api.ExpandedTemplate{Content: content}, nil
+}
+
+func (n notes) Mkdir(ctx context.Context, p *api.NoteMkdirParams) error {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return err
+	}
+	return v.Mkdir(ctx, p.Path)
+}
+
+func (n notes) MoveFolder(ctx context.Context, p *api.NoteMoveFolderParams) (*api.FolderMoveResult, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	who, err := author(ctx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return v.MoveFolder(ctx, p.Path, p.To, p.UpdateLinks != nil && *p.UpdateLinks, who)
+}
+
+func (n notes) DeleteFolder(ctx context.Context, p *api.NoteDeleteFolderParams) (*api.FolderDeleteResult, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	who, err := author(ctx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return v.DeleteFolder(ctx, p.Path, p.Files, who)
 }

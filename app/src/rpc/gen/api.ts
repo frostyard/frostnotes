@@ -415,6 +415,12 @@ export interface LogHistoryParams {
   limit?: number;
 }
 
+/** Params of log.revision. */
+export interface LogRevisionParams {
+  vault: string;
+  seq: number;
+}
+
 /** Params of log.pushes. */
 export interface LogPushesParams {
   vault: string;
@@ -470,6 +476,8 @@ export interface LogClient {
   match(params: LogMatchParams): Promise<LogMatch[]>;
   /** A file's revisions, newest first. */
   history(params: LogHistoryParams): Promise<Revision[]>;
+  /** One revision by its sequence number, for sync.readRevision (M3). */
+  revision(params: LogRevisionParams): Promise<Revision>;
   /**
    * The revisions the hub appended for each of a replica's pushes, for
    * sync.verify.
@@ -491,6 +499,7 @@ function logClient(t: Transport): LogClient {
     pull: (params) => t.call<LogPage>("log.pull", params),
     match: (params) => t.call<LogMatch[]>("log.match", params),
     history: (params) => t.call<Revision[]>("log.history", params),
+    revision: (params) => t.call<Revision>("log.revision", params),
     pushes: (params) => t.call<PushRecord[]>("log.pushes", params),
     resolve: (params) => t.call<LogFile>("log.resolve", params),
   };
@@ -1436,7 +1445,9 @@ export interface SyncClient {
   history(params: SyncHistoryParams): Promise<Revision[]>;
   /**
    * A hub revision's content, for the merge view: from this device's blob
-   * store when it has it, else fetched from the hub (ADR-0018).
+   * store when it has it, else fetched from the hub (ADR-0018). Content the
+   * hub has pruned is notFound (ADR-0019); like note.read, it reads at most
+   * 10 MB.
    */
   readRevision(params: SyncReadRevisionParams): Promise<RevisionContent>;
 }
@@ -1707,6 +1718,7 @@ export const METHODS = [
   "log.pull",
   "log.match",
   "log.history",
+  "log.revision",
   "log.pushes",
   "log.resolve",
   "note.list",

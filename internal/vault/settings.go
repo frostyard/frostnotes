@@ -14,6 +14,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/blobs"
 )
 
 // Settings are a vault's settings (docs/design/vault.md#on-disk). Each one
@@ -31,6 +32,9 @@ type Settings struct {
 	// Sources says where each setting comes from, by its field's name in
 	// api.VaultSettings.
 	Sources map[string]api.SettingSource
+	// digest is vault.yaml's content hash, "" when there is none: how a
+	// scan tells that the file changed.
+	digest string
 }
 
 // DailySettings say where daily notes go and what a new one holds.
@@ -121,11 +125,17 @@ type obsidianApp struct {
 // error; Obsidian's files are only defaults, so one that cannot be
 // decoded, or a value in it that is not one, is skipped.
 func LoadSettings(root string) (Settings, error) {
-	var own vaultYAML
 	data, err := readSetting(root, SettingsFile)
 	if err != nil {
 		return Settings{}, err
 	}
+	return parseSettings(root, data)
+}
+
+// parseSettings is LoadSettings with data as vault.yaml's content, nil
+// when there is none.
+func parseSettings(root string, data []byte) (Settings, error) {
+	var own vaultYAML
 	if data != nil {
 		if err := yaml.Unmarshal(data, &own); err != nil {
 			return Settings{}, fmt.Errorf("%s: %w", SettingsFile, err)
@@ -139,6 +149,9 @@ func LoadSettings(root string) (Settings, error) {
 	readObsidian(root, "app.json", &app)
 
 	s := Settings{Sources: map[string]api.SettingSource{}}
+	if data != nil {
+		s.digest = blobs.ID(data)
+	}
 	str := func(name string, own *string, obsidian string) string {
 		return strings.TrimSpace(*pick(s.Sources, name, own, given(obsidian)))
 	}

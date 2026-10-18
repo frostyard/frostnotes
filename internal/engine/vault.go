@@ -118,3 +118,16 @@ func (v vaults) Settings(_ context.Context, p *api.VaultSettingsParams) (*api.Va
 	out := s.API()
 	return &out, nil
 }
+
+func (v vaults) Configure(ctx context.Context, p *api.VaultConfigureParams) (*api.VaultSettings, error) {
+	actor, err := v.m.Vault(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	s, err := actor.Configure(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	out := s.API()
+	return &out, nil
+}

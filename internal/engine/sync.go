@@ -156,6 +156,10 @@ func (unbuiltLog) History(context.Context, *api.LogHistoryParams) ([]api.Revisio
 	return nil, unbuilt("log.history")
 }
 
+func (unbuiltLog) Revision(context.Context, *api.LogRevisionParams) (*api.Revision, error) {
+	return nil, unbuilt("log.revision")
+}
+
 func (unbuiltLog) Pushes(context.Context, *api.LogPushesParams) ([]api.PushRecord, error) {
 	return nil, unbuilt("log.pushes")
 }

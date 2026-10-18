@@ -120,6 +120,7 @@ must be one of the connection's device (`notFound` otherwise).
 | `log.pull` | `vault`, `after`, `limit` (default 500, at most 1,000) | `LogPage` `{files []LogFile, next, more}` |
 | `log.match` | `vault`, `files []MatchQuery` `{path, hash}` (at most 1,000) | `[]LogMatch` `{path, hash, file?, revision?, revisionHash?}` |
 | `log.history` | `vault`, `file`, `before?`, `limit` (default 50, at most 200) | `[]Revision`, newest first, below `before` |
+| `log.revision` | `vault`, `seq` | `Revision`: one revision, for `sync.readRevision` (M3) |
 | `log.pushes` | `vault`, `replica`, `pushes []int` (at most 1,000) | `[]PushRecord` `{push, revisions []Revision}` |
 | `log.resolve` | `vault`, `file`, `seq` | `LogFile`: the conflict flag cleared |
 
@@ -204,6 +205,7 @@ On a device, `sync` (caller `local`):
 | `sync.reset {vaultId}` | leave, then join again |
 | `sync.verify {vaultId}` | `VerifyReport`: files that differ from the hub's heads, pushes the hub has no record of, flagged files |
 | `sync.history {vaultId, path, limit?}` | the hub's revisions of a file (`log.history`) |
+| `sync.readRevision {vaultId, seq}` | `RevisionContent`: a revision (`log.revision`) and its content, from the device's blobs or downloaded into them from the hub; `notFound` once pruned, at most 10 MB |
 
 Event `sync.changed {status}` (transient) when a vault's sync state
 changes.

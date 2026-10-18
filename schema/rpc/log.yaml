@@ -175,6 +175,13 @@ methods:
       - {name: limit, type: int, optional: true, doc: "At most this many; default 50, at most 200."}
     result: "[]Revision"
     errors: [notFound, invalidParams]
+  - name: revision
+    doc: One revision by its sequence number, for sync.readRevision (M3).
+    params:
+      - {name: vault, type: string}
+      - {name: seq, type: int}
+    result: Revision
+    errors: [notFound]
   - name: pushes
     doc: The revisions the hub appended for each of a replica's pushes, for sync.verify.
     params:
