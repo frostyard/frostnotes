@@ -2,6 +2,7 @@ package mcpserver_test
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/frostyard/lodge/kit/kittest"
 	kit "github.com/frostyard/lodge/kit/lodgeapp"
@@ -220,6 +222,167 @@ func TestAFolderScopeHoldsThroughLodge(t *testing.T) {
 	}
 	if _, err := n.local.Note().Read(t.Context(), &api.NoteReadParams{VaultID: n.vault, Path: "Porter/Routines/Brief.md"}); !errors.Is(err, api.ErrNotFound) {
 		t.Errorf("Porter/Routines/Brief.md after the refusals = %v", err)
+	}
+}
+
+// The tools a session offers follow its scope (ADR-0028):
+// append_to_daily_note under daily or a bare write, taking a date only
+// under a bare write, and the write tools naming a limited scope's
+// folders.
+func TestToolsFollowTheScope(t *testing.T) {
+	n := startLodge(t)
+	id := "vault=" + strconv.FormatInt(n.vault, 10)
+	reads := []string{"get_backlinks", "list_notes", "read_note", "search_notes"}
+	for _, tc := range []struct {
+		scope  string
+		extra  []string
+		date   bool
+		limits string
+	}{
+		{id, nil, false, ""},
+		{id + ";daily", []string{"append_to_daily_note"}, false, "this token may append to today's daily note."},
+		{id + ";write=Porter/", []string{"create_note", "edit_note"}, false, "this token may write under Porter/."},
+		{id + ";write=Porter/;except=Porter/Routines/;daily", []string{"append_to_daily_note", "create_note", "edit_note"}, false,
+			"this token may write under Porter/ except Porter/Routines/, and append to today's daily note."},
+		{id + ";write", []string{"append_to_daily_note", "create_note", "edit_note"}, true, ""},
+		{id + ";write;except=Private/", []string{"append_to_daily_note", "create_note", "edit_note"}, true,
+			"this token may write anywhere in the vault except Private/."},
+	} {
+		cs := n.connect(t, "agent", tc.scope)
+		res, err := cs.ListTools(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, tool := range res.Tools {
+			names = append(names, tool.Name)
+			write := !slices.Contains(reads, tool.Name)
+			if write && tc.limits != "" && !strings.Contains(tool.Description, "Writes are limited: "+tc.limits) {
+				t.Errorf("%s: %s's description %q does not name the limits", tc.scope, tool.Name, tool.Description)
+			}
+			if write && tc.limits == "" && strings.Contains(tool.Description, "Writes are limited") {
+				t.Errorf("%s: %s's description names limits", tc.scope, tool.Name)
+			}
+			if tool.Name == "append_to_daily_note" {
+				schema, _ := json.Marshal(tool.InputSchema)
+				if got := strings.Contains(string(schema), `"date"`); got != tc.date {
+					t.Errorf("%s: append_to_daily_note takes a date: %t, want %t", tc.scope, got, tc.date)
+				}
+			}
+		}
+		slices.Sort(names)
+		want := slices.Sorted(slices.Values(append(slices.Clone(reads), tc.extra...)))
+		if !slices.Equal(names, want) {
+			t.Errorf("%s: tools = %v, want %v", tc.scope, names, want)
+		}
+	}
+}
+
+// Porter's token through lodge: it edits its memory, is refused at its
+// routines and elsewhere with the folders it may write, appends to
+// today's daily note, created from the template, and sees which notes it
+// may write.
+func TestPorterThroughLodge(t *testing.T) {
+	n := startLodge(t)
+	ctx := t.Context()
+	vaults, err := n.local.Vault().List(ctx, &api.VaultListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := ""
+	for _, v := range vaults {
+		if v.ID == n.vault {
+			dir = v.Path
+		}
+	}
+	for p, c := range map[string]string{
+		".obsidian/daily-notes.json": `{"folder": "Daily", "template": "Templates/Daily"}`,
+		"Templates/Daily.md":         "# {{title}}\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, p), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for p, c := range map[string]string{"Porter/Memory.md": "memory\n", "Porter/Routines/brief.md": "routine\n"} {
+		if _, err := n.local.Note().Create(ctx, &api.NoteCreateParams{VaultID: n.vault, Path: p, Content: c}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cs := n.connect(t, "porter", "vault="+strconv.FormatInt(n.vault, 10)+";write=Porter/;except=Porter/Routines/;daily")
+	if res, text := call(t, cs, "edit_note", map[string]any{"path": "Porter/Memory.md", "append": "- likes quinces\n"}); res.IsError {
+		t.Fatalf("edit_note Porter/Memory.md: %s", text)
+	}
+	refused := func(what string, res *sdk.CallToolResult, text string) {
+		t.Helper()
+		if !res.IsError || !strings.Contains(text, "this token may write under Porter/ except Porter/Routines/, and append to today's daily note") {
+			t.Errorf("%s = %v %s", what, res.IsError, text)
+		}
+	}
+	for _, p := range []string{"Porter/Routines/brief.md", "Plan.md"} {
+		res, text := call(t, cs, "edit_note", map[string]any{"path": p, "append": "x\n"})
+		refused("edit_note "+p, res, text)
+	}
+	for _, p := range []string{"Porter/Routines/new.md", "porter/routines/new.md", "PORTER/Routines/new.md", "Elsewhere.md"} {
+		res, text := call(t, cs, "create_note", map[string]any{"path": p, "content": "x\n"})
+		refused("create_note "+p, res, text)
+	}
+	day := time.Now().Format(time.DateOnly)
+	for i, line := range []string{"- capture one", "- capture two"} {
+		res, text := call(t, cs, "append_to_daily_note", map[string]any{"text": line})
+		if res.IsError {
+			t.Fatalf("append %d: %s", i, text)
+		}
+		if want := `"created":` + strconv.FormatBool(i == 0); !strings.Contains(text, want) {
+			t.Errorf("append %d = %s, want %s", i, text, want)
+		}
+	}
+	if res, text := call(t, cs, "append_to_daily_note", map[string]any{"text": "x", "date": "2026-01-01"}); !res.IsError {
+		t.Errorf("an append naming a date under daily = %s", text)
+	}
+	note, err := n.local.Note().Read(ctx, &api.NoteReadParams{VaultID: n.vault, Path: "Daily/" + day + ".md"})
+	if err != nil || note.Content != "# "+day+"\n- capture one\n- capture two\n" {
+		t.Fatalf("today's daily note = %+v, %v", note, err)
+	}
+	vs, err := n.local.Note().Versions(ctx, &api.NoteVersionsParams{VaultID: n.vault, Path: note.Path})
+	if err != nil || len(vs) != 3 || vs[0].Author != "porter" || vs[2].Author != "porter" {
+		t.Errorf("the daily note's versions = %+v, %v; want three by porter", vs, err)
+	}
+	// writable marks what the token may write, in both read tools.
+	res, text := call(t, cs, "list_notes", map[string]any{})
+	if res.IsError {
+		t.Fatal(text)
+	}
+	var list struct {
+		Notes []struct {
+			Path     string `json:"path"`
+			Writable *bool  `json:"writable"`
+		} `json:"notes"`
+	}
+	if err := json.Unmarshal([]byte(text), &list); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"Plan.md": false, "Porter/Memory.md": true, "Porter/Routines/brief.md": false,
+		"Templates/Daily.md": false, "Daily/" + day + ".md": false}
+	if len(list.Notes) != len(want) {
+		t.Errorf("list_notes = %+v", list.Notes)
+	}
+	for _, e := range list.Notes {
+		if w, ok := want[e.Path]; !ok || e.Writable == nil || *e.Writable != w {
+			t.Errorf("list_notes: %s writable %v, want %t", e.Path, e.Writable, w)
+		}
+	}
+	for p, w := range map[string]bool{"Porter/Memory.md": true, "Porter/Routines/brief.md": false} {
+		if _, text := call(t, cs, "read_note", map[string]any{"path": p}); !strings.Contains(text, `"writable":`+strconv.FormatBool(w)) {
+			t.Errorf("read_note %s = %s, want writable %t", p, text, w)
+		}
+	}
+	// A whole-vault scope marks nothing.
+	whole := n.connect(t, "claude", "vault="+strconv.FormatInt(n.vault, 10)+";write")
+	if _, text := call(t, whole, "read_note", map[string]any{"path": "Plan.md"}); strings.Contains(text, "writable") {
+		t.Errorf("read_note under a bare write = %s", text)
 	}
 }
 

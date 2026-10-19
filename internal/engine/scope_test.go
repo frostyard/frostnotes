@@ -28,6 +28,7 @@ func noteParams(id int64) map[string]map[string]any {
 		"note.versions":     {"vaultId": id, "path": "Plan.md"},
 		"note.revert":       {"vaultId": id, "path": "Plan.md", "version": 1, "base": zero},
 		"note.daily":        {"vaultId": id},
+		"note.appendDaily":  {"vaultId": id, "text": "x"},
 		"note.files":        {"vaultId": id},
 		"note.resolve":      {"vaultId": id, "from": "Plan.md", "targets": []string{"Plan"}},
 		"note.render":       {"vaultId": id, "path": "Plan.md"},
@@ -44,7 +45,7 @@ func noteParams(id int64) map[string]map[string]any {
 
 // noteWrites are the note methods specs/lodge-app.md marks writes.
 var noteWrites = []string{"note.create", "note.write", "note.move", "note.delete", "note.revert",
-	"note.daily", "note.upload", "note.mkdir", "note.moveFolder", "note.deleteFolder"}
+	"note.daily", "note.appendDaily", "note.upload", "note.mkdir", "note.moveFolder", "note.deleteFolder"}
 
 func noteMethods(t *testing.T) []string {
 	t.Helper()

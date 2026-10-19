@@ -311,12 +311,19 @@ in the daily-note format, and the date carries the time of day it is now.
 A template that cannot be read gives an empty note, as in Obsidian.
 `note.template` expands any template note the same way for the app's
 Insert template, `{{date}}` and `{{time}}` in the template settings'
-formats. MCP's
-`append_to_daily_note` ([specs/mcp.md](../specs/mcp.md)) creates it that way, as the agent's version, then appends with a base like
-any write. For an agent whose scope limits its writes, `note.daily`
-judges the day's path under the vault's lock, where it writes: the
-scope may write that path, or, under `daily`, it is today's and not
-under `except`
+formats.
+
+`note.appendDaily` appends text at the end of a day's note, creating it
+that way first. Under the vault's lock it reads the note and writes it
+with the hash read as its base, so it never changes text already there;
+an edit that lands on disk between the read and the rename merges as for
+any write. MCP's `append_to_daily_note`
+([specs/mcp.md](../specs/mcp.md)) calls it.
+
+For an agent whose scope limits its writes, `note.daily` and
+`note.appendDaily` judge the day's path under the vault's lock, where
+they write. The scope must be able to write that path, or, under
+`daily`, the note must be today's and not under `except`
 ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
 
 ### Versions
@@ -366,4 +373,4 @@ long-term history ([sync.md](sync.md)).
 - Related: [overview.md](overview.md), [sync.md](sync.md), [app.md](app.md) (the editor as a writer)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/render.md](../specs/render.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md); written settings in [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
-- Folder scopes: the write scope's path check after the path guard, built in [plan 0007](../plans/0007-folder-scopes-for-agents.md); planned there, an agent's append to today's daily note ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md))
+- Folder scopes: the write scope's path check after the path guard, and an agent's append to today's daily note, built in [plan 0007](../plans/0007-folder-scopes-for-agents.md) ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md))

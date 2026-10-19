@@ -109,6 +109,11 @@ types:
     fields:
       - {name: note, type: Note}
       - {name: created, type: bool, doc: "notesd created it from the vault's template for this call."}
+  - name: DailyAppend
+    doc: A day's daily note after an append.
+    fields:
+      - {name: write, type: WriteResult, doc: "The append's write."}
+      - {name: created, type: bool, doc: "notesd created the note from the vault's template for this call, before appending."}
   - name: VaultFile
     doc: A file of a vault, as the index has it.
     fields:
@@ -310,6 +315,23 @@ methods:
       - {name: author, type: string, optional: true, doc: "Who creates it, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it."}
     result: DailyNote
     errors: [notFound, invalidParams]
+  - name: appendDaily
+    writes: true
+    doc: >-
+      Append text at the end of a day's daily note, after a line break when
+      the note does not end in one, ending it with a line break. A missing
+      note is created first, as note.daily creates it. The append is a write
+      whose base is the note as notesd reads it under the vault's lock, so
+      it never changes text already there (ADR-0028); an edit that lands on
+      disk meanwhile merges as for note.write.
+    params:
+      - {name: vaultId, type: int}
+      - {name: text, type: string, doc: "The text to append; not empty."}
+      - {name: date, type: string, optional: true, doc: "YYYY-MM-DD; default today in notesd's time zone."}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent; a session's or an agent's connection fixes it."}
+      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it."}
+    result: DailyAppend
+    errors: [notFound, conflict, invalidParams]
   - name: files
     doc: >-
       Every file and folder of a vault: the Files pane's listing and the

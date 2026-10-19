@@ -162,8 +162,8 @@ func (h *httpSessions) server(r *http.Request) *sdk.Server {
 		return nil
 	}
 	op.client = c
-	op.srv = newServer(Options{Client: c, VaultID: scope.Vault, ReadOnly: !scope.CanWrite(), Version: h.o.Version,
-		Author: token, Log: h.o.Log})
+	op.srv = newServer(Options{Client: c, VaultID: scope.Vault, ReadOnly: !scope.CanWrite() && !scope.Daily, Scope: &scope,
+		Version: h.o.Version, Author: token, Log: h.o.Log})
 	h.o.Log.Info("MCP session", "token", token, "scope", scope.String())
 	return op.srv
 }

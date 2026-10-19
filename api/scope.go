@@ -204,8 +204,9 @@ func (s Scope) WritableFolder(p string) bool {
 // Excepted reports whether p is in an except= folder, or is one.
 func (s Scope) Excepted(p string) bool { return inAny(p, s.Except, true) }
 
-// describe says what the scope may write, for a refusal's message.
-func (s Scope) describe() string {
+// Describe says what the scope may write, for a refusal's message and
+// the MCP tools' descriptions.
+func (s Scope) Describe() string {
 	except := ""
 	if len(s.Except) > 0 {
 		except = " except " + strings.Join(s.Except, ", ")
@@ -282,7 +283,7 @@ func boundScope(ctx context.Context) *Scope {
 // outside is a refused write's answer: invalidParams, saying what the
 // token may write, so an agent can correct itself (ADR-0028).
 func outside(sc *Scope, what string) error {
-	return InvalidParams("%s is outside this token's writes: %s", what, sc.describe())
+	return InvalidParams("%s is outside this token's writes: %s", what, sc.Describe())
 }
 
 // CheckWrite refuses, for an agent, a write of any file at paths that its

@@ -321,18 +321,50 @@ func (n notes) Daily(ctx context.Context, p *api.NoteDailyParams) (*api.DailyNot
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
-	date := now
-	if p.Date != nil {
-		if date, err = time.ParseInLocation(time.DateOnly, *p.Date, time.Local); err != nil {
-			return nil, api.InvalidParams("date %q is not YYYY-MM-DD", *p.Date)
-		}
+	date, today, err := day(p.Date)
+	if err != nil {
+		return nil, err
 	}
 	who, err := author(ctx, p.Source, p.Author)
 	if err != nil {
 		return nil, err
 	}
-	return v.Daily(dailyGuarded(ctx, v, date.Format(time.DateOnly) == now.Format(time.DateOnly)), date, who)
+	return v.Daily(dailyGuarded(ctx, v, today), date, who)
+}
+
+// AppendDaily appends to a day's daily note, judged for an agent as
+// note.daily is.
+func (n notes) AppendDaily(ctx context.Context, p *api.NoteAppendDailyParams) (*api.DailyAppend, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	if p.Text == "" {
+		return nil, api.InvalidParams("text is empty")
+	}
+	date, today, err := day(p.Date)
+	if err != nil {
+		return nil, err
+	}
+	who, err := author(ctx, p.Source, p.Author)
+	if err != nil {
+		return nil, err
+	}
+	return v.AppendDaily(dailyGuarded(ctx, v, today), date, p.Text, who)
+}
+
+// day is the day a daily-note method names, YYYY-MM-DD, or today in
+// notesd's time zone, and whether it is today.
+func day(date *string) (time.Time, bool, error) {
+	now := time.Now()
+	if date == nil {
+		return now, true, nil
+	}
+	d, err := time.ParseInLocation(time.DateOnly, *date, time.Local)
+	if err != nil {
+		return time.Time{}, false, api.InvalidParams("date %q is not YYYY-MM-DD", *date)
+	}
+	return d, *date == now.Format(time.DateOnly), nil
 }
 
 // Files lists the index's files and the vault's folders, with every

@@ -145,7 +145,7 @@ func mayWrite(ctx context.Context, method string) bool {
 }
 
 // dailyMethod reports whether method is one daily admits.
-func dailyMethod(method string) bool { return method == "note.daily" }
+func dailyMethod(method string) bool { return method == "note.daily" || method == "note.appendDaily" }
 
 // inScope answers a call that names a vault outside ctx's scope as one
 // naming a vault that does not exist, so a scoped caller cannot learn

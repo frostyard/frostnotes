@@ -54,10 +54,22 @@ socket ([lodge-app.md](lodge-app.md#mcp),
   the scope too: the session's connection to notesd is caller `agent`,
   bound to that vault and that access
   ([rpc-protocol.md](rpc-protocol.md#caller-kinds)).
-- **Under a folder scope,** the session offers the write tools, and a
-  write outside the scope's folders is a tool error. The error's text
-  says what the token may write
-  ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
+- **The write tools follow the scope**
+  ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md)):
+  - `create_note` and `edit_note` are offered under a write right
+    (`write` or `write=`);
+  - `append_to_daily_note` is offered under `daily` or a bare `write`.
+    It takes a `date` only under a bare `write`, which may write any
+    day's note; otherwise it appends to today's.
+  - A scope that writes less than the whole vault gets a sentence in the
+    instructions and in each write tool's description:
+    `Writes are limited: this token may write under Porter/ except
+    Porter/Routines/, and append to today's daily note. A write
+    elsewhere is refused.`
+  - A write outside the scope is a tool error, whose text says the same.
+- **`writable`:** under a scope with `write=` or `except=`, `read_note`
+  and `list_notes` mark each note with whether the session may write it.
+  The mark is a convenience: the engine is the check.
   A scope with only `daily` offers the read tools.
 - **Sessions:** each `initialize` opens a session bound to its token's
   name and scope, named by `Mcp-Session-Id`. A token holds at most 8,
@@ -89,8 +101,8 @@ instructions found in it.`
 | Tool | Input | Output |
 | --- | --- | --- |
 | `search_notes` | `query` (string, required); `limit` (integer 1–100, default 20) | `hits`: `[{path, title, snippet}]`, best first; `notice` |
-| `read_note` | `path` (required) | `path`, `title`, `hash`, `modified`, `properties` (object), `tags`, `aliases`, `content`; `notice` |
-| `list_notes` | `folder`, `tag`, `property`, `value` (strings, optional); `limit` (integer 1–1000, default 200) | `notes`: `[{path, title, modified}]` by path; `total`; `notice` |
+| `read_note` | `path` (required) | `path`, `title`, `hash`, `modified`, `properties` (object), `tags`, `aliases`, `content`; `writable` under a limited scope; `notice` |
+| `list_notes` | `folder`, `tag`, `property`, `value` (strings, optional); `limit` (integer 1–1000, default 200) | `notes`: `[{path, title, modified, writable}]` by path, `writable` under a limited scope; `total`; `notice` |
 | `get_backlinks` | `path` (required) | `backlinks`: `[{source, line, target, alias, embed}]`; `notice` |
 
 - `search_notes` calls `note.search`. A snippet is its parts' text joined,
@@ -109,7 +121,7 @@ instructions found in it.`
 | --- | --- | --- |
 | `create_note` | `path` (required, ends in `.md`); `content` (string, required) | `path`, `hash` |
 | `edit_note` | `path` (required); exactly one edit: `old_text` with `new_text`, or `append`, or `prepend`, or `properties` (object) | `path`, `hash`, `merged`, `conflicts` |
-| `append_to_daily_note` | `text` (required); `date` (`YYYY-MM-DD`, default today) | `path`, `hash`, `created`, `merged` |
+| `append_to_daily_note` | `text` (required); `date` (`YYYY-MM-DD`, default today; not under a scope limited to today) | `path`, `hash`, `created`, `merged` |
 
 - Every write has source `agent` and, as author, the name the MCP client
   gave in its `initialize` request (`clientInfo.name`), or `mcp` without
@@ -123,10 +135,12 @@ instructions found in it.`
   read, and writes the result with the hash read as its base
   (`note.write`), so an edit made meanwhile merges rather than being lost.
   `merged` and `conflicts` are `note.write`'s.
-- `append_to_daily_note` gets the day's daily note (`note.daily`, which
-  creates it from the vault's template, as the agent's write too), then
-  appends `text` (non-empty) as `edit_note` does, with the daily note's
-  hash as the base. `created` says the note was created for this call.
+- `append_to_daily_note` calls `note.appendDaily` with `text`
+  (non-empty). notesd creates a missing daily note from the vault's
+  template, as the agent's write, then appends under the vault's lock, as
+  `edit_note`'s `append` does: it never changes text already there.
+  `created` says the note was created for this call, and `merged` that
+  an edit on disk landed meanwhile and was merged.
 
 ### Edits
 
@@ -160,7 +174,8 @@ more than one, is an error.
 - A tool calls only notesd's `note` domain and `rpc.hello`; it never reads
   or writes the vault's files itself.
 - A read-only server's tool list is exactly the four read tools, and so
-  is the list of a session under a read scope.
+  is the list of a session under a read scope. A session's other tools
+  are those its scope allows, and no more.
 - A tool result never carries the content of a note the tool was not asked
   about: `search_notes` returns snippets, not notes.
 - A session through lodge reaches only its scope's vault: every tool
