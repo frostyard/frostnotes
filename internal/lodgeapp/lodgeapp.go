@@ -53,6 +53,12 @@ type Config struct {
 	// session learns it from rpc.hello. LoadContentKey keeps it.
 	ContentKey []byte
 	Log        *slog.Logger
+	// Sessions bounds /mcp's sessions: the kit's Max, Idle and Every, its
+	// defaults where zero. lodgeapp sets CheckScope and Logger.
+	Sessions mcpsession.Options
+	// Opened, when set, hears of each notesd connection an MCP session
+	// opens, for tests.
+	Opened func(*api.Client)
 }
 
 // Server returns the kit's server for notes' routes. Without a content key
@@ -115,18 +121,22 @@ func MCP(cfg Config) *mcpsession.Sessions {
 			return c.Token, c.Scope, ok && c.Kind == kit.Agent
 		},
 		Open: func(ctx context.Context, token string, scope api.Scope) (*api.Client, error) {
-			return Agent(ctx, cfg, token, scope)
+			c, err := Agent(ctx, cfg, token, scope)
+			if err == nil && cfg.Opened != nil {
+				cfg.Opened(c)
+			}
+			return c, err
 		},
 		Version: cfg.Version,
 		Log:     cfg.Log,
 	})
-	return mcpsession.New(h, mcpsession.Options{
-		CheckScope: func(s string) error {
-			_, err := api.ParseScope(s)
-			return err
-		},
-		Logger: cfg.Log,
-	})
+	opts := cfg.Sessions
+	opts.CheckScope = func(s string) error {
+		_, err := api.ParseScope(s)
+		return err
+	}
+	opts.Logger = cfg.Log
+	return mcpsession.New(h, opts)
 }
 
 // Agent opens an in-process connection to notesd as caller agent, bound to

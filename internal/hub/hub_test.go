@@ -203,6 +203,38 @@ func TestPairingAndTheTokenCheck(t *testing.T) {
 	}
 }
 
+// padded is body with spaces before its closing brace, n bytes in all:
+// still the same JSON.
+func padded(t *testing.T, body string, n int) string {
+	t.Helper()
+	if len(body) > n {
+		t.Fatalf("%q is longer than %d bytes", body, n)
+	}
+	return body[:len(body)-1] + strings.Repeat(" ", n-len(body)) + "}"
+}
+
+// A pairing request and a relocation request are at most 1 KiB: one of
+// 1,024 bytes is read and answered by what it says, and one byte more is
+// 413 (lodge-app.md#limits, sync-protocol.md).
+func TestTheUntokenedBodiesAreAKibibyte(t *testing.T) {
+	h := newHub(t)
+	pair := `{"name": "laptop"}`
+	if resp := h.do(http.MethodPost, "/sync/pair", "", strings.NewReader(padded(t, pair, 1024)), nil); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("a 1,024-byte pairing request = %s, want 201", resp.Status)
+	}
+	if resp := h.do(http.MethodPost, "/sync/pair", "", strings.NewReader(padded(t, pair, 1025)), nil); resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("a 1,025-byte pairing request = %s, want 413", resp.Status)
+	}
+	relocate := `{"device": 1, "nonce": "` + strings.Repeat("A", 43) + `"}`
+	// The hub records no URL yet: a request it reads is 409.
+	if resp := h.do(http.MethodPost, "/sync/hub", "", strings.NewReader(padded(t, relocate, 1024)), nil); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("a 1,024-byte relocation request = %s, want 409", resp.Status)
+	}
+	if resp := h.do(http.MethodPost, "/sync/hub", "", strings.NewReader(padded(t, relocate, 1025)), nil); resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("a 1,025-byte relocation request = %s, want 413", resp.Status)
+	}
+}
+
 // A peer past its bucket of requests without a token gets 429 with
 // Retry-After, at POST /sync/pair and POST /sync/hub alike (N5).
 func TestUntokenedRequestsAreLimitedPerPeer(t *testing.T) {
@@ -223,16 +255,15 @@ func TestUntokenedRequestsAreLimitedPerPeer(t *testing.T) {
 func TestPairingRefusals(t *testing.T) {
 	h := newHub(t)
 	for name, body := range map[string]string{
-		"not JSON":        "laptop",
-		"an empty name":   `{"name": ""}`,
-		"an unknown key":  `{"name": "a", "admin": true}`,
-		"a control char":  `{"name": "a\u0007"}`,
-		"a 65-byte name":  `{"name": "` + strings.Repeat("x", 65) + `"}`,
-		"over a kibibyte": `{"name": "a", "pad": "` + strings.Repeat("x", 1100) + `"}`,
+		"not JSON":       "laptop",
+		"an empty name":  `{"name": ""}`,
+		"an unknown key": `{"name": "a", "admin": true}`,
+		"a control char": `{"name": "a\u0007"}`,
+		"a 65-byte name": `{"name": "` + strings.Repeat("x", 65) + `"}`,
 	} {
 		resp := h.do(http.MethodPost, "/sync/pair", "", strings.NewReader(body), nil)
-		if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusRequestEntityTooLarge {
-			t.Errorf("%s: %s, want 400 or 413", name, resp.Status)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %s, want 400", name, resp.Status)
 		}
 	}
 	for i := range 8 {
