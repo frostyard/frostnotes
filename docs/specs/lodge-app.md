@@ -189,9 +189,14 @@ lodge-content adds its own sandbox policy and cross-origin headers
   - `hub.status` reports it.
   - Devices learn it with `log.hub` (caller `device`), which answers
     `{hub, url?}`. A device calls it at each connection. When `url` is
-    set and differs from its own record, it keeps the new URL and
-    reconnects there. Its token, replicas, agreed states and cursors
-    stay.
+    set and differs from its own record, it first checks the host at
+    `url` with the relocation proof, exactly as `sync.relocate` does
+    (below), and only then keeps the new URL and reconnects there. Its
+    token, replicas, agreed states and cursors stay. A host that does
+    not prove itself is not followed, and the device stays and logs
+    why: its next connection would send its token there, so a mistyped
+    `notesctl hub url`, or a hub database someone changed, must not
+    collect it.
 - **`POST /device/sync/hub`** (no credential; body at most 1 KiB):
   - The request is `{"device": <device ID>, "nonce": "<43 base64url
     characters>"}`.
@@ -201,7 +206,13 @@ lodge-content adds its own sandbox policy and cross-origin headers
     hub keeps of that device's token. Its message is `frostnotes
     relocate\n` + hub ID + `\n` + url + `\n` + nonce.
   - An unknown or revoked device is 404. A hub with no recorded URL is
-    409. A body that is not that object, or a nonce that is not 32
+    409. A peer that reaches `/device/` can thus learn which device IDs
+    exist, the hub's ID and its recorded URL; none of them is a secret.
+  - The proof's key is the hash of the token that the hub stores.
+    Someone who can read the hub's database can make a valid proof, and
+    so lead a device that runs `sync.relocate` to their URL into sending
+    its token there. That is one more reason the hub's data directory is
+    its own user's alone (0700). A body that is not that object, or a nonce that is not 32
     bytes of unpadded base64url, is 400; a body over 1 KiB is 413.
 - **`sync.relocate {hub, url}`** (caller `local`, on a device; `hub` is
   the paired hub's URL now, as `sync.hubs` lists it):
