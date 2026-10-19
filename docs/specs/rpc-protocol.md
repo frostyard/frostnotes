@@ -45,9 +45,10 @@ it fits: [design/overview.md](../design/overview.md).
   the desktop app reads `notesblob://localhost/<sha256>.<ext>` from
   notesd's blob store itself (`app/src-tauri/src/protocol.rs`), the
   development gateway serves `GET /blobs/<sha256>.<ext>?token=…` on its
-  listener (M3), and notesd serves `GET /content/blobs/<sha256>.<ext>`
+  listener (M3), and notesd serves `GET /content/blobs/<mac>/<sha256>.<ext>`
   on the lodge app socket to lodge-content, whose sign-in admits the
-  browser ([lodge-app.md](lodge-app.md#contentblobs), M4). Each answers only those paths (64 lowercase hex digits
+  browser, the `mac` being an HMAC of the hash under the content key
+  that `rpc.hello` gives a session ([lodge-app.md](lodge-app.md#contentblobs), M4). Each answers only those paths (64 lowercase hex digits
   and an extension of 1 to 8 lowercase letters or digits), with the
   content type the extension names ([design/app.md](../design/app.md#attachments)),
   `X-Content-Type-Options: nosniff`, a `Content-Security-Policy` of
