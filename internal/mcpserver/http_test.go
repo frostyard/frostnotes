@@ -20,6 +20,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/lodgeapp"
+	"github.com/frostyard/frostnotes/internal/mcpserver"
 	"github.com/frostyard/frostnotes/internal/rpctest"
 )
 
@@ -383,6 +384,74 @@ func TestPorterThroughLodge(t *testing.T) {
 	whole := n.connect(t, "claude", "vault="+strconv.FormatInt(n.vault, 10)+";write")
 	if _, text := call(t, whole, "read_note", map[string]any{"path": "Plan.md"}); strings.Contains(text, "writable") {
 		t.Errorf("read_note under a bare write = %s", text)
+	}
+}
+
+// Through lodge, every result that names a note carries its address in
+// lodge, the web app's route under /notes, however odd the note's name.
+func TestResultsCarryTheNotesURL(t *testing.T) {
+	n := startLodge(t)
+	ctx := t.Context()
+	odd := "Projects/Q3 plan #2?/Ünïcode & 100%.md"
+	linker := "Notes/50% off & more.md"
+	for p, c := range map[string]string{odd: "quince harvest\n", linker: "see [[Plan]]\n"} {
+		if _, err := n.local.Note().Create(ctx, &api.NoteCreateParams{VaultID: n.vault, Path: p, Content: c}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := func(p string) string { return mcpserver.NoteURL(n.vault, p) }
+	if got := want(odd); got != "/notes/"+strconv.FormatInt(n.vault, 10)+"/Projects/Q3%20plan%20%232%3F/%C3%9Cn%C3%AFcode%20%26%20100%25.md" {
+		t.Fatalf("the odd note's url = %s", got)
+	}
+	cs := n.connect(t, "claude", "vault="+strconv.FormatInt(n.vault, 10)+";write")
+	result := func(tool string, args map[string]any, out any) {
+		t.Helper()
+		res, text := call(t, cs, tool, args)
+		if res.IsError {
+			t.Fatalf("%s: %s", tool, text)
+		}
+		if err := json.Unmarshal([]byte(text), out); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type named struct {
+		Path string `json:"path"`
+		URL  string `json:"url"`
+	}
+	var note named
+	result("read_note", map[string]any{"path": odd}, &note)
+	var search struct {
+		Hits []named `json:"hits"`
+	}
+	result("search_notes", map[string]any{"query": "quince"}, &search)
+	var list struct {
+		Notes []named `json:"notes"`
+	}
+	result("list_notes", map[string]any{"folder": "Projects"}, &list)
+	var back struct {
+		Backlinks []struct {
+			Source string `json:"source"`
+			URL    string `json:"url"`
+		} `json:"backlinks"`
+	}
+	result("get_backlinks", map[string]any{"path": "Plan.md"}, &back)
+	var made, edited, daily named
+	result("create_note", map[string]any{"path": "New #1/a & b.md", "content": "x\n"}, &made)
+	result("edit_note", map[string]any{"path": odd, "append": "y\n"}, &edited)
+	result("append_to_daily_note", map[string]any{"text": "z"}, &daily)
+	if len(search.Hits) != 1 || len(list.Notes) != 1 {
+		t.Fatalf("search_notes = %+v, list_notes = %+v; want the odd note in each", search.Hits, list.Notes)
+	}
+	got := []named{note, search.Hits[0], list.Notes[0], made, edited, daily}
+	if len(back.Backlinks) == 1 {
+		got = append(got, named{back.Backlinks[0].Source, back.Backlinks[0].URL})
+	} else {
+		t.Errorf("backlinks = %+v", back.Backlinks)
+	}
+	for _, r := range got {
+		if r.Path == "" || r.URL != want(r.Path) {
+			t.Errorf("%s: url %q, want %q", r.Path, r.URL, want(r.Path))
+		}
 	}
 }
 

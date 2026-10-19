@@ -38,7 +38,7 @@ func (t *tools) searchNotes(ctx context.Context, _ *sdk.CallToolRequest, in sear
 				snippet.WriteString("**")
 			}
 		}
-		out.Hits = append(out.Hits, searchHit{Path: hit.Path, Title: hit.Title, Snippet: snippet.String()})
+		out.Hits = append(out.Hits, searchHit{Path: hit.Path, Title: hit.Title, URL: t.url(hit.Path), Snippet: snippet.String()})
 	}
 	return nil, out, nil
 }
@@ -58,7 +58,7 @@ func (t *tools) readNote(ctx context.Context, _ *sdk.CallToolRequest, in readIn)
 		properties = map[string]any{}
 	}
 	out := noteOut{
-		Path: note.Path, Title: note.Title, Hash: note.Hash,
+		Path: note.Path, Title: note.Title, URL: t.url(note.Path), Hash: note.Hash,
 		Modified:   note.ModifiedAt.UTC().Format(time.RFC3339),
 		Properties: properties,
 		Tags:       append([]string{}, note.Tags...),
@@ -95,7 +95,7 @@ func (t *tools) listNotes(ctx context.Context, _ *sdk.CallToolRequest, in listIn
 	out := listOut{Notes: []listEntry{}, Total: len(notes), Notice: Notice}
 	for _, note := range notes[:min(in.Limit, len(notes))] {
 		out.Notes = append(out.Notes, listEntry{
-			Path: note.Path, Title: note.Title, Modified: note.ModifiedAt.UTC().Format(time.RFC3339),
+			Path: note.Path, Title: note.Title, URL: t.url(note.Path), Modified: note.ModifiedAt.UTC().Format(time.RFC3339),
 			Writable: t.writable(note.Path),
 		})
 	}
@@ -110,7 +110,7 @@ func (t *tools) getBacklinks(ctx context.Context, _ *sdk.CallToolRequest, in bac
 	out := backlinksOut{Backlinks: []backlink{}, Notice: Notice}
 	for _, link := range links {
 		out.Backlinks = append(out.Backlinks, backlink{
-			Source: link.Source, Line: int(link.Link.Line), Target: link.Link.Target,
+			Source: link.Source, URL: t.url(link.Source), Line: int(link.Link.Line), Target: link.Link.Target,
 			Alias: link.Link.Alias, Embed: link.Link.Embed,
 		})
 	}

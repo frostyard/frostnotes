@@ -13,6 +13,7 @@ type searchIn struct {
 type searchHit struct {
 	Path    string `json:"path"`
 	Title   string `json:"title"`
+	URL     string `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Snippet string `json:"snippet" jsonschema:"words around the best match, the matching ones between ** and **"`
 }
 
@@ -28,6 +29,7 @@ type readIn struct {
 type noteOut struct {
 	Path       string         `json:"path"`
 	Title      string         `json:"title"`
+	URL        string         `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Hash       string         `json:"hash" jsonschema:"the version read: what a write that started from it names as its base"`
 	Modified   string         `json:"modified" jsonschema:"when the file last changed, RFC 3339 in UTC"`
 	Properties map[string]any `json:"properties" jsonschema:"the YAML frontmatter as an object; empty without one"`
@@ -49,6 +51,7 @@ type listIn struct {
 type listEntry struct {
 	Path     string `json:"path"`
 	Title    string `json:"title"`
+	URL      string `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Modified string `json:"modified" jsonschema:"RFC 3339 in UTC"`
 	Writable *bool  `json:"writable,omitzero" jsonschema:"whether this session may write the note; present only when its writes are limited to folders"`
 }
@@ -65,6 +68,7 @@ type backlinksIn struct {
 
 type backlink struct {
 	Source string `json:"source" jsonschema:"the linking note's path"`
+	URL    string `json:"url,omitzero" jsonschema:"through lodge: the linking note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Line   int    `json:"line"`
 	Target string `json:"target" jsonschema:"the link's target as written"`
 	Alias  string `json:"alias"`
@@ -83,6 +87,7 @@ type createIn struct {
 
 type createOut struct {
 	Path string `json:"path"`
+	URL  string `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Hash string `json:"hash"`
 }
 
@@ -97,6 +102,7 @@ type editIn struct {
 
 type editOut struct {
 	Path      string `json:"path"`
+	URL       string `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Hash      string `json:"hash"`
 	Merged    bool   `json:"merged" jsonschema:"the note had changed since it was read, and the edit was merged into it"`
 	Conflicts int    `json:"conflicts" jsonschema:"passages changed both ways, where the other change stood"`
@@ -114,6 +120,7 @@ type todayIn struct {
 
 type dailyOut struct {
 	Path    string `json:"path"`
+	URL     string `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
 	Hash    string `json:"hash"`
 	Created bool   `json:"created" jsonschema:"the daily note was created for this call"`
 	Merged  bool   `json:"merged"`

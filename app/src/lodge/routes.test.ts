@@ -1,6 +1,16 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { noteRef, noteRoute, noteTitle, parseNoteRoute } from "./routes";
+
+// The cases notesd's MCP tools share: their url is /notes plus each route
+// (internal/mcpserver/url_test.go reads the same file).
+const shared = JSON.parse(readFileSync(resolve("src/lodge/note-routes.json"), "utf8")) as {
+  vaultId: number;
+  path: string;
+  route: string;
+}[];
 
 describe("notes' routes", () => {
   it("encodes each segment and reads it back", () => {
@@ -9,6 +19,14 @@ describe("notes' routes", () => {
     expect(route).toBe("/1/Projects/Q3%20plan%20%232%3F/%C3%9Cn%C3%AFcode%20%26%20100%25.md");
     expect(parseNoteRoute(route)).toEqual({ vaultId: 1, path });
     expect(noteRef(2, "a b.md")).toBe("notes/2/a%20b.md");
+  });
+
+  it("routes the cases notesd's MCP tools share", () => {
+    expect(shared.length).toBeGreaterThan(10);
+    for (const c of shared) {
+      expect(noteRoute(c.vaultId, c.path)).toBe(c.route);
+      expect(parseNoteRoute(c.route)).toEqual({ vaultId: c.vaultId, path: c.path });
+    }
   });
 
   it("names a vault alone", () => {

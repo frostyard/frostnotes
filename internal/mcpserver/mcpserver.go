@@ -28,6 +28,9 @@ type Options struct {
 	// and under a limited scope the read tools mark what it may write
 	// (ADR-0028). nil serves the whole vault, as notesctl mcp does.
 	Scope *api.Scope
+	// URLs adds each note's address in lodge to results (url): through
+	// lodge, whose routes name the vault by this notesd's ID.
+	URLs bool
 	// Version is reported to the MCP host as the server's.
 	Version string
 	// Author, when set, is every write's author in place of the MCP

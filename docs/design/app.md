@@ -593,8 +593,11 @@ desktop's, with a different transport and frame:
 
     Only then does the app open its WebSocket, with `connectApi()`.
   - **Routes.** A note's canonical URL is `/notes/<vault id>/<path>`,
-    each segment percent-encoded, and its frame's URL
-    `/app/notes/<vault id>/<path>`.
+    each segment percent-encoded as `encodeURIComponent` does, and its
+    frame's URL `/app/notes/<vault id>/<path>`.
+    - MCP's results through lodge give the same URL as `url`
+      ([specs/mcp.md](../specs/mcp.md#results)). Both sides test against
+      `src/lodge/note-routes.json`.
     - The app sends `route {path, title}` when the active tab changes.
     - It opens a note on `navigate {route}`, and opens its own route on
       load.
