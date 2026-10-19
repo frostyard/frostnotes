@@ -299,6 +299,7 @@ func (s *Server) Hello(ctx context.Context, p *api.RPCHelloParams) (*api.Hello, 
 	h := &api.Hello{Protocol: api.Protocol, Server: s.opts.Name, Caller: string(id.Caller)}
 	if id.Caller == api.CallerSession {
 		h.Login, h.DisplayName, h.Node = optional(id.Login), optional(id.DisplayName), optional(id.Node)
+		h.ContentKey = optional(id.ContentKey)
 	}
 	return h, nil
 }
