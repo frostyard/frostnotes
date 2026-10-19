@@ -87,6 +87,24 @@ describe("inline math", () => {
   });
 });
 
+describe("drawing", () => {
+  it("draws a formula once, however often it shows", () => {
+    const render = vi.spyOn(katex, "render");
+    const v = open("Twice $q_{once}$ and $q_{once}$\n\nend");
+    expect(maths(v)).toHaveLength(2);
+    expect(maths(v).every((m) => m.querySelector(".katex-html"))).toBe(true);
+    expect(render.mock.calls.filter(([tex]) => tex === "q_{once}")).toHaveLength(1);
+  });
+
+  it("puts a formula's MathML in place a frame later", async () => {
+    const v = open("Area $m_{later}$ here\n\nend");
+    expect(maths(v)[0]?.querySelector(".katex-html")).not.toBeNull();
+    expect(maths(v)[0]?.querySelector(".katex-mathml")).toBeNull();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(maths(v)[0]?.querySelector(".katex > .katex-mathml annotation")?.textContent).toBe("m_{later}");
+  });
+});
+
 describe("block math", () => {
   const doc = "Before\n\n$$\ne = mc^2\n$$\n\nend";
 

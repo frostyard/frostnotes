@@ -1,0 +1,36 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 224fb11..cc61322 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -5987,11 +5987,11 @@ class HeightMapBranch extends HeightMap {
+         let { left, right } = this, rightStart = offset + left.length + this.break, rebalance = null;
+         if (measured && measured.from <= offset + left.length && measured.more)
+             rebalance = left = left.updateHeight(oracle, offset, force, measured);
+-        else
++        else if (force || left.outdated)
+             left.updateHeight(oracle, offset, force);
+         if (measured && measured.from <= rightStart + right.length && measured.more)
+             rebalance = right = right.updateHeight(oracle, rightStart, force, measured);
+-        else
++        else if (force || right.outdated)
+             right.updateHeight(oracle, rightStart, force);
+         if (rebalance)
+             return this.balanced(left, right);
+diff --git a/dist/index.js b/dist/index.js
+index 522f3b6..9624526 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5982,11 +5982,11 @@ class HeightMapBranch extends HeightMap {
+         let { left, right } = this, rightStart = offset + left.length + this.break, rebalance = null;
+         if (measured && measured.from <= offset + left.length && measured.more)
+             rebalance = left = left.updateHeight(oracle, offset, force, measured);
+-        else
++        else if (force || left.outdated)
+             left.updateHeight(oracle, offset, force);
+         if (measured && measured.from <= rightStart + right.length && measured.more)
+             rebalance = right = right.updateHeight(oracle, rightStart, force, measured);
+-        else
++        else if (force || right.outdated)
+             right.updateHeight(oracle, rightStart, force);
+         if (rebalance)
+             return this.balanced(left, right);

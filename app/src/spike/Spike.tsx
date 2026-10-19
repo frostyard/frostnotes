@@ -198,11 +198,12 @@ export function Spike({ name, auto, report }: SpikeProps) {
   );
 }
 
-// countHidden counts the app editor's hidden ranges where the note shows.
+// countHidden counts the app editor's hidden ranges (marks of class
+// cm-pv-hide) where the note shows.
 function countHidden(view: EditorView): number {
   let n = 0;
   for (const it = buildInline(view.state, view.visibleRanges).iter(); it.value; it.next()) {
-    if (!it.value.spec.class && !it.value.spec.widget) n++;
+    if (it.value.spec.class === "cm-pv-hide") n++;
   }
   return n;
 }
