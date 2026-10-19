@@ -14,8 +14,11 @@ import {
   type Event,
   type FileBase,
   type Hello,
+  type HubDevice,
+  type HubStatus,
   METHOD_CALLERS,
   type Method,
+  type PendingPairing,
   PROTOCOL,
   type Vault,
   type VaultConfigureParams,
@@ -41,6 +44,8 @@ export interface MockOptions {
   folders?: string[];
   /** The connection's caller kind: local (the default), or session for the web app inside lodge. */
   caller?: CallerKind;
+  /** A hub's state, when this notesd is one: hub.status, hub.devices and hub.pending answer from it, and hub.revoke changes it. */
+  hub?: { status: HubStatus; devices: HubDevice[]; pending: PendingPairing[] };
   /** A session's login, display name and node, as lodge names them. */
   login?: string;
   displayName?: string;
@@ -225,6 +230,8 @@ export class MockTransport implements Transport {
         return this.note(method, p);
       case "sync":
         return this.sync(method, p);
+      case "hub":
+        return this.hubDomain(method, p);
     }
     throw new RPCError(ErrorCode.methodNotFound, `method ${method} does not exist`);
   }
@@ -338,6 +345,28 @@ export class MockTransport implements Transport {
         return v.moveFolder(path, String(p.to ?? ""));
       case "note.deleteFolder":
         return v.deleteFolder(path, (p.files ?? []) as FileBase[], who);
+    }
+    throw new RPCError(ErrorCode.methodNotFound, `method ${method} does not exist`);
+  }
+
+  // The hub domain's reads and revoke, from MockOptions.hub; without one,
+  // notesd that never served a vault.
+  private hubDomain(method: string, p: Params): unknown {
+    const hub = this.opts.hub;
+    switch (method) {
+      case "hub.status":
+        return hub ? { ...hub.status } : { hub: "", vaults: 0, devices: 0, connected: 0 };
+      case "hub.devices":
+        return hub ? hub.devices.map((d) => ({ ...d })) : [];
+      case "hub.pending":
+        return hub ? hub.pending.map((x) => ({ ...x })) : [];
+      case "hub.revoke": {
+        const d = hub?.devices.find((x) => x.id === Number(p.device));
+        if (!d) throw new RPCError(ErrorCode.notFound, `device ${String(p.device)} does not exist`);
+        d.revoked = true;
+        d.connected = false;
+        return null;
+      }
     }
     throw new RPCError(ErrorCode.methodNotFound, `method ${method} does not exist`);
   }

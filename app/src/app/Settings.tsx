@@ -1,16 +1,28 @@
 // The settings dialog's container (docs/specs/ui.md, Settings): its
 // sections from the app's preferences (data/prefs.ts, kept on this
 // device), the vault's settings (vault.settings, changed with
-// vault.configure; ADR-0021), the keyboard map and the vault's sync. A
-// row's id says where it goes: "pref:<key>" or "vault:<field>".
-import { closeSettings, notify, openSettings, useOverlays } from "../data/overlays";
+// vault.configure; ADR-0021), the keyboard map, the vault's sync, and on
+// a hub its devices and pending pairings (docs/design/hub.md#hub-settings-in-the-app).
+// A row's id says where it goes: "pref:<key>", "vault:<field>" or
+// "hub:revoke:<device>".
+import { useEffect, useState } from "react";
+
+import { ask, closeSettings, notify, openSettings, useOverlays } from "../data/overlays";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
 import { type SettingRow, SettingsDialog, type SettingsSection } from "../features/settings/SettingsDialog";
 import { boundCommands, formatHotkey, HOTKEY_NAMES, hotkeysFor } from "../lib/keymap";
-import type { SyncStatus, VaultConfigureParams, VaultSettings } from "../rpc/gen/api";
+import type {
+  Client,
+  HubDevice,
+  HubStatus,
+  PendingPairing,
+  SyncStatus,
+  VaultConfigureParams,
+  VaultSettings,
+} from "../rpc/gen/api";
 import { statusSync } from "./status";
 
 type BoolPref = {
@@ -36,8 +48,65 @@ const choice = (
   control: { kind: "select", value, options: options.map(([v, label]) => ({ value: v, label })) },
 });
 
+/** HubView is this notesd's hub role, for the Hub section. */
+export interface HubView {
+  status: HubStatus;
+  devices: HubDevice[];
+  pending: PendingPairing[];
+}
+
+/** loadHub reads the hub's state; null where the caller may not, or notesd is no hub. */
+export async function loadHub(c: Client): Promise<HubView | null> {
+  try {
+    const [status, devices, pending] = await Promise.all([c.hub.status(), c.hub.devices(), c.hub.pending()]);
+    return status.hub === "" ? null : { status, devices, pending };
+  } catch {
+    return null;
+  }
+}
+
+const time = (at: string) => at.replace("T", " ").replace(/:\d\d(\.\d+)?Z$/, " UTC");
+
+/**
+ * hubSection lists the hub's devices, each with Revoke while it is not
+ * revoked, and its pending pairings, each with the node lodge named and
+ * the command that approves it on the hub's machine: approving is local
+ * only (ADR-0016).
+ */
+export function hubSection(hub: HubView): SettingsSection {
+  const rows: SettingRow[] = [{ id: "hub:id", name: "Hub", control: { kind: "info", text: hub.status.hub } }];
+  if (hub.status.url)
+    rows.push({ id: "hub:url", name: "Devices' URL", control: { kind: "info", text: hub.status.url } });
+  for (const d of hub.devices) {
+    const seen = d.seenAt ? `, last seen ${time(d.seenAt)}` : ", never seen";
+    rows.push({
+      id: `hub:revoke:${d.id}`,
+      name: d.name,
+      description: `Paired ${time(d.pairedAt)}${seen}${d.connected ? ", connected" : ""}`,
+      control: d.revoked ? { kind: "info", text: "Revoked" } : { kind: "button", label: "Revoke", danger: true },
+    });
+  }
+  if (hub.devices.length === 0) {
+    rows.push({ id: "hub:none", name: "Devices", control: { kind: "info", text: "No device has paired." } });
+  }
+  for (const pp of hub.pending) {
+    rows.push({
+      id: `hub:pending:${pp.code}`,
+      name: `${pp.name} (pending)`,
+      description: `From ${pp.addr || "a node lodge did not name"}; expires ${time(pp.expiresAt)}`,
+      control: { kind: "info", text: pp.approved ? "Approved" : `notesctl hub approve ${pp.code}` },
+    });
+  }
+  return { id: "hub", name: "Hub", rows };
+}
+
 /** settingsSections builds the dialog's sections; vault is null while the vault's settings cannot be read. */
-export function settingsSections(p: Prefs, vault: VaultSettings | null, sync: SyncStatus | null): SettingsSection[] {
+export function settingsSections(
+  p: Prefs,
+  vault: VaultSettings | null,
+  sync: SyncStatus | null,
+  hub: HubView | null = null,
+): SettingsSection[] {
   const v = (row: SettingRow): SettingRow => (vault === null ? { ...row, disabled: true } : row);
   const text = (field: keyof VaultSettings, name: string, description?: string, placeholder?: string): SettingRow =>
     v({
@@ -169,6 +238,7 @@ export function settingsSections(p: Prefs, vault: VaultSettings | null, sync: Sy
           ]
         : [{ id: "sync:none", name: "Sync", control: { kind: "info", text: "This vault does not sync with a hub." } }],
     },
+    ...(hub ? [hubSection(hub)] : []),
   ];
 }
 
@@ -180,15 +250,43 @@ export function SettingsContainer() {
   const sync = useVaultState((s) => s.sync);
   const client = useClient();
   const vaultId = useNotes((s) => s.vaultId);
+  const [hub, setHub] = useState<HubView | null>(null);
+  const open = section !== null;
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    void loadHub(client).then((h) => live && setHub(h));
+    return () => {
+      live = false;
+    };
+  }, [open, client]);
   if (section === null) return null;
   return (
     <SettingsDialog
-      sections={settingsSections(prefs, vault, sync)}
+      sections={settingsSections(prefs, vault, sync, hub)}
       section={section}
       onSection={(id) => openSettings(id)}
       onClose={closeSettings}
       onChange={(id, value) => {
-        const [where, key] = id.split(":") as [string, string];
+        const [where, key, arg] = id.split(":") as [string, string, string | undefined];
+        if (where === "hub" && key === "revoke" && arg !== undefined) {
+          const device = hub?.devices.find((d) => d.id === Number(arg));
+          void ask({
+            title: `Revoke ${device?.name ?? "this device"}?`,
+            text: "Its token stops working at once, and it must pair again to sync.",
+            confirmLabel: "Revoke",
+            danger: true,
+          }).then(async (yes) => {
+            if (!yes) return;
+            try {
+              await client.hub.revoke({ device: Number(arg) });
+            } catch (err) {
+              notify(err instanceof Error ? err.message : String(err));
+            }
+            setHub(await loadHub(client));
+          });
+          return;
+        }
         if (where === "pref") {
           prefs.setPrefs({ [key]: value } as Partial<Prefs>);
           return;
