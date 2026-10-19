@@ -14,6 +14,7 @@ types:
       - {name: login, type: string, optional: true, doc: "A session's tailnet login, from lodge."}
       - {name: displayName, type: string, optional: true, doc: "A session's display name, when lodge sends one."}
       - {name: node, type: string, optional: true, doc: "A session's node: its short host name, from lodge."}
+      - {name: contentKey, type: string, optional: true, doc: "A session's key for content URLs, 32 bytes in unpadded base64url: a file's URL on lodge-content names it by an HMAC under this key (docs/specs/lodge-app.md#contentblobs)."}
 methods:
   - name: hello
     doc: Negotiate the protocol major version. Changes within a major version are additive only.

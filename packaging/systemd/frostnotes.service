@@ -1,0 +1,40 @@
+# notesd as lodge's notes app (docs/specs/lodge-app.md, ADR-0026), as the
+# system user frostnotes. Its data directory is on the machine's local disk
+# (SQLite never lives on a network file system); vaults may be anywhere
+# frostnotes can write. notesctl reaches it as frostnotes:
+#   sudo -u frostnotes FROSTNOTES_SOCKET=/run/frostnotes/notesd.sock notesctl …
+# M2's hub unit uses /run/frostnotes too: stop and disable it before
+# enabling this one (plan 0006, Phase 7).
+[Unit]
+Description=Frostnotes' notesd, as lodge's notes app
+Documentation=https://github.com/frostyard/frostnotes/blob/main/docs/specs/lodge-app.md
+Requires=frostnotes-lodge.socket
+After=network-online.target frostnotes-lodge.socket
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=frostnotes
+Group=frostnotes
+ExecStart=/usr/bin/notesd -lodge
+Environment=FROSTNOTES_DATA_DIR=/var/lib/frostnotes
+Environment=FROSTNOTES_SOCKET=/run/frostnotes/notesd.sock
+# A system service has no Secret Service session: device tokens, if this
+# notesd ever pairs with a hub, go to a private file in its data directory.
+Environment=FROSTNOTES_SECRETS=file
+StateDirectory=frostnotes
+StateDirectoryMode=0700
+RuntimeDirectory=frostnotes
+RuntimeDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

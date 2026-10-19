@@ -22,6 +22,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/engine"
 	"github.com/frostyard/frostnotes/internal/events"
 	"github.com/frostyard/frostnotes/internal/hub"
+	"github.com/frostyard/frostnotes/internal/lodgeapp"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
 	"github.com/frostyard/frostnotes/internal/secrets"
 	"github.com/frostyard/frostnotes/internal/store"
@@ -45,13 +46,17 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
 	fs := flag.NewFlagSet("notesd", flag.ContinueOnError)
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	debug := fs.Bool("debug", false, "log at debug level")
 	devgwAddr := fs.String("devgw", "", "also serve the API over a WebSocket on this loopback address, for UI development "+
 		"in a browser; needs FROSTNOTES_DEVGW_TOKEN (at least 16 characters)")
-	hubAddr := fs.String("hub", "", "also serve the hub's sync endpoints on this address (plain HTTP: put TLS in front "+
-		"for devices on other machines; docs/specs/sync-protocol.md)")
+	hubAddr := fs.String("hub", "", "also serve the hub's sync endpoints on this loopback address (plain HTTP, for tests, "+
+		"the simulation and the evidence; devices on other machines reach the hub through lodge, -lodge)")
+	lodge := fs.Bool("lodge", false, "serve lodge's app socket as app \"notes\": the web app's API, lodge-content's files "+
+		"and the hub's device routes (docs/specs/lodge-app.md); LODGE_ROOT and LODGE_UID move it for development")
 	maxBlob := fs.Int64("hub-max-blob", blobxfer.DefaultMaxSize, "with -hub, the largest file a device may upload, in bytes")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -59,6 +64,11 @@ func run(ctx context.Context, args []string) error {
 	if *showVersion {
 		fmt.Printf("notesd %s (%s)\n", version, commit)
 		return nil
+	}
+	if *hubAddr != "" {
+		if err := checkLoopback(*hubAddr); err != nil {
+			return fmt.Errorf("-hub: %w", err)
+		}
 	}
 	level := slog.LevelInfo
 	if *debug {
@@ -134,6 +144,19 @@ func run(ctx context.Context, args []string) error {
 			}
 		}()
 	}
+	if *lodge {
+		key, err := lodgeapp.LoadContentKey(paths.DataDir)
+		if err != nil {
+			return err
+		}
+		cfg := lodgeapp.Config{RPC: srv, Router: router, Blobs: blobStore, Hub: h, Version: version, ContentKey: key, Log: logger}
+		go func() {
+			if err := lodgeapp.Serve(ctx, cfg); err != nil {
+				logger.Error("lodge app socket stopped", "err", err)
+				stop()
+			}
+		}()
+	}
 	if *devgwAddr != "" {
 		// The gateway stands in for the app's bridge, so its connections
 		// are local callers (docs/specs/rpc-protocol.md).
@@ -149,4 +172,17 @@ func run(ctx context.Context, args []string) error {
 	err = srv.Serve(ctx, ln, router)
 	logger.Info("notesd stopped")
 	return err
+}
+
+// checkLoopback accepts a listen address whose host is a loopback IP or
+// localhost: notesd listens on no network address (docs/specs/lodge-app.md).
+func checkLoopback(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return fmt.Errorf("%s is not a loopback address: devices reach a hub on another machine through lodge", addr)
+	}
+	return nil
 }

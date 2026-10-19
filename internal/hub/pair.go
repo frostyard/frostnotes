@@ -20,11 +20,13 @@ import (
 )
 
 // Pairing (ADR-0016, docs/specs/sync-protocol.md, Pairing): pending
-// pairings live in the hub's memory for 10 minutes, at most 8 at once, and
-// are approved only through the local socket.
+// pairings live in the hub's memory for 10 minutes, at most 8 at once and,
+// behind lodge, 2 from one node, and are approved only through the local
+// socket.
 const (
 	pairingTTL     = 10 * time.Minute
 	maxPending     = 8
+	maxPendingPeer = 2
 	maxPairBody    = 1 << 10
 	collectWait    = 30 * time.Second
 	crockford      = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -38,6 +40,7 @@ type pairing struct {
 	secretHash string
 	code       string // 8 characters of crockford, without the '-'
 	name, addr string
+	peer       string // the node's key, Peer.Key; "" when none was named
 	created    time.Time
 	expires    time.Time
 	approved   bool
@@ -117,18 +120,29 @@ func (h *Hub) startPairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := h.cfg.Now()
+	peer := peerOf(r)
 	secret := make([]byte, 32)
 	_, _ = rand.Read(secret)
 	encoded := base64.RawURLEncoding.EncodeToString(secret)
 	p := &pairing{id: randomHex(16), secretHash: TokenHash(encoded), code: newCode(), name: req.Name,
-		addr: r.RemoteAddr, created: now, expires: now.Add(pairingTTL), changed: make(chan struct{})}
+		addr: peer.Name, peer: peer.Key, created: now, expires: now.Add(pairingTTL), changed: make(chan struct{})}
 	h.mu.Lock()
 	h.sweep(now)
-	pending := 0
+	pending, mine := 0, 0
 	for _, q := range h.pairings {
 		if !q.approved && now.Before(q.expires) {
 			pending++
+			if peer.Key != "" && q.peer == peer.Key {
+				mine++
+			}
 		}
+	}
+	// One node may not take every slot: lodge names it (Lodge-Node-ID),
+	// which is a rate key here, never an admission.
+	if mine >= maxPendingPeer {
+		h.mu.Unlock()
+		http.Error(w, "this node already has devices waiting to pair; approve or let them expire", http.StatusTooManyRequests)
+		return
 	}
 	if pending >= maxPending {
 		h.mu.Unlock()

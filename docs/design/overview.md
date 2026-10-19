@@ -142,6 +142,8 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/syncer`, `internal/hub` | the device's sync loops; the hub's device routes, pairing, the token check, relocation, and its `log` and `hub` domains |
 | `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub`; the only package importing `lodge/kit` |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
+| `internal/blobhttp` | vault files by hash for browsers: the development gateway's `/blobs/` and the lodge socket's `/content/blobs/`, with their headers and limits |
+| `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes` |
 | `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
 | `app/` | Tauri v2 + React + TypeScript; `app/src/rpc/gen/api.ts` is generated |

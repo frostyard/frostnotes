@@ -71,6 +71,11 @@ file a step names before writing its frostnotes counterpart.
   sync loops and the `sync` domain; `internal/blobxfer`: blobs over HTTP
   by hash; `internal/secrets`: device tokens in the Secret Service
   ([docs/specs/sync-protocol.md](docs/specs/sync-protocol.md)).
+  `internal/lodgeapp`: `notesd --lodge`, lodge's app socket over
+  `lodge/kit` (`/health`, `/api` as caller `session`, `/content/blobs/`,
+  `/device/`; [docs/specs/lodge-app.md](docs/specs/lodge-app.md)), the
+  only package importing the kit; `internal/blobhttp`: files by hash for
+  browsers. `packaging/`: the manifest, systemd units and `sysusers.d`.
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).
   `internal/evidence`: real notesd processes for the milestones' exit
