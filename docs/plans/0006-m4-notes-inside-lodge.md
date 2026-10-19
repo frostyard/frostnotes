@@ -46,9 +46,10 @@ M4's first drafts (a notesd of its own on the tailnet, with its own
 sign-in, tokens and web serving) became lodge's ADRs 0004 to 0008
 before anyone accepted them. No code or card merges before the user
 accepts the ADRs. On 2026-10-18 the user asked for the build to go
-ahead overnight as stacked PRs for review: Phases 2, 3 and 4 are in
-review on branches `m4/phase2`, `m4/phase3` and `m4/phase4` (agents
-through `/mcp`, beside Phase 5 on `m4/phase5`).
+ahead overnight as stacked PRs for review: Phases 2, 3, 4 and 5 are in
+review on branches `m4/phase2` to `m4/phase5`, each on the one before:
+agents through `/mcp`, then the web app at desktop widths first (the
+narrow layout and its cards follow).
 
 ## Decisions taken for M4
 

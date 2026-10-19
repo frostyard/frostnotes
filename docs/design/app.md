@@ -565,6 +565,8 @@ desktop's, with a different transport and frame:
   - lodge serves it from `/usr/share/lodge/apps/notes/web/`
     ([lodge ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md)),
     with notes' manifest, `packaging/lodge/app.json`, beside it.
+    `make lodge-app` lays that tree out in `build/lodge/apps/notes/`,
+    the manifest at the build's version.
   - In that mode `main.tsx` connects through lodge, and the mock, the
     spikes and the shell's commands stay out of the bundle.
   - The build carries `icon.svg`, from the icon's master, for lodge's
@@ -599,9 +601,12 @@ desktop's, with a different transport and frame:
   - **The switcher's key.** The window's key listener never binds the
     key `init` names. When it is pressed inside the frame, the listener
     sends `shortcut {key}`.
-  - **Visibility and theme.** On `visible {false}` the heartbeat stops,
-    and on `visible {true}` the connection is checked at once. `theme`
-    sets the light or dark scheme while the Theme preference is System.
+  - **Visibility and theme.** The heartbeat follows the page's
+    visibility, not the frame's
+    ([lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md#visibility-and-theme)):
+    a hidden frame keeps its session. On `visible {true}` a lost
+    connection is tried at once. `theme` sets the light or dark scheme
+    while the Theme preference is System.
 - **The connection** is notes' own `connectApi()` in
   `rpc/transport/ws.ts`, beside the dev gateway's `connectWS()`. It
   opens a WebSocket to `wss://<the page's host>/app/notes/api`, with no
@@ -688,7 +693,8 @@ desktop's, with a different transport and frame:
 
 ## Operational notes
 
-- Local storage holds `frostnotes.workspace.v1:<vault path>`,
+- Local storage holds (in the web build, after lodge's `notes:` prefix,
+  since every app shares lodge's origin) `frostnotes.workspace.v1:<vault path>`,
   `frostnotes.prefs.v1`, `frostnotes.seq` and `frostnotes.recentCommands`
   (the palette's). The command Reset workspace
   layout clears the current vault's; clearing the app's site data clears

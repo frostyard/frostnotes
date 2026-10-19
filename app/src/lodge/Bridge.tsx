@@ -3,7 +3,7 @@
 // go to the shell, the shell's navigate (and the frame's own route on load)
 // opens a note, and the shell's theme reaches the Theme preference's
 // System. lodge-client itself keeps the switcher's key from the app.
-import { splitRoute } from "@frostyard/lodge-client";
+import { MAX_ROUTE, splitRoute } from "@frostyard/lodge-client";
 import { useEffect } from "react";
 
 import { viewOf } from "../app/commands";
@@ -52,7 +52,9 @@ export function LodgeBridge(props: { lodge: Lodge }) {
         return;
       }
       const title = path === "" ? "" : noteTitle(path);
-      lodge.route(noteRoute(vaultId, path), title);
+      const route = noteRoute(vaultId, path);
+      // A route is at most 2,048 characters (lodge-client.md, Routes).
+      lodge.route(route.length <= MAX_ROUTE ? route : noteRoute(vaultId, ""), title);
       lodge.context(
         path === "" ? { kind: null, ref: "", title: "" } : { kind: "note", ref: noteRef(vaultId, path), title },
       );

@@ -90,6 +90,21 @@ describe("LodgeBridge", () => {
     expect(lodge.contexts.at(-1)).toEqual({ kind: "note", ref: "notes/3/Deep/b%20c.md", title: "b c" });
   });
 
+  it("reports the vault's route for a note whose route would be too long", async () => {
+    const long = `${"x".repeat(2100)}.md`;
+    const lodge = new FakeLodge("/");
+    const mock = new MockTransport(mockVaults(), { files: { 3: { [long]: "x\n" } }, caller: "session", node: "e2e" });
+    render(
+      <App connect={async () => mock}>
+        <LodgeBridge lodge={lodge} />
+      </App>,
+    );
+    await screen.findByRole("main", { name: "Workspace" });
+    await act(async () => lodge.send("navigate", { route: `/3/${long}` }));
+    await waitFor(() => expect(activePath()).toBe(long));
+    await waitFor(() => expect(lodge.routes.at(-1)?.[0]).toBe("/3"));
+  });
+
   it("opens another vault's note on navigate", async () => {
     const { lodge } = await start("/");
     await waitFor(() => expect(useNotes.getState().vaultId).toBe(3));
