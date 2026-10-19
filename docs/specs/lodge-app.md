@@ -183,6 +183,10 @@ lodge-content adds its own sandbox policy and cross-origin headers
   (`Lodge-Node-Name`, and `Lodge-Login` when sent: `phone
   (ana@example.com)`), or empty when it names none. It is shown beside the device's own name and the time in
   `notesctl hub pending`, to tell pairings apart, never to admit one.
+- **Pending pairings per node:** behind lodge, one node (`Lodge-Node-ID`)
+  may have at most 2 pairings waiting, so no peer takes all 8 of the
+  hub's slots; a third answers 429. The node ID is a rate key here,
+  never an admission.
 - **The hub's URL:**
   - `hub.setURL {url}` (caller `local`) records the URL devices should
     use, an `https://` URL by sync-protocol's rules (or `http://` on
@@ -271,6 +275,7 @@ On the server, run them as `frostnotes` (`sudo -u frostnotes notesctl
 | MCP sessions | 8 per token name, the least recently used evicted; an hour idle |
 | a blob answer | a 206 of 8 MiB; 64 MiB whole |
 | a relocation request | 1 KiB; a 32-byte nonce |
+| pending pairings | 8 in all; 2 from one node behind lodge |
 
 ## Rules
 

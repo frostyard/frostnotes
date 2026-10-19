@@ -104,15 +104,17 @@ func Device(h http.Handler) http.Handler {
 	})
 }
 
-// peer is the node lodge named for a device request, with its login when
-// lodge sent one: "phone (ana@example.com)", "phone", or "".
-func peer(ctx context.Context) string {
+// peer is the node lodge named for a device request: its name, with its
+// login when lodge sent one ("phone (ana@example.com)", "phone", or ""),
+// and its node ID as the key that bounds its pending pairings.
+func peer(ctx context.Context) hub.Peer {
 	c, ok := kit.CallerFrom(ctx)
-	if !ok || c.NodeName == "" {
-		return ""
+	if !ok {
+		return hub.Peer{}
 	}
-	if c.Login != "" {
-		return c.NodeName + " (" + c.Login + ")"
+	name := c.NodeName
+	if name != "" && c.Login != "" {
+		name += " (" + c.Login + ")"
 	}
-	return c.NodeName
+	return hub.Peer{Name: name, Key: c.NodeID}
 }

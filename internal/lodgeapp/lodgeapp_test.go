@@ -376,3 +376,38 @@ func watch(t *testing.T, srv *rpctest.Server) *api.Client {
 	}
 	return c
 }
+
+// A node behind lodge may have two pairings waiting; a third is refused,
+// and another node keeps its own: one peer cannot take the hub's eight
+// slots. lodge's node ID is the key, never an admission.
+func TestANodeMayHaveTwoPairingsWaiting(t *testing.T) {
+	n := start(t)
+	pair := func(c kit.Caller) int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/device/sync/pair", strings.NewReader(`{"name": "phone"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := n.lodge.Do(req, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	one := kittest.Device()
+	other := kittest.Device()
+	other.NodeID, other.NodeName = "other-node", "laptop"
+	for i, want := range []int{http.StatusCreated, http.StatusCreated, http.StatusTooManyRequests} {
+		if got := pair(one); got != want {
+			t.Fatalf("pairing %d from one node = %d, want %d", i+1, got, want)
+		}
+	}
+	if got := pair(other); got != http.StatusCreated {
+		t.Fatalf("a pairing from another node = %d, want 201", got)
+	}
+	pending, err := n.local.Hub().Pending(t.Context(), &api.HubPendingParams{})
+	if err != nil || len(pending) != 3 {
+		t.Fatalf("pending = %+v, %v; want three", pending, err)
+	}
+}
