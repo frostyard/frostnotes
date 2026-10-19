@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,17 +34,16 @@ func (v vaults) List(ctx context.Context, _ *api.VaultListParams) ([]api.Vault, 
 // Add registers a directory. The path is resolved through symlinks, so one
 // directory cannot be registered twice under two names, and a vault may
 // neither contain nor lie inside another: their files would be indexed and
-// synced twice.
+// synced twice. With create it makes the directory first, once it knows
+// the vault may be registered.
 func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, error) {
 	if !filepath.IsAbs(p.Path) {
 		return nil, api.InvalidParams("vault path %q is not absolute", p.Path)
 	}
-	path, err := filepath.EvalSymlinks(p.Path)
+	create := p.Create != nil && *p.Create
+	path, err := vaultPath(p.Path, create)
 	if err != nil {
-		return nil, api.InvalidParams("vault path %q: %v", p.Path, err)
-	}
-	if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
-		return nil, api.InvalidParams("vault path %q is not a directory", p.Path)
+		return nil, err
 	}
 	name := filepath.Base(path)
 	if p.Name != nil {
@@ -62,7 +63,17 @@ func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, err
 				return api.Conflict("vault %q overlaps vault %q at %s", path, e.Name, e.Path)
 			}
 		}
+		if create {
+			if err := os.Mkdir(path, 0o755); errors.Is(err, fs.ErrExist) {
+				return api.Conflict("%s already exists", path)
+			} else if err != nil {
+				return api.InvalidParams("make the vault's folder: %v", err)
+			}
+		}
 		out, err = tx.InsertVault(ctx, name, path)
+		if err != nil && create {
+			_ = os.Remove(path) // the folder notesd just made, still empty
+		}
 		return err
 	})
 	if err != nil {
@@ -98,6 +109,39 @@ func (v vaults) Reindex(ctx context.Context, p *api.VaultReindexParams) (*api.Sc
 	}
 	s, err := actor.Reindex(ctx)
 	return &s, err
+}
+
+// vaultPath resolves a vault's path through symlinks: the directory's
+// own, or for one to create, its parent's, which must be a directory,
+// while the directory itself must not exist yet.
+func vaultPath(p string, create bool) (string, error) {
+	if !create {
+		path, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			return "", api.InvalidParams("vault path %q: %v", p, err)
+		}
+		if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
+			return "", api.InvalidParams("vault path %q is not a directory", p)
+		}
+		return path, nil
+	}
+	clean := filepath.Clean(p)
+	base := filepath.Base(clean)
+	if base == string(filepath.Separator) || base == "." {
+		return "", api.InvalidParams("vault path %q names no folder to make", p)
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(clean))
+	if err != nil {
+		return "", api.InvalidParams("the folder to hold the vault: %v", err)
+	}
+	if fi, err := os.Stat(parent); err != nil || !fi.IsDir() {
+		return "", api.InvalidParams("%s is not a folder", filepath.Dir(clean))
+	}
+	path := filepath.Join(parent, base)
+	if _, err := os.Lstat(path); err == nil {
+		return "", api.Conflict("%s already exists", path)
+	}
+	return path, nil
 }
 
 // within reports whether path is dir or lies inside it.

@@ -1587,6 +1587,8 @@ export interface VaultAddParams {
   path: string;
   /** Display name; defaults to the directory's base name. */
   name?: string;
+  /** Make the directory first; its parent must exist and it must not. */
+  create?: boolean;
 }
 
 /** Params of vault.remove. */
@@ -1652,7 +1654,8 @@ export interface VaultRemoved {
 
 /**
  * The vaults this notesd owns: directories of markdown notes (ADR-0003).
- * Registering a vault never writes to it.
+ * Registering a vault never writes to it; add with create makes its empty
+ * directory first (ADR-0024).
  */
 export interface VaultClient {
   /** Every registered vault, by name. */
@@ -1660,7 +1663,9 @@ export interface VaultClient {
   /**
    * Register a directory as a vault. The path must be absolute and name an
    * existing directory, and no registered vault may contain it or lie inside
-   * it.
+   * it. With create, notesd makes the directory first (Create new vault,
+   * ADR-0024): its parent must exist and it must not; it is made only when it
+   * may be registered.
    */
   add(params: VaultAddParams): Promise<Vault>;
   /** Forget a vault. Its directory and files are untouched. */

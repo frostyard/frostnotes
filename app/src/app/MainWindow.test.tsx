@@ -135,9 +135,10 @@ describe("the main window over the mock", () => {
     expect(tabs(1)).toEqual(["pic.png", "b"]);
   });
 
-  it("says how to add a vault when there is none", async () => {
-    await start(new MockTransport());
-    expect(screen.getByText(/No vaults yet/)).toBeTruthy();
+  it("is the vault manager when there is no vault", async () => {
+    render(<App connect={async () => new MockTransport()} />);
+    expect(await screen.findByRole("dialog", { name: "Manage vaults" })).toBeTruthy();
+    expect(screen.getByText("No vaults yet")).toBeTruthy();
   });
 
   it("shows the reason and reconnects when the connection is lost", async () => {

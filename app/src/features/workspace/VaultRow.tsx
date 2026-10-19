@@ -1,6 +1,7 @@
 // The vault row at the foot of the left sidebar (docs/specs/ui.md#sidebars-and-panes):
 // the vault's name opens the vault menu, which lists the vaults by name
-// with the current one checked; Settings sits at the right.
+// with the current one checked, then Manage vaults…; Settings sits at the
+// right.
 import { ChevronsUpDown, Settings } from "lucide-react";
 import { useState } from "react";
 
@@ -19,6 +20,8 @@ export interface VaultRowProps {
   current: number | null;
   settingsDisabled: boolean;
   onChoose: (id: number) => void;
+  /** Manage vaults…: the vault manager. */
+  onManage: () => void;
   onSettings: () => void;
 }
 
@@ -36,7 +39,7 @@ export function VaultRow(props: VaultRowProps) {
         onClick={(e) => {
           // The menu opens above the row, which sits at the window's foot.
           const r = e.currentTarget.getBoundingClientRect();
-          setMenuAt(menuAt ? null : { x: r.left, y: r.top - props.vaults.length * 28 - 14 });
+          setMenuAt(menuAt ? null : { x: r.left, y: r.top - (props.vaults.length + 1) * 28 - 23 });
         }}
         className="text-sidebar-row flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 font-semibold hover:bg-selection-inactive"
       >
@@ -54,15 +57,19 @@ export function VaultRow(props: VaultRowProps) {
       {menuAt && (
         <Menu
           label="Vaults"
-          items={props.vaults.map((v) => ({
-            kind: "item",
-            id: String(v.id),
-            label: v.name,
-            checked: v.id === props.current,
-          }))}
+          items={[
+            ...props.vaults.map((v) => ({
+              kind: "item" as const,
+              id: String(v.id),
+              label: v.name,
+              checked: v.id === props.current,
+            })),
+            { kind: "separator" as const },
+            { kind: "item" as const, id: "manage", label: "Manage vaults…" },
+          ]}
           x={menuAt.x}
           y={menuAt.y}
-          onChoose={(id) => props.onChoose(Number(id))}
+          onChoose={(id) => (id === "manage" ? props.onManage() : props.onChoose(Number(id)))}
           onClose={() => setMenuAt(null)}
         />
       )}

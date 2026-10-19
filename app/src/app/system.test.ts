@@ -2,7 +2,7 @@
 // Phase 7; docs/specs/ui.md, Menus).
 import { describe, expect, it } from "vitest";
 
-import { suppressNativeMenu } from "./system";
+import { canPickFolders, pickFolder, setWindowTitle, suppressNativeMenu, windowTitle } from "./system";
 
 describe("suppressNativeMenu", () => {
   it("keeps the webview's menu from showing anywhere, until removed", () => {
@@ -18,5 +18,20 @@ describe("suppressNativeMenu", () => {
     remove();
     expect(ask()).toBe(false);
     p.remove();
+  });
+});
+
+describe("the folder picker and the window's title in a browser", () => {
+  it("has no picker, and names the page", async () => {
+    expect(canPickFolders()).toBe(false);
+    await expect(pickFolder("Open folder as vault")).resolves.toBeNull();
+    setWindowTitle("Plan - Notes - Frostnotes");
+    expect(document.title).toBe("Plan - Notes - Frostnotes");
+  });
+
+  it("names the note and the vault in the title", () => {
+    expect(windowTitle("Plan", "Notes")).toBe("Plan - Notes - Frostnotes");
+    expect(windowTitle(null, "Notes")).toBe("Notes - Frostnotes");
+    expect(windowTitle(null, null)).toBe("Frostnotes");
   });
 });

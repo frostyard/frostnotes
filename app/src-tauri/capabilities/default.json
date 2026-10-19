@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window. App commands (notesd_connect, notesd_send, open_url, open_file, spike_mode, spike_report, spike_say) are allowed by default. Of Tauri's own, only what the page uses: event listening (the window's events), the window controls of the app's own title bar and the close that waits for unsaved notes (destroy), and the webview's zoom, never core:default's menus, tray, images or paths.",
+  "description": "The main window. App commands (notesd_connect, notesd_send, open_url, open_file, spike_mode, spike_report, spike_say) are allowed by default. Of Tauri's own, only what the page uses: event listening (the window's events), the window controls of the app's own title bar and the close that waits for unsaved notes (destroy), the window's title, the webview's zoom, and the dialog plugin's open dialog, which picks a folder to open or create a vault in (ADR-0024); never core:default's menus, tray, images or paths.",
   "windows": [
     "main"
   ],
@@ -16,6 +16,8 @@
     "core:window:allow-show",
     "core:window:allow-close",
     "core:window:allow-destroy",
-    "core:webview:allow-set-webview-zoom"
+    "core:window:allow-set-title",
+    "core:webview:allow-set-webview-zoom",
+    "dialog:allow-open"
   ]
 }
