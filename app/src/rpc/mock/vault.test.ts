@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-
+import { sha256 } from "../../lib/sha256";
 import { Client, ErrorCode, type Event, PROTOCOL } from "../gen/api";
 import { MockTransport, mockVaults } from "./mock";
-import { sha256 } from "./sha256";
 
 const now = () => new Date("2026-10-17T09:30:00Z");
 const text = new TextEncoder();

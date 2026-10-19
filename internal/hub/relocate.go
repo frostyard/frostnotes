@@ -1,12 +1,14 @@
 package hub
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -106,7 +108,9 @@ func validNonce(s string) bool {
 
 // relocation answers POST /sync/hub: the hub's ID, its recorded URL and
 // the proof for a paired device's nonce. It takes no credential: the
-// proof reveals only what an HMAC under the token's hash reveals.
+// proof reveals only what an HMAC under the token's hash reveals. An
+// unknown or revoked device gets the same answer, with a proof under a
+// key no token has, so the endpoint does not tell which devices exist.
 func (h *Hub) relocation(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRelocateBody))
 	if err != nil {
@@ -116,22 +120,6 @@ func (h *Hub) relocation(w http.ResponseWriter, r *http.Request) {
 	var req RelocationRequest
 	if err := json.Unmarshal(body, &req, json.RejectUnknownMembers(true)); err != nil || req.Device < 1 || !validNonce(req.Nonce) {
 		http.Error(w, `the body must be {"device": <ID>, "nonce": "<32 bytes, base64url>"}`, http.StatusBadRequest)
-		return
-	}
-	d, err := h.cfg.DB.Device(r.Context(), req.Device)
-	if errors.Is(err, store.ErrNotFound) || err == nil && (!d.RevokedAt.IsZero() || d.TokenHash == "") {
-		http.Error(w, "no such device", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		h.cfg.Log.Error("read a device for a relocation", "err", err)
-		http.Error(w, "the hub cannot answer now", http.StatusInternalServerError)
-		return
-	}
-	key, err := hex.DecodeString(d.TokenHash)
-	if err != nil || len(key) != sha256.Size {
-		h.cfg.Log.Error("a device's token hash is not SHA-256", "device", d.ID)
-		http.Error(w, "the hub cannot answer now", http.StatusInternalServerError)
 		return
 	}
 	hubID, err := h.cfg.DB.HubIdentity(r.Context())
@@ -150,7 +138,32 @@ func (h *Hub) relocation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the hub records no URL for its devices", http.StatusConflict)
 		return
 	}
-	h.cfg.Log.Debug("a device asks for a relocation proof", "device", d.ID)
+	key, err := h.proofKey(r.Context(), req.Device)
+	if err != nil {
+		h.cfg.Log.Error("read a device for a relocation", "err", err)
+		http.Error(w, "the hub cannot answer now", http.StatusInternalServerError)
+		return
+	}
+	h.cfg.Log.Debug("a device asks for a relocation proof", "device", req.Device)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.MarshalWrite(w, Relocation{Hub: hubID, URL: u, Proof: Proof(key, hubID, u, req.Nonce)})
+}
+
+// proofKey is device id's relocation key: the 32 bytes of its token's
+// hash, or, for a device that is unknown or revoked, an HMAC of its ID
+// under the hub's own random key, which no token makes.
+func (h *Hub) proofKey(ctx context.Context, id int64) ([]byte, error) {
+	d, err := h.cfg.DB.Device(ctx, id)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	if err == nil && d.RevokedAt.IsZero() && d.TokenHash != "" {
+		if key, err := hex.DecodeString(d.TokenHash); err == nil && len(key) == sha256.Size {
+			return key, nil
+		}
+		return nil, fmt.Errorf("device %d's token hash is not SHA-256", id)
+	}
+	m := hmac.New(sha256.New, h.decoy)
+	_, _ = fmt.Fprintf(m, "frostnotes no device\n%d", id)
+	return m.Sum(nil), nil
 }

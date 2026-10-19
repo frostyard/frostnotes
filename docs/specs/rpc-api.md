@@ -1154,6 +1154,7 @@ Server identity, the negotiated protocol, and who the connection is.
 | `login` | `string` (optional) | A session's tailnet login, from lodge. |
 | `displayName` | `string` (optional) | A session's display name, when lodge sends one. |
 | `node` | `string` (optional) | A session's node: its short host name, from lodge. |
+| `contentKey` | `string` (optional) | A session's key for content URLs, 32 bytes in unpadded base64url: a file's URL on lodge-content names it by an HMAC under this key (docs/specs/lodge-app.md#contentblobs). |
 
 ## sync
 
