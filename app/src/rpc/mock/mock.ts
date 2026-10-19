@@ -4,12 +4,18 @@
 // docs/specs/rpc-api.md): rpc.hello first; events only after
 // events.subscribe, durable ones kept and replayed after sinceSeq; the
 // vault domain; the note domain over each vault's MockVault (vault.ts);
-// and a sync domain for vaults that sync with no hub.
+// and a sync domain for vaults that sync with no hub. As caller session
+// (MockOptions.caller) it refuses what notesd refuses a browser inside
+// lodge, and names a session's writes as notesd does.
 import { byName } from "../../data/stores";
 import {
+  type CallerKind,
   ErrorCode,
   type Event,
   type FileBase,
+  type Hello,
+  METHOD_CALLERS,
+  type Method,
   PROTOCOL,
   type Vault,
   type VaultConfigureParams,
@@ -33,6 +39,12 @@ export interface MockOptions {
   files?: Record<number, Record<string, string | Uint8Array>>;
   /** Folders on the mock's disk besides the vaults and their parents, for vault.add's create. */
   folders?: string[];
+  /** The connection's caller kind: local (the default), or session for the web app inside lodge. */
+  caller?: CallerKind;
+  /** A session's login, display name and node, as lodge names them. */
+  login?: string;
+  displayName?: string;
+  node?: string;
 }
 
 type Params = Record<string, unknown>;
@@ -175,7 +187,15 @@ export class MockTransport implements Transport {
     }, this.opts.latency ?? 0);
   }
 
+  private get caller(): CallerKind {
+    return this.opts.caller ?? "local";
+  }
+
   private dispatch(method: string, p: Params): unknown {
+    const admits: readonly CallerKind[] | undefined = METHOD_CALLERS[method as Method];
+    if (!admits?.includes(this.caller)) {
+      throw new RPCError(ErrorCode.methodNotFound, `method ${method} does not exist`);
+    }
     if (method === "rpc.hello") {
       if (p.protocol !== PROTOCOL) {
         throw new RPCError(
@@ -185,9 +205,16 @@ export class MockTransport implements Transport {
       }
       this.hello = true;
       this.client = typeof p.client === "string" ? p.client : "";
-      return { protocol: PROTOCOL, server: this.opts.server ?? "notesd mock" };
+      const hello: Hello = { protocol: PROTOCOL, server: this.opts.server ?? "notesd mock", caller: this.caller };
+      if (this.caller === "session") {
+        if (this.opts.login) hello.login = this.opts.login;
+        if (this.opts.displayName) hello.displayName = this.opts.displayName;
+        if (this.opts.node) hello.node = this.opts.node;
+      }
+      return hello;
     }
     if (!this.hello) throw new RPCError(ErrorCode.notReady, "call rpc.hello first");
+    if (method === "rpc.ping") return null;
     const [domain] = method.split(".");
     switch (domain) {
       case "events":
@@ -329,9 +356,11 @@ export class MockTransport implements Transport {
     return v;
   }
 
-  // author is who makes a write: source editor unless the writer says
-  // agent, and the client name given to rpc.hello unless it names one.
+  // author is who makes a write: a session's connection names it, else
+  // source editor unless the writer says agent, and the client name given
+  // to rpc.hello unless it names one.
   private author(p: Params): Author {
+    if (this.caller === "session") return { source: "editor", name: `${this.opts.node ?? ""} (web)` };
     const source = (p.source ?? "editor") as VersionSource;
     if (source !== "editor" && source !== "agent") {
       throw new RPCError(ErrorCode.invalidParams, `source "${source}": a write's source is editor or agent`);
