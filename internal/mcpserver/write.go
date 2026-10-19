@@ -16,7 +16,7 @@ func (t *tools) createNote(ctx context.Context, req *sdk.CallToolRequest, in cre
 	if !strings.HasSuffix(in.Path, ".md") {
 		return nil, createOut{}, fmt.Errorf("path must end in .md")
 	}
-	source, name := agentWrite(req)
+	source, name := t.agentWrite(req)
 	result, err := t.o.Client.Note().Create(ctx, &api.NoteCreateParams{
 		VaultID: t.o.VaultID, Path: in.Path, Content: in.Content, Source: source, Author: name,
 	})
@@ -36,7 +36,7 @@ func (t *tools) editNote(ctx context.Context, req *sdk.CallToolRequest, in editI
 	if err != nil {
 		return nil, editOut{}, err
 	}
-	source, name := agentWrite(req)
+	source, name := t.agentWrite(req)
 	result, err := notes.Write(ctx, &api.NoteWriteParams{
 		VaultID: t.o.VaultID, Path: note.Path, Base: note.Hash, Content: content, Source: source, Author: name,
 	})
@@ -50,7 +50,7 @@ func (t *tools) appendToDailyNote(ctx context.Context, req *sdk.CallToolRequest,
 	if in.Text == "" {
 		return nil, dailyOut{}, fmt.Errorf("text must not be empty")
 	}
-	source, name := agentWrite(req)
+	source, name := t.agentWrite(req)
 	params := &api.NoteDailyParams{VaultID: t.o.VaultID, Source: source, Author: name}
 	if in.Date != "" {
 		params.Date = &in.Date

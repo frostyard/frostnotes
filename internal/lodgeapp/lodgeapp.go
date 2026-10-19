@@ -1,8 +1,8 @@
 // Package lodgeapp serves notesd as lodge's notes app
 // (docs/specs/lodge-app.md, ADR-0026) over lodge/kit, which owns the app
 // socket, its peer check and the Lodge-* headers: /health, /api as caller
-// session, /content/blobs/ for lodge-content, and the hub's device routes
-// under /device/. /mcp comes in plan 0006's Phase 4.
+// session, /content/blobs/ for lodge-content, /mcp for agents with lodge's
+// tokens, and the hub's device routes under /device/.
 package lodgeapp
 
 import (
@@ -20,11 +20,13 @@ import (
 	"strings"
 
 	kit "github.com/frostyard/lodge/kit/lodgeapp"
+	"github.com/frostyard/lodge/kit/mcpsession"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobhttp"
 	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/hub"
+	"github.com/frostyard/frostnotes/internal/mcpserver"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
 )
 
@@ -69,6 +71,7 @@ func Server(cfg Config) *kit.Server {
 		},
 		Content: blobhttp.Handler(cfg.Blobs, blobhttp.Options{Prefix: "/content/blobs/",
 			MaxRange: MaxRange, MaxWhole: MaxWhole, Download: true, Key: cfg.ContentKey}),
+		MCP:    MCP(cfg),
 		Logger: cfg.Log,
 	}
 	if cfg.Hub != nil {
@@ -92,7 +95,53 @@ func Serve(ctx context.Context, cfg Config) error {
 	if cfg.Log != nil {
 		cfg.Log.Info("lodge app socket", "path", env.SocketPath(ID), "lodge uid", env.LodgeUID)
 	}
-	return Server(cfg).Serve(ctx, ln)
+	srv := Server(cfg)
+	// The MCP sessions' sweep runs until notesd stops serving.
+	if m, ok := srv.MCP.(*mcpsession.Sessions); ok {
+		defer m.Close()
+	}
+	return srv.Serve(ctx, ln)
+}
+
+// MCP serves /mcp (docs/specs/mcp.md#through-lodge): the kit binds each
+// MCP session to its token's name and scope, keeps 8 per token and ends
+// idle ones, and each session's tools reach notesd over an in-process
+// connection of caller agent bound to that scope, which the engine
+// enforces.
+func MCP(cfg Config) *mcpsession.Sessions {
+	h := mcpserver.Handler(mcpserver.HTTPOptions{
+		Caller: func(r *http.Request) (string, string, bool) {
+			c, ok := kit.CallerFrom(r.Context())
+			return c.Token, c.Scope, ok && c.Kind == kit.Agent
+		},
+		Open: func(ctx context.Context, token string, scope api.Scope) (*api.Client, error) {
+			return Agent(ctx, cfg, token, scope)
+		},
+		Version: cfg.Version,
+		Log:     cfg.Log,
+	})
+	return mcpsession.New(h, mcpsession.Options{
+		CheckScope: func(s string) error {
+			_, err := api.ParseScope(s)
+			return err
+		},
+		Logger: cfg.Log,
+	})
+}
+
+// Agent opens an in-process connection to notesd as caller agent, bound to
+// the token's name and scope, and completes rpc.hello. It lives until the
+// client is closed.
+func Agent(ctx context.Context, cfg Config, token string, scope api.Scope) (*api.Client, error) {
+	server, client := net.Pipe()
+	id := api.Identity{Caller: api.CallerAgent, Token: token, Scope: &scope}
+	go cfg.RPC.ServeConn(context.WithoutCancel(ctx), server, cfg.Router, id)
+	c := api.NewClient(client)
+	if _, err := c.RPC().Hello(ctx, &api.RPCHelloParams{Protocol: api.Protocol, Client: "mcp " + token}); err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	return c, nil
 }
 
 // Identity is the connection identity of an /api session: caller session,

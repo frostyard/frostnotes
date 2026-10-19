@@ -73,8 +73,12 @@ func TestAuthorIsTheMCPClient(t *testing.T) {
 	if got := author(nil); got != "mcp" {
 		t.Errorf("author without a session = %q, want mcp", got)
 	}
-	source, name := agentWrite(nil)
+	source, name := (&tools{}).agentWrite(nil)
 	if fmt.Sprint(*source, " ", *name) != "agent mcp" {
 		t.Errorf("agentWrite = %s %s", *source, *name)
+	}
+	source, name = (&tools{o: Options{Author: "claude-laptop"}}).agentWrite(nil)
+	if fmt.Sprint(*source, " ", *name) != "agent claude-laptop" {
+		t.Errorf("agentWrite with Options.Author = %s %s", *source, *name)
 	}
 }
