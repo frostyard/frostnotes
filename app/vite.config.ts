@@ -7,7 +7,10 @@ import { defineConfig } from "vite";
 // watcher polls (docs/adr/0009-development-environment-and-gates.md).
 const poll = process.env.NSL === "1";
 
-export default defineConfig({
+// The web build (--mode web) is served by lodge at /app/notes/
+// (docs/design/app.md#in-a-browser); the desktop app's from its root.
+export default defineConfig(({ mode }) => ({
+  base: mode === "web" ? "/app/notes/" : "/",
   plugins: [react(), tailwindcss()],
   clearScreen: false,
   envPrefix: ["VITE_", "TAURI_ENV_"],
@@ -26,4 +29,4 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["src/testing/setup.ts"],
   },
-});
+}));
