@@ -53,3 +53,4 @@ outside test server: sync's other end is another notesd.
 
 - Shapes: [M0 plan](../plans/0001-m0-foundations.md); `Makefile`, `dev/nsl/` (M0)
 - Builds on: frostmail ADR-0006; frostyard/core ADR-0022, ADR-0023, ADR-0043, ADR-0044
+- Extended by: [ADR-0025](0025-patch-what-costs-the-editor-its-frames.md) (pnpm patches of dependencies)

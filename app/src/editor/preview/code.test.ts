@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { markdownSupport } from "../syntax/index";
 import { BASIC } from "./basic";
 import { CODE } from "./code";
-import { livePreview, type PreviewCommand, previewEnv } from "./framework";
+import { livePreview, type PreviewCommand, previewEnv, shownText } from "./framework";
 
 let view: EditorView | null = null;
 let commands: PreviewCommand[] = [];
@@ -35,6 +35,10 @@ function open(doc: string, cursor: number | string = doc.length): EditorView {
 }
 
 const lines = (v: EditorView) => [...v.contentDOM.querySelectorAll<HTMLElement>(".cm-line")];
+const shown = (v: EditorView, n: number) => {
+  const el = lines(v)[n];
+  return el ? shownText(el) : undefined;
+};
 const classes = (v: EditorView) =>
   lines(v).map((l) =>
     [...l.classList]
@@ -61,22 +65,22 @@ describe("code blocks", () => {
   it("hide their fences and show the language away from the selection", () => {
     const v = open(DOC);
     expect(v.contentDOM.querySelector(".cm-pv-code-lang")?.textContent).toBe("js");
-    expect(lines(v)[0]?.textContent).not.toContain("```");
-    expect(lines(v)[3]?.textContent).toBe("");
-    expect(lines(v)[1]?.textContent).toBe("let a = 1;");
+    expect(shown(v, 0)).not.toContain("```");
+    expect(shown(v, 3)).toBe("");
+    expect(shown(v, 1)).toBe("let a = 1;");
   });
 
   it("show their fences while the selection is in them", () => {
     const v = open(DOC, "b = 2");
-    expect(lines(v)[0]?.textContent).toBe("```js");
-    expect(lines(v)[3]?.textContent).toBe("```");
+    expect(shown(v, 0)).toBe("```js");
+    expect(shown(v, 3)).toBe("```");
     expect(v.contentDOM.querySelector(".cm-pv-code-header")).toBeNull();
   });
 
   it("show no language when the fence names none", () => {
     const v = open("~~~\nplain\n~~~\n\nend");
     expect(v.contentDOM.querySelector(".cm-pv-code-lang")?.textContent).toBe("");
-    expect(lines(v)[2]?.textContent).toBe("");
+    expect(shown(v, 2)).toBe("");
   });
 
   it("copy their code with the header's button", () => {

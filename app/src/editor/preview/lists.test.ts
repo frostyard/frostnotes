@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { markdownSupport } from "../syntax/index";
 import { BASIC } from "./basic";
-import { livePreview, previewEnv } from "./framework";
+import { livePreview, previewEnv, shownText } from "./framework";
 import { LISTS } from "./lists";
 
 let view: EditorView | null = null;
@@ -33,7 +33,7 @@ function open(doc: string, cursor: number | string = doc.length): EditorView {
 }
 
 const lines = (v: EditorView) => [...v.contentDOM.querySelectorAll<HTMLElement>(".cm-line")];
-const texts = (v: EditorView) => lines(v).map((l) => l.textContent);
+const texts = (v: EditorView) => lines(v).map((l) => shownText(l));
 const marked = (v: EditorView, cls: string) => lines(v).map((l) => l.classList.contains(cls));
 
 describe("quotes", () => {

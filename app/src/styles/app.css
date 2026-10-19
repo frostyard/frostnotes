@@ -2,8 +2,13 @@
    (tokens.css) and type roles as utilities: bg-sidebar, text-secondary,
    border-separator, text-sidebar-row, and so on. Mail's list, reader and
    compose roles are left out; tabs, badges, code, highlights, tags and
-   popovers are Frostnotes' own (docs/specs/ui.md). */
-@import "tailwindcss";
+   popovers are Frostnotes' own (docs/specs/ui.md). Tailwind's layers come
+   one by one, as "tailwindcss" itself imports them, so that the preflight is
+   the app's copy (preflight.css). */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "./preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "@fontsource-variable/inter";
 @import "./tokens.css";
 @import "./editor.css";

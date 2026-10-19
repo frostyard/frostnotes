@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { markdownSupport } from "../syntax/index";
 import { BASIC } from "./basic";
-import { livePreview, type PreviewCommand, previewEnv } from "./framework";
+import { livePreview, type PreviewCommand, previewEnv, shownText } from "./framework";
 import { INLINE } from "./inline";
 
 let view: EditorView | null = null;
@@ -35,7 +35,10 @@ function open(doc: string, cursor: number | string = doc.length): EditorView {
   return view;
 }
 
-const line = (v: EditorView, n: number) => v.contentDOM.querySelectorAll(".cm-line")[n]?.textContent;
+const line = (v: EditorView, n: number) => {
+  const el = v.contentDOM.querySelectorAll(".cm-line")[n];
+  return el ? shownText(el) : undefined;
+};
 const all = (v: EditorView, sel: string) => [...v.contentDOM.querySelectorAll<HTMLElement>(sel)];
 const press = (el: Element | undefined) => el?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
 

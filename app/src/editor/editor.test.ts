@@ -33,7 +33,7 @@ function drawn(s: EditorState): string[] {
   const out: string[] = [];
   for (const it = buildInline(s, [{ from: 0, to: s.doc.length }]).iter(); it.value; it.next()) {
     const spec = it.value.spec;
-    const what = spec.widget ? "widget" : spec.class ? String(spec.class) : "hide";
+    const what = spec.widget ? "widget" : spec.class === "cm-pv-hide" ? "hide" : String(spec.class);
     out.push(`${what}:${s.doc.sliceString(it.from, it.to)}`);
   }
   return out;

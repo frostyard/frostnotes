@@ -4,11 +4,12 @@
 // a context to decorations. Inline providers run over the visible ranges
 // in a view plugin; block providers, whose widgets may replace line
 // breaks, run in a state field over the whole document, again only around
-// what changed. Syntax shows as typed on every line a selection touches;
+// what changed or what a parse added. Syntax shows as typed on every line a
+// selection touches, and is hidden on the others by a mark;
 // a block widget shows its source while a selection is inside it. A
 // widget's clicks go to its provider, which answers with a transaction or
 // a command.
-import { syntaxTree } from "@codemirror/language";
+import { language, syntaxTree } from "@codemirror/language";
 import {
   type EditorState,
   type Extension,
@@ -126,7 +127,11 @@ export interface Provider {
 /** previewProviders collects the providers; live preview is on while there are any. */
 export const previewProviders = Facet.define<Provider>();
 
-const hidden = Decoration.replace({});
+// Hidden syntax is a mark that does not display, not a replacement: the
+// view pads every replacement with two buffer images, which made hidden
+// syntax most of a line's elements.
+const hidden = Decoration.mark({ class: "cm-pv-hide" });
+const hiddenTheme = EditorView.baseTheme({ ".cm-pv-hide": { display: "none" } });
 
 interface Span {
   from: number;
@@ -238,18 +243,31 @@ function blockSet(state: EditorState, spans: readonly Span[]): Range<Decoration>
   return draw(state, spans, ps);
 }
 
-/** blockField holds the block providers' decorations, redrawn only around changes and the selection. */
+/** blockField holds the block providers' decorations, redrawn only around changes, the selection and what a parse added. */
 const blockField = StateField.define<DecorationSet>({
   create: (state) => Decoration.set(blockSet(state, [{ from: 0, to: state.doc.length }]), true),
   update(set, tr: Transaction) {
     const state = tr.state;
     if (!state.facet(previewProviders).some((p) => p.kind === "block")) return Decoration.none;
-    const treeGrew = syntaxTree(tr.startState) !== syntaxTree(state) && !tr.docChanged;
-    if (treeGrew || redrawn(tr) || tr.startState.facet(previewProviders) !== state.facet(previewProviders)) {
+    if (
+      redrawn(tr) ||
+      tr.startState.facet(previewProviders) !== state.facet(previewProviders) ||
+      tr.startState.facet(language) !== state.facet(language)
+    ) {
       return Decoration.set(blockSet(state, [{ from: 0, to: state.doc.length }]), true);
     }
-    if (!tr.docChanged && !tr.selection) return set;
+    const before = syntaxTree(tr.startState);
+    const after = syntaxTree(state);
+    if (!tr.docChanged && !tr.selection && after === before) return set;
     const spans: Span[] = [];
+    // A parse that went further than the old tree drew the blocks past it,
+    // and the old tree's last block, cut where that parse stopped, again;
+    // the blocks before it were final. (Redrawing the whole document for
+    // each step of the background parse took a frame of its own.)
+    if (after !== before) {
+      const from = tr.changes.mapPos(before.topNode.lastChild?.from ?? 0, -1);
+      if (after.length > from) spans.push(topLevel(state, from, after.length));
+    }
     let mapped = set.map(tr.changes);
     tr.changes.iterChangedRanges((_fa, _ta, fromB, toB) => spans.push(topLevel(state, fromB, toB)));
     // The selection's old and new places: a block it enters shows its
@@ -282,6 +300,13 @@ function overlapsKept(set: DecorationSet, d: Range<Decoration>): boolean {
   return hit;
 }
 
+/** shownText is the text el shows, without the syntax live preview hides: for tests. */
+export function shownText(el: Element): string {
+  const copy = el.cloneNode(true) as Element;
+  for (const h of copy.querySelectorAll(".cm-pv-hide")) h.remove();
+  return copy.textContent ?? "";
+}
+
 /** blockDecorations is the block providers' decorations in a state, for tests. */
 export function blockDecorations(state: EditorState): DecorationSet {
   return state.field(blockField, false) ?? Decoration.none;
@@ -306,5 +331,5 @@ const clicks = EditorView.domEventHandlers({
 
 /** livePreview is the framework over providers; source mode leaves it out. */
 export function livePreview(providers: readonly Provider[]): Extension {
-  return [providers.map((p) => previewProviders.of(p)), inlinePlugin, blockField, clicks];
+  return [providers.map((p) => previewProviders.of(p)), inlinePlugin, blockField, clicks, hiddenTheme];
 }

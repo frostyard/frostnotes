@@ -8,6 +8,17 @@ import { whereFor } from "../../workspace/ops";
 import { readCallout } from "../syntax/callouts";
 import { type DrawContext, type PreviewAction, type Provider, previewEnv } from "./framework";
 
+/** LINE_HEIGHT and LINE_CHARS are a line's height and length at the default font size (16 px, line height 1.5). */
+const LINE_HEIGHT = 24;
+const LINE_CHARS = 75;
+
+/** estimateHeight is markdown's height in lines of the default size, each source line wrapped. */
+export function estimateHeight(markdown: string): number {
+  let lines = 0;
+  for (const line of markdown.split("\n")) lines += Math.max(1, Math.ceil(line.length / LINE_CHARS));
+  return lines * LINE_HEIGHT;
+}
+
 /** RenderedWidget shows a block through the environment's sanitized renderer. */
 export class RenderedWidget extends WidgetType {
   constructor(
@@ -20,6 +31,14 @@ export class RenderedWidget extends WidgetType {
 
   override eq(other: RenderedWidget): boolean {
     return this.provider === other.provider && this.markdown === other.markdown && this.className === other.className;
+  }
+
+  // Until the view has measured it, a block is taken to be as tall as its
+  // source wrapped at the default size, plus its padding: taken for one
+  // line, as by default, blocks made a scroll render more lines at once
+  // than it needed.
+  override get estimatedHeight(): number {
+    return estimateHeight(this.markdown) + 8;
   }
 
   toDOM(view: EditorView): HTMLElement {

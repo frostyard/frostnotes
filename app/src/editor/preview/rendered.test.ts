@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { markdownSupport } from "../syntax/index";
 import { BASIC } from "./basic";
 import { blockDecorations, livePreview, type PreviewCommand, previewEnv } from "./framework";
-import { RENDERED } from "./rendered";
+import { estimateHeight, RENDERED, RenderedWidget } from "./rendered";
 
 let view: EditorView | null = null;
 let commands: PreviewCommand[] = [];
@@ -158,5 +158,13 @@ describe("a click in a rendered block", () => {
     press(v.contentDOM.querySelector(".callout-content span"));
     expect(v.state.selection.main.head).toBe(0);
     expect(replaced(v.state)).toEqual([]);
+  });
+});
+
+describe("height estimates", () => {
+  it("take a block for its source's lines, each wrapped, at the default size", () => {
+    expect(estimateHeight("> [!note] Title\n> body")).toBe(48);
+    expect(estimateHeight("x".repeat(160))).toBe(72);
+    expect(new RenderedWidget("table", "| a |\n| - |\n| 1 |", "cm-pv-table").estimatedHeight).toBe(80);
   });
 });

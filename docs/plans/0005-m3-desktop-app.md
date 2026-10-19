@@ -38,7 +38,7 @@ properties; T-0080 and T-0081) is merged. Phase 7, the review's fixes
 and evidence 1 to 3, is merged
 ([#39](https://github.com/frostyard/frostnotes/pull/39)): typing, the
 hotkeys and the writer pairs meet their targets in the built app, and
-scrolling falls just short of its own (a follow-up). Phase 8, which
+scrolling, after its follow-up (in review), meets its own. Phase 8, which
 lets the app open and create vaults
 ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
 accepted 2026-10-18; batch 2's vault switcher only ever switched
@@ -854,6 +854,64 @@ against the built app.
   25 ms at p95 and scrolling 22 fps; leaving out one group there gains
   at most 6 fps (basic). The follow-up profiles the scroll in WebKit and
   makes what live preview draws cheaper.
+
+- **Result (2026-10-18): evidence 1's scrolling met.** The follow-up
+  profiled the fling in WebKitGTK: a trace of CodeMirror's measuring frame
+  by frame, JavaScript samples taken through WebKit's remote inspector
+  (`WEBKIT_INSPECTOR_HTTP_SERVER`, a debug build), and the editor's lines
+  laid out alone under variants. Every other frame the view renders a
+  screen's worth of new lines; those frames took 12 to 14 ms of the main
+  thread where about 13 fits a vsync, and the frames between took 2. The
+  time went to the new lines' elements, each costing about 15 µs to
+  build, style, lay out and take away, not to drawing the decorations:
+  - hidden syntax was drawn as replacements, which CodeMirror pads with
+    two `<img>` buffers each: 9 of a decorated line's 19 elements;
+  - Tailwind's preflight resets `::before` and `::after` with a universal
+    rule, so WebKit resolved both pseudo-elements of every element: over
+    a quarter of the lines' style and layout;
+  - KaTeX's spans were 40 percent of it, its hidden MathML laid out with
+    them;
+  - block widgets, taken for one line until measured, made the view
+    render more lines at once than a scroll needed;
+  - CodeMirror's height map walked a node for every line it had measured
+    on every measure (0.4 ms a frame at the note's top, 1.5 ms by its
+    end);
+  - and each step of the background parse redrew every block widget in
+    the note, a long frame each.
+
+  | Change | Where |
+  | --- | --- |
+  | Hidden syntax is a mark that does not display | `editor/preview/framework.ts` |
+  | A step of the parse redraws only the blocks it added | `editor/preview/framework.ts` |
+  | KaTeX draws each formula once and widgets clone it; the MathML is attached a frame later | `editor/preview/math.ts` |
+  | Rendered blocks and display math estimate their height from their source | `editor/preview/rendered.ts`, `editor/preview/math.ts` |
+  | The preflight's pseudo-element reset leaves out the editor's lines and gutter | `styles/preflight.css` ([ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md)) |
+  | CodeMirror's height map walks only what is outdated | `app/patches/` ([ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md)) |
+
+  On the host's GPU, `make app-build && FROSTNOTES_SPIKE=editor
+  build/frostnotes-app` now scrolls at 59.86, 59.93 and 59.99 fps in
+  three runs (51.7 before), frame p95 18, 17 and 17 ms (34 before): 21 or
+  22 frames of about 1,120 take more than 18.4 ms (209 before), and at most
+  one more than 36.7. Typing stays at 12, 10 and 11 ms at p95, and live
+  preview's checks hold. Over Phase 8, merged since, five of six runs
+  scroll at 59.77 to 59.94 fps, frame p95 17 or 18 ms, and one, taken as
+  the machine settled after a build, at 58.99: the margin is under 1 fps.
+  Without the height map's patch the note scrolls at 58.6 to 59.4 fps.
+  Under Xvfb in nsl, which paints in software, it scrolls at 21 fps (22
+  before) and typing is 19 to 21 ms at p95.
+  Tests cover each change: hidden marks, the field's drawing of a parse's
+  steps against a full drawing, a formula drawn once and its MathML a
+  frame later, the estimates, and the preflight copy against Tailwind's;
+  each fails with its change undone.
+
+  The fling outruns the parse: WebKit has no `requestIdleCallback`, so
+  CodeMirror's parse worker wakes every 500 ms and parses only to the
+  viewport, and the last third of the note scrolls past as raw text for a
+  moment before live preview draws it, here as before. Keeping the parse
+  ahead (parsing 4 ms toward 100,000 characters past the viewport in the
+  frame after each viewport update) decorated the whole fling, which is
+  what a user should see, and scrolled at 58.5 to 59 fps before the last
+  of the changes above; it is a follow-up.
 
 - **Result (2026-10-18): evidence 2 and 3** (`make m3-evidence`, the
   built app under Xvfb in nsl; `internal/appevidence`, whose drivers are

@@ -84,6 +84,8 @@ file a step names before writing its frostnotes counterpart.
   `app/src/app/` and `app/src/data/` connect it. `app/src/spike/` is M0's
   CodeMirror spike and the drivers of M3's exit evidence. The icon's master is `app/src-tauri/icons/icon.svg`
   (`scripts/render-icons.py`, ADR-0013).
+  `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
+  the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
 - `dev/nsl/provision.sh`: the nsl machine for the app toolchain;
   `scripts/dev-app.sh` runs notesd beside the app or Vite there.
   `tools/rpcgen`, `tools/taskrun`: the contract generator and the task-card
