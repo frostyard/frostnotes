@@ -98,6 +98,64 @@ describe("the settings", () => {
   });
 });
 
+describe("the Hub section", () => {
+  it("lists a hub's devices and pending pairings, and revokes a device after asking", async () => {
+    const mock = new MockTransport(mockVaults(), {
+      files: FILES,
+      caller: "session",
+      node: "phone",
+      hub: {
+        status: {
+          hub: "0123456789abcdef0123456789abcdef",
+          url: "https://lodge.example.ts.net/device/notes",
+          vaults: 1,
+          devices: 1,
+          connected: 1,
+        },
+        devices: [
+          {
+            id: 4,
+            name: "laptop",
+            pairedAt: "2026-10-01T09:00:00Z",
+            seenAt: "2026-10-18T22:00:00Z",
+            connected: true,
+            revoked: false,
+          },
+        ],
+        pending: [
+          {
+            code: "7K4M-Q2XD",
+            name: "desk",
+            addr: "desk (ana@example.com)",
+            createdAt: "2026-10-19T03:00:00Z",
+            expiresAt: "2026-10-19T03:10:00Z",
+            approved: false,
+          },
+        ],
+      },
+    });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    act(() => useOverlays.setState({ settings: "hub" }));
+    const hub = await within(settings()).findByRole("region", { name: "Hub" });
+    expect(within(hub).getByText("https://lodge.example.ts.net/device/notes")).toBeTruthy();
+    expect(within(hub).getByText("notesctl hub approve 7K4M-Q2XD")).toBeTruthy();
+    expect(within(hub).getByText(/From desk \(ana@example.com\)/)).toBeTruthy();
+    await user.click(within(hub).getByRole("button", { name: "Revoke laptop" }));
+    await user.click(await screen.findByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(within(settings()).getByText("Revoked")).toBeTruthy());
+    expect(mock.calls.some((c) => c.method === "hub.revoke")).toBe(true);
+  });
+
+  it("is absent where notesd is no hub", async () => {
+    await start();
+    act(() => useOverlays.setState({ settings: "general" }));
+    await waitFor(() => expect(settings()).toBeTruthy());
+    expect(within(settings()).queryByRole("button", { name: "Hub" })).toBeNull();
+  });
+});
+
 describe("the history tab", () => {
   it("lists the versions, shows one and its changes, restores it, and compares it", async () => {
     const { mock, user } = await start();

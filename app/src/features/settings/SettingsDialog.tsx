@@ -13,7 +13,9 @@ export type SettingControl =
   /** Read-only key caps (the Hotkeys section). */
   | { kind: "keys"; keys: readonly string[] }
   /** Read-only text. */
-  | { kind: "info"; text: string };
+  | { kind: "info"; text: string }
+  /** An action: a button with its label, red when it cannot be undone; a click is onChange(id, true). */
+  | { kind: "button"; label: string; danger?: boolean };
 
 /** SettingRow is one setting. */
 export interface SettingRow {
@@ -167,6 +169,18 @@ function Control({ row, onChange }: { row: SettingRow; onChange: SettingsDialogP
       ));
     case "info":
       return <span className="select-text text-secondary">{control.text}</span>;
+    case "button":
+      return (
+        <button
+          type="button"
+          aria-label={`${control.label} ${name}`}
+          disabled={disabled}
+          className={`h-7 rounded-md border border-separator px-3 disabled:opacity-50 ${control.danger ? "text-flag-1" : "text-primary"}`}
+          onClick={() => onChange(id, true)}
+        >
+          {control.label}
+        </button>
+      );
   }
 }
 

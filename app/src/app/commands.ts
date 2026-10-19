@@ -477,10 +477,17 @@ export function workspaceCommands(c: Client): Command[] {
     name: `Go to tab ${i + 1}`,
     run: () => update((w) => gotoTab(w, i + 1)),
   }));
+  // Inside lodge zoom is the browser's own (docs/specs/ui.md#in-a-browser).
+  const zoom: Command[] =
+    import.meta.env.MODE === "web"
+      ? []
+      : [
+          { id: "window:zoom-in", name: "Zoom in", run: () => setZoom(zoomStep(usePrefs.getState().zoom, 1)) },
+          { id: "window:zoom-out", name: "Zoom out", run: () => setZoom(zoomStep(usePrefs.getState().zoom, -1)) },
+          { id: "window:reset-zoom", name: "Reset zoom", run: () => setZoom(1) },
+        ];
   return [
-    { id: "window:zoom-in", name: "Zoom in", run: () => setZoom(zoomStep(usePrefs.getState().zoom, 1)) },
-    { id: "window:zoom-out", name: "Zoom out", run: () => setZoom(zoomStep(usePrefs.getState().zoom, -1)) },
-    { id: "window:reset-zoom", name: "Reset zoom", run: () => setZoom(1) },
+    ...zoom,
     {
       id: "daily-notes",
       name: "Open today's daily note",
