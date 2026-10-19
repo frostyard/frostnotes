@@ -29,6 +29,11 @@ of lodge's app contract is
   web app), merged on 2026-10-19.
 - **Still to come:** the rest of the narrow layout, the evidence and the
   review's record.
+- **Next:** [plan 0007](docs/plans/0007-folder-limited-agent-scopes.md)
+  limits an agent's writes to folders and lets it append to today's
+  daily note, for Porter, frostyard's assistant
+  ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md),
+  proposed).
 - **Phase 7** moves the user's hub behind lodge from 2026-10-26. The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
