@@ -246,6 +246,23 @@ func TestContentServesBlobsWithinTheirLimits(t *testing.T) {
 			t.Errorf("Range %s carried %d bytes", rng, n)
 		}
 	}
+	// An If-Range that does not match changes nothing: the limits hold.
+	for _, ifRange := range []string{`"nope"`, "Mon, 02 Jan 2006 15:04:05 GMT"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/content/blobs/"+past+".bin", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Range", "bytes=0-0")
+		req.Header.Set("If-Range", ifRange)
+		resp, err := n.lodge.Do(req, kittest.Content())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusPartialContent || resp.ContentLength != 1 {
+			t.Errorf("Range 0-0 with If-Range %s = %s, %d bytes; want the one byte", ifRange, resp.Status, resp.ContentLength)
+		}
+	}
 	for _, rng := range []string{"bytes=0-1,4-5", "bytes=99999999-", "items=0-1", "bytes=5-1"} {
 		if code := get("/content/blobs/"+small+".svg", rng).StatusCode; code != http.StatusRequestedRangeNotSatisfiable {
 			t.Errorf("Range %s = %d, want 416", rng, code)
