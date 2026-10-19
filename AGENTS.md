@@ -45,8 +45,9 @@ file a step names before writing its frostnotes counterpart.
 - `cmd/notesd`: the daemon. `cmd/notesctl`: the CLI (clix/cobra; one
   `newXxxCmd(opts)` per file).
 - `api/`: the RPC contract. `zz_generated.go` comes from `schema/rpc/*.yaml`
-  via `tools/rpcgen` (`make gen`); `api.go`, `client.go` and `conn.go` are
-  the hand-written runtime (Router, caller kinds, Client). Never edit
+  via `tools/rpcgen` (`make gen`); `api.go`, `client.go` and `conn.go`
+  name lodge kit's runtime (`lodge/kit/jsonrpc`: Router, Client, Error)
+  and keep notes' caller kinds, scope and identity. Never edit
   generated files (`api/zz_generated.go`, `app/src/rpc/gen/api.ts`,
   `docs/specs/rpc-api.md`).
 - `internal/store`: SQLite (modernc, pure Go): migrations, the single-writer
@@ -55,12 +56,13 @@ file a step names before writing its frostnotes counterpart.
 - `internal/markdown`: `Parse` (goldmark with an Obsidian extension) into
   a `Doc`, `SplitFrontmatter`, `Resolve`; the dialect and its fixtures are
   [docs/specs/markdown.md](docs/specs/markdown.md). `internal/events`: fans
-  committed events out and replays the log. `internal/rpcserver`: the
-  socket server and `ServeConn` for authenticated WebSockets.
+  committed events out and replays the log. `internal/rpcserver`:
+  `rpc.hello`, `events.subscribe` and the private socket over the kit's
+  server, and `ServeConn` for authenticated connections.
   `internal/engine`: the API domains over the store and the vaults.
-  `internal/rpctest`: a real server for tests. `internal/devgw`: the
-  loopback WebSocket gateway for UI work in a browser. `internal/config`:
-  paths.
+  `internal/rpctest`: a real server for tests, on `lodge/kit/rpctest`.
+  `internal/devgw`: the loopback WebSocket gateway for UI work in a
+  browser. `internal/config`: paths.
 - `internal/vault`: one actor per vault (`Manager`): `Walk`, the scan, the
   fsnotify watcher, the path guard, atomic compare-and-merge writes,
   moves, settings, daily notes and the daily prune. Every change to a
@@ -73,8 +75,8 @@ file a step names before writing its frostnotes counterpart.
   ([docs/specs/sync-protocol.md](docs/specs/sync-protocol.md)).
   `internal/lodgeapp`: `notesd --lodge`, lodge's app socket over
   `lodge/kit` (`/health`, `/api` as caller `session`, `/content/blobs/`,
-  `/mcp` for agents, `/device/`; [docs/specs/lodge-app.md](docs/specs/lodge-app.md)), the
-  only package importing the kit; `internal/blobhttp`: files by hash for
+  `/mcp` for agents, `/device/`; [docs/specs/lodge-app.md](docs/specs/lodge-app.md));
+  `internal/blobhttp`: files by hash for
   browsers. `packaging/`: the manifest, systemd units and `sysusers.d`.
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).

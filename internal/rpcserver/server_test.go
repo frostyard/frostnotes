@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
-	"github.com/frostyard/frostnotes/internal/rpcserver"
 	"github.com/frostyard/frostnotes/internal/rpctest"
 	"github.com/frostyard/frostnotes/internal/store"
 )
@@ -22,13 +21,17 @@ type rawConn struct {
 	sc *bufio.Scanner
 }
 
-func dialRaw(t *testing.T, socket string) *rawConn {
+// dialRaw connects to srv's socket, as the local user.
+func dialRaw(t *testing.T, srv *rpctest.Server) *rawConn {
 	t.Helper()
-	nc, err := dialConn(socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = nc.Close() })
+	nc := srv.Run.Dial(t)
+	return &rawConn{t: t, nc: nc, sc: bufio.NewScanner(nc)}
+}
+
+// pipeRaw connects as a connection its listener authenticated as id.
+func pipeRaw(t *testing.T, srv *rpctest.Server, id api.Identity) *rawConn {
+	t.Helper()
+	nc := srv.Run.Pipe(t, func(ctx context.Context, nc net.Conn) { srv.RPC.ServeConn(ctx, nc, srv.Router, id) })
 	return &rawConn{t: t, nc: nc, sc: bufio.NewScanner(nc)}
 }
 
@@ -50,7 +53,7 @@ func (r *rawConn) recv() string {
 
 func TestWireRules(t *testing.T) {
 	srv := rpctest.Start(t)
-	r := dialRaw(t, srv.Socket)
+	r := dialRaw(t, srv)
 
 	r.send(`{"jsonrpc":"2.0","id":1,"method":"vault.list"}`)
 	if got := r.recv(); !strings.Contains(got, `"code":1004`) || !strings.Contains(got, `"id":1`) {
@@ -89,10 +92,7 @@ func TestWireRules(t *testing.T) {
 // method looks like one that does not exist.
 func TestCallerKindLimitsMethods(t *testing.T) {
 	srv := rpctest.Start(t)
-	server, client := net.Pipe()
-	t.Cleanup(func() { _ = client.Close() })
-	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.Identity{Caller: api.CallerSession, Login: "ana@example.com", Node: "phone"})
-	r := &rawConn{t: t, nc: client, sc: bufio.NewScanner(client)}
+	r := pipeRaw(t, srv, api.Identity{Caller: api.CallerSession, Login: "ana@example.com", Node: "phone"})
 
 	r.send(`{"jsonrpc":"2.0","id":1,"method":"rpc.hello","params":{"protocol":1,"client":"browser"}}`)
 	if got := r.recv(); !strings.Contains(got, `"caller":"session","login":"ana@example.com","node":"phone"`) {
@@ -149,7 +149,7 @@ func TestEventsResumeAfterReconnect(t *testing.T) {
 
 func TestListenRejectsLiveSocket(t *testing.T) {
 	srv := rpctest.Start(t)
-	if _, err := rpcserver.Listen(srv.Socket); err == nil || !strings.Contains(err.Error(), "already listening") {
+	if _, err := srv.RPC.Listen(srv.Socket); err == nil || !strings.Contains(err.Error(), "notesd is already listening on "+srv.Socket) {
 		t.Fatalf("Listen on a live socket = %v", err)
 	}
 }
@@ -167,10 +167,7 @@ func TestRepeatedHello(t *testing.T) {
 // local note or vault events.
 func TestEventsReachOnlyTheCallersTheirDomainAdmits(t *testing.T) {
 	srv := rpctest.Start(t)
-	server, client := net.Pipe()
-	t.Cleanup(func() { _ = client.Close() })
-	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.Identity{Caller: api.CallerDevice})
-	r := &rawConn{t: t, nc: client, sc: bufio.NewScanner(client)}
+	r := pipeRaw(t, srv, api.Identity{Caller: api.CallerDevice})
 	r.send(`{"jsonrpc":"2.0","id":1,"method":"rpc.hello","params":{"protocol":1,"client":"device"}}`)
 	r.recv()
 	r.send(`{"jsonrpc":"2.0","id":2,"method":"events.subscribe"}`)

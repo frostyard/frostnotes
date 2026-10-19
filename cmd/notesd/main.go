@@ -102,11 +102,11 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	ln, err := rpcserver.Listen(paths.Socket)
+	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger})
+	ln, err := srv.Listen(paths.Socket)
 	if err != nil {
 		return err
 	}
-	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger})
 	// The device side of sync runs on every notesd; the hub's listener only
 	// with -hub (docs/design/sync.md).
 	keys, err := secrets.Open(ctx, filepath.Join(paths.DataDir, "secrets.json"), logger)

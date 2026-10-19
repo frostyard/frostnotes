@@ -20,7 +20,9 @@ func (panicky) List(context.Context, *api.NoteListParams) ([]api.NoteEntry, erro
 
 // A handler that panics answers internal; notesd and the connection live on.
 func TestPanickingHandlerAnswersInternal(t *testing.T) {
-	srv := rpctest.StartWith(t, rpctest.Options{Note: panicky{}})
+	var o rpctest.Options
+	o.Services = func(s *api.Services) { s.Note = panicky{} }
+	srv := rpctest.StartWith(t, o)
 	c := srv.Dial(t)
 	if _, err := c.Note().List(t.Context(), &api.NoteListParams{VaultID: 1}); !errors.Is(err, api.ErrInternal) {
 		t.Fatalf("List = %v, want internal", err)
@@ -41,7 +43,9 @@ func (huge) Read(context.Context, *api.NoteReadParams) (*api.Note, error) {
 // client can read; the connection lives on (review finding 2, plan 0005
 // Phase 7).
 func TestAReplyTooLargeAnswersInternal(t *testing.T) {
-	srv := rpctest.StartWith(t, rpctest.Options{Note: huge{}})
+	var o rpctest.Options
+	o.Services = func(s *api.Services) { s.Note = huge{} }
+	srv := rpctest.StartWith(t, o)
 	c := srv.Dial(t)
 	if _, err := c.Note().Read(t.Context(), &api.NoteReadParams{VaultID: 1, Path: "Big.md"}); !errors.Is(err, api.ErrInternal) {
 		t.Fatalf("Read = %v, want internal", err)
