@@ -86,6 +86,10 @@ func Handler(store *blobs.Store, opts Options) http.Handler {
 		if opts.Download && r.URL.Query().Get("download") == "1" {
 			h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.%s"`, m[1], m[2]))
 		}
+		// A blob never changes under its hash, so a real If-Range always
+		// matches; one that does not would make ServeContent answer whole,
+		// past the limits.
+		r.Header.Del("If-Range")
 		if rg := r.Header.Get("Range"); rg != "" {
 			cut, ok := oneRange(rg, size, opts.MaxRange)
 			if !ok {

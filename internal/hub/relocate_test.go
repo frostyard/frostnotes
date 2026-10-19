@@ -25,9 +25,9 @@ func TestTheHubRecordsItsURL(t *testing.T) {
 	h := newHub(t)
 	ctx := t.Context()
 	const moved = "https://lodge.example.ts.net/device/notes"
-	st, err := h.c.Hub().SetURL(ctx, &api.HubSetURLParams{URL: moved + "/"})
+	st, err := h.c.Hub().SetURL(ctx, &api.HubSetURLParams{URL: "https://Lodge.Example.ts.net/device/notes/"})
 	if err != nil || st.URL == nil || *st.URL != moved {
-		t.Fatalf("SetURL = %+v, %v; want %s without its trailing /", st, err, moved)
+		t.Fatalf("SetURL = %+v, %v; want %s, its host in lower case and without its trailing /", st, err, moved)
 	}
 	token, _ := h.pair("phone")
 	dev, err := h.dial(token)
