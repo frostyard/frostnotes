@@ -22,9 +22,10 @@ Rationale: [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md),
 [design/hub.md](../design/hub.md), [design/overview.md](../design/overview.md).
 
 **Status: M4's contract,** written in
-[plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s Phase 1. It binds
-as Phases 2 to 4 land. Until then the hub serves only
-[sync-protocol.md](sync-protocol.md)'s routes on its plain address.
+[plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s Phase 1 and built
+in Phases 2 to 4 (merged 2026-10-19). The user's hub serves only
+[sync-protocol.md](sync-protocol.md)'s routes on its plain address until
+Phase 7 moves it behind lodge.
 
 ## Interface
 
@@ -73,7 +74,11 @@ path admits one caller kind, and any other is 403:
 | `HEAD`, `GET`, `PUT` `/device/sync/blobs/{hash}` | `device` | contents |
 | `POST /device/sync/hub` | `device` | the hub's ID, URL and relocation proof |
 
-- Any other path is 404.
+- A path outside this table is 403, since it admits no caller, as is a
+  caller kind its row does not admit
+  ([lodge's app-contract.md](https://github.com/frostyard/lodge/blob/main/docs/specs/app-contract.md#what-an-app-serves-on-its-socket)).
+  `/x/…`, which notes does not serve, is 404 to a session, and a
+  `/device/` path the table does not list is 404 to a device.
 - Errors are `text/plain; charset=utf-8`, one line saying why.
 - **Required headers:**
   - `session`: `Lodge-Login`, `Lodge-Node-ID`, `Lodge-Node-Name` and

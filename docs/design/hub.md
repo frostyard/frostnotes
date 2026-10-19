@@ -12,10 +12,11 @@ routes on the lodge socket, relocation),
 [specs/sync-protocol.md](../specs/sync-protocol.md) (the device
 protocol).
 
-**Status: planned** for M4
-([plan 0006](../plans/0006-m4-notes-inside-lodge.md)). Today's hub serves
-devices on a plain HTTP address behind a `tailscale serve` on another
-machine ([sync.md](sync.md)). This document covers what changes for the
+**Status: built** in M4's Phases 2 and 3
+([plan 0006](../plans/0006-m4-notes-inside-lodge.md); merged
+2026-10-19). The user's hub moves behind lodge in Phase 7, from
+2026-10-26; until then it serves devices on a plain HTTP address behind
+a `tailscale serve` on another machine ([sync.md](sync.md)). This document covers what changes for the
 hub and its devices when notesd becomes lodge's notes app; browsers and
 agents are in [overview.md](overview.md#notesd-as-a-lodge-app) and
 [app.md](app.md#in-a-browser).

@@ -21,10 +21,15 @@ M2, sync ([plan 0004](docs/plans/0004-m2-sync.md)), and M3, the desktop
 app ([plan 0005](docs/plans/0005-m3-desktop-app.md); the app's design is
 [docs/design/app.md](docs/design/app.md)), are built and in their 7-day
 trials, M2's through 2026-10-24 and M3's through 2026-10-25. M4, notes
-inside lodge (frostyard's tailnet web shell), is planned
+inside lodge (frostyard's tailnet web shell), is in progress
 ([plan 0006](docs/plans/0006-m4-notes-inside-lodge.md); notesd's side
 of lodge's app contract is
-[docs/specs/lodge-app.md](docs/specs/lodge-app.md)). The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
+[docs/specs/lodge-app.md](docs/specs/lodge-app.md)):
+- **Built:** Phases 2 to 5 (notesd as lodge's notes app, `/mcp` and the
+  web app), merged on 2026-10-19.
+- **Still to come:** the rest of the narrow layout, the evidence and the
+  review's record.
+- **Phase 7** moves the user's hub behind lodge from 2026-10-26. The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
 file a step names before writing its frostnotes counterpart.
@@ -95,7 +100,11 @@ file a step names before writing its frostnotes counterpart.
   moves lines to notesd's socket; JSON-RPC multiplexing is in
   `app/src/rpc/transport.ts`, with Tauri, WebSocket (`transport/ws.ts`) and
   mock (`rpc/mock/`) transports. `app/src/features/` is presentational;
-  `app/src/app/` and `app/src/data/` connect it. `app/src/spike/` is M0's
+  `app/src/app/` and `app/src/data/` connect it. `app/src/lodge/` runs the
+  app inside lodge's frame (lodge-client, the lodge transport, content
+  URLs), and `app/src/features/mobile/` holds the narrow layout's
+  components. `make web-build` builds it for lodge (`/app/notes/`), and
+  `make lodge-app` lays it out with `packaging/lodge/app.json`. `app/src/spike/` is M0's
   CodeMirror spike and the drivers of M3's exit evidence. The icon's master is `app/src-tauri/icons/icon.svg`
   (`scripts/render-icons.py`, ADR-0013).
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`

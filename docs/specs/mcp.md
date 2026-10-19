@@ -31,8 +31,8 @@ through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md).
 
 ### Through lodge
 
-*(M4; binds when [plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s
-Phase 4 lands.)* lodge serves the same tools to agents on its tailnet
+*(M4, built in [plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s
+Phase 4.)* lodge serves the same tools to agents on its tailnet
 at `https://lodge.<tailnet>.ts.net/mcp/notes`, MCP's Streamable HTTP
 transport, and forwards each request to `/mcp` on notesd's lodge app
 socket ([lodge-app.md](lodge-app.md#mcp),
