@@ -35,14 +35,18 @@ notes (T-0076 to T-0079), are merged. What the spec still asked of Phase
 6 (opening links and files outside the app, zoom, the Editor settings,
 aliases, page previews, indentation guides and the reading view's
 properties; T-0080 and T-0081) is merged. Phase 7, the review's fixes
-and evidence 1 to 3, is in review: typing, the hotkeys and the writer
-pairs meet their targets in the built app, and scrolling falls just
-short of its own (a follow-up). Evidence 4 is the user's 7-day trial.
-It waits for Phase 8, which lets the app open and create vaults
+and evidence 1 to 3, is merged
+([#39](https://github.com/frostyard/frostnotes/pull/39)): typing, the
+hotkeys and the writer pairs meet their targets in the built app, and
+scrolling falls just short of its own (a follow-up). Phase 8, which
+lets the app open and create vaults
 ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
-accepted 2026-10-18): batch 2's vault switcher only ever switched
-vaults. Phase 8 (the contract, the shell's folder picker, T-0082 and
-T-0083, and the wiring) is in review.
+accepted 2026-10-18; batch 2's vault switcher only ever switched
+vaults), is merged too
+([#41](https://github.com/frostyard/frostnotes/pull/41)): the contract,
+the shell's folder picker, T-0082 and T-0083, and the wiring. What
+remains is evidence 4, the user's 7-day trial on their one Linux
+desktop, framework.
 
 ## Decisions taken for M3
 
@@ -793,9 +797,12 @@ against the built app.
   3. Each writer pair with the editor loses no token and keeps the
      cursor: vim saving the open note, a pull from another device
      through a hub, an agent's append through MCP, and a second tab.
-  4. The user uses Frostnotes instead of Obsidian on two machines, synced
-     through M2's hub, for 7 days, finds no edit missing, and names
-     anything they went back to Obsidian for.
+  4. The user uses Frostnotes instead of Obsidian on their desktop
+     (framework) for 7 days, synced through M2's hub with the minideb VM
+     still a syncing device, finds no edit missing, and names anything
+     they went back to Obsidian for. The user has one Linux desktop
+     (2026-10-18), so the same notes on a second machine wait for M4's
+     web app ([roadmap](0002-roadmap.md)).
 - `make m3-evidence` records evidence 1 to 3; evidence 4 is the user's.
 
 - **Result (2026-10-18): the review.** An agent that had not written the
@@ -880,14 +887,16 @@ against the built app.
 
   1. Decide the open question of the two trials (below): M3's 7 days
      alongside M2's, or after.
-  2. On each of the two machines, whose notesd is joined to the hub (M2's
-     trial): from this repository, `make app-build`, then
+  2. On framework, whose notesd is joined to the hub (M2's trial): from
+     this repository, `make app-build`, then
      `install -m 0755 build/frostnotes-app ~/.local/bin/frostnotes`, and
-     start `frostnotes`; it connects to the running notesd.
-  3. For 7 days, write in Frostnotes on both machines instead of
-     Obsidian.
-  4. Each day, on both: `notesctl sync verify`; note the result, any edit
-     found missing, and anything you went back to Obsidian for.
+     start `frostnotes`; it connects to the running notesd. The minideb
+     VM stays joined as M2's trial set it up, a second device syncing
+     the same vault.
+  3. For 7 days, write in Frostnotes on framework instead of Obsidian.
+  4. Each day, on framework: `notesctl sync verify`; note the result,
+     any edit found missing, and anything you went back to Obsidian
+     for.
   5. Once, check by hand what no test reaches: copy from a code block with
      its button and paste elsewhere; open a web link (the browser opens)
      and Open in default app on a PDF and an image; play and seek a video
@@ -981,7 +990,9 @@ as a dialog. Choosing a vault there switches the window in place
     the user's steps for evidence 4.
   - Evidence 4 starts once this phase is merged.
 
-- **Result (2026-10-18).** The contract came first: `vault.add`'s
+- **Result (2026-10-18, merged in
+  [#41](https://github.com/frostyard/frostnotes/pull/41)).** The
+  contract came first: `vault.add`'s
   `create` in notesd (the folder is made only once the vault may be
   registered; a refused one is never made), `notesctl vault add
   --create`, and the mock, each with tests. The shell gained
@@ -1035,9 +1046,9 @@ as a dialog. Choosing a vault there switches the window in place
   no provider waits for typing to pause. Scrolling is what misses its
   target, by a frame now and then (Phase 7, evidence 1); that is the
   follow-up's.
-- **The two trials:** M3's needs M2's hub on the user's two machines.
-  Run M2's 7 days first and M3's after, or overlap them once Phase 6
-  ends? The user decides by Phase 7.
+- **The two trials:** M3's runs on framework through M2's hub, with the
+  minideb VM syncing beside it. Run M2's 7 days first and M3's after,
+  or overlap them? The user decides.
 
 ## References
 
