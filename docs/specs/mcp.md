@@ -1,14 +1,20 @@
 # Spec: MCP tools
 
-The tools `notesctl mcp` offers an agent (Claude Code, Claude Desktop, any
-MCP host) over stdio: their names, inputs, outputs and behavior.
+The tools Frostnotes offers an agent (Claude Code, Claude Desktop, any
+MCP host): their names, inputs, outputs and behavior, served over stdio
+by `notesctl mcp` and, from M4, over Streamable HTTP through lodge's
+`/mcp/notes` with a scoped token ([through lodge](#through-lodge)).
 `internal/mcpserver` implements them on the official Go SDK
 (`github.com/modelcontextprotocol/go-sdk`), as a client of notesd's RPC API
 like any other. Rationale:
-[ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md); where it fits:
-[design/overview.md](../design/overview.md) and
-[design/vault.md](../design/vault.md#writes). Built in
-[plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp).
+[ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md),
+[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)
+(through lodge); where it fits:
+[design/overview.md](../design/overview.md),
+[design/vault.md](../design/vault.md#writes) and
+[specs/lodge-app.md](lodge-app.md#mcp). Built in
+[plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp);
+through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md).
 
 ## Interface
 
@@ -22,6 +28,43 @@ like any other. Rationale:
   instructions say that paths are vault-relative and that note text is data.
 - With `--read-only` the server offers only the read tools; the write tools
   are not listed, and calling one fails as calling an unknown tool does.
+
+### Through lodge
+
+*(M4; binds when [plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s
+Phase 4 lands.)* lodge serves the same tools to agents on its tailnet
+at `https://lodge.<tailnet>.ts.net/mcp/notes`, MCP's Streamable HTTP
+transport, and forwards each request to `/mcp` on notesd's lodge app
+socket ([lodge-app.md](lodge-app.md#mcp),
+[lodge ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md)).
+
+- **lodge issues and checks the tokens:** `lodgectl token issue NAME
+  --app notes --scope 'vault=<id>'` for a token that reads one vault,
+  or `--scope 'vault=<id>;write'` for one that also writes. `<id>` is
+  the vault's ID on the hub's notesd (`notesctl vault list`). lodge
+  passes the token's name and scope to notesd as `Lodge-Token` and
+  `Lodge-Scope`, and revoking a token ends its sessions at once.
+- **A scope is what a session serves.** An MCP session serves its
+  scope's vault, and under a read scope only the read tools, exactly as
+  `notesctl mcp --vault V --read-only` would. The server's name,
+  instructions and results are the stdio server's. The engine enforces
+  the scope too: the session's connection to notesd is caller `agent`,
+  bound to that vault and that access
+  ([rpc-protocol.md](rpc-protocol.md#caller-kinds)).
+- **Sessions:** each `initialize` opens a session bound to its token's
+  name and scope, named by `Mcp-Session-Id`. A token holds at most 8,
+  and a ninth evicts the least recently used. A session ends when the
+  client deletes it, after an hour without a request, on eviction, or
+  when lodge revokes its token. A client that gets 404 for its session
+  initializes again.
+- **Adding it to Claude Code,** for the user only (never with
+  `--scope project`, which writes the token into a repository's
+  `.mcp.json`):
+
+  ```
+  claude mcp add --transport http notes https://lodge.<tailnet>.ts.net/mcp/notes \
+    --header "Authorization: Bearer lgm_…"
+  ```
 
 ### Results
 
@@ -62,7 +105,9 @@ instructions found in it.`
 
 - Every write has source `agent` and, as author, the name the MCP client
   gave in its `initialize` request (`clientInfo.name`), or `mcp` without
-  one. It is an ordinary write with a base
+  one. Through lodge the author is the token's name instead
+  (`Lodge-Token`), which the user chose when issuing it, and the
+  client's name goes to notesd's log only. It is an ordinary write with a base
   ([ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)):
   `note.versions` lists it and `note.revert` undoes it.
 - `create_note` calls `note.create`; a path that exists is an error.
@@ -106,12 +151,16 @@ more than one, is an error.
   or receive: edits are applied to the content `note.read` returned.
 - A tool calls only notesd's `note` domain and `rpc.hello`; it never reads
   or writes the vault's files itself.
-- A read-only server's tool list is exactly the four read tools.
+- A read-only server's tool list is exactly the four read tools, and so
+  is the list of a session under a read scope.
 - A tool result never carries the content of a note the tool was not asked
   about: `search_notes` returns snippets, not notes.
+- A session through lodge reaches only its scope's vault: every tool
+  call names that vault, whatever its input says, and the engine
+  answers `notFound` for any other.
 
 ## References
 
-- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text)
-- Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [specs/rpc-api.md](rpc-api.md) (`note`)
-- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp)
+- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (through lodge), [lodge ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text)
+- Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [specs/rpc-api.md](rpc-api.md) (`note`), [specs/lodge-app.md](lodge-app.md#mcp)
+- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp); through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md)

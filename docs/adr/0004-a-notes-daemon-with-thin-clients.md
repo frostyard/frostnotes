@@ -66,3 +66,4 @@ generated JSON-RPC contract, and a React UI behind a swappable transport
 - Shapes: [design/overview.md](../design/overview.md), [design/app.md](../design/app.md) (the app as a thin client)
 - Builds on: frostmail ADR-0002 and ADR-0009
 - Related: [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0008](0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md)
+- Followed by: [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (M4: the hub's authentication and TLS are lodge's, and notesd runs behind it)

@@ -44,13 +44,16 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0023 — The app shows files by their hash and uploads them through notesd](adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
 - [0024 — The app opens and creates vaults, and a window switches between them](adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)
 - [0025 — Patch what costs the editor its frames](adr/0025-patch-what-costs-the-editor-its-frames.md)
+- [0026 — notesd runs as a lodge app](adr/0026-notesd-runs-as-a-lodge-app.md)
+- [0027 — A narrow window takes Obsidian's phone layout](adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)
 
 ### Design
 
 - [Overview](design/overview.md) — notesd, its two roles, the clients, the planned layout
 - [Vault](design/vault.md) — scan, watch, parse, index, link resolution, writes, versions
 - [Sync](design/sync.md) — the hub's revision log, pairing, push and pull, blobs, merges, conflicts, retention, the simulation
-- [App](design/app.md) — the desktop and web UI: data, workspace, editor, saves and merges, live preview, reading view, keys
+- [App](design/app.md) — the desktop and web UI: data, workspace, editor, saves and merges, live preview, reading view, keys, the browser
+- [Hub behind lodge](design/hub.md) — the hub as lodge's notes app: device routes, moving devices behind lodge, running as `frostnotes`
 - [Agent workflow](design/agent-workflow.md) — planner, executor and taskrun; a card's life; sizing
 
 
@@ -59,11 +62,12 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [RPC protocol](specs/rpc-protocol.md) — transports, caller kinds, messages, connection setup, events
 - [RPC API](specs/rpc-api.md) — every method, type and event (generated from `schema/rpc`)
 - [Markdown](specs/markdown.md) — the Obsidian dialect, link resolution and the parse fixtures
-- [MCP tools](specs/mcp.md) — what `notesctl mcp` offers an agent: tools, inputs, outputs, edits
+- [MCP tools](specs/mcp.md) — what `notesctl mcp` and lodge's `/mcp/notes` offer an agent: tools, inputs, outputs, edits, scopes
 - [Sync protocol](specs/sync-protocol.md) — the hub's endpoints, pairing, pushes and pulls, applying, joining, limits
 - [Three-way merge](specs/merge.md) — how `internal/merge` merges text and notes, with its golden fixtures
 - [Rendering](specs/render.md) — the HTML notesd renders notes into, the sanitizer's allowlist, and its fixtures
-- [UI](specs/ui.md) — the main window: tokens, type, Obsidian's layout in frostmail's look, panes, prompts, the keyboard map
+- [UI](specs/ui.md) — the main window: tokens, type, Obsidian's layout in frostmail's look, panes, prompts, the browser, narrow windows, the keyboard map
+- [notesd as a lodge app](specs/lodge-app.md) — what notesd installs for lodge and serves on its app socket: callers from `Lodge-*` headers, `/api`, blobs, `/mcp` scopes, `/device/` and relocation
 
 
 ### Plans
@@ -73,6 +77,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0003 — M1 headless vault](plans/0003-m1-headless-vault.md)
 - [0004 — M2 sync](plans/0004-m2-sync.md)
 - [0005 — M3 desktop app](plans/0005-m3-desktop-app.md)
+- [0006 — M4 notes inside lodge](plans/0006-m4-notes-inside-lodge.md)
 
 ## Conventions
 

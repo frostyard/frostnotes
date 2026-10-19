@@ -22,9 +22,19 @@ it fits: [design/overview.md](../design/overview.md).
     `Origin` from the Vite dev server; caller `local`, standing in for the
     app's bridge;
   - the hub's `/sync` (M2): caller `device`, authenticated by a device
-    token ([sync-protocol.md](sync-protocol.md));
-  - the hub's browser endpoints (M4): caller `session`, specified with the
-    hub's authentication.
+    token ([sync-protocol.md](sync-protocol.md)); from M4 on the lodge
+    app socket at `/device/sync`, still with the device token;
+  - `/api` on the lodge app socket (M4): caller `session`, a browser
+    that lodge signed in, named by the `Lodge-*` headers lodge sets
+    ([lodge-app.md](lodge-app.md#api),
+    [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)).
+- **The lodge app socket** (M4) is HTTP/1.1 on a Unix socket that only
+  lodge's user may open; its requests' caller kinds come from
+  `Lodge-Caller` ([lodge-app.md](lodge-app.md#requests-on-the-app-socket)).
+- **In-process connections.** `/mcp` on the lodge app socket (M4) gives
+  each MCP session a connection inside notesd, a `net.Pipe` whose server
+  end `rpcserver.ServeConn` serves as caller `agent`, carrying the
+  token's scope ([lodge-app.md](lodge-app.md#mcp)).
 - Each message is one line: a JSON object followed by `\n`, at most 16 MiB
   (`api.MaxMessageSize`). JSON escapes newlines in strings, so a message is
   never split. notesd answers a request whose reply would be longer with
@@ -33,9 +43,11 @@ it fits: [design/overview.md](../design/overview.md).
 - **Files' bytes travel beside the RPC,** by content hash
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)):
   the desktop app reads `notesblob://localhost/<sha256>.<ext>` from
-  notesd's blob store itself (`app/src-tauri/src/protocol.rs`), and the
+  notesd's blob store itself (`app/src-tauri/src/protocol.rs`), the
   development gateway serves `GET /blobs/<sha256>.<ext>?token=…` on its
-  listener (M3). Either answers only those paths (64 lowercase hex digits
+  listener (M3), and notesd serves `GET /content/blobs/<sha256>.<ext>`
+  on the lodge app socket to lodge-content, whose sign-in admits the
+  browser ([lodge-app.md](lodge-app.md#contentblobs), M4). Each answers only those paths (64 lowercase hex digits
   and an extension of 1 to 8 lowercase letters or digits), with the
   content type the extension names ([design/app.md](../design/app.md#attachments)),
   `X-Content-Type-Options: nosniff`, a `Content-Security-Policy` of
@@ -44,12 +56,53 @@ it fits: [design/overview.md](../design/overview.md).
 
 ## Caller kinds
 
-Every domain in `schema/rpc` lists the caller kinds it admits (`local`,
-`session`, `device`; [rpc-api.md](rpc-api.md) shows each domain's list).
-A request for a method whose domain does not admit the connection's caller
+A connection's caller kind is fixed when it is accepted:
+
+| Kind | Who | How it is authenticated |
+| --- | --- | --- |
+| `local` | the desktop app, `notesctl`, `notesctl mcp`, the development gateway | the private socket's peer UID; the gateway's token |
+| `session` | a browser running the web app inside lodge (M4) | lodge's sign-in, passed as `Lodge-Caller: session` on the app socket, which only lodge's user may open ([lodge-app.md](lodge-app.md#requests-on-the-app-socket)) |
+| `device` | another notesd syncing with the hub (M2) | a device token ([sync-protocol.md](sync-protocol.md)) |
+| `agent` | an MCP session behind lodge's `/mcp/notes` (M4), in process | lodge's token, passed as `Lodge-Token` and `Lodge-Scope` ([mcp.md](mcp.md#through-lodge)) |
+
+Every domain in `schema/rpc` lists the caller kinds it admits
+([rpc-api.md](rpc-api.md) shows each domain's list), and a method may
+list its own `callers`, which narrow its domain's: each must be one of
+the domain's (M4,
+[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)). A method that
+changes notes is marked `writes`, which an agent's read scope refuses.
+A request for a method that does not admit the connection's caller
 returns `methodNotFound` (-32601), exactly as for a method that does not
 exist, so a caller cannot probe for methods it may not call. A request
 dispatched with no caller kind is refused the same way.
+
+From M4:
+
+- `note` admits `local`, `session` and `agent`; `vault` admits `local`
+  and `session`, with `vault.add` and `vault.remove` narrowed to
+  `local`. `hub` admits `local` and `session`, with `hub.serve`,
+  `hub.approve` and `hub.setURL` narrowed to `local`
+  ([lodge-app.md](lodge-app.md#methods-and-callers)). `rpc` admits
+  every kind, and `events` every kind but `agent`. `sync` stays
+  `local`, and `log` `device`.
+- **An agent's scope binds its connection.** An `agent` connection
+  carries its token's scope (`vault=<id>`, with `;write` to write): a
+  call that names another vault answers `notFound`, as for a vault that
+  does not exist, and a method marked `writes` answers `methodNotFound`
+  under a read scope.
+- **A connection names its writes.** For `session` and `agent`
+  connections, every version a call records carries the connection's
+  source and author. A session's source is `editor` and its author
+  `<Lodge-Node-Name> (web)`. An agent's source is `agent` and its author
+  its token's name (`Lodge-Token`). The `source` and `author` parameters
+  of `note` methods are ignored on these connections. `local`
+  connections keep the parameters and their defaults.
+- **`rpc.hello` says who is connected:** its result gains the
+  connection's caller kind and, for a session, the signed-in login, its
+  display name and the node's name, from lodge's headers. The web app
+  shows them, and hides what its caller may not use.
+- **`rpc.ping`** answers `null` to every caller after hello: the web
+  app's heartbeat, which finds a connection a sleeping phone dropped.
 
 ## Messages
 
@@ -111,10 +164,14 @@ Clients ignore unknown fields and unknown events.
   undelivered events pile up).
 - TypeScript: `JsonRpcSession` over a line channel; the Tauri transport uses
   the bridge's `notesd_connect` and `notesd_send`, and the WebSocket
-  transport sends one line per frame (M0 Phase 4).
+  transport sends one line per frame (M0 Phase 4). In the web app,
+  inside lodge, it connects to `wss://<the page's host>/app/notes/api`,
+  with no token, and its blob URLs are lodge-client's `contentURL` (M4,
+  [design/app.md](../design/app.md#in-a-browser)).
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens)
-- Design: [design/overview.md](../design/overview.md)
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (the lodge app socket, the session and agent callers, method-level callers)
+- Design: [design/overview.md](../design/overview.md), [design/hub.md](../design/hub.md)
+- Related: [lodge-app.md](lodge-app.md) (what notesd serves to lodge); lodge's [app contract](https://github.com/frostyard/lodge/blob/main/docs/specs/app-contract.md)
 - Generated reference: [rpc-api.md](rpc-api.md)

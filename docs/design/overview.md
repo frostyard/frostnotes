@@ -2,8 +2,11 @@
 
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
 [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
-[ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md).
-Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md).
+[ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
+[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)
+(notesd as a lodge app).
+Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md),
+[specs/lodge-app.md](../specs/lodge-app.md).
 
 **Status: M0 built** ([plan 0001](../plans/0001-m0-foundations.md)): notesd
 with the store, the socket and caller kinds; `notesctl hello` and `vault`;
@@ -31,17 +34,23 @@ a thin client.
                                                            ├─ render (goldmark, sanitizer)
                                                            └─ sync client ──┐ WebSocket, device token
                                                                             ▼
- notesd, hub role ── HTTPS ─┬─ /sync  devices: push, pull, blobs ─ revision log ─ merge
-                            ├─ /api   browsers: JSON-RPC over WebSocket, session
-                            ├─ /mcp   agents: Streamable HTTP, scoped token
-                            └─ /      the web app (the same React UI, WebSocketTransport)
+ browser, phone (web app in lodge's frame)    agents (/mcp/notes)    devices (/device/notes/)
+        └──────────── https://lodge.<tailnet>.ts.net: sign-in, tokens, the web build ──────┘
+                                             │ HTTP/1.1 on /run/lodge/apps/notes.sock, Lodge-* headers
+ notesd --lodge, hub role (user frostnotes) ─┬─ /api            browsers: JSON-RPC, caller session
+                                             ├─ /mcp            agents: Streamable HTTP, caller agent (in process, scoped)
+                                             ├─ /content/blobs  files by hash, through lodge-content
+                                             ├─ /device/sync…   devices: push, pull, blobs ─ revision log ─ merge
+                                             └─ /health
 ```
 
 ## Design
 
 - **notesd** (`cmd/notesd`) is one pure-Go binary. In the device role it
-  serves the socket and syncs each vault with its hub. In the hub role it
-  also serves HTTPS. A hub has vault directories on disk like any device.
+  serves the socket and syncs each vault with its hub. In the hub role,
+  from M4, it is lodge's notes app: it serves lodge's app socket and no
+  network address ([below](#notesd-as-a-lodge-app), [hub.md](hub.md)).
+  A hub has vault directories on disk like any device.
 - **The vault engine** scans and watches each vault, parses notes, keeps
   the index and the local versions, and performs every write as a
   compare-and-merge ([vault.md](vault.md),
@@ -60,11 +69,46 @@ a thin client.
   it saves as the user types and takes merges as remote changes, and shows
   files by their hash ([app.md](app.md), [specs/ui.md](../specs/ui.md)).
 - **MCP** tools are hand-written adapters over the engine, served over stdio
-  by `notesctl mcp` and over HTTP by the hub
-  ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)).
+  by `notesctl mcp` and over HTTP through lodge's `/mcp/notes` with a
+  scoped token
+  ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md),
+  [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)).
   `internal/mcpserver` is a client of notesd's API like the app: its read
   tools mark note text as data, and its writes name their base and are
   attributed to the MCP client ([specs/mcp.md](../specs/mcp.md)).
+
+### notesd as a lodge app
+
+From M4, on lodge's machine, notesd is lodge's `notes` app
+([ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md),
+[lodge ADR-0003](https://github.com/frostyard/lodge/blob/main/docs/adr/0003-lodge-is-the-only-process-on-the-network.md)).
+
+- **One process is on the network: lodge.** It is a tailnet node with
+  TLS. It:
+  - signs browsers in by their tailnet identity;
+  - issues agents' tokens;
+  - serves notes' web build from `/usr/share/lodge/apps/notes/web/` at
+    `/app/notes/`;
+  - serves untrusted bytes from its second node, `lodge-content`.
+
+  notesd runs as the system user `frostnotes` and serves HTTP/1.1 on
+  `/run/lodge/apps/notes.sock`, which only lodge's user may open
+  ([specs/lodge-app.md](../specs/lodge-app.md)).
+- **Callers come from lodge's headers.** lodge sets `Lodge-Caller` and
+  the caller's identity, and notesd trusts them because nothing but
+  lodge can connect:
+  - `/api` is a session;
+  - `/mcp` is an agent, over an in-process connection bound to its
+    token's scope;
+  - `/content/blobs/` is lodge-content;
+  - `/device/` is a device, which still shows its device token.
+- **Rights stay in notesd.** notesd decides which methods each caller
+  kind may call, method by method, what an agent's scope allows, which
+  the engine enforces, and who wrote what. lodge never parses notesd's
+  JSON-RPC.
+- **The private socket stays `local`:** `notesctl`, run as `frostnotes`
+  on the hub, and the desktop app's bridge on a device. The desktop app
+  is not a lodge client; it works against its own notesd.
 
 ### Application icon
 
@@ -95,7 +139,8 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/merge` | diff3 by line and word, frontmatter by key (planner-owned) |
 | `internal/blobs` | the content-addressed blob store |
 | `internal/render` | goldmark rendering and the HTML sanitizer |
-| `internal/syncer`, `internal/hub` | the device's sync loops; the hub's endpoints, pairing and log domain |
+| `internal/syncer`, `internal/hub` | the device's sync loops; the hub's device routes, pairing, the token check, relocation, and its `log` and `hub` domains |
+| `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub`; the only package importing `lodge/kit` |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
 | `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
@@ -126,11 +171,13 @@ Planned configuration:
 | `FROSTNOTES_SECRETS=file` | unset | notesd: keep device tokens in a private file, not the Secret Service (development) |
 
 The socket directory is 0700 and the socket 0600, owned by the user. The
-database must be on a local file system; vaults may be anywhere.
+database must be on a local file system; vaults may be anywhere. A hub
+behind lodge (`notesd --lodge`, run as `frostnotes`; `--hub` on loopback
+for tests) is in [hub.md](hub.md#operational-notes).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
-- Details: [vault.md](vault.md), [sync.md](sync.md), [app.md](app.md)
-- Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
-- Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md); notesd as a lodge app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) and lodge's [ADR-0003](https://github.com/frostyard/lodge/blob/main/docs/adr/0003-lodge-is-the-only-process-on-the-network.md)
+- Details: [vault.md](vault.md), [sync.md](sync.md), [app.md](app.md), [hub.md](hub.md)
+- Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/lodge-app.md](../specs/lodge-app.md)
+- Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md); notesd inside lodge in [M4](../plans/0006-m4-notes-inside-lodge.md)

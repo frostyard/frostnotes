@@ -175,17 +175,23 @@ tests, with a seeded property test):
 
 `notesctl hub join <url> <vault>` asks the hub to pair (`/sync/pair`) and
 shows a one-time code of 8 characters. The user approves it on the hub's
-machine, over its local socket (`notesctl hub approve <code>`; later also
-the web app's devices page), and the device collects its token: 32 random
+machine, over its local socket (`notesctl hub approve <code>`; the web
+app's Hub settings list pending pairings and revoke devices, but never
+approve), and the device collects its token: 32 random
 bytes, of which the hub keeps only the SHA-256. The device keeps the token
 in the Secret Service. Every sync request carries it: the `/sync`
 WebSocket, which serves JSON-RPC as caller `device`, and each blob
 request. `notesctl hub revoke <device>` closes the device's connections
 and ends its sync. Devices refuse a hub URL that is not `https://`, except
-on loopback; TLS comes from a reverse proxy or `tailscale serve`
+on loopback
 ([ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md)).
-Browser sign-in and remote MCP tokens are decided in the hub's
-authentication ADR (before M4).
+During M2 TLS came from `tailscale serve` on another machine. From M4
+the hub is lodge's notes app: devices reach it at lodge's
+`/device/notes/` with the same tokens, and move there on their own once
+the hub records that URL (`notesctl hub url`), or with
+`notesctl hub relocate`. Browsers and agents reach notesd through lodge
+([hub.md](hub.md),
+[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)).
 
 A device that joins with files already in its folder matches them by
 history: a file whose hash is a revision of the hub's file at the same
@@ -273,6 +279,6 @@ revocations and rejoins from an older copy (`profile.go`)
 ## References
 
 - Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
-- Related: [overview.md](overview.md), [vault.md](vault.md), [app.md](app.md#history-and-merges) (conflicts in the merge view)
+- Related: [overview.md](overview.md), [vault.md](vault.md), [app.md](app.md#history-and-merges) (conflicts in the merge view), [hub.md](hub.md) (the hub behind lodge, moving devices)
 - Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Built in: [plan 0004](../plans/0004-m2-sync.md) ([roadmap — M2](../plans/0002-roadmap.md))

@@ -10,7 +10,10 @@ editor and the reading view),
 [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)
 (saves and merges),
 [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
-(attachments).
+(attachments),
+[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) and
+[ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)
+(the web app inside lodge).
 Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
 [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 (the syntax both parsers read).
@@ -22,8 +25,10 @@ dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
 commands, editor core, reading view, merge view and history below
 (Phase 5), and Phase 6's menus, notices, prompts, status bar and
 sidebar panes.
-Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
-rewritten as each phase lands.
+M3's design is built through its Phase 8 ([plan 0005](../plans/0005-m3-desktop-app.md)).
+[In a browser](#in-a-browser) is M4's design
+([plan 0006](../plans/0006-m4-notes-inside-lodge.md)), rewritten as each phase
+lands.
 
 ## Overview
 
@@ -31,7 +36,8 @@ The app is a Tauri v2 window running a React UI, a thin client of notesd
 like `notesctl` and MCP. It holds no notes of its own: it lists a vault's
 files from notesd, edits a note's exact text in CodeMirror, saves it with
 its base, and shows what notesd renders. The same UI runs in a browser
-against the dev gateway now and the hub in M4.
+against the dev gateway, and in M4 as the web app the hub serves
+([In a browser](#in-a-browser)).
 
 ```
  features/ (presentational) ◄── app/ (containers, layout) ◄── workspace/ (tabs, splits, sidebars)
@@ -42,7 +48,7 @@ against the dev gateway now and the hub in M4.
                                      ▼
                        data/ (Session, stores) ◄── Client (rpc/gen/api.ts)
                                                      │ Transport: tauri (bridge.rs ⇄ notesd.sock)
-                                                     │            ws (devgw; the hub in M4), mock
+                                                     │            ws (devgw; lodge's /app/notes/api in M4), mock
  <img src="notesblob://localhost/<sha256>.png"> ◄── protocol.rs ◄── notesd's blobs/
 ```
 
@@ -50,7 +56,7 @@ against the dev gateway now and the hub in M4.
 
 | Path | What | Owner |
 | --- | --- | --- |
-| `main.tsx` | picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, else Tauri), renders `App` | planner |
+| `main.tsx` | picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, lodge's `/app/notes/api` in a `web` build, else Tauri), renders `App` | planner |
 | `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/tauri.ts`, `transport/ws.ts`, `gen/api.ts` (generated) | planner |
 | `rpc/mock/` | `MockTransport`: an in-memory notesd with notesd's semantics and a vault of made-up notes | planner |
 | `data/` | `Session`, the stores (vaults, files, sync, settings), the document registry | planner |
@@ -545,6 +551,119 @@ serves `/blobs/` from Vite there if it must.
 - View's Zoom in, Zoom out and Reset zoom step through a browser's zoom
   levels with the webview's own zoom, kept as a preference.
 
+## In a browser
+
+M4 runs the app inside lodge, in a frame of lodge's shell, in Firefox on
+another machine and on the user's phone
+([ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md),
+[lodge ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md),
+[specs/ui.md](../specs/ui.md#in-a-browser)). It is the same code as the
+desktop's, with a different transport and frame:
+
+- **The build.** `make web-build` runs `vite build --mode web` in nsl
+  into `build/web/`, with Vite's `base` set to `/app/notes/`.
+  - lodge serves it from `/usr/share/lodge/apps/notes/web/`
+    ([lodge ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md)),
+    with notes' manifest, `packaging/lodge/app.json`, beside it.
+  - In that mode `main.tsx` connects through lodge, and the mock, the
+    spikes and the shell's commands stay out of the bundle.
+  - The build carries `icon.svg`, from the icon's master, for lodge's
+    rail.
+  - `index.html`'s viewport has `viewport-fit=cover`, so the safe-area
+    insets the narrow layout uses are not zero on iOS.
+  - There is no web manifest of notes' own: lodge installs once, for
+    every app
+    ([lodge ADR-0008](https://github.com/frostyard/lodge/blob/main/docs/adr/0008-lodge-installs-as-one-home-screen-app.md)).
+- **The shell, through `@frostyard/lodge-client`**
+  ([lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)):
+  - **Startup.** `main.tsx` first calls lodge-client's
+    `connectLodge({app: "notes"})`.
+    - lodge-client posts `ready {contract: 1}`.
+    - The shell answers with `init {contract, contentOrigin, shortcut,
+      theme}`, then `visible`.
+    - `connectLodge()` resolves on `init`.
+
+    Only then does the app open its WebSocket, with `connectApi()`.
+  - **Routes.** A note's canonical URL is `/notes/<vault id>/<path>`,
+    each segment percent-encoded, and its frame's URL
+    `/app/notes/<vault id>/<path>`.
+    - The app sends `route {path, title}` when the active tab changes.
+    - It opens a note on `navigate {route}`, and opens its own route on
+      load.
+    - A route whose note is gone opens the quick switcher with its
+      name.
+  - **Context.** `context {kind: "note", ref: "notes/<vault id>/<path>",
+    title}` follows the active note, for lodge's companion.
+  - **Links.** A link to a lodge URL (the shell's origin) goes to
+    `open {url}`; other web links open in a new tab.
+  - **The switcher's key.** The window's key listener never binds the
+    key `init` names. When it is pressed inside the frame, the listener
+    sends `shortcut {key}`.
+  - **Visibility and theme.** On `visible {false}` the heartbeat stops,
+    and on `visible {true}` the connection is checked at once. `theme`
+    sets the light or dark scheme while the Theme preference is System.
+- **The connection** is notes' own `connectApi()` in
+  `rpc/transport/ws.ts`, beside the dev gateway's `connectWS()`. It
+  opens a WebSocket to `wss://<the page's host>/app/notes/api`, with no
+  token, once lodge-client's `connectLodge()` has resolved.
+  lodge signed the browser in before the shell loaded, and passes who it
+  is to notesd ([specs/lodge-app.md](../specs/lodge-app.md#api)).
+  A phone drops connections when it sleeps or changes networks, so:
+  - `Session` reconnects after 1 s, doubling to 30 s with jitter, and at
+    once when the frame becomes visible or the browser comes back
+    online;
+  - while visible it calls `rpc.ping` every 30 s, and drops a connection
+    that has not answered in 10 s. lodge closes a session after 90 s
+    without a frame;
+  - each reconnect resumes events from the last sequence number and
+    saves or re-reads open documents, as on the desktop.
+
+  Sign-in failures are the shell's to show. The app only says that
+  notes is out of reach, and keeps trying.
+- **Who is signed in** comes from `rpc.hello`: the caller kind, the
+  login, the display name and the node. With caller `session` the app
+  hides what a session may not call: opening, creating and removing
+  vaults, sync's status and conflicts, approving pairings, and the
+  shell's commands.
+- **Files by hash** load from lodge-content: the transport's `blobURL`
+  is `contentURL("blobs/<hash>.<ext>")`. Open in new tab opens a PDF at
+  its content URL; where a browser will not show a file in a sandboxed
+  page, the app offers the `?download=1` URL instead.
+- **Offline**, the status bar says notes is out of reach. Editors keep
+  their text and save it with its base on reconnect (the registry's
+  retries), and leaving the page with unsaved text asks first where the
+  browser allows. Nothing is stored in the browser but ADR-0021's
+  workspace and preferences.
+- **Narrow windows**
+  ([ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md),
+  [specs/ui.md](../specs/ui.md#narrow-windows)):
+  - `app/` chooses the layout from `matchMedia("(max-width: 599px)")`,
+    the frame's width.
+  - The workspace model gains a narrow view, the active group's active
+    tab, which leaves the stored tree as it is.
+  - The view header, drawers, bottom bar, tab switcher, editing toolbar
+    and bottom sheets are presentational components in
+    `features/mobile/`, connected in `app/`.
+  - Touch sizes come from a `(pointer: coarse)` media query over the
+    tokens.
+  - The editing toolbar follows the visual viewport to sit on the
+    on-screen keyboard.
+- **Hub settings** (`app/Settings.tsx`'s Hub section, over
+  `features/hub/`) list the hub's devices and pending pairings, with
+  Revoke where the caller may ([hub.md](hub.md#hub-settings-in-the-app)).
+  lodge manages sign-in, tokens and sessions.
+- **Tests:**
+  - Vitest drives the lodge transport's reconnect and heartbeat with a
+    fake WebSocket and timers.
+  - It drives lodge-client's messages with a fake shell that posts
+    them.
+  - It runs the narrow components in happy-dom with `matchMedia`
+    stubbed.
+  - `make m4-evidence` drives the web build in Firefox (geckodriver in
+    nsl) inside lodge's development build on loopback, at a desktop size
+    and at 390 × 844
+    ([plan 0006](../plans/0006-m4-notes-inside-lodge.md#phase-7--the-users-hub-in-lodge-and-exit-evidence)).
+
 ## Dev and test
 
 - `VITE_MOCK=1` runs the UI against `MockTransport` and its made-up
@@ -581,7 +700,7 @@ serves `/blobs/` from Vite there if it must.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); frostmail's `docs/design/app.md`, which this copies
-- Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts)
-- Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
-- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
+- Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
+- Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
+- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md) ([roadmap](../plans/0002-roadmap.md))
