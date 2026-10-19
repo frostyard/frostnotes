@@ -258,10 +258,13 @@ Implements [design/app.md](../design/app.md#in-a-browser),
 Needs lodge's phase 1 (lodge-client) and phase 2's development build.
 
 - **The planner's part:**
-  - `make web-build` with the base `/app/notes/`, `main.tsx`'s choice
-    and `connectLodge()`;
-  - lodge-client's messages: `init`, `ready`, `route`, `context`,
-    `open`, `shortcut`, `navigate`, `visible`, `theme`;
+  - `make web-build` with the base `/app/notes/`, and `main.tsx`'s
+    choice;
+  - startup: lodge-client's `connectLodge({app: "notes"})` handshake
+    (`ready`, then the shell's `init` and `visible`), then notes' own
+    `connectApi()` WebSocket transport in `rpc/transport/ws.ts`;
+  - lodge-client's other messages: `route`, `context`, `open`,
+    `shortcut`, `navigate`, `visible`, `theme`;
   - canonical routes, `contentURL` blobs, and PDFs in a new tab, with
     the download URL as the fallback;
   - the app hiding what a session may not call;

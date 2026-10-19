@@ -576,9 +576,14 @@ desktop's, with a different transport and frame:
     ([lodge ADR-0008](https://github.com/frostyard/lodge/blob/main/docs/adr/0008-lodge-installs-as-one-home-screen-app.md)).
 - **The shell, through `@frostyard/lodge-client`**
   ([lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)):
-  - **Startup.** On load the bundle gets `init {contract,
-    contentOrigin, shortcut, theme}` from the shell and answers
-    `ready`.
+  - **Startup.** `main.tsx` first calls lodge-client's
+    `connectLodge({app: "notes"})`.
+    - lodge-client posts `ready {contract: 1}`.
+    - The shell answers with `init {contract, contentOrigin, shortcut,
+      theme}`, then `visible`.
+    - `connectLodge()` resolves on `init`.
+
+    Only then does the app open its WebSocket, with `connectApi()`.
   - **Routes.** A note's canonical URL is `/notes/<vault id>/<path>`,
     each segment percent-encoded, and its frame's URL
     `/app/notes/<vault id>/<path>`.
@@ -597,8 +602,10 @@ desktop's, with a different transport and frame:
   - **Visibility and theme.** On `visible {false}` the heartbeat stops,
     and on `visible {true}` the connection is checked at once. `theme`
     sets the light or dark scheme while the Theme preference is System.
-- **The connection** is `connectLodge()` in `rpc/transport/ws.ts`, a
-  WebSocket to `wss://<the page's host>/app/notes/api` with no token.
+- **The connection** is notes' own `connectApi()` in
+  `rpc/transport/ws.ts`, beside the dev gateway's `connectWS()`. It
+  opens a WebSocket to `wss://<the page's host>/app/notes/api`, with no
+  token, once lodge-client's `connectLodge()` has resolved.
   lodge signed the browser in before the shell loaded, and passes who it
   is to notesd ([specs/lodge-app.md](../specs/lodge-app.md#api)).
   A phone drops connections when it sleeps or changes networks, so:
