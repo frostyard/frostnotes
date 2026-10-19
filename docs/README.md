@@ -79,7 +79,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0004 — M2 sync](plans/0004-m2-sync.md)
 - [0005 — M3 desktop app](plans/0005-m3-desktop-app.md)
 - [0006 — M4 notes inside lodge](plans/0006-m4-notes-inside-lodge.md)
-- [0007 — Folder-limited agent scopes](plans/0007-folder-limited-agent-scopes.md)
+- [0007 — Folder scopes for agents](plans/0007-folder-scopes-for-agents.md)
 
 ## Conventions
 

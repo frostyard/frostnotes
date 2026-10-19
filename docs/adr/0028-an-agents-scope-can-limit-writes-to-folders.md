@@ -191,7 +191,7 @@ Porter's token is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
   scope), [specs/rpc-protocol.md](../specs/rpc-protocol.md#caller-kinds)
   (an agent's scope binding its connection),
   [design/vault.md](../design/vault.md#daily-notes) (the daily note an
-  append writes), [plan 0007](../plans/0007-folder-limited-agent-scopes.md)
+  append writes), [plan 0007](../plans/0007-folder-scopes-for-agents.md)
 - Builds on: [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (notes
   defines the scope, and the engine enforces it),
   [ADR-0006](0006-every-write-names-the-version-it-changes.md) (an append
@@ -199,7 +199,7 @@ Porter's token is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
 - Elsewhere: lodge's
   [ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md)
   (agents reach each app through its own MCP endpoint) and
-  [ADR-0014](https://github.com/frostyard/lodge/blob/main/docs/adr/0014-agents-on-the-host-reach-mcp-through-a-local-socket.md)
+  [ADR-0014](https://github.com/frostyard/lodge/blob/main/docs/adr/0014-agents-on-lodges-host-use-a-local-agent-socket.md)
   (the local agent socket); Porter's
   [ADR-0005](https://github.com/frostyard/porter/blob/main/docs/adr/0005-memory-and-routines-live-in-the-vault.md)
   (memory and routines in the vault)

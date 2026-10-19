@@ -29,7 +29,7 @@ of lodge's app contract is
   web app), merged on 2026-10-19.
 - **Still to come:** the rest of the narrow layout, the evidence and the
   review's record.
-- **Next:** [plan 0007](docs/plans/0007-folder-limited-agent-scopes.md)
+- **Next:** [plan 0007](docs/plans/0007-folder-scopes-for-agents.md)
   limits an agent's writes to folders and lets it append to today's
   daily note, for Porter, frostyard's assistant
   ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md),

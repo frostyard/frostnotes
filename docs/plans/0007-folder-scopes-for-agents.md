@@ -1,4 +1,4 @@
-# Plan: Folder-limited agent scopes
+# Plan: Folder scopes for agents
 
 This plan builds [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md):
 - an agent's scope can limit its writes to folders and take folders out
@@ -13,7 +13,7 @@ frostyard's assistant, needs from notes. Porter's token is
 [ADR-0005](https://github.com/frostyard/porter/blob/main/docs/adr/0005-memory-and-routines-live-in-the-vault.md)).
 
 Porter reaches `/mcp/notes` over lodge's local agent socket (lodge's
-[ADR-0014](https://github.com/frostyard/lodge/blob/main/docs/adr/0014-agents-on-the-host-reach-mcp-through-a-local-socket.md)).
+[ADR-0014](https://github.com/frostyard/lodge/blob/main/docs/adr/0014-agents-on-lodges-host-use-a-local-agent-socket.md)).
 That is lodge's work. lodge passes notes the same `Lodge-Caller: agent`,
 `Lodge-Token` and `Lodge-Scope` it passes from its tailnet listener, so
 nothing in notes changes for it.
@@ -164,7 +164,7 @@ Work is split per
   scope, `/mcp`), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)
 - Elsewhere: lodge's
   [ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md)
-  and [ADR-0014](https://github.com/frostyard/lodge/blob/main/docs/adr/0014-agents-on-the-host-reach-mcp-through-a-local-socket.md);
+  and [ADR-0014](https://github.com/frostyard/lodge/blob/main/docs/adr/0014-agents-on-lodges-host-use-a-local-agent-socket.md);
   Porter's [ADR-0005](https://github.com/frostyard/porter/blob/main/docs/adr/0005-memory-and-routines-live-in-the-vault.md)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
