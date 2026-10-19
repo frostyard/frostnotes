@@ -46,6 +46,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0025 — Patch what costs the editor its frames](adr/0025-patch-what-costs-the-editor-its-frames.md)
 - [0026 — notesd runs as a lodge app](adr/0026-notesd-runs-as-a-lodge-app.md)
 - [0027 — A narrow window takes Obsidian's phone layout](adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)
+- [0028 — An agent's scope can limit writes to folders](adr/0028-an-agents-scope-can-limit-writes-to-folders.md)
 
 ### Design
 
@@ -78,6 +79,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0004 — M2 sync](plans/0004-m2-sync.md)
 - [0005 — M3 desktop app](plans/0005-m3-desktop-app.md)
 - [0006 — M4 notes inside lodge](plans/0006-m4-notes-inside-lodge.md)
+- [0007 — Folder scopes for agents](plans/0007-folder-scopes-for-agents.md)
 
 ## Conventions
 
