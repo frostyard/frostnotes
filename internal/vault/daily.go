@@ -50,6 +50,9 @@ func (v *Vault) Daily(ctx context.Context, date time.Time, who Author) (*api.Dai
 	if err := v.checkIgnored(p); err != nil {
 		return nil, err
 	}
+	if err := checkGuard(ctx, p); err != nil {
+		return nil, err
+	}
 	n, err := v.read(ctx, r, p)
 	if err == nil {
 		return &api.DailyNote{Note: *n}, nil

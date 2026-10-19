@@ -2,9 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/frostyard/lodge/kit/jsonrpc"
 )
@@ -75,42 +72,6 @@ func CallerFrom(ctx context.Context) Caller {
 	return c
 }
 
-// Scope is what an agent's token allows (Lodge-Scope, ADR-0026): one
-// vault, read only unless Write.
-type Scope struct {
-	Vault int64
-	Write bool
-}
-
-// ParseScope parses a scope, "vault=<id>" or "vault=<id>;write", where
-// <id> is a vault's ID on this notesd. Anything else is an error.
-func ParseScope(s string) (Scope, error) {
-	rest, ok := strings.CutPrefix(s, "vault=")
-	if !ok {
-		return Scope{}, fmt.Errorf("scope %q does not start with vault=", s)
-	}
-	id, write := rest, false
-	if before, after, found := strings.Cut(rest, ";"); found {
-		if after != "write" {
-			return Scope{}, fmt.Errorf("scope %q: only ;write may follow the vault", s)
-		}
-		id, write = before, true
-	}
-	n, err := strconv.ParseInt(id, 10, 64)
-	if err != nil || n < 1 || strconv.FormatInt(n, 10) != id {
-		return Scope{}, fmt.Errorf("scope %q: the vault is a positive decimal ID", s)
-	}
-	return Scope{Vault: n, Write: write}, nil
-}
-
-// String is the scope's Lodge-Scope form.
-func (s Scope) String() string {
-	if s.Write {
-		return fmt.Sprintf("vault=%d;write", s.Vault)
-	}
-	return fmt.Sprintf("vault=%d", s.Vault)
-}
-
 // Identity is who a connection's listener authenticated, fixed for the
 // connection's lifetime: its caller kind, the names lodge gave a session
 // or an agent, and an agent's scope.
@@ -169,12 +130,22 @@ func scoped(ctx context.Context) (*Scope, bool) {
 	return id.Scope, id.Scope != nil || id.Caller == CallerAgent
 }
 
-// mayWrite reports whether ctx's scope, if any, lets it call a method
-// marked writes.
-func mayWrite(ctx context.Context) bool {
+// mayWrite reports whether ctx's scope, if any, lets it call method,
+// which is marked writes: a write right does, and daily does for the
+// daily note's own method (ADR-0028). The engine then judges each path.
+func mayWrite(ctx context.Context, method string) bool {
 	sc, bound := scoped(ctx)
-	return !bound || sc != nil && sc.Write
+	switch {
+	case !bound:
+		return true
+	case sc == nil:
+		return false
+	}
+	return sc.CanWrite() || sc.Daily && dailyMethod(method)
 }
+
+// dailyMethod reports whether method is one daily admits.
+func dailyMethod(method string) bool { return method == "note.daily" }
 
 // inScope answers a call that names a vault outside ctx's scope as one
 // naming a vault that does not exist, so a scoped caller cannot learn

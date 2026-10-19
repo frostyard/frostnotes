@@ -52,8 +52,8 @@ type Router struct {
 func NewRouter(s Services) (*Router, error) {
 	r := &Router{jsonrpc.NewRouter[Caller, ErrorCode](jsonrpc.RouterOptions[Caller]{
 		Caller: CallerFrom,
-		Admit: func(ctx context.Context, _ string, rt jsonrpc.Route[Caller]) bool {
-			return !rt.Writes || mayWrite(ctx)
+		Admit: func(ctx context.Context, method string, rt jsonrpc.Route[Caller]) bool {
+			return !rt.Writes || mayWrite(ctx, method)
 		},
 	})}
 	if err := s.register(r); err != nil {

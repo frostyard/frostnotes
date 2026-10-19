@@ -131,9 +131,86 @@ func (n notes) Links(ctx context.Context, p *api.NoteLinksParams) ([]api.Link, e
 	return n.db.Links(ctx, f.ID)
 }
 
+// checkWrite judges, for an agent, the files a write names against its
+// scope (ADR-0028). It judges paths the vault's guard accepts, spelled as
+// their folders list them; a path the guard refuses is refused as the
+// vault would refuse it. Other callers write anywhere.
+func checkWrite(ctx context.Context, v *vault.Vault, paths ...string) error {
+	if !api.Scoped(ctx) {
+		return nil
+	}
+	if err := checkPaths(v, paths...); err != nil {
+		return err
+	}
+	return api.CheckWrite(ctx, paths...)
+}
+
+// checkFolders is checkWrite for folders moved or deleted whole, named
+// as the vault names them, without leading or trailing slashes.
+func checkFolders(ctx context.Context, v *vault.Vault, folders ...string) error {
+	if !api.Scoped(ctx) {
+		return nil
+	}
+	folders = trimFolders(folders)
+	if err := checkPaths(v, folders...); err != nil {
+		return err
+	}
+	return api.CheckWriteFolder(ctx, folders...)
+}
+
+func trimFolders(folders []string) []string {
+	out := make([]string, len(folders))
+	for i, f := range folders {
+		out[i] = strings.Trim(f, "/")
+	}
+	return out
+}
+
+// checkPaths runs the vault's path guard over an agent's paths, and
+// refuses one that reaches a file by another name than its folder lists.
+func checkPaths(v *vault.Vault, paths ...string) error {
+	for _, p := range paths {
+		if err := vault.CheckPath(p); err != nil {
+			return api.InvalidParams("%v", err)
+		}
+		if err := v.CheckSpelling(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// guarded carries an agent's scope into a move, for its link updates.
+func guarded(ctx context.Context) context.Context {
+	if !api.Scoped(ctx) {
+		return ctx
+	}
+	return vault.WithWriteGuard(ctx, func(p string) error { return api.CheckWrite(ctx, p) })
+}
+
+// dailyGuarded carries an agent's scope into note.daily, which judges the
+// daily note's path under the vault's lock, whether or not the note exists
+// yet: where the scope may write, or, under daily, today's (ADR-0028).
+func dailyGuarded(ctx context.Context, v *vault.Vault, today bool) context.Context {
+	if !api.Scoped(ctx) {
+		return ctx
+	}
+	return vault.WithWriteGuard(ctx, func(p string) error {
+		// The settings name the daily note's folder, spelled as anyone
+		// wrote them.
+		if err := v.CheckSpelling(p); err != nil {
+			return err
+		}
+		return api.CheckDaily(ctx, p, today)
+	})
+}
+
 func (n notes) Create(ctx context.Context, p *api.NoteCreateParams) (*api.WriteResult, error) {
 	v, err := n.m.Vault(p.VaultID)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkWrite(ctx, v, p.Path); err != nil {
 		return nil, err
 	}
 	who, err := author(ctx, p.Source, p.Author)
@@ -148,6 +225,9 @@ func (n notes) Write(ctx context.Context, p *api.NoteWriteParams) (*api.WriteRes
 	if err != nil {
 		return nil, err
 	}
+	if err := checkWrite(ctx, v, p.Path); err != nil {
+		return nil, err
+	}
 	who, err := author(ctx, p.Source, p.Author)
 	if err != nil {
 		return nil, err
@@ -160,16 +240,22 @@ func (n notes) Move(ctx context.Context, p *api.NoteMoveParams) (*api.MoveResult
 	if err != nil {
 		return nil, err
 	}
+	if err := checkWrite(ctx, v, p.Path, p.To); err != nil {
+		return nil, err
+	}
 	who, err := author(ctx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	return v.Move(ctx, p.Path, p.To, p.UpdateLinks != nil && *p.UpdateLinks, who)
+	return v.Move(guarded(ctx), p.Path, p.To, p.UpdateLinks != nil && *p.UpdateLinks, who)
 }
 
 func (n notes) Delete(ctx context.Context, p *api.NoteDeleteParams) error {
 	v, err := n.m.Vault(p.VaultID)
 	if err != nil {
+		return err
+	}
+	if err := checkWrite(ctx, v, p.Path); err != nil {
 		return err
 	}
 	who, err := author(ctx, nil, nil)
@@ -219,6 +305,10 @@ func (n notes) Revert(ctx context.Context, p *api.NoteRevertParams) (*api.WriteR
 	if err != nil {
 		return nil, err
 	}
+	// A deleted file comes back at its last path, the one named.
+	if err := checkWrite(ctx, v, p.Path); err != nil {
+		return nil, err
+	}
 	who, err := author(ctx, nil, nil)
 	if err != nil {
 		return nil, err
@@ -231,7 +321,8 @@ func (n notes) Daily(ctx context.Context, p *api.NoteDailyParams) (*api.DailyNot
 	if err != nil {
 		return nil, err
 	}
-	date := time.Now()
+	now := time.Now()
+	date := now
 	if p.Date != nil {
 		if date, err = time.ParseInLocation(time.DateOnly, *p.Date, time.Local); err != nil {
 			return nil, api.InvalidParams("date %q is not YYYY-MM-DD", *p.Date)
@@ -241,7 +332,7 @@ func (n notes) Daily(ctx context.Context, p *api.NoteDailyParams) (*api.DailyNot
 	if err != nil {
 		return nil, err
 	}
-	return v.Daily(ctx, date, who)
+	return v.Daily(dailyGuarded(ctx, v, date.Format(time.DateOnly) == now.Format(time.DateOnly)), date, who)
 }
 
 // Files lists the index's files and the vault's folders, with every
@@ -368,6 +459,9 @@ func (n notes) Upload(ctx context.Context, p *api.NoteUploadParams) (*api.WriteR
 	if err != nil {
 		return nil, err
 	}
+	if err := checkWrite(ctx, v, p.Path); err != nil {
+		return nil, err
+	}
 	who, err := author(ctx, p.Source, p.Author)
 	if err != nil {
 		return nil, err
@@ -409,6 +503,15 @@ func (n notes) Mkdir(ctx context.Context, p *api.NoteMkdirParams) error {
 	if err != nil {
 		return err
 	}
+	if api.Scoped(ctx) {
+		folder := strings.Trim(p.Path, "/")
+		if err := checkPaths(v, folder); err != nil {
+			return err
+		}
+		if err := api.CheckMakeFolder(ctx, folder); err != nil {
+			return err
+		}
+	}
 	return v.Mkdir(ctx, p.Path)
 }
 
@@ -417,16 +520,22 @@ func (n notes) MoveFolder(ctx context.Context, p *api.NoteMoveFolderParams) (*ap
 	if err != nil {
 		return nil, err
 	}
+	if err := checkFolders(ctx, v, p.Path, p.To); err != nil {
+		return nil, err
+	}
 	who, err := author(ctx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	return v.MoveFolder(ctx, p.Path, p.To, p.UpdateLinks != nil && *p.UpdateLinks, who)
+	return v.MoveFolder(guarded(ctx), p.Path, p.To, p.UpdateLinks != nil && *p.UpdateLinks, who)
 }
 
 func (n notes) DeleteFolder(ctx context.Context, p *api.NoteDeleteFolderParams) (*api.FolderDeleteResult, error) {
 	v, err := n.m.Vault(p.VaultID)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkFolders(ctx, v, p.Path); err != nil {
 		return nil, err
 	}
 	who, err := author(ctx, nil, nil)

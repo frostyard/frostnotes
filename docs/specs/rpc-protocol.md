@@ -87,10 +87,15 @@ From M4:
   every kind, and `events` every kind but `agent`. `sync` stays
   `local`, and `log` `device`.
 - **An agent's scope binds its connection.** An `agent` connection
-  carries its token's scope (`vault=<id>`, with `;write` to write): a
-  call that names another vault answers `notFound`, as for a vault that
-  does not exist, and a method marked `writes` answers `methodNotFound`
-  under a read scope.
+  carries its token's scope: one vault, and the writes it allows
+  ([lodge-app.md](lodge-app.md#mcp)).
+  - A call that names another vault answers `notFound`, as for a vault
+    that does not exist.
+  - A method marked `writes` answers `methodNotFound` under a scope with
+    no write right.
+  - A write outside the scope's folders answers `invalidParams`, which
+    names them
+    ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
 - **A connection names its writes.** For `session` and `agent`
   connections, every version a call records carries the connection's
   source and author. A session's source is `editor` and its author
@@ -172,7 +177,7 @@ Clients ignore unknown fields and unknown events.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (the lodge app socket, the session and agent callers, method-level callers)
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (the lodge app socket, the session and agent callers, method-level callers), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope)
 - Design: [design/overview.md](../design/overview.md), [design/hub.md](../design/hub.md)
 - Related: [lodge-app.md](lodge-app.md) (what notesd serves to lodge); lodge's [app contract](https://github.com/frostyard/lodge/blob/main/docs/specs/app-contract.md)
 - Generated reference: [rpc-api.md](rpc-api.md)

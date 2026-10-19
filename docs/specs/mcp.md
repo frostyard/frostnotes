@@ -40,7 +40,10 @@ socket ([lodge-app.md](lodge-app.md#mcp),
 
 - **lodge issues and checks the tokens:** `lodgectl token issue NAME
   --app notes --scope 'vault=<id>'` for a token that reads one vault,
-  or `--scope 'vault=<id>;write'` for one that also writes. `<id>` is
+  or `--scope 'vault=<id>;write'` for one that also writes. A scope can
+  limit writes to folders, as in
+  `'vault=<id>;write=Porter/;except=Porter/Routines/;daily'`
+  ([lodge-app.md](lodge-app.md#mcp)). `<id>` is
   the vault's ID on the hub's notesd (`notesctl vault list`). lodge
   passes the token's name and scope to notesd as `Lodge-Token` and
   `Lodge-Scope`, and revoking a token ends its sessions at once.
@@ -51,6 +54,11 @@ socket ([lodge-app.md](lodge-app.md#mcp),
   the scope too: the session's connection to notesd is caller `agent`,
   bound to that vault and that access
   ([rpc-protocol.md](rpc-protocol.md#caller-kinds)).
+- **Under a folder scope,** the session offers the write tools, and a
+  write outside the scope's folders is a tool error. The error's text
+  says what the token may write
+  ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
+  A scope with only `daily` offers the read tools.
 - **Sessions:** each `initialize` opens a session bound to its token's
   name and scope, named by `Mcp-Session-Id`. A token holds at most 8,
   and a ninth evicts the least recently used. A session ends when the
@@ -161,6 +169,6 @@ more than one, is an error.
 
 ## References
 
-- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (through lodge), [lodge ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text)
+- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (through lodge), [lodge ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (folder scopes)
 - Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [specs/rpc-api.md](rpc-api.md) (`note`), [specs/lodge-app.md](lodge-app.md#mcp)
-- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp); through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md)
+- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp); through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md); folder scopes in [plan 0007](../plans/0007-folder-scopes-for-agents.md)
