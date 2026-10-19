@@ -4,6 +4,8 @@
 // rendering and filled again when an embedded note changes, and a tag's
 // click searching for it. In jsdom, whose DOM DOMPurify reads as a
 // browser's: under happy-dom the sanitizer escapes everything.
+import { forceParsing } from "@codemirror/language";
+import { EditorView } from "@codemirror/view";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
@@ -70,6 +72,12 @@ async function open() {
   await user.click(fileRow("Garden.md"));
   const editor = await screen.findByTestId("note-editor");
   await waitFor(() => expect(editor.querySelector(".cm-content")).not.toBeNull());
+  // CodeMirror's first parse stops after 20 ms and finishes in idle time, so
+  // on a busy runner the end of the note may not be parsed yet, nor its
+  // widgets drawn: parse it all before looking.
+  const view = EditorView.findFromDOM(editor);
+  if (!view) throw new Error("the note editor has no view");
+  act(() => void forceParsing(view, view.state.doc.length, 10_000));
   return { mock, user, editor };
 }
 
