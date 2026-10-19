@@ -111,7 +111,7 @@ export function Prompt<T>(props: PromptProps<T>) {
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className="mt-[60px] flex max-h-[70vh] w-[700px] max-w-[80vw] flex-col overflow-hidden rounded-xl border border-separator bg-window shadow-popover"
+        className="mt-[60px] flex max-h-[70vh] w-[700px] max-w-[80vw] flex-col overflow-hidden rounded-xl border border-separator bg-window shadow-popover max-[599px]:mt-[env(safe-area-inset-top)] max-[599px]:max-h-[100dvh] max-[599px]:w-full max-[599px]:max-w-full max-[599px]:rounded-none max-[599px]:border-0"
       >
         <input
           ref={field}
@@ -137,7 +137,7 @@ export function Prompt<T>(props: PromptProps<T>) {
               role="option"
               tabIndex={-1}
               aria-selected={index === selected}
-              className={`flex min-h-8 items-center rounded-md px-2 text-sidebar-row ${index === selected ? "bg-selection-inactive" : ""}`}
+              className={`flex min-h-8 items-center rounded-md px-2 text-sidebar-row max-[599px]:min-h-11 pointer-coarse:min-h-11 ${index === selected ? "bg-selection-inactive" : ""}`}
               onMouseMove={() => setSelected(index)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => onEnter(item, { ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey })}
@@ -149,7 +149,7 @@ export function Prompt<T>(props: PromptProps<T>) {
             <p className="text-sidebar-row text-secondary">{emptyText}</p>
           )}
         </div>
-        <div className="flex h-7 shrink-0 items-center gap-4 border-t border-separator px-4 text-status text-tertiary">
+        <div className="flex h-7 shrink-0 items-center gap-4 border-t border-separator px-4 text-status text-tertiary max-[599px]:hidden">
           {instructions.map(({ keys, text }) => (
             <span key={`${keys}-${text}`}>
               <span className="font-semibold">{keys}</span> {text}

@@ -50,6 +50,25 @@ describe("Menu", () => {
     expect(document.activeElement).toBe(m);
   });
 
+  it("draws a sheet from the bottom, the whole width, with 44-high items, in a narrow window", () => {
+    render(
+      <Menu
+        label="Sheet"
+        items={[{ kind: "item", id: "a", label: "Alpha" }]}
+        x={300}
+        y={200}
+        sheet
+        onChoose={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    const menu = screen.getByRole("menu", { name: "Sheet" });
+    expect(menu.className).toContain("bottom-0");
+    expect(menu.className).toContain("inset-x-0");
+    expect(menu.style.left).toBe("");
+    expect(screen.getByRole("menuitem", { name: "Alpha" }).className).toContain("h-11");
+  });
+
   it("lists items, separators and submenus in order", () => {
     setup();
     const m = menu();

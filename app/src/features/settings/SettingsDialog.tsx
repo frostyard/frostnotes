@@ -69,7 +69,7 @@ export function SettingsDialog({ sections, section, onSection, onChange, onClose
         aria-modal="true"
         aria-label="Settings"
         tabIndex={-1}
-        className="relative flex h-[640px] max-h-[85vh] w-[900px] max-w-[90vw] overflow-hidden rounded-xl border border-separator bg-window shadow-popover"
+        className="relative flex h-[640px] max-h-[85vh] w-[900px] max-w-[90vw] overflow-hidden rounded-xl border border-separator bg-window shadow-popover max-[599px]:h-[100dvh] max-[599px]:max-h-[100dvh] max-[599px]:w-full max-[599px]:max-w-full max-[599px]:flex-col max-[599px]:rounded-none max-[599px]:border-0"
         onKeyDown={(event) => {
           event.stopPropagation();
           if (event.key === "Escape") {
