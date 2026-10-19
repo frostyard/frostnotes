@@ -1,4 +1,4 @@
-# Spec: the desktop UI (M3)
+# Spec: the UI
 
 The look and behavior of Frostnotes' main window: Obsidian's layout
 (ribbon, sidebars of panes, tabs in splits, status bar) drawn in
@@ -13,6 +13,12 @@ fuzzy matching. The user's Obsidian uses every default (its `app.json`,
 
 Sections marked *(batch N)* are refined when their cards are written
 ([plan 0005](../plans/0005-m3-desktop-app.md)); everything else binds now.
+M4 brings the same window to a browser
+([In a browser](#in-a-browser)) and to a phone, in Obsidian's phone
+layout ([Narrow windows](#narrow-windows),
+[ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md));
+sections marked *(M4)* bind as [plan 0006](../plans/0006-m4-web-app.md)
+lands them.
 
 ## Tokens
 
@@ -594,6 +600,130 @@ left, `--flag-1` at 15% on the right), each with an arrow to take the
 other side's chunk. Done closes the tab and, when the file is flagged on
 its hub, resolves it (`sync.resolve`).
 
+## In a browser
+
+*(M4.)* The same window in a browser, served by the hub
+([design/app.md](../design/app.md#in-a-browser)), differs at any width:
+
+- **No window chrome of its own:** no window controls and no drag
+  regions; the browser draws its own. The page's title is the window's
+  (`<note> - <vault> - Frostnotes`).
+- **The status bar's first item is the hub,** in place of sync, which
+  is a device's: `cloud` while connected (tooltip "Connected to HUB as
+  LOGIN on NODE"), `cloud-off` while out of reach ("Hub out of reach;
+  reconnecting"); its menu shows who is signed in and the hub's name.
+- **The vault manager** lists the hub's vaults and switches between
+  them. It offers no Open folder as vault, Create new vault or Remove
+  from list, and says that vaults are added on the hub's machine
+  (`notesctl vault add`, then `notesctl hub serve`).
+- **Files:** Open in default app becomes Open in new tab for files the
+  browser shows (images, audio, video, PDF), which opens the file's
+  `/blobs/` URL; it is hidden for other files. Attach file opens the
+  browser's file picker (on a phone, the camera too) and uploads with
+  `note.upload`.
+- **Zoom** is the browser's own; View's zoom commands are not
+  registered.
+- **Leaving the page** with unsaved text asks first (`beforeunload`).
+- **The Hub section of Settings** (also on the desktop when its notesd
+  is a hub; [design/hub.md](../design/hub.md#hub-settings-in-the-app)):
+  - Devices, each with Revoke; pending pairings, with the command that
+    approves one on the hub's machine;
+  - MCP tokens, each with Revoke, and the command that issues one;
+  - Allowed logins, read-only;
+  - Sessions, each with End, the current one marked.
+
+  Each row says what it is in the person's words.
+- **The home-screen page:** a manifest names the app Frostnotes, with
+  its icon, `--bg-window` as background and theme color, and
+  `display: standalone`
+  ([ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md)).
+
+## Narrow windows
+
+*(M4.)* Below 600 CSS pixels wide, the window takes Obsidian's phone layout
+([ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md)).
+The measures here are refined from Obsidian 1.14.4's phone styles
+(`.is-phone`, `.mobile-navbar`, `.mobile-toolbar`) when the cards are
+written; the structure binds now.
+
+```
+┌────────────────────────────────────┐
+│ ▤        Garden plan       📖 ⋯  ▥ │ view header 52
+│                                    │
+│   Garden plan                      │
+│   ┌ Properties ──────────────┐     │
+│   │ tags   #garden            │     │
+│   Text of the note …               │
+│                                    │
+├────────────────────────────────────┤
+│ ↶ ↷ [[ ![[ # 📎 H B I S ==  …      │ editing toolbar 52, while an editor has focus
+├────────────────────────────────────┤
+│   ‹     ›     ⌕     +    [3]    ≡  │ bottom bar 52, plus the safe area
+└────────────────────────────────────┘
+```
+
+- **What goes:** the ribbon, the title bar row, tab strips, splits and
+  the status bar. The workspace draws the active tab group's active tab
+  under its view header; other groups stay in the stored workspace,
+  undrawn, and the split commands do not apply.
+- **The view header** is 52 high: Open left sidebar (`panel-left`) at
+  the left; the note's title in the middle (a tap shows its folders as
+  the breadcrumb does); Reading view or Editing view, More options, and
+  Open right sidebar (`panel-right`) at the right. Back and forward move
+  to the bottom bar.
+- **Drawers:** a sidebar opens over the workspace from its own edge,
+  84% of the width and at most 450, `--bg-sidebar`, with its pane tabs
+  in a row at its top and, in the left one, the vault row at its foot.
+  The workspace behind is dimmed (`--backdrop`). It opens from its
+  header button, or a horizontal swipe that starts within 24 pixels of
+  its edge. It closes on a tap on the dimmed workspace, Escape, a swipe
+  back, or when it opens a note. One drawer is open at a time.
+- **The bottom bar** is 52 high plus the screen's bottom safe area
+  (`env(safe-area-inset-bottom)`), `--bg-toolbar`, 1px `--separator`
+  top, with six buttons spaced evenly, each named and 44 × 44:
+  - Navigate back (`chevron-left`), Navigate forward (`chevron-right`);
+  - Open quick switcher (`search`), New tab (`plus`);
+  - Tabs, the count of open tabs in a rounded square, which opens the
+    tab switcher;
+  - Menu (`menu`).
+
+  It hides while the on-screen keyboard is open.
+- **The tab switcher** is a full-screen list of the group's tabs: each
+  row with its title and folder, a tap to activate it and Close at its
+  right; New tab and Close all at its foot.
+- **The menu** lists:
+  - the ribbon's actions: quick switcher, today's daily note, insert
+    template, command palette;
+  - Settings;
+  - the status bar's items as text: the hub, backlinks, words and
+    characters.
+- **The editing toolbar** shows while an editor has focus. It is a row
+  52 high, docked to the top of the on-screen keyboard (the visual
+  viewport's bottom), that scrolls sideways. It holds Obsidian's default
+  phone commands, in its order:
+  - Undo, Redo, Insert wikilink, Insert embed, Insert tag, Attach file,
+    Set heading;
+  - Bold, Italic, Strikethrough, Highlight, Code, Blockquote, Comment,
+    Insert markdown link;
+  - Bullet list, Numbered list, Toggle checklist, Indent, Unindent.
+
+  Commands the registry lacks are added with it.
+- **Prompts** (the quick switcher, the palette, the folder chooser) take
+  the whole width, start under the top safe area, and end at the
+  keyboard; rows are 44 high.
+- **Menus** are sheets from the bottom, the whole width, items 44 high,
+  and open on a long press (500 ms) as well as a right click.
+- **Settings** are full screen: the list of sections, then a section
+  over it with a back button.
+- **Notices** sit at the top, the width less 8 pixels on each side.
+- **The merge view** stacks its two sides, the document above.
+
+**Touch sizes** follow the pointer at any width: when
+`(pointer: coarse)` matches, chrome buttons are 44 × 44 with 20-pixel
+icons, rows of lists, menus and prompts are at least 44 high, a tab's
+Close is always shown, and tooltips and hover previews do not show. A
+hardware keyboard still runs the [keyboard map](#keyboard-map).
+
 ## Keyboard map
 
 Obsidian 1.14.4's default hotkeys on Linux, with Obsidian's command IDs,
@@ -683,12 +813,15 @@ belongs to the field, a prompt or a menu.
 - Vault files load from their hash's URL only
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md));
   web links open in the system browser (`http`, `https` and `mailto`
-  only), never in the webview.
+  only), never in the webview, and in a browser in a new tab with
+  `noopener` and `noreferrer`, never in the app's own tab.
+- Below 600 pixels wide the window is the [narrow layout](#narrow-windows),
+  and nothing needs hover where the primary pointer is coarse.
 - Every interactive element is reachable by keyboard and has an
   accessible name.
 
 ## References
 
-- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager); frostmail's `docs/specs/ui.md` for the tokens and the chrome
-- Context: [design/app.md](../design/app.md)
-- Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md)
+- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md) (who is signed in), [ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md) (the home-screen page), [ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows); frostmail's `docs/specs/ui.md` for the tokens and the chrome
+- Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings)
+- Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-web-app.md)

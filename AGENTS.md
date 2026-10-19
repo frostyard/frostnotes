@@ -17,9 +17,12 @@ the canonical paths; keep content tool-agnostic.
 
 M0 (foundations) is done ([plan 0001](docs/plans/0001-m0-foundations.md)),
 and so is M1, the headless vault ([plan 0003](docs/plans/0003-m1-headless-vault.md)).
-M2, sync, is in progress ([plan 0004](docs/plans/0004-m2-sync.md)), and
-M3, the desktop app, is planned alongside it ([plan 0005](docs/plans/0005-m3-desktop-app.md);
-the app's design is [docs/design/app.md](docs/design/app.md)). The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
+M2, sync ([plan 0004](docs/plans/0004-m2-sync.md)), and M3, the desktop
+app ([plan 0005](docs/plans/0005-m3-desktop-app.md); the app's design is
+[docs/design/app.md](docs/design/app.md)), are built and in their 7-day
+trials through 2026-10-25. M4, the web app and remote MCP, is planned
+([plan 0006](docs/plans/0006-m4-web-app.md); the hub's design is
+[docs/design/hub.md](docs/design/hub.md)). The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
 file a step names before writing its frostnotes counterpart.

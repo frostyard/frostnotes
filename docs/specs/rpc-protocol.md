@@ -23,8 +23,15 @@ it fits: [design/overview.md](../design/overview.md).
     app's bridge;
   - the hub's `/sync` (M2): caller `device`, authenticated by a device
     token ([sync-protocol.md](sync-protocol.md));
-  - the hub's browser endpoints (M4): caller `session`, specified with the
-    hub's authentication.
+  - the hub's `/api` (M4): caller `session`, a browser authenticated by
+    its tailnet identity after `Host`, `Origin` and fetch-metadata
+    checks, with no token
+    ([hub-http.md](hub-http.md#api),
+    [ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md)).
+- **In-process connections.** The hub's `/mcp` (M4) gives each MCP
+  session a connection inside notesd, a `net.Pipe` whose server end
+  `rpcserver.ServeConn` serves as caller `agent`
+  ([ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md)).
 - Each message is one line: a JSON object followed by `\n`, at most 16 MiB
   (`api.MaxMessageSize`). JSON escapes newlines in strings, so a message is
   never split. notesd answers a request whose reply would be longer with
@@ -33,9 +40,11 @@ it fits: [design/overview.md](../design/overview.md).
 - **Files' bytes travel beside the RPC,** by content hash
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)):
   the desktop app reads `notesblob://localhost/<sha256>.<ext>` from
-  notesd's blob store itself (`app/src-tauri/src/protocol.rs`), and the
+  notesd's blob store itself (`app/src-tauri/src/protocol.rs`), the
   development gateway serves `GET /blobs/<sha256>.<ext>?token=…` on its
-  listener (M3). Either answers only those paths (64 lowercase hex digits
+  listener (M3), and the hub serves `GET /blobs/<sha256>.<ext>` to
+  sessions, with no token, behind the browser checks of
+  [hub-http.md](hub-http.md#blobs) (M4). Each answers only those paths (64 lowercase hex digits
   and an extension of 1 to 8 lowercase letters or digits), with the
   content type the extension names ([design/app.md](../design/app.md#attachments)),
   `X-Content-Type-Options: nosniff`, a `Content-Security-Policy` of
@@ -44,12 +53,47 @@ it fits: [design/overview.md](../design/overview.md).
 
 ## Caller kinds
 
-Every domain in `schema/rpc` lists the caller kinds it admits (`local`,
-`session`, `device`; [rpc-api.md](rpc-api.md) shows each domain's list).
-A request for a method whose domain does not admit the connection's caller
+A connection's caller kind is fixed when it is accepted:
+
+| Kind | Who | How it is authenticated |
+| --- | --- | --- |
+| `local` | the desktop app, `notesctl`, `notesctl mcp`, the development gateway | the socket's peer UID; the gateway's token |
+| `session` | a browser running the web app on the hub (M4) | the peer's tailnet identity ([hub-http.md](hub-http.md#browser-checks)) |
+| `device` | another notesd syncing with the hub (M2) | a device token ([sync-protocol.md](sync-protocol.md)) |
+| `agent` | an MCP session on the hub's `/mcp` (M4), in process | the MCP token that opened it ([mcp.md](mcp.md#the-hubs-endpoint)) |
+
+Every domain in `schema/rpc` lists the caller kinds it admits
+([rpc-api.md](rpc-api.md) shows each domain's list), and a method may
+list its own `callers`, which narrow its domain's: each must be one of
+the domain's (M4,
+[ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md)).
+A request for a method that does not admit the connection's caller
 returns `methodNotFound` (-32601), exactly as for a method that does not
 exist, so a caller cannot probe for methods it may not call. A request
 dispatched with no caller kind is refused the same way.
+
+From M4:
+
+- `note` admits `local`, `session` and `agent`; `vault` admits `local`
+  and `session`, with `vault.add` and `vault.remove` narrowed to
+  `local`. `hub` admits `local` and `session`, with the methods that
+  serve a vault or mint a credential narrowed to `local`
+  ([hub-http.md](hub-http.md#methods-on-the-hub)). `rpc` admits every
+  kind, and `events` every kind but `agent`. `sync` stays `local`, and
+  `log` `device`.
+- **A connection names its writes.** For `session` and `agent`
+  connections, every version a call records carries the connection's
+  source and author. A session's source is `editor` and its author
+  `<node name> (web)`. An agent's source is `agent` and its author its
+  token's name. The `source` and `author` parameters of `note` methods
+  are ignored on these connections. `local` connections keep the
+  parameters and their defaults.
+- **`rpc.hello` says who is connected:** its result gains the
+  connection's caller kind and, for a session, the signed-in login, its
+  display name and the node's name. The web app shows them, and hides
+  what its caller may not use.
+- **`rpc.ping`** answers `null` to every caller after hello: the web
+  app's heartbeat, which finds a connection a sleeping phone dropped.
 
 ## Messages
 
@@ -111,10 +155,14 @@ Clients ignore unknown fields and unknown events.
   undelivered events pile up).
 - TypeScript: `JsonRpcSession` over a line channel; the Tauri transport uses
   the bridge's `notesd_connect` and `notesd_send`, and the WebSocket
-  transport sends one line per frame (M0 Phase 4).
+  transport sends one line per frame (M0 Phase 4). In the web app it
+  connects to `wss://<the page's host>/api`, with no token, and its
+  blob URLs are the hub's `/blobs/` (M4,
+  [design/app.md](../design/app.md#in-a-browser)).
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens)
-- Design: [design/overview.md](../design/overview.md)
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens), [ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md) (sessions, method-level callers), [ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md) (the agent caller)
+- Design: [design/overview.md](../design/overview.md), [design/hub.md](../design/hub.md)
+- Related: [hub-http.md](hub-http.md) (the hub's routes)
 - Generated reference: [rpc-api.md](rpc-api.md)

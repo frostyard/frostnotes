@@ -2,8 +2,11 @@
 
 Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md),
 [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
-[ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md).
-Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md).
+[ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
+[ADR-0026](../adr/0026-the-hub-stays-on-the-tailnet-and-joins-it-itself.md)
+(the hub on the tailnet).
+Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md),
+[specs/hub-http.md](../specs/hub-http.md).
 
 **Status: M0 built** ([plan 0001](../plans/0001-m0-foundations.md)): notesd
 with the store, the socket and caller kinds; `notesctl hello` and `vault`;
@@ -31,17 +34,27 @@ a thin client.
                                                            ├─ render (goldmark, sanitizer)
                                                            └─ sync client ──┐ WebSocket, device token
                                                                             ▼
- notesd, hub role ── HTTPS ─┬─ /sync  devices: push, pull, blobs ─ revision log ─ merge
-                            ├─ /api   browsers: JSON-RPC over WebSocket, session
-                            ├─ /mcp   agents: Streamable HTTP, scoped token
-                            └─ /      the web app (the same React UI, WebSocketTransport)
+ notesd, hub role ── its own tailnet node (tsnet), HTTPS on 443, nothing off the tailnet
+        ├─ /sync  devices: push, pull, blobs ─ revision log ─ merge      device token
+        ├─ /api   browsers: JSON-RPC over WebSocket, caller session      tailnet identity, Origin
+        ├─ /mcp   agents: Streamable HTTP, caller agent (in process)     scoped MCP token
+        └─ /      the web app (the same React UI, WebSocketTransport)    tailnet identity
 ```
 
 ## Design
 
 - **notesd** (`cmd/notesd`) is one pure-Go binary. In the device role it
   serves the socket and syncs each vault with its hub. In the hub role it
-  also serves HTTPS. A hub has vault directories on disk like any device.
+  also joins the tailnet as a node of its own and serves HTTPS there, and
+  nowhere else ([hub.md](hub.md)). A hub has vault directories on disk
+  like any device.
+- **Who reaches the hub** is decided per route: devices with a device
+  token, browsers by their tailnet identity (an allowed login; a session
+  is one WebSocket), agents with an MCP token scoped to a vault and to
+  read or write
+  ([ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md),
+  [ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md)).
+  Minting a credential happens only on the hub's own socket.
 - **The vault engine** scans and watches each vault, parses notes, keeps
   the index and the local versions, and performs every write as a
   compare-and-merge ([vault.md](vault.md),
@@ -60,8 +73,9 @@ a thin client.
   it saves as the user types and takes merges as remote changes, and shows
   files by their hash ([app.md](app.md), [specs/ui.md](../specs/ui.md)).
 - **MCP** tools are hand-written adapters over the engine, served over stdio
-  by `notesctl mcp` and over HTTP by the hub
-  ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)).
+  by `notesctl mcp` and over HTTP by the hub with a scoped token
+  ([ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md),
+  [ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md)).
   `internal/mcpserver` is a client of notesd's API like the app: its read
   tools mark note text as data, and its writes name their base and are
   attributed to the MCP client ([specs/mcp.md](../specs/mcp.md)).
@@ -95,7 +109,8 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/merge` | diff3 by line and word, frontmatter by key (planner-owned) |
 | `internal/blobs` | the content-addressed blob store |
 | `internal/render` | goldmark rendering and the HTML sanitizer |
-| `internal/syncer`, `internal/hub` | the device's sync loops; the hub's endpoints, pairing and log domain |
+| `internal/syncer`, `internal/hub` | the device's sync loops; the hub's routes (sync, browsers, MCP, the web build's files), pairing, browser sessions, MCP tokens, and its `log` and `hub` domains |
+| `internal/tailnet` | the hub's tailnet node (`tsnet`): its TLS listener, its name and WhoIs; the only package importing `tailscale.com` |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
 | `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
@@ -124,13 +139,16 @@ Planned configuration:
 | `FROSTNOTES_DATA_DIR` | `$XDG_DATA_HOME/frostnotes` | notesd: `notesd.db`, `blobs/` |
 | `FROSTNOTES_SOCKET` | `$XDG_RUNTIME_DIR/frostnotes/notesd.sock` | notesd, notesctl, the app |
 | `FROSTNOTES_SECRETS=file` | unset | notesd: keep device tokens in a private file, not the Secret Service (development) |
+| `TS_AUTHKEY` | unset | notesd `--hub-tailnet`: the auth key for the node's first start ([hub.md](hub.md#operational-notes)) |
 
 The socket directory is 0700 and the socket 0600, owned by the user. The
-database must be on a local file system; vaults may be anywhere.
+database must be on a local file system; vaults may be anywhere. A hub's
+flags (`--hub-tailnet`, `--hub`, `--hub-web`) and its first start are in
+[hub.md](hub.md#operational-notes).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
-- Details: [vault.md](vault.md), [sync.md](sync.md), [app.md](app.md)
-- Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md)
-- Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md); the hub on the tailnet, [ADR-0026](../adr/0026-the-hub-stays-on-the-tailnet-and-joins-it-itself.md) through [ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md)
+- Details: [vault.md](vault.md), [sync.md](sync.md), [app.md](app.md), [hub.md](hub.md)
+- Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/hub-http.md](../specs/hub-http.md)
+- Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md); the hub on the tailnet in [M4](../plans/0006-m4-web-app.md)

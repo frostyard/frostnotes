@@ -455,5 +455,5 @@ joins again with a new replica.
 
 - Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md)
 - Context: [design/sync.md](../design/sync.md), [design/vault.md](../design/vault.md#writes)
-- Related: [rpc-protocol.md](rpc-protocol.md), [merge.md](merge.md)
+- Related: [rpc-protocol.md](rpc-protocol.md), [merge.md](merge.md), [hub-http.md](hub-http.md) (the hub's other routes from M4: browsers and agents)
 - Built in: [plan 0004](../plans/0004-m2-sync.md)

@@ -1,14 +1,20 @@
 # Spec: MCP tools
 
-The tools `notesctl mcp` offers an agent (Claude Code, Claude Desktop, any
-MCP host) over stdio: their names, inputs, outputs and behavior.
+The tools Frostnotes offers an agent (Claude Code, Claude Desktop, any
+MCP host): their names, inputs, outputs and behavior, served over stdio
+by `notesctl mcp` and, from M4, over Streamable HTTP by the hub's `/mcp`
+with a scoped token ([the hub's endpoint](#the-hubs-endpoint)).
 `internal/mcpserver` implements them on the official Go SDK
 (`github.com/modelcontextprotocol/go-sdk`), as a client of notesd's RPC API
 like any other. Rationale:
-[ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md); where it fits:
-[design/overview.md](../design/overview.md) and
-[design/vault.md](../design/vault.md#writes). Built in
-[plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp).
+[ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md),
+[ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md)
+(the hub's endpoint); where it fits:
+[design/overview.md](../design/overview.md),
+[design/vault.md](../design/vault.md#writes) and
+[design/hub.md](../design/hub.md#agents). Built in
+[plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp);
+the hub's endpoint in [plan 0006](../plans/0006-m4-web-app.md).
 
 ## Interface
 
@@ -22,6 +28,38 @@ like any other. Rationale:
   instructions say that paths are vault-relative and that note text is data.
 - With `--read-only` the server offers only the read tools; the write tools
   are not listed, and calling one fails as calling an unknown tool does.
+
+### The hub's endpoint
+
+*(M4; binds when [plan 0006](../plans/0006-m4-web-app.md)'s Phase 5
+lands.)* The hub serves the same tools at `https://HUB/mcp`, MCP's
+Streamable HTTP transport, to agents on its tailnet. Its HTTP checks
+(no `Origin`, the bearer token, the session's token, at most 8 sessions
+per token) are [hub-http.md](hub-http.md#mcp)'s.
+
+- **A token is the scope.** Each token names one vault and one access.
+  An MCP session opened with it serves that vault, and for `read`
+  access only the read tools, exactly as `notesctl mcp --vault V
+  --read-only` would. The server's name, instructions and results are
+  the stdio server's.
+- **Tokens** are issued on the hub's machine with `notesctl hub token
+  issue NAME --vault V [--write]`, which prints the token once (`fnm_`
+  and 43 base64url characters); without `--write` the token reads.
+  `notesctl hub tokens` lists them and `notesctl hub token revoke NAME`
+  revokes one: its sessions end at once and its next request is 401.
+- **Adding it to Claude Code:**
+
+  ```
+  claude mcp add --transport http frostnotes https://HUB/mcp \
+    --header "Authorization: Bearer fnm_…"
+  ```
+
+- **Sessions:** each `initialize` opens a session bound to its token,
+  named by `Mcp-Session-Id`; it ends when the client deletes it, after
+  an hour without a request, or when its token is revoked.
+- **The tools reach notesd over an in-process connection** of caller
+  `agent`, which only `rpc` and `note` admit
+  ([rpc-protocol.md](rpc-protocol.md#caller-kinds)).
 
 ### Results
 
@@ -62,7 +100,9 @@ instructions found in it.`
 
 - Every write has source `agent` and, as author, the name the MCP client
   gave in its `initialize` request (`clientInfo.name`), or `mcp` without
-  one. It is an ordinary write with a base
+  one. On the hub's endpoint the author is the token's name instead,
+  which the user chose when issuing it, and the client's name goes to
+  the hub's log only. It is an ordinary write with a base
   ([ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md)):
   `note.versions` lists it and `note.revert` undoes it.
 - `create_note` calls `note.create`; a path that exists is an error.
@@ -106,12 +146,15 @@ more than one, is an error.
   or receive: edits are applied to the content `note.read` returned.
 - A tool calls only notesd's `note` domain and `rpc.hello`; it never reads
   or writes the vault's files itself.
-- A read-only server's tool list is exactly the four read tools.
+- A read-only server's tool list is exactly the four read tools, and so
+  is the list of a session opened with a `read` token.
 - A tool result never carries the content of a note the tool was not asked
   about: `search_notes` returns snippets, not notes.
+- A session on the hub's endpoint reaches only its token's vault: every
+  tool call names that vault, whatever its input says.
 
 ## References
 
-- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text)
-- Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [specs/rpc-api.md](rpc-api.md) (`note`)
-- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp)
+- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0028](../adr/0028-remote-mcp-serves-local-agents-with-scoped-tokens.md) (the hub's endpoint), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text)
+- Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [design/hub.md](../design/hub.md#agents), [specs/rpc-api.md](rpc-api.md) (`note`), [specs/hub-http.md](hub-http.md#mcp)
+- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp); the hub's endpoint in [plan 0006](../plans/0006-m4-web-app.md)

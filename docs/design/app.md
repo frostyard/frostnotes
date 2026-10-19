@@ -10,7 +10,12 @@ editor and the reading view),
 [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)
 (saves and merges),
 [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
-(attachments).
+(attachments),
+[ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md),
+[ADR-0029](../adr/0029-the-hub-serves-the-web-apps-build-from-a-directory.md),
+[ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md)
+and [ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md)
+(the web app).
 Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
 [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 (the syntax both parsers read).
@@ -22,8 +27,10 @@ dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
 commands, editor core, reading view, merge view and history below
 (Phase 5), and Phase 6's menus, notices, prompts, status bar and
 sidebar panes.
-Everything else here is M3's design ([plan 0005](../plans/0005-m3-desktop-app.md)),
-rewritten as each phase lands.
+M3's design is built through its Phase 8 ([plan 0005](../plans/0005-m3-desktop-app.md)).
+[In a browser](#in-a-browser) is M4's design
+([plan 0006](../plans/0006-m4-web-app.md)), rewritten as each phase
+lands.
 
 ## Overview
 
@@ -31,7 +38,8 @@ The app is a Tauri v2 window running a React UI, a thin client of notesd
 like `notesctl` and MCP. It holds no notes of its own: it lists a vault's
 files from notesd, edits a note's exact text in CodeMirror, saves it with
 its base, and shows what notesd renders. The same UI runs in a browser
-against the dev gateway now and the hub in M4.
+against the dev gateway, and in M4 as the web app the hub serves
+([In a browser](#in-a-browser)).
 
 ```
  features/ (presentational) ◄── app/ (containers, layout) ◄── workspace/ (tabs, splits, sidebars)
@@ -42,7 +50,7 @@ against the dev gateway now and the hub in M4.
                                      ▼
                        data/ (Session, stores) ◄── Client (rpc/gen/api.ts)
                                                      │ Transport: tauri (bridge.rs ⇄ notesd.sock)
-                                                     │            ws (devgw; the hub in M4), mock
+                                                     │            ws (devgw; the hub's /api in M4), mock
  <img src="notesblob://localhost/<sha256>.png"> ◄── protocol.rs ◄── notesd's blobs/
 ```
 
@@ -50,7 +58,7 @@ against the dev gateway now and the hub in M4.
 
 | Path | What | Owner |
 | --- | --- | --- |
-| `main.tsx` | picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, else Tauri), renders `App` | planner |
+| `main.tsx` | picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, the hub's `/api` in a `web` build, else Tauri), renders `App` | planner |
 | `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/tauri.ts`, `transport/ws.ts`, `gen/api.ts` (generated) | planner |
 | `rpc/mock/` | `MockTransport`: an in-memory notesd with notesd's semantics and a vault of made-up notes | planner |
 | `data/` | `Session`, the stores (vaults, files, sync, settings), the document registry | planner |
@@ -545,6 +553,78 @@ serves `/blobs/` from Vite there if it must.
 - View's Zoom in, Zoom out and Reset zoom step through a browser's zoom
   levels with the webview's own zoom, kept as a preference.
 
+## In a browser
+
+M4 serves the app from the hub, to Firefox on another machine and to the
+user's phone, over the tailnet
+([design/hub.md](hub.md), [specs/ui.md](../specs/ui.md#in-a-browser)).
+It is the same code as the desktop's, with a different transport and
+frame:
+
+- **The build.** `make web-build` runs `vite build --mode web` in nsl
+  into `build/web/`
+  ([ADR-0029](../adr/0029-the-hub-serves-the-web-apps-build-from-a-directory.md)).
+  In that mode `main.tsx` connects to the hub, and the mock, the spikes
+  and the shell's commands stay out of the bundle. The build writes
+  `frostnotes-web.json` (version, protocol) and `manifest.webmanifest`
+  with the icons `scripts/render-icons.py` renders from the master
+  (192, 512 and a maskable 512)
+  ([ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md)).
+- **The connection** is `connectHub()` in `rpc/transport/ws.ts`, a
+  WebSocket to `wss://<the page's host>/api` with no token, since the
+  hub knows the browser by its tailnet node
+  ([ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md)).
+  A phone drops connections when it sleeps or changes networks:
+  - `Session` reconnects after 1 s, doubling to 30 s with jitter, and at
+    once when the page becomes visible or the browser comes back online;
+  - while the page is visible it calls `rpc.ping` every 30 s, and drops
+    a connection that has not answered in 10 s;
+  - each reconnect resumes events from the last sequence number and
+    saves or re-reads open documents, as on the desktop.
+
+  When it cannot connect, it asks `GET /api` without an upgrade, whose
+  one-line answer says why (a login not allowed, a tagged node), and
+  shows that.
+- **Who is signed in** comes from `rpc.hello`'s result: the caller kind,
+  the login and the node. The status bar's hub item and the Hub settings
+  show it. With caller `session`, the app hides what a session may not
+  call: opening, creating and removing vaults, sync's status and
+  conflicts, approving pairings, issuing tokens, and the shell's
+  commands.
+- **Files by hash** load from `/blobs/<hash>.<ext>` on the page's own
+  origin (the transport's `blobURL`), with nothing in the URL but the
+  hash.
+- **Offline**, the status bar says the hub is out of reach. Editors keep
+  their text and save it with its base on reconnect (the registry's
+  retries), and leaving the page with unsaved text asks first. Nothing
+  is stored in the browser but ADR-0021's workspace and preferences.
+- **Narrow windows**
+  ([ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md),
+  [specs/ui.md](../specs/ui.md#narrow-windows)):
+  - `app/` chooses the layout from `matchMedia("(max-width: 599px)")`.
+    The workspace model gains a narrow view, the active group's active
+    tab, which leaves the stored tree as it is.
+  - The view header, drawers, bottom bar, tab switcher, editing toolbar
+    and bottom sheets are presentational components in
+    `features/mobile/`, connected in `app/`.
+  - Touch sizes come from a `(pointer: coarse)` media query over the
+    tokens, so components need no flag.
+  - The editing toolbar follows the visual viewport (`visualViewport`)
+    to sit on the on-screen keyboard.
+- **Hub settings** (`app/Settings.tsx`'s Hub section, over `features/hub/`)
+  list devices, pending pairings, MCP tokens, allowed logins and
+  sessions from `hub.*`, with Revoke and End where the caller may.
+  They show whenever `hub.status` answers, on the hub's desktop too.
+- **Tests:**
+  - Vitest drives the hub transport's reconnect, heartbeat and refusal
+    with a fake WebSocket and timers, and the narrow components in
+    happy-dom with `matchMedia` stubbed.
+  - `make m4-evidence` drives the web build in Firefox (geckodriver in
+    nsl) at a desktop size and at 390 × 844. It runs against a hub on
+    loopback built with the `e2e` tag, whose browser routes give every
+    peer one fixed identity
+    ([plan 0006](../plans/0006-m4-web-app.md#phase-8--the-users-hub-and-exit-evidence)).
+
 ## Dev and test
 
 - `VITE_MOCK=1` runs the UI against `MockTransport` and its made-up
@@ -581,7 +661,7 @@ serves `/blobs/` from Vite there if it must.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); frostmail's `docs/design/app.md`, which this copies
-- Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts)
-- Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
-- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md), [ADR-0029](../adr/0029-the-hub-serves-the-web-apps-build-from-a-directory.md), [ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md), [ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md); frostmail's `docs/design/app.md`, which this copies
+- Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub's routes and sessions)
+- Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/hub-http.md](../specs/hub-http.md) (the web app's routes)
+- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-web-app.md) ([roadmap](../plans/0002-roadmap.md))
