@@ -191,7 +191,7 @@ Porter's token is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
   scope), [specs/rpc-protocol.md](../specs/rpc-protocol.md#caller-kinds)
   (an agent's scope binding its connection),
   [design/vault.md](../design/vault.md#daily-notes) (the daily note an
-  append writes), [plan 0007](../plans/0007-folder-scopes-for-agents.md)
+  append writes), [plan 0007](../plans/0007-folder-limited-agent-scopes.md)
 - Builds on: [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (notes
   defines the scope, and the engine enforces it),
   [ADR-0006](0006-every-write-names-the-version-it-changes.md) (an append

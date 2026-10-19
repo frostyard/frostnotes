@@ -1,4 +1,4 @@
-# Plan: Folder scopes for agents
+# Plan: Folder-limited agent scopes
 
 This plan builds [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md):
 - an agent's scope can limit its writes to folders and take folders out
