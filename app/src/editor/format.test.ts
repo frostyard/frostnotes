@@ -6,13 +6,17 @@ import { describe, expect, it } from "vitest";
 import {
   deleteParagraph,
   insertLink,
+  insertPair,
   setHeading,
+  toggleBlockquote,
   toggleBold,
+  toggleBulletList,
   toggleChecklist,
   toggleCode,
   toggleComment,
   toggleHighlight,
   toggleItalics,
+  toggleNumberedList,
   toggleStrikethrough,
 } from "./format";
 
@@ -217,6 +221,31 @@ describe("set heading", () => {
   it("sets every touched line, moving what was at an insertion past it", () => {
     expect(run(setHeading(3), "{a\n# b}")).toBe("### {a\n### b}");
     expect(run(setHeading(2), "|x")).toBe("## |x");
+  });
+});
+
+describe("the phone toolbar's line commands", () => {
+  it("quotes lines, and unquotes them when all are quoted", () => {
+    expect(run(toggleBlockquote, "a|")).toBe("> a|");
+    expect(run(toggleBlockquote, "{a\n\nb}")).toBe("> {a\n\n> b}");
+    expect(run(toggleBlockquote, "{> a\n>b}")).toBe("{a\nb}");
+  });
+
+  it("makes bullets, numbered items from 1, and plain lines again", () => {
+    expect(run(toggleBulletList, "{a\nb}")).toBe("- {a\n- b}");
+    expect(run(toggleBulletList, "{- a\n- b}")).toBe("{a\nb}");
+    expect(run(toggleBulletList, "1. a|")).toBe("- a|");
+    expect(run(toggleNumberedList, "{a\nb\nc}")).toBe("1. {a\n2. b\n3. c}");
+    expect(run(toggleNumberedList, "{1. a\n2. b}")).toBe("{a\nb}");
+    expect(run(toggleNumberedList, "- a|")).toBe("1. a|");
+    expect(run(toggleBulletList, "  a|")).toBe("  - a|");
+  });
+
+  it("inserts a wikilink, an embed or a tag around the selection", () => {
+    expect(run(insertPair("[[", "]]"), "see |")).toBe("see [[|]]");
+    expect(run(insertPair("[[", "]]"), "see {Plan}")).toBe("see [[Plan|]]");
+    expect(run(insertPair("![[", "]]"), "|")).toBe("![[|]]");
+    expect(run(insertPair("#", ""), "a |")).toBe("a #|");
   });
 });
 

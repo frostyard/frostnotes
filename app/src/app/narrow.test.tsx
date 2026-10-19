@@ -1,3 +1,4 @@
+import { EditorView } from "@codemirror/view";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +10,7 @@ import { useNotes } from "../data/stores";
 import { emptyVault, useVaultState } from "../data/vaultState";
 import { MockTransport, mockVaults } from "../rpc/mock/mock";
 import { emptyWorkspace } from "../workspace/model";
-import { activeTab } from "../workspace/ops";
+import { activeTab, open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
 import { NARROW } from "./narrow";
@@ -43,6 +44,13 @@ async function start() {
   render(<App connect={async () => new MockTransport(mockVaults(), { files })} />);
   await screen.findByRole("main", { name: "Workspace" });
 }
+
+const openNote = (w: Parameters<typeof open>[0], path: string) => open(w, { type: "note", path, mode: "edit" }, "here");
+
+const editorText = () => {
+  const el = screen.queryByTestId("note-editor")?.querySelector(".cm-editor");
+  return el ? EditorView.findFromDOM(el as HTMLElement)?.state.doc.toString() : undefined;
+};
 
 const activePath = () => {
   const v = activeTab(useWorkspace.getState().ws).view;
@@ -86,5 +94,31 @@ describe("a narrow window", () => {
     expect(count()).toBe(before + 1);
     await user.click(screen.getByRole("button", { name: "Menu" }));
     expect(useOverlays.getState().menu?.label).toBe("Menu");
+  });
+
+  it("shows the editing toolbar in the bottom bar's place while an editor has the focus", async () => {
+    const user = userEvent.setup();
+    await start();
+    act(() => useWorkspace.getState().update((w) => openNote(w, "a.md")));
+    await waitFor(() => expect(editorText()).toBe("Alpha\n"));
+    const view = EditorView.findFromDOM(screen.getByTestId("note-editor").querySelector(".cm-editor") as HTMLElement);
+    act(() => view?.focus());
+    const toolbar = await screen.findByRole("toolbar", { name: "Editing toolbar" });
+    expect(screen.queryByRole("navigation", { name: "Bottom bar" })).toBeNull();
+    const names = within(toolbar)
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label"));
+    expect(names.slice(0, 7)).toEqual([
+      "Undo",
+      "Redo",
+      "Add internal link",
+      "Add embed",
+      "Add tag",
+      "Attach file",
+      "Set heading",
+    ]);
+    expect(names).toHaveLength(20);
+    await user.click(within(toolbar).getByRole("button", { name: "Bold" }));
+    await waitFor(() => expect(editorText()).toBe("**Alpha**\n"));
   });
 });

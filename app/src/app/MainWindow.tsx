@@ -24,6 +24,7 @@ import { TitleBar } from "../features/chrome/TitleBar";
 import { WindowControls } from "../features/chrome/WindowControls";
 import { BottomBar } from "../features/mobile/BottomBar";
 import { Drawer } from "../features/mobile/Drawer";
+import { EditingToolbar } from "../features/mobile/EditingToolbar";
 import { StatusBar } from "../features/status/StatusBar";
 import { PaneTabs } from "../features/workspace/PaneTabs";
 import { Splitter } from "../features/workspace/Splitter";
@@ -34,6 +35,7 @@ import { activeGroup, activeTab, back, forward, selectPane, setSidebarWidth } fr
 import { useWorkspace } from "../workspace/store";
 import { useMaximized, windowCommand } from "./chrome";
 import { editorCommands, workspaceCommands } from "./commands";
+import { useEditorFocus, useKeyboardInset } from "./keyboard";
 import { openConflictsMenu, openEditingModeMenu, openNarrowMenu, openTabList } from "./menus";
 import { useNarrow } from "./narrow";
 import { Overlays } from "./Overlays";
@@ -127,6 +129,8 @@ export function MainWindow() {
   const backlinks = useBacklinkCount(activeNote?.path ?? null);
   const counts = useNoteCounts(docs);
   const narrow = useNarrow();
+  const editing = useEditorFocus();
+  const keyboard = useKeyboardInset();
   // A narrow window's sidebars are drawers, one open at a time, closed
   // when the active tab shows another view (a note opened from one).
   const [drawer, setDrawer] = useState<Side | null>(null);
@@ -260,17 +264,26 @@ export function MainWindow() {
                 narrow={{ onLeft: () => setDrawer("left"), onRight: () => setDrawer("right") }}
               />
             </div>
-            <BottomBar
-              canBack={active.back.length > 0}
-              canForward={active.forward.length > 0}
-              tabs={group.tabs.length}
-              onBack={() => update((w) => back(w))}
-              onForward={() => update((w) => forward(w))}
-              onSwitcher={() => registry.run("switcher:open")}
-              onNewTab={() => registry.run("workspace:new-tab")}
-              onTabs={(x, y) => openTabList(group.id, x, y)}
-              onMenu={(x, y) => openNarrowMenu((c) => registry.run(c), x, y)}
-            />
+            {editing ? (
+              // The toolbar takes the bottom bar's place while an editor has
+              // the focus, docked to the keyboard where there is one.
+              <>
+                <div className="h-[52px] shrink-0" />
+                <EditingToolbar bottom={keyboard} onRun={(c) => registry.run(c)} />
+              </>
+            ) : (
+              <BottomBar
+                canBack={active.back.length > 0}
+                canForward={active.forward.length > 0}
+                tabs={group.tabs.length}
+                onBack={() => update((w) => back(w))}
+                onForward={() => update((w) => forward(w))}
+                onSwitcher={() => registry.run("switcher:open")}
+                onNewTab={() => registry.run("workspace:new-tab")}
+                onTabs={(x, y) => openTabList(group.id, x, y)}
+                onMenu={(x, y) => openNarrowMenu((c) => registry.run(c), x, y)}
+              />
+            )}
             {drawer && (
               <Drawer
                 side={drawer}
