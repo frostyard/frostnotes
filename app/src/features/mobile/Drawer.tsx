@@ -1,8 +1,11 @@
 // A sidebar as a drawer in a narrow window (docs/specs/ui.md#narrow-windows):
 // over the workspace from its own edge, 84% of the width and at most 450,
-// the workspace behind dimmed. A tap on the dimmed workspace or Escape
-// closes it.
+// the workspace behind dimmed. A tap on the dimmed workspace, Escape, or a
+// swipe back toward its edge closes it.
 import { type ReactNode, useEffect, useRef } from "react";
+
+/** SWIPE_CLOSE_PX is how far a swipe back toward its edge closes a drawer. */
+export const SWIPE_CLOSE_PX = 50;
 
 export interface DrawerProps {
   side: "left" | "right";
@@ -14,6 +17,7 @@ export interface DrawerProps {
 /** Drawer draws an open drawer and its backdrop. */
 export function Drawer(props: DrawerProps) {
   const panel = useRef<HTMLDivElement>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     const before = document.activeElement;
     panel.current?.focus();
@@ -45,6 +49,21 @@ export function Drawer(props: DrawerProps) {
             e.stopPropagation();
             props.onClose();
           }
+        }}
+        onPointerDown={(e) => {
+          swipe.current = e.pointerType === "touch" ? { x: e.clientX, y: e.clientY } : null;
+        }}
+        onPointerMove={(e) => {
+          const start = swipe.current;
+          if (!start) return;
+          const back = props.side === "left" ? start.x - e.clientX : e.clientX - start.x;
+          if (back >= SWIPE_CLOSE_PX && back > Math.abs(e.clientY - start.y)) {
+            swipe.current = null;
+            props.onClose();
+          }
+        }}
+        onPointerUp={() => {
+          swipe.current = null;
         }}
       >
         {props.children}

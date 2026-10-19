@@ -42,6 +42,7 @@ import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
 import { statusSync, useBacklinkCount, useNoteCounts } from "./status";
 import { setWindowTitle, windowTitle } from "./system";
+import { installEdgeSwipe, installLongPress } from "./touch";
 import { VaultsView } from "./VaultsView";
 import { WorkspaceView } from "./WorkspaceView";
 
@@ -137,6 +138,10 @@ export function MainWindow() {
   const activeKey = `${active.id}:${active.view.type === "empty" ? "" : active.view.path}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeKey is the trigger
   useEffect(() => setDrawer(null), [activeKey]);
+  // A long press opens what a right click opens, wherever the pointer is a
+  // finger; a swipe from a narrow window's edge opens that side's drawer.
+  useEffect(() => installLongPress(), []);
+  useEffect(() => (narrow && drawer === null ? installEdgeSwipe(setDrawer) : undefined), [narrow, drawer]);
   const widths = fitSidebars(useWindowWidth(), ws.left, ws.right);
   const shown = { left: widths.left > 0, right: widths.right > 0 };
   const controls = isTauri();
