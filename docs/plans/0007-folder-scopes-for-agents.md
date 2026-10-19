@@ -38,6 +38,11 @@ Status (2026-10-19):
     cannot learn the daily note's path without writing it, so the
     session could not tell. Under `write=` alone, `edit_note` and
     `create_note` reach a daily note in their folders.
+  - This was confirmed on 2026-10-19. A whole-vault writer can already
+    write the daily note, so taking the tool from `vault=<id>;write`
+    tokens would be a regression rather than a limit. Under folder
+    writes, `daily` is the only way to append, which is what Porter
+    needs.
   - Two rules were added to ADR-0028 while building:
     - a prefix is written one way, in NFC and `url.PathEscape`'s
       encoding;
