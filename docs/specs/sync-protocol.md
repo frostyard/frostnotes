@@ -248,9 +248,11 @@ On a hub, `hub` (caller `local`; from M4 also `session`, but for
 - The hub records a device's last request time, at most once a minute.
 - From M4, a device asks `log.hub` at each connection. When the hub
   records a URL that differs from the device's (scheme and host without
-  case, the path exactly), and the device would pair with it, the device
-  keeps it and connects there, once per dial, with the same token,
-  replicas, agreed states and cursors. A hub from before M4 answers
+  case, the path exactly), the device would pair with it, and the host
+  there proves it is the hub (`POST /sync/hub`'s proof, as
+  `sync.relocate` checks it), the device keeps it and connects there,
+  once per dial, with the same token, replicas, agreed states and
+  cursors. A URL's host is kept in lower case. A hub from before M4 answers
   `methodNotFound`, and the device stays
   ([lodge-app.md](lodge-app.md#device)).
 
