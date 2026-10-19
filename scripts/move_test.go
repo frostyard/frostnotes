@@ -65,7 +65,12 @@ getent)
 	esac ;;
 lodgectl) [ "$1" = status ] && { [ -e "$R/stub/lodge-down" ] && exit 1; exit 0; }; log "lodgectl $*" ;;
 notesctl)
-	case $FROSTNOTES_SOCKET in
+	if [ "$1" = help ]; then
+		echo "Available Commands:"; echo "  status      Show the hub"
+		[ -e "$R/stub/old-notesctl" ] || echo "  url         Record the URL devices should use for this hub"
+		exit 0
+	fi
+	case ${FROSTNOTES_SOCKET:-} in
 	/run/frostnotes-lodge/*) unit=frostnotes.service; data=$R/var/lib/frostnotes ;;
 	*) unit=notesd.service; data=$R/home/m2hub/.local/share/frostnotes ;;
 	esac
@@ -323,6 +328,9 @@ func TestRefusesWhatItCannotReadUnambiguously(t *testing.T) {
 		"a moved hub's leftovers": {func(t *testing.T, root string) {
 			writeFile(t, root, "home/m2hub/.local/share/frostnotes.moved-20261025T000000Z/notesd.db", "")
 		}, nil, "looks moved already"},
+		"an M2 notesctl": {func(t *testing.T, root string) {
+			writeFile(t, root, "stub/old-notesctl", "")
+		}, nil, "has no 'hub url'"},
 		"--apply without --url":   {func(*testing.T, string) {}, []string{"--apply"}, "--apply needs --url"},
 		"a URL that is not https": {func(*testing.T, string) {}, []string{"--url", "http://lodge/device/notes"}, "--url must be https://"},
 	} {

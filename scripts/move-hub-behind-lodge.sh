@@ -199,7 +199,11 @@ notesctl=$(command -v notesctl || true)
 if [ -n "$exec_start" ] && [ -x "$(p "$(dirname "$exec_start")/notesctl")" ]; then
 	notesctl=$(p "$(dirname "$exec_start")/notesctl")
 fi
-[ -n "$notesctl" ] || problem "no notesctl beside ${exec_start:-notesd} or on PATH: install the one notesd came with"
+if [ -z "$notesctl" ]; then
+	problem "no notesctl beside ${exec_start:-notesd} or on PATH: install the one notesd came with"
+elif ! "$notesctl" help hub 2>/dev/null | grep -qE '^[[:space:]]+url[[:space:]]'; then
+	problem "$notesctl has no 'hub url' (an M2 notesctl?): install the one ${exec_start:-notesd} came with beside it"
+fi
 dropins=$(show "$UNIT" DropInPaths)
 say "    $UNIT runs ${exec_start:-?} as $APP_USER, data $target, private socket $app_socket"
 [ -z "$dropins" ] || say "    with drop-ins: $dropins (kept as they are: the binary, data and socket above are theirs)"
