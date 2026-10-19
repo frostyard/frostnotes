@@ -467,7 +467,7 @@ joins again with a new replica.
 
 ## References
 
-- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md)
-- Context: [design/sync.md](../design/sync.md), [design/vault.md](../design/vault.md#writes)
+- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (from M4, the hub behind lodge and relocation)
+- Context: [design/sync.md](../design/sync.md), [design/vault.md](../design/vault.md#writes), [design/hub.md](../design/hub.md) (the hub behind lodge, moving devices)
 - Related: [rpc-protocol.md](rpc-protocol.md), [merge.md](merge.md), [lodge-app.md](lodge-app.md) (from M4, these routes under `/device/` on lodge's app socket, and relocation)
 - Built in: [plan 0004](../plans/0004-m2-sync.md)
