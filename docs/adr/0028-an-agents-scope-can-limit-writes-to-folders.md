@@ -68,6 +68,10 @@ Porter's token is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
 - Prefixes are percent-encoded as URL path segments are, with `,`, `;`
   and `%` always encoded, so a scope stays ASCII in `Lodge-Scope`.
   `Porter/` is written as it is.
+- A prefix is written one way: its names in NFC, encoded exactly as
+  Go's `url.PathEscape` encodes each name (`My%20Notes/`,
+  `R%C3%A9sum%C3%A9s/`). Another encoding of the same folder is an
+  error.
 - `except=` needs a write right (`write`, `write=` or `daily`) to take
   from. Without one it is an error.
 
@@ -79,6 +83,15 @@ Porter's token is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
 - Folding is what keeps `except` sound on a file system that ignores
   case. On one that keeps case, it makes `write=` admit other spellings
   of the same folder's name, which `except` folds the same way.
+- **A file system's other names:** a share can answer to names its
+  folders do not list:
+  - an 8.3 short name (`ROUTIN~1`);
+  - a name with a trailing dot or space, which it trims;
+  - a letter it folds otherwise than Unicode does, such as `ı` as `I`.
+
+  A path that reaches an existing file or folder by such a name is
+  refused with `invalidParams`. So folding has to cover only the names
+  a folder lists.
 
 **What each write method needs:**
 - **`note.create`, `write`, `upload`, `delete`, `mkdir` and `revert`:**
@@ -102,6 +115,8 @@ Porter's token is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
   only, in notesd's time zone, and for no other day.
 - `note.daily` creates a missing daily note from the vault's daily-note
   settings and template, as it does for any caller.
+- The daily note's path is judged where it is written, under the
+  vault's lock, from the settings as they are then.
 - `note.appendDaily` appends text at the end of the daily note and
   creates it first when it is missing. It writes with the note's current
   hash as its base, under the vault's lock, so it never edits text that

@@ -198,6 +198,31 @@ func TestTheEngineHoldsTheAgentToItsScope(t *testing.T) {
 	}
 }
 
+// A folder scope holds through lodge: the engine refuses what it does
+// not allow, in any spelling, and says what the token may write.
+func TestAFolderScopeHoldsThroughLodge(t *testing.T) {
+	n := startLodge(t)
+	cs := n.connect(t, "porter", "vault="+strconv.FormatInt(n.vault, 10)+";write=Porter/;except=Porter/Routines/;daily")
+	if got := toolNames(t, cs); len(got) != 7 {
+		t.Fatalf("tools = %v, want seven", got)
+	}
+	if res, text := call(t, cs, "create_note", map[string]any{"path": "Porter/Memory.md", "content": "memory\n"}); res.IsError {
+		t.Fatalf("create_note in Porter/: %s", text)
+	}
+	for _, p := range []string{"Porter/Routines/Brief.md", "porter/ROUTINES/Brief.md", "Elsewhere.md"} {
+		res, text := call(t, cs, "create_note", map[string]any{"path": p, "content": "x\n"})
+		if !res.IsError || !strings.Contains(text, "outside this token's writes") || !strings.Contains(text, "under Porter/ except Porter/Routines/") {
+			t.Errorf("create_note %s = %v %s", p, res.IsError, text)
+		}
+	}
+	if res, text := call(t, cs, "edit_note", map[string]any{"path": "Plan.md", "append": "x\n"}); !res.IsError || !strings.Contains(text, "outside this token's writes") {
+		t.Errorf("edit_note Plan.md = %v %s", res.IsError, text)
+	}
+	if _, err := n.local.Note().Read(t.Context(), &api.NoteReadParams{VaultID: n.vault, Path: "Porter/Routines/Brief.md"}); !errors.Is(err, api.ErrNotFound) {
+		t.Errorf("Porter/Routines/Brief.md after the refusals = %v", err)
+	}
+}
+
 // A session belongs to its token and scope: another token's request for
 // it is 404, and a scope that does not parse is 403.
 func TestASessionBelongsToItsToken(t *testing.T) {
@@ -225,7 +250,8 @@ func TestASessionBelongsToItsToken(t *testing.T) {
 			t.Errorf("session %s as %s %s = %d, want 404", id, c.Token, c.Scope, resp.StatusCode)
 		}
 	}
-	for _, bad := range []string{"vault=x", "all", "vault=1;admin", ""} {
+	for _, bad := range []string{"vault=x", "all", "vault=1;admin", "", "vault=1;except=A/", "vault=1;daily;write",
+		"vault=1;write=A", "vault=1;write=Résumés/", "vault=1;write=../"} {
 		if _, err := n.dial(t, "claude-laptop", bad); err == nil {
 			t.Errorf("a session with scope %q opened", bad)
 		}

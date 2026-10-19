@@ -25,6 +25,23 @@ Work is split per
   boundary and its contract.
 - **No cards.**
 
+Status (2026-10-19):
+- **Phase 1.** ADR-0028 is Proposed. The user approved building this
+  plan on 2026-10-19, ahead of its acceptance, as PRs for review.
+- **Phase 2 is built in two PRs.**
+  - The first PR has the grammar, the engine's checks on every writing
+    method, the router's `daily`, the tests at the boundaries, and the
+    specs.
+  - The second has `note.appendDaily`, with Phase 3's tools.
+  - Two rules were added to ADR-0028 while building:
+    - a prefix is written one way, in NFC and `url.PathEscape`'s
+      encoding;
+    - a path that reaches an existing file by a name its folder does
+      not list is refused (a share's 8.3 names, trimmed dots and other
+      foldings).
+- **Today's time zone,** the open question below, is checked when the
+  hub runs it.
+
 ## Phase 1 — Decisions (planner)
 
 - [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md),

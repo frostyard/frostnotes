@@ -162,11 +162,31 @@ lodge-content adds its own sandbox policy and cross-origin headers
 
 [mcp.md](mcp.md#through-lodge) gives the tools; on the socket:
 
-- **The scope** is `Lodge-Scope`, which lodge passes unread:
-  - `vault=<id>` for reading one vault, or `vault=<id>;write` to also
-    write;
-  - `<id>` is the vault's ID on this notesd (`notesctl vault list`);
-  - anything else is 403.
+- **The scope** is `Lodge-Scope`, which lodge passes unread
+  ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md)):
+
+  ```
+  vault=<id>[;write[=<prefix>[,<prefix>…]]][;except=<prefix>[,<prefix>…]][;daily]
+  ```
+
+  - `<id>` is the vault's ID on this notesd (`notesctl vault list`).
+    Every scope reads the whole vault.
+  - `;write` also writes the whole vault. `;write=` writes only under
+    its prefixes.
+  - `;except=` takes its prefixes out of every write, `daily`'s
+    included, and always wins. It needs `write`, `write=` or `daily`.
+  - `;daily` writes today's daily note, in notesd's time zone, and
+    nothing else.
+  - A prefix is a folder: a vault-relative path ending in `/`, whose
+    names pass the path guard and are in NFC. It is percent-encoded as
+    a URL path segment is, so `,`, `;`, `%`, spaces and every byte
+    outside ASCII are encoded, and it is written only that way:
+    `Porter/`, `My%20Notes/`, `R%C3%A9sum%C3%A9s/`.
+  - The parts appear at most once each, in that order, so a scope reads
+    one way.
+  - Anything else is 403 at `initialize`. So is any scope that a notesd
+    from before this grammar cannot parse: it fails closed.
+  - Porter's scope is `vault=<id>;write=Porter/;except=Porter/Routines/;daily`.
 - **Sessions:**
   - each MCP session is bound, at `initialize`, to the token's name
     (`Lodge-Token`) and its scope;
@@ -180,7 +200,27 @@ lodge-content adds its own sandbox policy and cross-origin headers
   scope.
   - Only `rpc` and `note` admit `agent`.
   - A call that names another vault is `notFound`.
-  - A method marked `writes` is `methodNotFound` under a read scope.
+  - Under a scope with no write right, a method marked `writes` is
+    `methodNotFound`. `daily` admits `note.daily`.
+  - **A write outside the scope** is `invalidParams`, and its message
+    says what the token may write.
+  - **How a path is judged:** after the path guard, segment by segment
+    against each prefix, after NFC normalization and case folding, so
+    no spelling of an `except` folder escapes it.
+  - **Aliases:** a path that reaches an existing file or folder by a
+    name its folder does not list is `invalidParams` too. Examples are
+    an 8.3 short name, or a trailing dot that a share trims.
+  - **What each write needs:**
+    - `note.create`, `write`, `upload`, `delete` and `revert`: the path.
+    - `note.move`: both ends.
+    - `note.mkdir`: the folder, which may be a `write=` folder itself.
+    - `note.moveFolder` and `note.deleteFolder`: each folder writable
+      whole, with no `except` at, above or under it.
+    - A move with `updateLinks` whose rewrites would reach a note
+      outside the scope is refused whole.
+    - `note.daily`: the day's note writable, or under `daily` today's,
+      and not under `except`. It is judged under the vault's lock, at
+      the path the daily-note settings give.
 - **Attribution:** an agent's writes are source `agent`, with
   `Lodge-Token` as author. The client's `clientInfo.name` goes to the
   log only.
@@ -286,7 +326,8 @@ lodge-content adds its own sandbox policy and cross-origin headers
 
 On the server, run them as `frostnotes` (`sudo -u frostnotes notesctl
 …`). Agents' tokens are lodge's: `lodgectl token issue NAME --app notes
---scope 'vault=<id>;write'`.
+--scope 'vault=<id>;write'`, or a folder scope such as
+`'vault=<id>;write=Porter/;except=Porter/Routines/;daily'`.
 
 ### Limits
 
@@ -306,9 +347,12 @@ On the server, run them as `frostnotes` (`sudo -u frostnotes notesctl
 - notesd reads `Lodge-*` headers only on the app socket, and only after
   the peer check.
 - Each path on the app socket admits one caller kind.
-- An agent's scope is enforced by the engine. A test calls every `note`
-  method on another vault, and every method marked `writes` under a
-  read scope.
+- An agent's scope is enforced by the engine. Tests call:
+  - every `note` method on another vault;
+  - every method marked `writes` under a read scope;
+  - every method marked `writes` outside a folder scope;
+  - each kind of write at the folder boundaries, with case and Unicode
+    spellings of an `except` folder.
 - The writes of `session` and `agent` connections carry the
   connection's source and author, never the request's.
 - Approving a device and recording the hub's URL answer
@@ -327,8 +371,8 @@ On the server, run them as `frostnotes` (`sudo -u frostnotes notesctl
 
 ## References
 
-- Rationale: [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (files by hash)
+- Rationale: [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (files by hash), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope)
 - Context: [design/hub.md](../design/hub.md), [design/overview.md](../design/overview.md), [design/app.md](../design/app.md#in-a-browser)
 - lodge: [app contract](https://github.com/frostyard/lodge/blob/main/docs/specs/app-contract.md), [lodge-http](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-http.md), [ADR-0003](https://github.com/frostyard/lodge/blob/main/docs/adr/0003-lodge-is-the-only-process-on-the-network.md), [ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md), [ADR-0010](https://github.com/frostyard/lodge/blob/main/docs/adr/0010-untrusted-bytes-come-from-a-second-node.md)
 - Related: [sync-protocol.md](sync-protocol.md), [rpc-protocol.md](rpc-protocol.md), [mcp.md](mcp.md)
-- Built in: [plan 0006](../plans/0006-m4-notes-inside-lodge.md)
+- Built in: [plan 0006](../plans/0006-m4-notes-inside-lodge.md); folder scopes in [plan 0007](../plans/0007-folder-scopes-for-agents.md)

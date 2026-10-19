@@ -150,6 +150,9 @@ func (v *Vault) MoveFolder(ctx context.Context, from, to string, updateLinks boo
 		if plans, err = v.planRewrites(ctx, r, moved, moves); err != nil {
 			return nil, err
 		}
+		if err := checkRewrites(ctx, plans, moves); err != nil {
+			return nil, err
+		}
 	}
 	if err := mkdirs(r, to); err != nil {
 		return nil, apiError(to, err)

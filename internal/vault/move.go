@@ -61,6 +61,9 @@ func (v *Vault) Move(ctx context.Context, from, to string, updateLinks bool, who
 		if plans, err = v.planRewrites(ctx, r, []store.File{row}, moves); err != nil {
 			return nil, err
 		}
+		if err := checkRewrites(ctx, plans, moves); err != nil {
+			return nil, err
+		}
 	}
 	if err := mkdirs(r, to); err != nil {
 		return nil, apiError(to, err)
