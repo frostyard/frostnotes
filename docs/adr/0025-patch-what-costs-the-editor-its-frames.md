@@ -1,6 +1,6 @@
 # 0025 — Patch what costs the editor its frames
 
-- **Status:** Accepted (2026-10-19)
+- **Status:** Accepted (2026-10-18)
 - **Date:** 2026-10-18
 
 ## Context
