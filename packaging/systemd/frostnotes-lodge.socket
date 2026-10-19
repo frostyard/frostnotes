@@ -1,0 +1,18 @@
+# notesd's lodge app socket (docs/specs/lodge-app.md; lodge's app
+# contract, Install layout): only lodge's group may open it, and notesd
+# closes any peer but lodge's uid.
+[Unit]
+Description=Frostnotes' lodge app socket
+Documentation=https://github.com/frostyard/frostnotes/blob/main/docs/specs/lodge-app.md
+
+[Socket]
+ListenStream=/run/lodge/apps/notes.sock
+SocketUser=frostnotes
+SocketGroup=lodge
+SocketMode=0660
+DirectoryMode=0755
+FileDescriptorName=notes
+Service=frostnotes.service
+
+[Install]
+WantedBy=sockets.target
