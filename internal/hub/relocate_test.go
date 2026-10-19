@@ -92,10 +92,17 @@ func TestTheRelocationProof(t *testing.T) {
 		t.Fatal("the answer holds the token or its hash")
 	}
 
-	// Refusals: an unknown or revoked device, and a malformed request.
-	if resp := h.relocation(`{"device": 999, "nonce": "` + nonce + `"}`); resp.StatusCode != http.StatusNotFound {
-		t.Errorf("an unknown device = %s, want 404", resp.Status)
+	// An unknown device gets the same answer as a paired one, with a proof
+	// no token makes: the endpoint does not tell which devices exist.
+	unknown := h.relocation(`{"device": 999, "nonce": "` + nonce + `"}`)
+	if unknown.StatusCode != http.StatusOK {
+		t.Fatalf("an unknown device = %s, want 200 as for a paired one", unknown.Status)
 	}
+	if u := decode[hub.Relocation](t, unknown.Body); u.Hub != got.Hub || u.URL != moved || len(u.Proof) != 43 ||
+		u.Proof == got.Proof || u.Proof == hub.Proof(hub.TokenKey(token), got.Hub, moved, nonce) {
+		t.Errorf("an unknown device's answer = %+v", u)
+	}
+	// Refusals: a malformed request.
 	for name, bad := range map[string]string{
 		"a short nonce":     `{"device": 1, "nonce": "` + nonce[:42] + `"}`,
 		"a long nonce":      `{"device": 1, "nonce": "` + nonce + `A"}`,
@@ -127,8 +134,12 @@ func TestTheRelocationProof(t *testing.T) {
 	if err := h.c.Hub().Revoke(t.Context(), &api.HubRevokeParams{Device: device}); err != nil {
 		t.Fatal(err)
 	}
-	if resp := h.relocation(body); resp.StatusCode != http.StatusNotFound {
-		t.Errorf("a revoked device = %s, want 404", resp.Status)
+	revoked := h.relocation(body)
+	if revoked.StatusCode != http.StatusOK {
+		t.Fatalf("a revoked device = %s, want 200 as for a paired one", revoked.Status)
+	}
+	if r := decode[hub.Relocation](t, revoked.Body); r.Proof == hub.Proof(hub.TokenKey(token), r.Hub, moved, nonce) {
+		t.Error("a revoked device's token still makes its proof")
 	}
 }
 
