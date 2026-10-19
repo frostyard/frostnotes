@@ -63,7 +63,7 @@ class FakeLodge implements Lodge {
   }
 }
 
-const files = { 3: { "a.md": "Alpha\n", "Deep/b c.md": "Beta\n" }, 1: { "n.md": "N\n" } };
+const files = { 3: { "a.md": "Alpha\n", "Deep/b c.md": "Beta\n", "paper.pdf": "%PDF-1.4" }, 1: { "n.md": "N\n" } };
 
 async function start(route: string) {
   const lodge = new FakeLodge(route);
@@ -128,6 +128,15 @@ describe("LodgeBridge", () => {
     act(() => usePrefs.getState().setPrefs({ theme: "dark" }));
     act(() => lodge.send("theme", { scheme: "light" }));
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("opens a PDF in a new tab through the shell, or as a download", async () => {
+    const { lodge } = await start("/3/paper.pdf");
+    const open = await screen.findByRole("button", { name: "Open in new tab" });
+    act(() => open.click());
+    act(() => screen.getByRole("button", { name: "Download" }).click());
+    expect(lodge.opened).toHaveLength(2);
+    expect(lodge.opened[1]).toBe(`${lodge.opened[0]}?download=1`);
   });
 
   it("asks the shell to open web links", async () => {

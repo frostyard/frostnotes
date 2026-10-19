@@ -13,6 +13,7 @@ import { NoteEditor } from "../editor/NoteEditor";
 import type { PreviewCommand } from "../editor/preview/framework";
 import { EmptyTab } from "../features/workspace/EmptyTab";
 import { extensionOf, fileType } from "../lib/fileTree";
+import { useLodge } from "../lodge/lodge";
 import { ReadingView } from "../reading/ReadingView";
 import { type MergeSide, tabTitle, type ViewState } from "../workspace/model";
 import type { OpenWhere } from "../workspace/ops";
@@ -125,6 +126,27 @@ export function ViewContent(props: ViewContentProps) {
   return view.type === "file" ? <FileView path={view.path} /> : <Message text={`${tabTitle(view)} needs a vault.`} />;
 }
 
+// ContentFile offers a file inside lodge (docs/design/app.md#in-a-browser):
+// its content URL in a new tab, where the browser shows what it can (a
+// PDF), or the same URL as a download where it will not show a file in a
+// sandboxed page.
+function ContentFile(props: { name: string; url: string; open: (url: string) => void }) {
+  const button = "rounded-md border border-separator px-3 py-1 text-sidebar-row text-primary hover:bg-code";
+  return (
+    <div className="flex flex-col items-center gap-3 p-8 text-secondary">
+      <p className="text-empty">{props.name} opens outside the app.</p>
+      <div className="flex gap-2">
+        <button type="button" className={button} onClick={() => props.open(props.url)}>
+          Open in new tab
+        </button>
+        <button type="button" className={button} onClick={() => props.open(`${props.url}?download=1`)}>
+          Download
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Message({ text }: { text: string }) {
   return <p className="text-empty mx-auto max-w-[700px] px-8 py-8 text-secondary">{text}</p>;
 }
@@ -133,6 +155,7 @@ function Message({ text }: { text: string }) {
 // inline, anything else by name.
 function FileView({ path }: { path: string }) {
   const c = useClient();
+  const shell = useLodge((s) => s.lodge);
   const hash = useFiles((s) => s.files.get(path)?.hash);
   const url = hash === undefined ? "" : (c.transport.blobURL?.(hash, extensionOf(path)) ?? "");
   const name = path.slice(path.lastIndexOf("/") + 1);
@@ -150,7 +173,9 @@ function FileView({ path }: { path: string }) {
       // biome-ignore lint/a11y/useMediaCaption: a vault's video has no captions to offer
       return <video src={url} controls className="mx-auto max-w-full p-8" />;
     default:
-      return (
+      return shell && url !== "" ? (
+        <ContentFile name={name} url={url} open={(u) => shell.open(u)} />
+      ) : (
         <div className="flex flex-col items-center gap-3 p-8 text-secondary">
           <p className="text-empty">{name} opens outside the app.</p>
           <button
