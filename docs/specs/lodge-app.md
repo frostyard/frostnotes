@@ -126,8 +126,10 @@ digits, and `ext` 1 to 8 lowercase letters or digits. The public URL is
 - `X-Content-Type-Options: nosniff`;
 - `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`;
 - `Cache-Control: private, max-age=31536000, immutable`;
-- one `Range` per request. A 206 carries at most 8 MiB. A request
-  without a range is answered whole up to 64 MiB, else 413.
+- one `Range` per request; several, or one past the end, is 416. A 206
+  carries at most 8 MiB: a longer or open range is cut to 8 MiB from
+  its start. A request without a range is answered whole up to 64 MiB,
+  else 413.
 - With `?download=1`, also `Content-Disposition: attachment;
   filename="<hash>.<ext>"`. The web app uses it where a browser will not
   show a file in a sandboxed page.
@@ -178,8 +180,8 @@ lodge-content adds its own sandbox policy and cross-origin headers
 
   lodge adds no identity check here.
 - **A pending pairing's address** behind lodge is the node lodge names
-  (`Lodge-Node-Name`, and `Lodge-Login` when sent), or empty when it
-  names none. It is shown beside the device's own name and the time in
+  (`Lodge-Node-Name`, and `Lodge-Login` when sent: `phone
+  (ana@example.com)`), or empty when it names none. It is shown beside the device's own name and the time in
   `notesctl hub pending`, to tell pairings apart, never to admit one.
 - **The hub's URL:**
   - `hub.setURL {url}` (caller `local`) records the URL devices should
