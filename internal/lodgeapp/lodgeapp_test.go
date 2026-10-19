@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"github.com/frostyard/lodge/kit/manifest"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/blobhttp"
 	"github.com/frostyard/frostnotes/internal/lodgeapp"
 	"github.com/frostyard/frostnotes/internal/rpctest"
 	"github.com/frostyard/frostnotes/internal/syncer"
@@ -33,6 +35,12 @@ type notes struct {
 	lodge *kittest.Lodge
 	local *api.Client
 	vault int64
+	key   []byte
+}
+
+// blob is a file's content path on the socket, named by its MAC.
+func (n *notes) blob(hash, ext string) string {
+	return "/content/blobs/" + blobhttp.ContentMAC(n.key, hash) + "/" + hash + "." + ext
 }
 
 func start(t *testing.T) *notes {
@@ -50,9 +58,10 @@ func start(t *testing.T) *notes {
 	if _, err := local.Note().Read(t.Context(), &api.NoteReadParams{VaultID: v.ID, Path: "Plan.md"}); err != nil {
 		t.Fatal(err)
 	}
+	key := bytes.Repeat([]byte{7}, 32)
 	l := kittest.Start(t, lodgeapp.ID, lodgeapp.Server(lodgeapp.Config{RPC: srv.RPC, Router: srv.Router,
-		Blobs: srv.Blobs, Hub: srv.Hub, Version: "test"}))
-	return &notes{srv: srv, lodge: l, local: local, vault: v.ID}
+		Blobs: srv.Blobs, Hub: srv.Hub, Version: "test", ContentKey: key}))
+	return &notes{srv: srv, lodge: l, local: local, vault: v.ID, key: key}
 }
 
 // The socket keeps lodge's rules: the peer check, one caller kind per
@@ -104,7 +113,7 @@ func TestASessionReadsWritesAndListens(t *testing.T) {
 	ctx := t.Context()
 	cl, hello := dialSession(t, n, kittest.Session())
 	if hello.Caller != "session" || ptr(hello.Login) != kittest.Login || ptr(hello.DisplayName) != kittest.DisplayName ||
-		ptr(hello.Node) != kittest.NodeName {
+		ptr(hello.Node) != kittest.NodeName || ptr(hello.ContentKey) != base64.RawURLEncoding.EncodeToString(n.key) {
 		t.Fatalf("hello = %+v", hello)
 	}
 	if _, err := cl.Events().Subscribe(ctx, &api.EventsSubscribeParams{}); err != nil {
@@ -197,26 +206,31 @@ func TestContentServesBlobsWithinTheirLimits(t *testing.T) {
 		return resp
 	}
 	small := put([]byte("<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>"))
-	resp := get("/content/blobs/"+small+".svg", "")
+	resp := get(n.blob(small, "svg"), "")
 	h := resp.Header
 	if resp.StatusCode != http.StatusOK || h.Get("Content-Type") != "image/svg+xml" || h.Get("X-Content-Type-Options") != "nosniff" ||
 		h.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; sandbox" ||
 		h.Get("Cache-Control") != "private, max-age=31536000, immutable" || h.Get("Content-Disposition") != "" {
 		t.Fatalf("GET a blob = %s %v", resp.Status, h)
 	}
-	if d := get("/content/blobs/"+small+".svg?download=1", "").Header.Get("Content-Disposition"); d != `attachment; filename="`+small+`.svg"` {
+	if d := get(n.blob(small, "svg")+"?download=1", "").Header.Get("Content-Disposition"); d != `attachment; filename="`+small+`.svg"` {
 		t.Errorf("with ?download=1, Content-Disposition = %q", d)
 	}
-	for _, bad := range []string{"/content/blobs/" + small, "/content/blobs/" + strings.ToUpper(small) + ".svg",
-		"/content/blobs/" + small + ".toolongext", "/content/" + small + ".svg", "/content/blobs/" + strings.Repeat("0", 64) + ".png"} {
+	// Without the key's MAC there is no URL for a file: a page that knows a
+	// file's hash cannot learn whether the vault holds it.
+	other := blobhttp.ContentMAC(bytes.Repeat([]byte{8}, 32), small)
+	for _, bad := range []string{"/content/blobs/" + small + ".svg", "/content/blobs/" + other + "/" + small + ".svg",
+		"/content/blobs/" + blobhttp.ContentMAC(n.key, strings.Repeat("0", 64)) + "/" + small + ".svg",
+		n.blob(small, "toolongext"), "/content/" + small + ".svg", n.blob(strings.Repeat("0", 64), "png"),
+		strings.Replace(n.blob(small, "svg"), small, strings.ToUpper(small), 1)} {
 		if code := get(bad, "").StatusCode; code != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404", bad, code)
 		}
 	}
-	if code, _ := n.lodge.Get(t, "/content/blobs/"+small+".svg", kittest.X()); code != http.StatusForbidden {
+	if code, _ := n.lodge.Get(t, n.blob(small, "svg"), kittest.X()); code != http.StatusForbidden {
 		t.Errorf("a blob as a session = %d, want 403: content is lodge-content's", code)
 	}
-	if code, _ := n.lodge.Request(t, http.MethodPut, "/content/blobs/"+small+".svg", kittest.Content()); code != http.StatusMethodNotAllowed {
+	if code, _ := n.lodge.Request(t, http.MethodPut, n.blob(small, "svg"), kittest.Content()); code != http.StatusMethodNotAllowed {
 		t.Errorf("PUT a blob = %d, want 405", code)
 	}
 
@@ -224,10 +238,10 @@ func TestContentServesBlobsWithinTheirLimits(t *testing.T) {
 	whole := bytes.Repeat([]byte{'a'}, lodgeapp.MaxWhole)
 	atLimit := put(whole)
 	past := put(append(whole, 'b'))
-	if resp := get("/content/blobs/"+atLimit+".bin", ""); resp.StatusCode != http.StatusOK || resp.ContentLength != lodgeapp.MaxWhole {
+	if resp := get(n.blob(atLimit, "bin"), ""); resp.StatusCode != http.StatusOK || resp.ContentLength != lodgeapp.MaxWhole {
 		t.Errorf("a 64 MiB blob = %s, %d bytes; want it whole", resp.Status, resp.ContentLength)
 	}
-	if code := get("/content/blobs/"+past+".bin", "").StatusCode; code != http.StatusRequestEntityTooLarge {
+	if code := get(n.blob(past, "bin"), "").StatusCode; code != http.StatusRequestEntityTooLarge {
 		t.Errorf("a blob past 64 MiB without a range = %d, want 413", code)
 	}
 	// A 206 carries at most 8 MiB: a range of exactly that is whole, a
@@ -238,7 +252,7 @@ func TestContentServesBlobsWithinTheirLimits(t *testing.T) {
 		"bytes=10-":       "bytes 10-8388617/67108865",
 		"bytes=-5":        "bytes 67108860-67108864/67108865",
 	} {
-		resp := get("/content/blobs/"+past+".bin", rng)
+		resp := get(n.blob(past, "bin"), rng)
 		if resp.StatusCode != http.StatusPartialContent || resp.Header.Get("Content-Range") != want {
 			t.Errorf("Range %s = %s %q, want 206 %q", rng, resp.Status, resp.Header.Get("Content-Range"), want)
 		}
@@ -248,7 +262,7 @@ func TestContentServesBlobsWithinTheirLimits(t *testing.T) {
 	}
 	// An If-Range that does not match changes nothing: the limits hold.
 	for _, ifRange := range []string{`"nope"`, "Mon, 02 Jan 2006 15:04:05 GMT"} {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/content/blobs/"+past+".bin", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, n.blob(past, "bin"), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -264,7 +278,7 @@ func TestContentServesBlobsWithinTheirLimits(t *testing.T) {
 		}
 	}
 	for _, rng := range []string{"bytes=0-1,4-5", "bytes=99999999-", "items=0-1", "bytes=5-1"} {
-		if code := get("/content/blobs/"+small+".svg", rng).StatusCode; code != http.StatusRequestedRangeNotSatisfiable {
+		if code := get(n.blob(small, "svg"), rng).StatusCode; code != http.StatusRequestedRangeNotSatisfiable {
 			t.Errorf("Range %s = %d, want 416", rng, code)
 		}
 	}
@@ -409,5 +423,29 @@ func TestANodeMayHaveTwoPairingsWaiting(t *testing.T) {
 	pending, err := n.local.Hub().Pending(t.Context(), &api.HubPendingParams{})
 	if err != nil || len(pending) != 3 {
 		t.Fatalf("pending = %+v, %v; want three", pending, err)
+	}
+}
+
+// The content key is kept in the data directory: made once, 32 bytes, its
+// owner's alone, and the same after a restart, so URLs stay cacheable.
+func TestTheContentKeyIsKept(t *testing.T) {
+	dir := t.TempDir()
+	key, err := lodgeapp.LoadContentKey(dir)
+	if err != nil || len(key) != 32 {
+		t.Fatalf("LoadContentKey = %d bytes, %v", len(key), err)
+	}
+	fi, err := os.Stat(filepath.Join(dir, "content.key"))
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("content.key = %v, %v; want mode 0600", fi.Mode(), err)
+	}
+	again, err := lodgeapp.LoadContentKey(dir)
+	if err != nil || !bytes.Equal(again, key) {
+		t.Fatalf("a second load = %x, %v; want the same key", again, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "content.key"), []byte("short"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lodgeapp.LoadContentKey(dir); err == nil {
+		t.Fatal("a content key that is not 32 bytes loaded")
 	}
 }

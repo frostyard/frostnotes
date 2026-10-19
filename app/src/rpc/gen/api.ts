@@ -1266,6 +1266,12 @@ export interface Hello {
   displayName?: string;
   /** A session's node: its short host name, from lodge. */
   node?: string;
+  /**
+   * A session's key for content URLs, 32 bytes in unpadded base64url: a
+   * file's URL on lodge-content names it by an HMAC under this key
+   * (docs/specs/lodge-app.md#contentblobs).
+   */
+  contentKey?: string;
 }
 
 /** Params of rpc.hello. */

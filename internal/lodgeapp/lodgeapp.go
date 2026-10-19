@@ -7,9 +7,16 @@ package lodgeapp
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	kit "github.com/frostyard/lodge/kit/lodgeapp"
@@ -40,20 +47,28 @@ type Config struct {
 	Hub *hub.Hub
 	// Version is notesd's, for /health.
 	Version string
-	Log     *slog.Logger
+	// ContentKey names files in content URLs (blobhttp.ContentMAC); a
+	// session learns it from rpc.hello. LoadContentKey keeps it.
+	ContentKey []byte
+	Log        *slog.Logger
 }
 
-// Server returns the kit's server for notes' routes.
+// Server returns the kit's server for notes' routes. Without a content key
+// it makes one for this process: content URLs are never unkeyed.
 func Server(cfg Config) *kit.Server {
+	if cfg.ContentKey == nil {
+		cfg.ContentKey = make([]byte, 32)
+		_, _ = rand.Read(cfg.ContentKey)
+	}
 	s := &kit.Server{
 		Health: func(context.Context) kit.Health {
 			return kit.Health{OK: true, Version: cfg.Version, Protocol: api.Protocol}
 		},
 		API: func(ctx context.Context, nc net.Conn, c kit.Caller) {
-			cfg.RPC.ServeConn(ctx, nc, cfg.Router, Identity(c))
+			cfg.RPC.ServeConn(ctx, nc, cfg.Router, Identity(c, cfg.ContentKey))
 		},
 		Content: blobhttp.Handler(cfg.Blobs, blobhttp.Options{Prefix: "/content/blobs/",
-			MaxRange: MaxRange, MaxWhole: MaxWhole, Download: true}),
+			MaxRange: MaxRange, MaxWhole: MaxWhole, Download: true, Key: cfg.ContentKey}),
 		Logger: cfg.Log,
 	}
 	if cfg.Hub != nil {
@@ -81,9 +96,45 @@ func Serve(ctx context.Context, cfg Config) error {
 }
 
 // Identity is the connection identity of an /api session: caller session,
-// named by lodge's headers, whose writes are "<node> (web)".
-func Identity(c kit.Caller) api.Identity {
-	return api.Identity{Caller: api.CallerSession, Login: c.Login, DisplayName: c.DisplayName, Node: c.NodeName}
+// named by lodge's headers, whose writes are "<node> (web)", and which
+// learns the content key from rpc.hello.
+func Identity(c kit.Caller, contentKey []byte) api.Identity {
+	return api.Identity{Caller: api.CallerSession, Login: c.Login, DisplayName: c.DisplayName, Node: c.NodeName,
+		ContentKey: base64.RawURLEncoding.EncodeToString(contentKey)}
+}
+
+// contentKeyFile is the content key's file in notesd's data directory.
+const contentKeyFile = "content.key"
+
+// LoadContentKey returns the content key kept in dir, making it (32 bytes
+// from crypto/rand, mode 0600) on first use, so content URLs stay the
+// same across restarts and browsers can cache files.
+func LoadContentKey(dir string) ([]byte, error) {
+	path := filepath.Join(dir, contentKeyFile)
+	key, err := os.ReadFile(path)
+	if err == nil {
+		if len(key) != 32 {
+			return nil, fmt.Errorf("%s holds %d bytes, not 32", path, len(key))
+		}
+		return key, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	key = make([]byte, 32)
+	_, _ = rand.Read(key)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("make the content key: %w", err)
+	}
+	if _, err := f.Write(key); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("write the content key: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("write the content key: %w", err)
+	}
+	return key, nil
 }
 
 // Device serves the hub's endpoints (sync-protocol.md's paths) under

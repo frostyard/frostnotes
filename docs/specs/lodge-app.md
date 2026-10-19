@@ -65,7 +65,7 @@ path admits one caller kind, and any other is 403:
 | --- | --- | --- |
 | `GET /health` | any, or none | the app's state for lodge's rail |
 | `GET /api`, WebSocket | `session` | JSON-RPC as caller `session` |
-| `GET`, `HEAD` `/content/blobs/<hash>.<ext>` | `content` | files by hash |
+| `GET`, `HEAD` `/content/blobs/<mac>/<hash>.<ext>` | `content` | files by hash, named by a MAC |
 | `POST`, `GET`, `DELETE` `/mcp` | `agent` | MCP Streamable HTTP |
 | `POST /device/sync/pair` | `device` | start a pairing |
 | `GET /device/sync/pair/{pairing}` | `device` | collect a device token |
@@ -116,9 +116,25 @@ only once its store is open, so a notesd that answers is serving.
 
 ### `/content/blobs/`
 
-`GET` or `HEAD /content/blobs/<hash>.<ext>`: `hash` is 64 lowercase hex
-digits, and `ext` 1 to 8 lowercase letters or digits. The public URL is
-`https://lodge-content.<tailnet>.ts.net/notes/blobs/<hash>.<ext>`. Answers:
+`GET` or `HEAD /content/blobs/<mac>/<hash>.<ext>`:
+
+- `hash` is 64 lowercase hex digits, and `ext` 1 to 8 lowercase letters
+  or digits.
+- `mac` is 43 base64url characters: HMAC-SHA256 of
+  `frostnotes content\n` + `hash`, keyed with notesd's content key, in
+  unpadded base64url.
+  - The content key is 32 random bytes that notesd keeps in its data
+    directory (`content.key`, mode 0600). It stays the same across
+    restarts, so URLs stay cacheable.
+  - `rpc.hello` hands it to a session as `contentKey`, and the web app
+    computes each file's `mac`.
+- A path without the right `mac` is 404. Under `ts.net` (a public
+  suffix) every page on every node of the tailnet is same-site to
+  lodge-content. Without the key, such a page cannot make a file's URL,
+  so it cannot learn whether the vault holds a file it knows.
+
+The public URL is
+`https://lodge-content.<tailnet>.ts.net/notes/blobs/<mac>/<hash>.<ext>`. Answers:
 
 - the content with that hash from notesd's blob store, else 404;
 - the content type the extension names
