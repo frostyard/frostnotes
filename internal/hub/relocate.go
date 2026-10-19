@@ -23,12 +23,14 @@ import (
 // POST /sync/hub, whose proof shows the hub holds its token's hash.
 
 // CheckURL accepts a hub URL whose scheme is https, or http on loopback
-// (ADR-0016), and returns it without a trailing '/'.
+// (ADR-0016), and returns it without a trailing '/' and with its host in
+// lower case, so URLs that SameURL calls the same are equal strings.
 func CheckURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(strings.TrimSuffix(raw, "/"))
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
 		return nil, api.InvalidParams("%q is not a hub URL", raw)
 	}
+	u.Host = strings.ToLower(u.Host)
 	switch u.Scheme {
 	case "https":
 	case "http":
@@ -148,7 +150,7 @@ func (h *Hub) relocation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the hub records no URL for its devices", http.StatusConflict)
 		return
 	}
-	h.cfg.Log.Info("a device asks for a relocation proof", "device", d.ID)
+	h.cfg.Log.Debug("a device asks for a relocation proof", "device", d.ID)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.MarshalWrite(w, Relocation{Hub: hubID, URL: u, Proof: Proof(key, hubID, u, req.Nonce)})
 }
