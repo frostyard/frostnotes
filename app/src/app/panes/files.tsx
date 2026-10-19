@@ -18,7 +18,7 @@ import type { Client } from "../../rpc/gen/api";
 import { activeTab, open, setFileSort, setFolderOpen, setFoldersOpen } from "../../workspace/ops";
 import { useWorkspace } from "../../workspace/store";
 import { copyPath, createNote, deleteFile, newNotePath } from "../commands";
-import { openInDefaultApp } from "../system";
+import { openOutside, openOutsideLabel } from "../system";
 import { openFile } from "./open";
 
 const SORTS: { id: SortOrder; label: string }[] = [
@@ -218,6 +218,7 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
     ...extra,
   });
   const sep: MenuItem = { kind: "separator" };
+  const outside = folder || path === null ? null : openOutsideLabel(path);
   const items: MenuItem[] = folder
     ? [
         item("new-note", "New note"),
@@ -241,7 +242,7 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
         sep,
         item("copy-path", "Copy path"),
         item("history", "Open version history"),
-        item("open-default", "Open in default app"),
+        ...(outside === null ? [] : [item("open-default", outside)]),
         sep,
         item("delete", "Delete"),
       ];
@@ -271,7 +272,7 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
           case "history":
             return update((w) => open(w, { type: "history", path: at }, "tab"));
           case "open-default":
-            return openInDefaultApp(vaultId, at);
+            return openOutside(c, vaultId, at);
           case "delete":
             return folder ? deleteFolder(c, vaultId, at) : deleteFile(c, at);
         }

@@ -7,6 +7,7 @@ import { MAX_ROUTE, splitRoute } from "@frostyard/lodge-client";
 import { useEffect } from "react";
 
 import { viewOf } from "../app/commands";
+import { windowTitle } from "../app/system";
 import { useFiles } from "../data/files";
 import { notify, openPrompt } from "../data/overlays";
 import { openVault, useClient } from "../data/session";
@@ -43,7 +44,8 @@ export function LodgeBridge(props: { lodge: Lodge }) {
       const vaultId = useNotes.getState().vaultId;
       const view = activeTab(useWorkspace.getState().ws).view;
       const path = view.type === "empty" ? "" : view.path;
-      const key = `${vaultId}\u0000${path}`;
+      const vaultName = useNotes.getState().vaults.find((v) => v.id === vaultId)?.name ?? "";
+      const key = `${vaultId}\u0000${path}\u0000${vaultName}`;
       if (key === last) return;
       last = key;
       if (vaultId === null) {
@@ -53,8 +55,12 @@ export function LodgeBridge(props: { lodge: Lodge }) {
       }
       const title = path === "" ? "" : noteTitle(path);
       const route = noteRoute(vaultId, path);
-      // A route is at most 2,048 characters (lodge-client.md, Routes).
-      lodge.route(route.length <= MAX_ROUTE ? route : noteRoute(vaultId, ""), title);
+      // A route is at most 2,048 characters (lodge-client.md, Routes); the
+      // frame's title is the window's (docs/specs/ui.md#in-a-browser).
+      lodge.route(
+        route.length <= MAX_ROUTE ? route : noteRoute(vaultId, ""),
+        windowTitle(title || null, vaultName || null),
+      );
       lodge.context(
         path === "" ? { kind: null, ref: "", title: "" } : { kind: "note", ref: noteRef(vaultId, path), title },
       );

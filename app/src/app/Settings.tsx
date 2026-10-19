@@ -23,6 +23,7 @@ import type {
   VaultConfigureParams,
   VaultSettings,
 } from "../rpc/gen/api";
+import { useNarrow } from "./narrow";
 import { statusSync } from "./status";
 
 type BoolPref = {
@@ -251,6 +252,7 @@ export function SettingsContainer() {
   const client = useClient();
   const vaultId = useNotes((s) => s.vaultId);
   const [hub, setHub] = useState<HubView | null>(null);
+  const narrow = useNarrow();
   const open = section !== null;
   useEffect(() => {
     if (!open) return;
@@ -263,6 +265,7 @@ export function SettingsContainer() {
   if (section === null) return null;
   return (
     <SettingsDialog
+      narrow={narrow}
       sections={settingsSections(prefs, vault, sync, hub)}
       section={section}
       onSection={(id) => openSettings(id)}

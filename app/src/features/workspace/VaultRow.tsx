@@ -41,7 +41,7 @@ export function VaultRow(props: VaultRowProps) {
           const r = e.currentTarget.getBoundingClientRect();
           setMenuAt(menuAt ? null : { x: r.left, y: r.top - (props.vaults.length + 1) * 28 - 23 });
         }}
-        className="text-sidebar-row flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 font-semibold hover:bg-selection-inactive"
+        className="text-sidebar-row flex min-w-0 flex-1 items-center gap-1 rounded-md px-1 py-1 font-semibold hover:bg-selection-inactive pointer-coarse:min-h-11"
       >
         <span className="truncate">{current?.name ?? "No vault"}</span>
         <ChevronsUpDown size={12} className="shrink-0 text-secondary" aria-hidden />

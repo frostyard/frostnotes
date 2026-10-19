@@ -146,9 +146,12 @@ export function ask(q: Omit<OpenConfirm, "answer">): Promise<boolean> {
   });
 }
 
-/** openPreview shows a link's page preview, unless the note's preview is open already. */
+/** coarse reports whether the pointer is a finger: hover previews do not show then (docs/specs/ui.md#narrow-windows). */
+const coarse = () => typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true;
+
+/** openPreview shows a link's page preview, unless the note's preview is open already or the pointer is a finger. */
 export function openPreview(preview: OpenPreview): void {
-  if (useOverlays.getState().preview?.path === preview.path) return;
+  if (coarse() || useOverlays.getState().preview?.path === preview.path) return;
   useOverlays.setState({ preview });
 }
 

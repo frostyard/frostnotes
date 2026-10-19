@@ -18,7 +18,7 @@ export interface IconButtonProps {
 export function iconButtonClass(size: 28 | 24 = 28, selected = false): string {
   return `flex shrink-0 items-center justify-center rounded-md text-secondary hover:bg-selection-inactive disabled:opacity-40 disabled:hover:bg-transparent ${
     size === 24 ? "size-6" : "size-7"
-  } ${selected ? "bg-selection-sidebar" : ""}`;
+  } pointer-coarse:size-11 pointer-coarse:[&_svg]:size-5 ${selected ? "bg-selection-sidebar" : ""}`;
 }
 
 /** IconButton is a chrome button. */

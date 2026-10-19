@@ -4,7 +4,10 @@
 // and another version at the right, read-only: a conflict version, a hub
 // revision, any version from the history, or the text the editor held when
 // notesd refused its base. Taking a chunk from the right is an ordinary
-// edit of the document, so it saves with its base and Ctrl+Z undoes it.
+// edit of the document, so it saves with its base and Ctrl+Z undoes it. A
+// narrow window stacks the two, the document above, each half scrolling on
+// its own (docs/specs/ui.md#narrow-windows); its arrows have no column
+// between the sides there, so a chunk is taken by editing the document.
 import { history } from "@codemirror/commands";
 import { MergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
@@ -23,6 +26,8 @@ export interface MergePaneProps {
   other: MergeSide;
   /** Done: the merge is finished. */
   onDone: () => void;
+  /** A narrow window's: the sides stacked, without arrows. */
+  narrow?: boolean;
 }
 
 /** OtherSide is the right side's text and what to call it, or why it is missing. */
@@ -42,8 +47,12 @@ const mergeTheme = EditorView.theme({
   ".cm-changedText": { background: "none", textDecoration: "underline" },
 });
 
+/** stacked lays @codemirror/merge's two editors out one above the other, each half scrolling on its own. */
+const stacked =
+  "[&_.cm-mergeView]:h-full [&_.cm-mergeViewEditors]:flex [&_.cm-mergeViewEditors]:h-full [&_.cm-mergeViewEditors]:flex-col [&_.cm-mergeViewEditor]:min-h-0 [&_.cm-mergeViewEditor]:flex-1 [&_.cm-mergeViewEditor]:overflow-auto [&_.cm-mergeViewEditor+.cm-mergeViewEditor]:border-t [&_.cm-mergeViewEditor+.cm-mergeViewEditor]:border-separator";
+
 /** MergePane compares a note's document with another version of it. */
-export function MergePane({ vaultId, path, other, onDone }: MergePaneProps) {
+export function MergePane({ vaultId, path, other, onDone, narrow = false }: MergePaneProps) {
   const current = useClient();
   const client = useRef(current);
   client.current = current;
@@ -119,7 +128,7 @@ export function MergePane({ vaultId, path, other, onDone }: MergePaneProps) {
         ],
       },
       parent: host.current,
-      revertControls: "b-to-a",
+      revertControls: narrow ? undefined : "b-to-a",
       highlightChanges: true,
       gutter: true,
     });
@@ -129,7 +138,7 @@ export function MergePane({ vaultId, path, other, onDone }: MergePaneProps) {
       doc.detach(a);
       mv?.destroy();
     };
-  }, [doc, text]);
+  }, [doc, text, narrow]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -141,7 +150,12 @@ export function MergePane({ vaultId, path, other, onDone }: MergePaneProps) {
           Done
         </button>
       </div>
-      <div ref={host} data-testid="merge-view" className="min-h-0 flex-1 overflow-auto" />
+      <div
+        ref={host}
+        data-testid="merge-view"
+        data-stacked={narrow || undefined}
+        className={`min-h-0 flex-1 overflow-auto ${narrow ? stacked : ""}`}
+      />
     </div>
   );
 }

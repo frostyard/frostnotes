@@ -135,7 +135,7 @@ export function TabStrip(props: TabStripProps) {
               type="button"
               aria-label={`Close ${tab.title}`}
               tabIndex={-1}
-              className={`flex size-4 shrink-0 items-center justify-center rounded ${
+              className={`flex size-4 shrink-0 items-center justify-center rounded pointer-coarse:size-8 pointer-coarse:opacity-100 ${
                 tab.active ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               }`}
               onClick={(event) => {

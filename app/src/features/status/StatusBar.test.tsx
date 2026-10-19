@@ -32,6 +32,28 @@ describe("StatusBar", () => {
     expect(bar().textContent).toBe("Reconnecting to notesd… (socket closed)");
   });
 
+  it("shows notes' connection and who is signed in, in a browser, in place of sync", () => {
+    const onIdentity = vi.fn();
+    setup({
+      identity: { login: "ana@example.com", node: "phone" },
+      onIdentity,
+      sync: { state: "idle", text: "Synced", conflicts: 0 },
+    });
+    const item = screen.getByRole("button", { name: "Connected as ana@example.com on phone" });
+    expect(item.getAttribute("title")).toBe("Connected as ana@example.com on phone");
+    expect(item.getAttribute("aria-haspopup")).toBe("menu");
+    expect(screen.queryByRole("img", { name: "Synced" })).toBeNull();
+    fireEvent.click(item);
+    expect(onIdentity).toHaveBeenCalledOnce();
+  });
+
+  it("says notes are out of reach while a browser reconnects", () => {
+    setup({ identity: { login: "ana@example.com" }, connection: { state: "lost", reason: "socket closed" } });
+    const item = screen.getByRole("button", { name: "Notes out of reach; reconnecting" });
+    expect(item.dataset.connection).toBe("lost");
+    expect(bar().textContent).toBe("");
+  });
+
   it("is empty when ready with nothing to show", () => {
     setup();
     expect(bar().textContent).toBe("");

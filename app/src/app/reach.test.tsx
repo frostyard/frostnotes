@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // What Phase 6 finished, in the window over the mock: zoom, web links and
-// Open in default app in a browser, aliases in the quick switcher, page
+// files opening outside the app in a browser, the browser's connection
+// item, aliases in the quick switcher, page
 // previews in the editor and the reading view, and the reading view's
 // properties block. In jsdom, whose DOM DOMPurify reads as a browser's.
 import { EditorView } from "@codemirror/view";
@@ -42,6 +43,7 @@ const FILES = {
   3: {
     "Plan.md": "---\nstatus: draft\naliases:\n  - Roadmap\n---\nRows of quince.\n",
     "Notes.md": "Intro.\nSee [[Plan]] and [site](https://example.test/).\n",
+    "pic.png": "not really a png",
   },
 };
 
@@ -81,7 +83,7 @@ describe("zoom", () => {
 });
 
 describe("outside the app, in a browser", () => {
-  it("opens a web link in a new tab, and says files open in the desktop app", async () => {
+  it("opens a web link in a new tab, and a file the browser shows in a new browser tab", async () => {
     const opened = vi.spyOn(window, "open").mockReturnValue(null);
     const { user } = await open("Notes.md");
     const site = await waitFor(() => {
@@ -93,9 +95,37 @@ describe("outside the app, in a browser", () => {
     });
     fireEvent.mouseDown(site, { button: 0 });
     await waitFor(() => expect(opened).toHaveBeenCalledWith("https://example.test/", "_blank", "noopener,noreferrer"));
+    // A note has no way out of the app in a browser (docs/specs/ui.md#in-a-browser).
     await user.click(screen.getByRole("button", { name: "More options" }));
-    await user.click(screen.getByRole("menuitem", { name: "Open in default app" }));
-    expect(await screen.findByText("Open in default app works in the desktop app.")).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /^Open in (default app|new browser tab)$/ })).toBeNull();
+    await user.keyboard("{Escape}");
+    // An image opens by its content URL in a new browser tab.
+    fireEvent.contextMenu(fileRow("pic.png"));
+    expect(screen.queryByRole("menuitem", { name: "Open in default app" })).toBeNull();
+    await user.click(await screen.findByRole("menuitem", { name: "Open in new browser tab" }));
+    await waitFor(() =>
+      expect(opened).toHaveBeenLastCalledWith(
+        expect.stringMatching(/^data:image\/png;base64,/),
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    );
+  });
+
+  it("shows notes' connection in the status bar, and who is signed in in its menu", async () => {
+    const mock = new MockTransport(mockVaults(), {
+      files: FILES,
+      caller: "session",
+      login: "ana@example.com",
+      displayName: "Ana",
+      node: "phone",
+    });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Connected as ana@example.com on phone" }));
+    const labels = useOverlays.getState().menu?.items.map((i) => (i.kind === "item" ? i.label : "-"));
+    expect(labels).toEqual(["Signed in as Ana", "ana@example.com", "on phone"]);
   });
 });
 

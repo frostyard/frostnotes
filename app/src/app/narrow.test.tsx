@@ -13,6 +13,7 @@ import { emptyWorkspace } from "../workspace/model";
 import { activeTab, open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
+import { NARROW_BACKLINKS } from "./menus";
 import { NARROW } from "./narrow";
 
 // A window as narrow as a phone: the media query matches.
@@ -41,8 +42,10 @@ afterEach(() => {
 const files = { 3: { "a.md": "Alpha\n", "Deep/b.md": "Beta\n" }, 1: { "n.md": "N\n" } };
 
 async function start() {
-  render(<App connect={async () => new MockTransport(mockVaults(), { files })} />);
+  const mock = new MockTransport(mockVaults(), { files });
+  render(<App connect={async () => mock} />);
   await screen.findByRole("main", { name: "Workspace" });
+  return mock;
 }
 
 const openNote = (w: Parameters<typeof open>[0], path: string) => open(w, { type: "note", path, mode: "edit" }, "here");
@@ -120,6 +123,47 @@ describe("a narrow window", () => {
     expect(names).toHaveLength(20);
     await user.click(within(toolbar).getByRole("button", { name: "Bold" }));
     await waitFor(() => expect(editorText()).toBe("**Alpha**\n"));
+  });
+
+  it("opens the right drawer on the Backlinks pane from the Menu's backlinks", async () => {
+    const user = userEvent.setup();
+    await start();
+    // In reading view, so no editor takes the focus (and the bottom bar).
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    act(() => useOverlays.getState().menu?.onChoose(NARROW_BACKLINKS));
+    expect(screen.getByRole("dialog", { name: "Right sidebar" })).toBeTruthy();
+    const right = useWorkspace.getState().ws.right;
+    expect(right.panes[right.active]).toBe("backlinks");
+  });
+
+  it("shows the note's folders on a tap of the view header's title, a folder revealing it in the left drawer", async () => {
+    const user = userEvent.setup();
+    await start();
+    act(() =>
+      useWorkspace.getState().update((w) => open(w, { type: "note", path: "Deep/b.md", mode: "read" }, "here")),
+    );
+    await user.click(await screen.findByRole("button", { name: "b: show its folders" }));
+    const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
+    await user.click(within(crumbs).getByRole("button", { name: "Deep" }));
+    expect(screen.getByRole("dialog", { name: "Left sidebar" })).toBeTruthy();
+  });
+
+  it("stacks the merge view's two sides, the document above, without arrows", async () => {
+    const mock = await start();
+    act(() => mock.vault(3).outside("a.md", "Alpha, again\n"));
+    const older = mock.vault(3).versionList("a.md").at(-1);
+    if (!older) throw new Error("a.md has no versions");
+    act(() =>
+      useWorkspace
+        .getState()
+        .update((w) => open(w, { type: "merge", path: "a.md", other: { kind: "version", version: older.id } }, "here")),
+    );
+    const merge = await screen.findByTestId("merge-view");
+    await waitFor(() => expect(merge.querySelectorAll(".cm-editor")).toHaveLength(2));
+    expect(merge.dataset.stacked).toBe("true");
+    expect(merge.className).toContain("[&_.cm-mergeViewEditors]:flex-col");
+    expect(merge.querySelector(".cm-merge-revert")).toBeNull();
   });
 
   it("lists the tabs full screen from the bottom bar, to activate, close or add one", async () => {
