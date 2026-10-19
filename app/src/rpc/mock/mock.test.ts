@@ -33,7 +33,27 @@ describe("MockTransport", () => {
     await expect(client.rpc.hello({ protocol: PROTOCOL, client: "test" })).resolves.toEqual({
       protocol: 1,
       server: "notesd mock",
+      caller: "local",
     });
+  });
+
+  it("answers as a session inside lodge: who it is, what it may call, its writes' author", async () => {
+    const mock = new MockTransport(mockVaults(), { now, caller: "session", login: "ana@example.com", node: "phone" });
+    const client = new Client(mock);
+    await expect(client.rpc.hello({ protocol: PROTOCOL, client: "web" })).resolves.toEqual({
+      protocol: 1,
+      server: "notesd mock",
+      caller: "session",
+      login: "ana@example.com",
+      node: "phone",
+    });
+    await expect(client.rpc.ping()).resolves.toBeUndefined();
+    await expect(client.vault.list()).resolves.toHaveLength(3);
+    await expect(client.vault.add({ path: "/home/demo/x" })).rejects.toHaveProperty("code", ErrorCode.methodNotFound);
+    await expect(client.sync.hubs()).rejects.toHaveProperty("code", ErrorCode.methodNotFound);
+    await client.note.create({ vaultId: 1, path: "From the phone.md", content: "hi\n", source: "agent", author: "x" });
+    const [v] = await client.note.versions({ vaultId: 1, path: "From the phone.md" });
+    expect(v).toMatchObject({ source: "editor", author: "phone (web)" });
   });
 
   it("lists vaults by name, ignoring case", async () => {

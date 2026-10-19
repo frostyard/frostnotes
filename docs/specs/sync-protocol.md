@@ -40,6 +40,7 @@ ADR-0016). Every other path answers 404.
 | `/sync/pair/{pairing}` | `GET` | `Bearer` pairing secret | wait for approval and collect the token |
 | `/sync` | `GET` (WebSocket upgrade) | `Bearer` device token | JSON-RPC as caller `device` |
 | `/sync/blobs/{hash}` | `HEAD`, `GET`, `PUT` | `Bearer` device token | contents |
+| `/sync/hub` | `POST` | none | the hub's ID, the URL it records and a relocation proof (M4, [lodge-app.md](lodge-app.md#device)) |
 
 - A request whose `Origin` header is present and is not exactly
   `notesd://device` is refused with 403: a device sends that origin, or
@@ -107,12 +108,13 @@ the hub's `note` or `vault` events.
 
 ### `log` methods (caller `device`)
 
-Every method but `log.vaults` names a hub vault by its sync ID (`vault`);
+Every method but `log.vaults` and `log.hub` names a hub vault by its sync ID (`vault`);
 an unknown one, or one the hub no longer serves, is `notFound`. A replica
 must be one of the connection's device (`notFound` otherwise).
 
 | Method | Params | Result |
 | --- | --- | --- |
+| `log.hub` | | `LogHub` `{hub, url?}`: the hub's ID and the URL it records for devices (`hub.setURL`, M4) |
 | `log.vaults` | | `[]LogVault` `{sync, name, seq}`: every served vault, `seq` its latest |
 | `log.join` | `vault` | `Replica` `{id, vault, seq}`: a new replica for this device |
 | `log.missing` | `vault`, `hashes` (at most 1,000) | `[]string`: the hashes the hub has no content for |
@@ -197,6 +199,7 @@ On a device, `sync` (caller `local`):
 | `sync.pair {url, name?}` | starts a pairing with the hub at `url` (default name: the host name) and returns `{pairing, code, hub, url, expiresAt}` |
 | `sync.paired {pairing}` | waits up to 30 s; `{state: pending, approved or expired, hub}`; on approval keeps the token and records the hub |
 | `sync.hubs` | the paired hubs: `{id, hub, url, device, pairedAt}` |
+| `sync.relocate {hub, url}` | moves the hub paired at `hub` to `url` when the hub there proves itself; `conflict` otherwise (M4, [lodge-app.md](lodge-app.md#device)) |
 | `sync.join {vaultId, url, name}` | syncs the local vault with the hub vault called `name` on the paired hub at `url` |
 | `sync.leave {vaultId}` | stops syncing it and drops its sync state; the files stay |
 | `sync.status {vaultId?}` | `[]SyncStatus`: state (`idle`, `syncing`, `offline`, `revoked`, `reset`), cursor, hub sequence, pending and conflicted counts, refused files, last sync, error |
@@ -210,11 +213,13 @@ On a device, `sync` (caller `local`):
 Event `sync.changed {status}` (transient) when a vault's sync state
 changes.
 
-On a hub, `hub` (caller `local`):
+On a hub, `hub` (caller `local`; from M4 also `session`, but for
+`serve`, `approve` and `setURL`, [lodge-app.md](lodge-app.md#methods-and-callers)):
 
 | Method | Does |
 | --- | --- |
-| `hub.status` | `{hub, listen?, vaults, devices, connected}` |
+| `hub.status` | `{hub, listen?, url?, vaults, devices, connected}` |
+| `hub.setURL {url}` | records the URL devices should use (M4): `https://`, or `http://` on loopback; empty forgets it; answers `hub.status` |
 | `hub.serve {vaultId}` | serves a registered vault: gives it a sync ID and appends a create revision for each of its files, by path; `conflict` if it is served |
 | `hub.vaults` | the served vaults: `{vaultId, sync, name, seq, servedAt}` |
 | `hub.pending` | pending pairings: `{code, name, addr, createdAt, expiresAt, approved}` |
@@ -241,6 +246,15 @@ On a hub, `hub` (caller `local`):
   push IDs the hub has not seen: it applies it anew, and a state the head
   already holds changes nothing.
 - The hub records a device's last request time, at most once a minute.
+- From M4, a device asks `log.hub` at each connection. When the hub
+  records a URL that differs from the device's (scheme and host without
+  case, the path exactly), the device would pair with it, and the host
+  there proves it is the hub (`POST /sync/hub`'s proof, as
+  `sync.relocate` checks it), the device keeps it and connects there,
+  once per dial, with the same token, replicas, agreed states and
+  cursors. A URL's host is kept in lower case. A hub from before M4 answers
+  `methodNotFound`, and the device stays
+  ([lodge-app.md](lodge-app.md#device)).
 
 ### Pending changes
 

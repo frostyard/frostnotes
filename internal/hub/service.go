@@ -28,10 +28,17 @@ func (s hubService) Status(ctx context.Context, _ *api.HubStatusParams) (*api.Hu
 	if err != nil {
 		return nil, err
 	}
+	u, err := s.h.cfg.DB.HubURL(ctx)
+	if err != nil {
+		return nil, err
+	}
 	st := &api.HubStatus{Hub: id, Vaults: int64(len(vs))}
 	if s.h.cfg.Listen != "" {
 		listen := s.h.cfg.Listen
 		st.Listen = &listen
+	}
+	if u != "" {
+		st.URL = &u
 	}
 	for _, d := range ds {
 		if d.RevokedAt.IsZero() {
@@ -94,6 +101,24 @@ func (s hubService) Devices(ctx context.Context, _ *api.HubDevicesParams) ([]api
 		out = append(out, d.API(s.h.connected(d.ID)))
 	}
 	return out, nil
+}
+
+// SetURL records the URL devices should use (hub.setURL); they move to it
+// at their next connection (log.hub).
+func (s hubService) SetURL(ctx context.Context, p *api.HubSetURLParams) (*api.HubStatus, error) {
+	u := ""
+	if p.URL != "" {
+		parsed, err := CheckURL(p.URL)
+		if err != nil {
+			return nil, err
+		}
+		u = parsed.String()
+	}
+	if err := s.h.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return tx.SetHubURL(ctx, u) }); err != nil {
+		return nil, err
+	}
+	s.h.cfg.Log.Info("the hub's URL for devices", "url", u)
+	return s.Status(ctx, &api.HubStatusParams{})
 }
 
 func (s hubService) Revoke(ctx context.Context, p *api.HubRevokeParams) error {

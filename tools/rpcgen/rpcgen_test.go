@@ -56,6 +56,18 @@ func TestLoadRejects(t *testing.T) {
 			map[string]string{"rpc.yaml": minimalRPC, "a.yaml": "domain: a\ncallers: [local, local]\n"},
 			`caller "local" must be one of`,
 		},
+		"method caller outside its domain's": {
+			map[string]string{"rpc.yaml": minimalRPC, "a.yaml": "domain: a\ncallers: [local]\nmethods:\n  - name: m\n    callers: [session]\n"},
+			`a.m: caller "session" must be one of the domain's`,
+		},
+		"repeated method caller": {
+			map[string]string{"rpc.yaml": minimalRPC, "a.yaml": "domain: a\ncallers: [local, session]\nmethods:\n  - name: m\n    callers: [local, local]\n"},
+			`a.m: caller "local" must be one of the domain's`,
+		},
+		"agent method without a vault": {
+			map[string]string{"rpc.yaml": minimalRPC, "a.yaml": "domain: a\ncallers: [local, agent]\nmethods:\n  - name: m\n    params:\n      - {name: vaultId, type: int, optional: true}\n"},
+			"a.m admits agent, so it must name its vault in a required int vaultId",
+		},
 		"unknown yaml key": {
 			map[string]string{"rpc.yaml": minimalRPC + "bogus: 1\n"},
 			"field bogus not found",
@@ -136,5 +148,55 @@ func TestCheckDetectsStaleOutput(t *testing.T) {
 	}
 	if err := run(append([]string{"-check"}, args...)); err == nil || !strings.Contains(err.Error(), "stale") {
 		t.Fatalf("edited output not reported stale: %v", err)
+	}
+}
+
+// A method's own callers and writes mark reach the router, the scope
+// check, the TypeScript tables and the reference.
+func TestMethodCallersAndWrites(t *testing.T) {
+	dir := writeSchema(t, map[string]string{
+		"rpc.yaml": "domain: rpc\nprotocol: 1\ncallers: [local, agent]\nmethods:\n  - name: hello\n",
+		"a.yaml": "domain: a\ncallers: [local, session, agent]\nmethods:\n" +
+			"  - name: get\n    params:\n      - {name: vaultId, type: int}\n" +
+			"  - name: put\n    writes: true\n    params:\n      - {name: vaultId, type: int}\n" +
+			"  - name: admin\n    callers: [local]\n",
+	})
+	s, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := genGo(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`r.handle("a.get", callers, false,`,
+		`r.handle("a.put", callers, true,`,
+		`r.handle("a.admin", []Caller{CallerLocal}, false,`,
+		"if err := inScope(ctx, p.VaultID); err != nil {",
+	} {
+		if !strings.Contains(string(g), want) {
+			t.Errorf("Go output lacks %q", want)
+		}
+	}
+	if n := strings.Count(string(g), "inScope("); n != 2 {
+		t.Errorf("Go output checks the scope %d times, want 2 (a.get, a.put)", n)
+	}
+	ts := string(genTS(s))
+	for _, want := range []string{
+		`export type CallerKind = "local" | "session" | "device" | "agent";`,
+		`"a.admin": ["local"],`,
+		`"a.get": ["local", "session", "agent"],`,
+		"export const WRITES: ReadonlySet<Method> = new Set<Method>([\n  \"a.put\",\n]);",
+	} {
+		if !strings.Contains(ts, want) {
+			t.Errorf("TypeScript output lacks %q", want)
+		}
+	}
+	md := string(genMarkdown(s))
+	for _, want := range []string{"Callers: `local`.", "Writes: an agent's read scope refuses it."} {
+		if !strings.Contains(md, want) {
+			t.Errorf("Markdown output lacks %q", want)
+		}
 	}
 }

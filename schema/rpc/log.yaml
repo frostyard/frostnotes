@@ -118,12 +118,23 @@ types:
       - {name: at, type: time}
       - {name: lostTo, type: int, optional: true, doc: "For a conflict revision: the revision whose side stood."}
       - {name: pruned, type: bool, doc: "Its content is gone (ADR-0019)."}
+  - name: LogHub
+    doc: The hub a device is connected to.
+    fields:
+      - {name: hub, type: string, doc: "The hub's ID."}
+      - {name: url, type: string, optional: true, doc: "The URL the hub records for devices (hub.setURL); absent when it records none."}
   - name: PushRecord
     doc: The revisions the hub appended for one push.
     fields:
       - {name: push, type: int}
       - {name: revisions, type: "[]Revision", doc: "Empty when the hub has no record of the push, or it changed nothing."}
 methods:
+  - name: hub
+    doc: >-
+      The hub's ID and the URL it records for devices. A device asks at each
+      connection, and moves to a URL that differs from its own record,
+      keeping its token, replicas, agreed states and cursors.
+    result: LogHub
   - name: vaults
     doc: The vaults this hub serves.
     result: "[]LogVault"

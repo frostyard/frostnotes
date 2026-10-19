@@ -229,3 +229,27 @@ func (s *Server) Dial(t testing.TB) *api.Client {
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
+
+// DialAs connects as a connection its listener authenticated as id (a
+// session or an agent behind lodge, a device) over an in-process pipe,
+// and completes rpc.hello; the client closes when the test ends.
+func (s *Server) DialAs(t testing.TB, id api.Identity) *api.Client {
+	t.Helper()
+	server, client := net.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.RPC.ServeConn(ctx, server, s.Router, id)
+	}()
+	c := api.NewClient(client)
+	t.Cleanup(func() {
+		_ = c.Close()
+		cancel()
+		<-done
+	})
+	if _, err := c.RPC().Hello(ctx, &api.RPCHelloParams{Protocol: api.Protocol, Client: "rpctest"}); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}

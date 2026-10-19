@@ -37,6 +37,17 @@ func genMarkdown(s *Schema) []byte {
 				w.line("%s", oneLine(m.Doc))
 				w.line("")
 			}
+			var marks []string
+			if len(m.Callers) > 0 {
+				marks = append(marks, "Callers: `"+strings.Join(m.Callers, "`, `")+"`.")
+			}
+			if m.Writes {
+				marks = append(marks, "Writes: an agent's read scope refuses it.")
+			}
+			if len(marks) > 0 {
+				w.line("%s", strings.Join(marks, " "))
+				w.line("")
+			}
 			if len(m.Params) > 0 {
 				w.fieldTable(m.Params)
 			} else {

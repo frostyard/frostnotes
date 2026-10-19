@@ -19,7 +19,7 @@ func newHubCmd(opts *rootOptions) *cobra.Command {
 	}
 	cmd.AddCommand(newHubStatusCmd(opts), newHubServeCmd(opts), newHubVaultsCmd(opts),
 		newHubPendingCmd(opts), newHubApproveCmd(opts), newHubDevicesCmd(opts),
-		newHubRevokeCmd(opts), newHubJoinCmd(opts))
+		newHubRevokeCmd(opts), newHubJoinCmd(opts), newHubURLCmd(opts), newHubRelocateCmd(opts))
 	return cmd
 }
 
@@ -49,8 +49,63 @@ func newHubStatusCmd(opts *rootOptions) *cobra.Command {
 			if status.Listen != nil {
 				listen = "listening on " + *status.Listen
 			}
+			if status.URL != nil {
+				listen += "\ndevices use " + *status.URL
+			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s\n%s\n%d vaults, %d devices, %d connected\n",
 				hub, listen, status.Vaults, status.Devices, status.Connected)
+			return err
+		},
+	}
+}
+
+func newHubURLCmd(opts *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "url URL",
+		Short: "Record the URL devices should use for this hub",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, _, err := opts.dial(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			status, err := c.Hub().SetURL(cmd.Context(), &api.HubSetURLParams{URL: args[0]})
+			if err != nil {
+				return err
+			}
+			if written, err := clix.OutputJSON(status); err != nil || written {
+				return err
+			}
+			url := "the URL they paired with"
+			if status.URL != nil {
+				url = *status.URL
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "devices use %s\n", url)
+			return err
+		},
+	}
+}
+
+func newHubRelocateCmd(opts *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "relocate URL NEW-URL",
+		Short: "Verify and update a paired hub's URL",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, _, err := opts.dial(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			hub, err := c.Sync().Relocate(cmd.Context(), &api.SyncRelocateParams{Hub: args[0], URL: args[1]})
+			if err != nil {
+				return err
+			}
+			if written, err := clix.OutputJSON(hub); err != nil || written {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "hub %s is at %s now\n", hub.Hub, hub.URL)
 			return err
 		},
 	}

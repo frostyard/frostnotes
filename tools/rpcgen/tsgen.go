@@ -102,6 +102,40 @@ func genTS(s *Schema) []byte {
 	}
 	w.line("] as const;")
 	w.line("")
+	w.line("/** A method's wire name. */")
+	w.line("export type Method = (typeof METHODS)[number];")
+	w.line("")
+	w.line("/** A connection's caller kind (docs/specs/rpc-protocol.md). */")
+	var kinds []string
+	for _, c := range callerKinds {
+		kinds = append(kinds, fmt.Sprintf("%q", c))
+	}
+	w.line("export type CallerKind = %s;", strings.Join(kinds, " | "))
+	w.line("")
+	w.line("/** The caller kinds each method admits. */")
+	w.line("export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {")
+	for _, f := range s.Domains {
+		for _, m := range f.Methods {
+			var cs []string
+			for _, c := range m.admits(f) {
+				cs = append(cs, fmt.Sprintf("%q", c))
+			}
+			w.line("  %q: [%s],", wireMethod(f.Domain, m.Name), strings.Join(cs, ", "))
+		}
+	}
+	w.line("};")
+	w.line("")
+	w.line("/** The methods marked writes, which an agent's read scope refuses. */")
+	w.line("export const WRITES: ReadonlySet<Method> = new Set<Method>([")
+	for _, f := range s.Domains {
+		for _, m := range f.Methods {
+			if m.Writes {
+				w.line("  %q,", wireMethod(f.Domain, m.Name))
+			}
+		}
+	}
+	w.line("]);")
+	w.line("")
 	w.line("/** The typed notesd API over a Transport. */")
 	w.line("export class Client {")
 	for _, f := range s.Domains {

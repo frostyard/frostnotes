@@ -155,7 +155,7 @@ type EventsService interface {
 
 func registerEvents(r *Router, s EventsService) {
 	callers := []Caller{CallerLocal, CallerSession, CallerDevice}
-	r.handle("events.subscribe", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("events.subscribe", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p EventsSubscribeParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
@@ -190,6 +190,8 @@ type HubStatus struct {
 	Hub string `json:"hub"`
 	// The address notesd --hub serves; absent without --hub.
 	Listen *string `json:"listen,omitzero"`
+	// The URL devices should use, from hub.setURL; absent until one is recorded.
+	URL    *string `json:"url,omitzero"`
 	Vaults int64   `json:"vaults"`
 	// Paired devices that are not revoked.
 	Devices int64 `json:"devices"`
@@ -259,9 +261,16 @@ type HubRevokeParams struct {
 	Device int64 `json:"device"`
 }
 
-// HubService: On a hub: the vaults it serves and the devices paired with it
-// (docs/specs/sync-protocol.md). Approving and revoking devices happen only
-// here, over the local socket (ADR-0016).
+// HubSetURLParams holds the params of hub.setURL.
+type HubSetURLParams struct {
+	URL string `json:"url"`
+}
+
+// HubService: On a hub: the vaults it serves, the devices paired with it and
+// the URL they should use (docs/specs/sync-protocol.md,
+// docs/specs/lodge-app.md). Approving a device, serving a vault and recording
+// the URL happen only over the local socket (ADR-0016, ADR-0026); a session
+// may list and revoke.
 type HubService interface {
 	// Status implements hub.status. This notesd's hub role.
 	Status(ctx context.Context, p *HubStatusParams) (*HubStatus, error)
@@ -281,58 +290,70 @@ type HubService interface {
 	// Revoke implements hub.revoke. Revoke a device's token and close its
 	// connections; its revisions keep its name.
 	Revoke(ctx context.Context, p *HubRevokeParams) error
+	// SetURL implements hub.setURL. Record the URL devices should use: an
+	// https:// URL, or http:// on loopback, by sync-protocol's rules; empty
+	// forgets it. Devices learn it with log.hub and move to it, and it is the URL
+	// a relocation proof names (docs/specs/lodge-app.md#device).
+	SetURL(ctx context.Context, p *HubSetURLParams) (*HubStatus, error)
 }
 
 func registerHub(r *Router, s HubService) {
-	callers := []Caller{CallerLocal}
-	r.handle("hub.status", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	callers := []Caller{CallerLocal, CallerSession}
+	r.handle("hub.status", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubStatusParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Status(ctx, &p)
 	})
-	r.handle("hub.serve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("hub.serve", []Caller{CallerLocal}, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubServeParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
 		return s.Serve(ctx, &p)
 	})
-	r.handle("hub.vaults", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("hub.vaults", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubVaultsParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Vaults(ctx, &p)
 	})
-	r.handle("hub.pending", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("hub.pending", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubPendingParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Pending(ctx, &p)
 	})
-	r.handle("hub.approve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("hub.approve", []Caller{CallerLocal}, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubApproveParams
 		if err := decodeParams(raw, &p, []string{"code"}); err != nil {
 			return nil, err
 		}
 		return s.Approve(ctx, &p)
 	})
-	r.handle("hub.devices", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("hub.devices", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubDevicesParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Devices(ctx, &p)
 	})
-	r.handle("hub.revoke", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("hub.revoke", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p HubRevokeParams
 		if err := decodeParams(raw, &p, []string{"device"}); err != nil {
 			return nil, err
 		}
 		return nil, s.Revoke(ctx, &p)
+	})
+	r.handle("hub.setURL", []Caller{CallerLocal}, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p HubSetURLParams
+		if err := decodeParams(raw, &p, []string{"url"}); err != nil {
+			return nil, err
+		}
+		return s.SetURL(ctx, &p)
 	})
 }
 
@@ -398,6 +419,16 @@ func (x HubClient) Devices(ctx context.Context, p *HubDevicesParams) ([]HubDevic
 // Revoke calls hub.revoke.
 func (x HubClient) Revoke(ctx context.Context, p *HubRevokeParams) error {
 	return x.c.Call(ctx, "hub.revoke", p, nil)
+}
+
+// SetURL calls hub.setURL.
+func (x HubClient) SetURL(ctx context.Context, p *HubSetURLParams) (*HubStatus, error) {
+	var r HubStatus
+	err := x.c.Call(ctx, "hub.setURL", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // ---- log ----
@@ -621,12 +652,24 @@ type Revision struct {
 	Pruned bool `json:"pruned"`
 }
 
+// LogHub: The hub a device is connected to.
+type LogHub struct {
+	// The hub's ID.
+	Hub string `json:"hub"`
+	// The URL the hub records for devices (hub.setURL); absent when it records
+	// none.
+	URL *string `json:"url,omitzero"`
+}
+
 // PushRecord: The revisions the hub appended for one push.
 type PushRecord struct {
 	Push int64 `json:"push"`
 	// Empty when the hub has no record of the push, or it changed nothing.
 	Revisions []Revision `json:"revisions"`
 }
+
+// LogHubParams holds the params of log.hub.
+type LogHubParams struct{}
 
 // LogVaultsParams holds the params of log.vaults.
 type LogVaultsParams struct{}
@@ -704,6 +747,10 @@ type LogResolveParams struct {
 // the hub merges (ADR-0005, ADR-0017). Contents move over /sync/blobs, never
 // in these messages (ADR-0018).
 type LogService interface {
+	// Hub implements log.hub. The hub's ID and the URL it records for devices. A
+	// device asks at each connection, and moves to a URL that differs from its
+	// own record, keeping its token, replicas, agreed states and cursors.
+	Hub(ctx context.Context, p *LogHubParams) (*LogHub, error)
 	// Vaults implements log.vaults. The vaults this hub serves.
 	Vaults(ctx context.Context, p *LogVaultsParams) ([]LogVault, error)
 	// Join implements log.join. Start a replica of a vault for this device; push
@@ -738,70 +785,77 @@ type LogService interface {
 
 func registerLog(r *Router, s LogService) {
 	callers := []Caller{CallerDevice}
-	r.handle("log.vaults", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.hub", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p LogHubParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return s.Hub(ctx, &p)
+	})
+	r.handle("log.vaults", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogVaultsParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Vaults(ctx, &p)
 	})
-	r.handle("log.join", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.join", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogJoinParams
 		if err := decodeParams(raw, &p, []string{"vault"}); err != nil {
 			return nil, err
 		}
 		return s.Join(ctx, &p)
 	})
-	r.handle("log.missing", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.missing", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogMissingParams
 		if err := decodeParams(raw, &p, []string{"vault", "hashes"}); err != nil {
 			return nil, err
 		}
 		return s.Missing(ctx, &p)
 	})
-	r.handle("log.push", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.push", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogPushParams
 		if err := decodeParams(raw, &p, []string{"vault", "replica", "items"}); err != nil {
 			return nil, err
 		}
 		return s.Push(ctx, &p)
 	})
-	r.handle("log.pull", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.pull", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogPullParams
 		if err := decodeParams(raw, &p, []string{"vault", "after"}); err != nil {
 			return nil, err
 		}
 		return s.Pull(ctx, &p)
 	})
-	r.handle("log.match", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.match", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogMatchParams
 		if err := decodeParams(raw, &p, []string{"vault", "files"}); err != nil {
 			return nil, err
 		}
 		return s.Match(ctx, &p)
 	})
-	r.handle("log.history", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.history", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogHistoryParams
 		if err := decodeParams(raw, &p, []string{"vault", "file"}); err != nil {
 			return nil, err
 		}
 		return s.History(ctx, &p)
 	})
-	r.handle("log.revision", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.revision", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogRevisionParams
 		if err := decodeParams(raw, &p, []string{"vault", "seq"}); err != nil {
 			return nil, err
 		}
 		return s.Revision(ctx, &p)
 	})
-	r.handle("log.pushes", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.pushes", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogPushesParams
 		if err := decodeParams(raw, &p, []string{"vault", "replica", "pushes"}); err != nil {
 			return nil, err
 		}
 		return s.Pushes(ctx, &p)
 	})
-	r.handle("log.resolve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("log.resolve", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p LogResolveParams
 		if err := decodeParams(raw, &p, []string{"vault", "file", "seq"}); err != nil {
 			return nil, err
@@ -817,6 +871,16 @@ type LogClient struct{ c *Client }
 func (c *Client) Log() LogClient { return LogClient{c} }
 
 var _ LogService = LogClient{}
+
+// Hub calls log.hub.
+func (x LogClient) Hub(ctx context.Context, p *LogHubParams) (*LogHub, error) {
+	var r LogHub
+	err := x.c.Call(ctx, "log.hub", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
 
 // Vaults calls log.vaults.
 func (x LogClient) Vaults(ctx context.Context, p *LogVaultsParams) ([]LogVault, error) {
@@ -1262,10 +1326,11 @@ type NoteCreateParams struct {
 	VaultID int64  `json:"vaultId"`
 	Path    string `json:"path"`
 	Content string `json:"content"`
-	// editor (the default) or agent.
+	// editor (the default) or agent; a session's or an agent's connection fixes
+	// it.
 	Source *VersionSource `json:"source,omitzero"`
 	// Who is writing, for the version list; defaults to the client name given to
-	// rpc.hello.
+	// rpc.hello. A session's or an agent's connection fixes it.
 	Author *string `json:"author,omitzero"`
 }
 
@@ -1276,10 +1341,11 @@ type NoteWriteParams struct {
 	// The hash of the content this write started from.
 	Base    string `json:"base"`
 	Content string `json:"content"`
-	// editor (the default) or agent.
+	// editor (the default) or agent; a session's or an agent's connection fixes
+	// it.
 	Source *VersionSource `json:"source,omitzero"`
 	// Who is writing, for the version list; defaults to the client name given to
-	// rpc.hello.
+	// rpc.hello. A session's or an agent's connection fixes it.
 	Author *string `json:"author,omitzero"`
 }
 
@@ -1324,10 +1390,11 @@ type NoteDailyParams struct {
 	VaultID int64 `json:"vaultId"`
 	// YYYY-MM-DD; default today in notesd's time zone.
 	Date *string `json:"date,omitzero"`
-	// Who creates it when it is missing: editor (the default) or agent.
+	// Who creates it when it is missing: editor (the default) or agent; a
+	// session's or an agent's connection fixes it.
 	Source *VersionSource `json:"source,omitzero"`
 	// Who creates it, for the version list; defaults to the client name given to
-	// rpc.hello.
+	// rpc.hello. A session's or an agent's connection fixes it.
 	Author *string `json:"author,omitzero"`
 }
 
@@ -1358,9 +1425,11 @@ type NoteUploadParams struct {
 	Path    string `json:"path"`
 	// The file's bytes, base64 (standard alphabet, padded).
 	Data string `json:"data"`
-	// editor (the default) or agent.
+	// editor (the default) or agent; a session's or an agent's connection fixes
+	// it.
 	Source *VersionSource `json:"source,omitzero"`
-	// Who is writing; defaults to the client name given to rpc.hello.
+	// Who is writing; defaults to the client name given to rpc.hello. A session's
+	// or an agent's connection fixes it.
 	Author *string `json:"author,omitzero"`
 }
 
@@ -1519,164 +1588,233 @@ type NoteService interface {
 }
 
 func registerNote(r *Router, s NoteService) {
-	callers := []Caller{CallerLocal}
-	r.handle("note.list", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	callers := []Caller{CallerLocal, CallerSession, CallerAgent}
+	r.handle("note.list", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteListParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.List(ctx, &p)
 	})
-	r.handle("note.read", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.read", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteReadParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Read(ctx, &p)
 	})
-	r.handle("note.search", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.search", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteSearchParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "query"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Search(ctx, &p)
 	})
-	r.handle("note.backlinks", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.backlinks", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteBacklinksParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Backlinks(ctx, &p)
 	})
-	r.handle("note.links", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.links", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteLinksParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Links(ctx, &p)
 	})
-	r.handle("note.create", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.create", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteCreateParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "content"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Create(ctx, &p)
 	})
-	r.handle("note.write", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.write", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteWriteParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "base", "content"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Write(ctx, &p)
 	})
-	r.handle("note.move", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.move", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteMoveParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "to"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Move(ctx, &p)
 	})
-	r.handle("note.delete", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.delete", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteDeleteParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "base"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return nil, s.Delete(ctx, &p)
 	})
-	r.handle("note.versions", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.versions", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteVersionsParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Versions(ctx, &p)
 	})
-	r.handle("note.revert", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.revert", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteRevertParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "version", "base"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Revert(ctx, &p)
 	})
-	r.handle("note.daily", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.daily", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteDailyParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Daily(ctx, &p)
 	})
-	r.handle("note.files", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.files", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteFilesParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Files(ctx, &p)
 	})
-	r.handle("note.resolve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.resolve", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteResolveParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "from", "targets"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Resolve(ctx, &p)
 	})
-	r.handle("note.render", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.render", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteRenderParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Render(ctx, &p)
 	})
-	r.handle("note.upload", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.upload", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteUploadParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "data"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Upload(ctx, &p)
 	})
-	r.handle("note.readVersion", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.readVersion", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteReadVersionParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "version"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.ReadVersion(ctx, &p)
 	})
-	r.handle("note.tags", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.tags", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteTagsParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Tags(ctx, &p)
 	})
-	r.handle("note.properties", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.properties", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NotePropertiesParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Properties(ctx, &p)
 	})
-	r.handle("note.template", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.template", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteTemplateParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "template"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.Template(ctx, &p)
 	})
-	r.handle("note.mkdir", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.mkdir", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteMkdirParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return nil, s.Mkdir(ctx, &p)
 	})
-	r.handle("note.moveFolder", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.moveFolder", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteMoveFolderParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "to"}); err != nil {
 			return nil, err
 		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
 		return s.MoveFolder(ctx, &p)
 	})
-	r.handle("note.deleteFolder", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("note.deleteFolder", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteDeleteFolderParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path", "files"}); err != nil {
+			return nil, err
+		}
+		if err := inScope(ctx, p.VaultID); err != nil {
 			return nil, err
 		}
 		return s.DeleteFolder(ctx, &p)
@@ -1929,12 +2067,21 @@ func (NoteRemoved) Durable() bool { return true }
 
 // ---- rpc ----
 
-// Hello: Server identity and the negotiated protocol.
+// Hello: Server identity, the negotiated protocol, and who the connection is.
 type Hello struct {
 	// Protocol major version the server speaks.
 	Protocol int64 `json:"protocol"`
 	// Server name and version, for logs.
 	Server string `json:"server"`
+	// The connection's caller kind: local, session, device or agent
+	// (docs/specs/rpc-protocol.md#caller-kinds).
+	Caller string `json:"caller"`
+	// A session's tailnet login, from lodge.
+	Login *string `json:"login,omitzero"`
+	// A session's display name, when lodge sends one.
+	DisplayName *string `json:"displayName,omitzero"`
+	// A session's node: its short host name, from lodge.
+	Node *string `json:"node,omitzero"`
 }
 
 // RPCHelloParams holds the params of rpc.hello.
@@ -1945,6 +2092,9 @@ type RPCHelloParams struct {
 	Client string `json:"client"`
 }
 
+// RPCPingParams holds the params of rpc.ping.
+type RPCPingParams struct{}
+
 // RPCService: Connection setup. A client calls rpc.hello first on every
 // connection; the server answers any other method with notReady until hello
 // succeeds.
@@ -1952,16 +2102,26 @@ type RPCService interface {
 	// Hello implements rpc.hello. Negotiate the protocol major version. Changes
 	// within a major version are additive only.
 	Hello(ctx context.Context, p *RPCHelloParams) (*Hello, error)
+	// Ping implements rpc.ping. Nothing, answered: the web app's heartbeat while
+	// it is visible, which finds a connection a sleeping phone dropped.
+	Ping(ctx context.Context, p *RPCPingParams) error
 }
 
 func registerRPC(r *Router, s RPCService) {
-	callers := []Caller{CallerLocal, CallerSession, CallerDevice}
-	r.handle("rpc.hello", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	callers := []Caller{CallerLocal, CallerSession, CallerDevice, CallerAgent}
+	r.handle("rpc.hello", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p RPCHelloParams
 		if err := decodeParams(raw, &p, []string{"protocol", "client"}); err != nil {
 			return nil, err
 		}
 		return s.Hello(ctx, &p)
+	})
+	r.handle("rpc.ping", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p RPCPingParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return nil, s.Ping(ctx, &p)
 	})
 }
 
@@ -1981,6 +2141,11 @@ func (x RPCClient) Hello(ctx context.Context, p *RPCHelloParams) (*Hello, error)
 		return nil, err
 	}
 	return &r, nil
+}
+
+// Ping calls rpc.ping.
+func (x RPCClient) Ping(ctx context.Context, p *RPCPingParams) error {
+	return x.c.Call(ctx, "rpc.ping", p, nil)
 }
 
 // ---- sync ----
@@ -2141,6 +2306,14 @@ type SyncPairedParams struct {
 // SyncHubsParams holds the params of sync.hubs.
 type SyncHubsParams struct{}
 
+// SyncRelocateParams holds the params of sync.relocate.
+type SyncRelocateParams struct {
+	// The paired hub's URL now, as sync.hubs lists it.
+	Hub string `json:"hub"`
+	// Its new URL: https://, or http:// on loopback.
+	URL string `json:"url"`
+}
+
 // SyncJoinParams holds the params of sync.join.
 type SyncJoinParams struct {
 	VaultID int64 `json:"vaultId"`
@@ -2209,6 +2382,12 @@ type SyncService interface {
 	Paired(ctx context.Context, p *SyncPairedParams) (*PairResult, error)
 	// Hubs implements sync.hubs. The hubs this device paired with.
 	Hubs(ctx context.Context, p *SyncHubsParams) ([]SyncHub, error)
+	// Relocate implements sync.relocate. Move a paired hub to url, for a device
+	// that missed log.hub's move: it posts a fresh nonce to url's /sync/hub and
+	// keeps url only when the answer names that hub, records url as its own, and
+	// proves it holds this device's token's hash; else conflict, and nothing
+	// changes (docs/specs/lodge-app.md#device). The token is never sent.
+	Relocate(ctx context.Context, p *SyncRelocateParams) (*SyncHub, error)
 	// Join implements sync.join. Sync a local vault with a hub vault: files the
 	// hub has had at the same path match by hash, others are pushed as creates,
 	// and the hub's heads are pulled.
@@ -2240,84 +2419,91 @@ type SyncService interface {
 
 func registerSync(r *Router, s SyncService) {
 	callers := []Caller{CallerLocal}
-	r.handle("sync.pair", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.pair", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncPairParams
 		if err := decodeParams(raw, &p, []string{"url"}); err != nil {
 			return nil, err
 		}
 		return s.Pair(ctx, &p)
 	})
-	r.handle("sync.paired", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.paired", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncPairedParams
 		if err := decodeParams(raw, &p, []string{"pairing"}); err != nil {
 			return nil, err
 		}
 		return s.Paired(ctx, &p)
 	})
-	r.handle("sync.hubs", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.hubs", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncHubsParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Hubs(ctx, &p)
 	})
-	r.handle("sync.join", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.relocate", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p SyncRelocateParams
+		if err := decodeParams(raw, &p, []string{"hub", "url"}); err != nil {
+			return nil, err
+		}
+		return s.Relocate(ctx, &p)
+	})
+	r.handle("sync.join", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncJoinParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "url", "name"}); err != nil {
 			return nil, err
 		}
 		return s.Join(ctx, &p)
 	})
-	r.handle("sync.leave", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.leave", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncLeaveParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
 		return nil, s.Leave(ctx, &p)
 	})
-	r.handle("sync.status", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.status", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncStatusParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.Status(ctx, &p)
 	})
-	r.handle("sync.conflicts", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.conflicts", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncConflictsParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
 		return s.Conflicts(ctx, &p)
 	})
-	r.handle("sync.resolve", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.resolve", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncResolveParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
 		return nil, s.Resolve(ctx, &p)
 	})
-	r.handle("sync.reset", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.reset", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncResetParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
 		return s.Reset(ctx, &p)
 	})
-	r.handle("sync.verify", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.verify", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncVerifyParams
 		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
 			return nil, err
 		}
 		return s.Verify(ctx, &p)
 	})
-	r.handle("sync.history", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.history", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncHistoryParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
 			return nil, err
 		}
 		return s.History(ctx, &p)
 	})
-	r.handle("sync.readRevision", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("sync.readRevision", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p SyncReadRevisionParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "seq"}); err != nil {
 			return nil, err
@@ -2359,6 +2545,16 @@ func (x SyncClient) Hubs(ctx context.Context, p *SyncHubsParams) ([]SyncHub, err
 	var r []SyncHub
 	err := x.c.Call(ctx, "sync.hubs", p, &r)
 	return r, err
+}
+
+// Relocate calls sync.relocate.
+func (x SyncClient) Relocate(ctx context.Context, p *SyncRelocateParams) (*SyncHub, error) {
+	var r SyncHub
+	err := x.c.Call(ctx, "sync.relocate", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // Join calls sync.join.
@@ -2685,50 +2881,50 @@ type VaultService interface {
 }
 
 func registerVault(r *Router, s VaultService) {
-	callers := []Caller{CallerLocal}
-	r.handle("vault.list", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	callers := []Caller{CallerLocal, CallerSession}
+	r.handle("vault.list", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultListParams
 		if err := decodeParams(raw, &p, nil); err != nil {
 			return nil, err
 		}
 		return s.List(ctx, &p)
 	})
-	r.handle("vault.add", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("vault.add", []Caller{CallerLocal}, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultAddParams
 		if err := decodeParams(raw, &p, []string{"path"}); err != nil {
 			return nil, err
 		}
 		return s.Add(ctx, &p)
 	})
-	r.handle("vault.remove", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("vault.remove", []Caller{CallerLocal}, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultRemoveParams
 		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
 			return nil, err
 		}
 		return nil, s.Remove(ctx, &p)
 	})
-	r.handle("vault.status", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("vault.status", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultStatusParams
 		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
 			return nil, err
 		}
 		return s.Status(ctx, &p)
 	})
-	r.handle("vault.reindex", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("vault.reindex", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultReindexParams
 		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
 			return nil, err
 		}
 		return s.Reindex(ctx, &p)
 	})
-	r.handle("vault.settings", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("vault.settings", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultSettingsParams
 		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
 			return nil, err
 		}
 		return s.Settings(ctx, &p)
 	})
-	r.handle("vault.configure", callers, func(ctx context.Context, raw jsontext.Value) (any, error) {
+	r.handle("vault.configure", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p VaultConfigureParams
 		if err := decodeParams(raw, &p, []string{"id"}); err != nil {
 			return nil, err
@@ -2906,6 +3102,8 @@ var Methods = []string{
 	"hub.approve",
 	"hub.devices",
 	"hub.revoke",
+	"hub.setURL",
+	"log.hub",
 	"log.vaults",
 	"log.join",
 	"log.missing",
@@ -2940,9 +3138,11 @@ var Methods = []string{
 	"note.moveFolder",
 	"note.deleteFolder",
 	"rpc.hello",
+	"rpc.ping",
 	"sync.pair",
 	"sync.paired",
 	"sync.hubs",
+	"sync.relocate",
 	"sync.join",
 	"sync.leave",
 	"sync.status",
@@ -2969,21 +3169,21 @@ func EventAdmits(name string, caller Caller) bool {
 	case "log.appended":
 		return caller == CallerDevice
 	case "note.changed":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession || caller == CallerAgent
 	case "note.moved":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession || caller == CallerAgent
 	case "note.removed":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession || caller == CallerAgent
 	case "sync.changed":
 		return caller == CallerLocal
 	case "vault.scan":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession
 	case "vault.added":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession
 	case "vault.configured":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession
 	case "vault.removed":
-		return caller == CallerLocal
+		return caller == CallerLocal || caller == CallerSession
 	}
 	return false
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/format"
+	"slices"
 	"strings"
 )
 
@@ -117,11 +118,20 @@ func genGo(s *Schema) ([]byte, error) {
 		w.line("func register%s(r *Router, s %sService) {", dn, dn)
 		w.line("callers := []Caller{%s}", callerList(f.Callers))
 		for _, m := range f.Methods {
-			w.line("r.handle(%q, callers, func(ctx context.Context, raw jsontext.Value) (any, error) {", wireMethod(f.Domain, m.Name))
+			callers := "callers"
+			if len(m.Callers) > 0 {
+				callers = "[]Caller{" + callerList(m.Callers) + "}"
+			}
+			w.line("r.handle(%q, %s, %t, func(ctx context.Context, raw jsontext.Value) (any, error) {", wireMethod(f.Domain, m.Name), callers, m.Writes)
 			w.line("var p %s", paramsName(f.Domain, m.Name))
 			w.line("if err := decodeParams(raw, &p, %s); err != nil {", requiredList(m.Params))
 			w.line("return nil, err")
 			w.line("}")
+			if sf := m.scopeField(); sf != nil && slices.Contains(m.admits(f), "agent") {
+				w.line("if err := inScope(ctx, p.%s); err != nil {", goName(sf.Name))
+				w.line("return nil, err")
+				w.line("}")
+			}
 			if m.result == nil {
 				w.line("return nil, s.%s(ctx, &p)", goName(m.Name))
 			} else {

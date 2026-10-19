@@ -42,6 +42,10 @@ func (sv service) Hubs(ctx context.Context, _ *api.SyncHubsParams) ([]api.SyncHu
 	return out, nil
 }
 
+func (sv service) Relocate(ctx context.Context, p *api.SyncRelocateParams) (*api.SyncHub, error) {
+	return sv.s.relocate(ctx, p.Hub, p.URL)
+}
+
 // remote returns vault's remote, or notFound when it does not sync.
 func (sv service) remote(ctx context.Context, vaultID int64) (store.Remote, error) {
 	r, err := sv.s.cfg.DB.Remote(ctx, vaultID)

@@ -84,6 +84,29 @@ func (d *DB) HubIdentity(ctx context.Context) (string, error) {
 	return readHubIdentity(d.db.QueryRowContext(ctx, `SELECT hub_id FROM hub WHERE id = 1`))
 }
 
+// HubURL returns the URL the hub records for its devices (hub.setURL), or
+// "" when it records none.
+func (d *DB) HubURL(ctx context.Context) (string, error) {
+	var url string
+	err := d.db.QueryRowContext(ctx, `SELECT url FROM hub WHERE id = 1`).Scan(&url)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return url, hubReadError("read the hub's URL", err)
+}
+
+// SetHubURL records url ("" forgets it) as the URL the hub's devices
+// should use, making the hub ID first if it is missing.
+func (t *Tx) SetHubURL(ctx context.Context, url string) error {
+	if _, err := t.HubID(ctx); err != nil {
+		return err
+	}
+	if _, err := t.ExecContext(ctx, `UPDATE hub SET url = ? WHERE id = 1`, url); err != nil {
+		return fmt.Errorf("set the hub's URL: %w", err)
+	}
+	return nil
+}
+
 // ServeVault makes vault vaultID a hub vault, with a new sync ID (32
 // lowercase hex digits from crypto/rand), seq 0 and served_at = t.Now(),
 // making the hub ID too if it is missing. A vault that is already served

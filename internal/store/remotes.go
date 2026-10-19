@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -110,6 +111,18 @@ func (d *DB) SyncHubs(ctx context.Context) ([]SyncHub, error) {
 // SyncHub returns sync_hubs row id, or ErrNotFound. Task card T-0027.
 func (d *DB) SyncHub(ctx context.Context, id int64) (SyncHub, error) {
 	return scanSyncHub(d.db.QueryRowContext(ctx, `SELECT `+syncHubColumns+` FROM sync_hubs WHERE id = ?`, id))
+}
+
+// SetSyncHubURL moves sync_hubs row id to url, keeping its hub ID, device
+// ID and every vault synced with it (log.hub, sync.relocate). A row that
+// does not exist is ErrNotFound; a URL another row has, ErrConflict.
+func (t *Tx) SetSyncHubURL(ctx context.Context, id int64, url string) (SyncHub, error) {
+	if other, err := scanSyncHub(t.QueryRowContext(ctx, `SELECT `+syncHubColumns+` FROM sync_hubs WHERE url = ?`, url)); err == nil && other.ID != id {
+		return SyncHub{}, fmt.Errorf("move sync hub %d to %s: hub %s is paired there: %w", id, url, other.HubID, ErrConflict)
+	} else if err != nil && !errors.Is(err, ErrNotFound) {
+		return SyncHub{}, err
+	}
+	return scanSyncHub(t.QueryRowContext(ctx, `UPDATE sync_hubs SET url = ? WHERE id = ? RETURNING `+syncHubColumns, url, id))
 }
 
 // SyncHubByURL returns the hub paired at exactly url, or ErrNotFound. Task

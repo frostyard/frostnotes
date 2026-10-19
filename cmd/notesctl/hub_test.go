@@ -70,6 +70,9 @@ func (f *fakeHub) Devices(_ context.Context, p *api.HubDevicesParams) ([]api.Hub
 	return f.devices, f.record(p)
 }
 func (f *fakeHub) Revoke(_ context.Context, p *api.HubRevokeParams) error { return f.record(p) }
+func (f *fakeHub) SetURL(_ context.Context, p *api.HubSetURLParams) (*api.HubStatus, error) {
+	return &f.status, f.record(p)
+}
 
 // fakeSync serves the sync domain from its fields. Paired answers the
 // states in order, then the last one again.
@@ -99,6 +102,13 @@ func (f *fakeSync) Paired(_ context.Context, p *api.SyncPairedParams) (*api.Pair
 }
 func (f *fakeSync) Hubs(_ context.Context, p *api.SyncHubsParams) ([]api.SyncHub, error) {
 	return f.hubs, f.record(p)
+}
+func (f *fakeSync) Relocate(_ context.Context, p *api.SyncRelocateParams) (*api.SyncHub, error) {
+	var h api.SyncHub
+	if len(f.hubs) > 0 {
+		h = f.hubs[0]
+	}
+	return &h, f.record(p)
 }
 func (f *fakeSync) Join(_ context.Context, p *api.SyncJoinParams) (*api.SyncStatus, error) {
 	return &f.status[0], f.record(p)

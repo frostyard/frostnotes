@@ -73,17 +73,18 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener, r *api.Router) erro
 			_ = nc.Close()
 			continue
 		}
-		c := &conn{s: s, r: r, nc: nc, caller: api.CallerLocal, sem: make(chan struct{}, MaxInFlight)}
+		c := &conn{s: s, r: r, nc: nc, id: api.Identity{Caller: api.CallerLocal}, sem: make(chan struct{}, MaxInFlight)}
 		wg.Go(func() { c.serve(ctx) })
 	}
 }
 
 // ServeConn serves one connection that its listener has already
-// authenticated as caller (the development gateway, and the hub's
-// WebSocket endpoints from M2) until it ends or ctx does. Unix socket
-// connections go through Serve, which checks the peer's UID instead.
-func (s *Server) ServeConn(ctx context.Context, nc net.Conn, r *api.Router, caller api.Caller) {
-	c := &conn{s: s, r: r, nc: nc, caller: caller, sem: make(chan struct{}, MaxInFlight)}
+// authenticated as id (the development gateway, the hub's WebSocket
+// endpoints from M2, and lodge's sessions and agents from M4) until it
+// ends or ctx does. Unix socket connections go through Serve, which
+// checks the peer's UID instead.
+func (s *Server) ServeConn(ctx context.Context, nc net.Conn, r *api.Router, id api.Identity) {
+	c := &conn{s: s, r: r, nc: nc, id: id, sem: make(chan struct{}, MaxInFlight)}
 	c.serve(ctx)
 }
 
@@ -95,12 +96,12 @@ func connFrom(ctx context.Context) *conn {
 }
 
 type conn struct {
-	s      *Server
-	r      *api.Router
-	nc     net.Conn
-	caller api.Caller
-	sem    chan struct{}
-	ctx    context.Context
+	s   *Server
+	r   *api.Router
+	nc  net.Conn
+	id  api.Identity
+	sem chan struct{}
+	ctx context.Context
 
 	wmu    sync.Mutex
 	ready  atomic.Bool
@@ -113,7 +114,7 @@ type conn struct {
 }
 
 func (c *conn) serve(parent context.Context) {
-	base := api.WithCaller(context.WithValue(parent, ctxKey{}, c), c.caller)
+	base := api.WithIdentity(context.WithValue(parent, ctxKey{}, c), c.id)
 	ctx, cancel := context.WithCancel(api.WithConn(base, c))
 	c.ctx = ctx
 	stop := context.AfterFunc(ctx, func() { _ = c.nc.Close() })
@@ -268,7 +269,7 @@ func (c *conn) startEvents() {
 	sub := c.sub
 	c.wg.Go(func() {
 		err := sub.Run(c.ctx, func(ev api.EventEnvelope) error {
-			if !api.EventAdmits(ev.Event, c.caller) {
+			if !api.EventAdmits(ev.Event, c.id.Caller) {
 				return nil // another caller's event, as its domain says
 			}
 			params, err := json.Marshal(ev)
@@ -289,13 +290,28 @@ func (s *Server) Hello(ctx context.Context, p *api.RPCHelloParams) (*api.Hello, 
 	if p.Protocol != api.Protocol {
 		return nil, api.ProtocolMismatch("notesd speaks protocol %d, not %d", api.Protocol, p.Protocol)
 	}
+	id := api.IdentityFrom(ctx)
 	if c := connFrom(ctx); c != nil {
 		c.client.Store(&p.Client)
 		c.ready.Store(true)
-		s.opts.Logger.Debug("client connected", "client", p.Client, "caller", c.caller)
+		s.opts.Logger.Debug("client connected", "client", p.Client, "caller", id.Caller)
 	}
-	return &api.Hello{Protocol: api.Protocol, Server: s.opts.Name}, nil
+	h := &api.Hello{Protocol: api.Protocol, Server: s.opts.Name, Caller: string(id.Caller)}
+	if id.Caller == api.CallerSession {
+		h.Login, h.DisplayName, h.Node = optional(id.Login), optional(id.DisplayName), optional(id.Node)
+	}
+	return h, nil
 }
+
+func optional(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// Ping implements rpc.ping.
+func (s *Server) Ping(context.Context, *api.RPCPingParams) error { return nil }
 
 // Subscribe implements events.subscribe; delivery starts after the reply.
 func (s *Server) Subscribe(ctx context.Context, p *api.EventsSubscribeParams) (*api.Subscription, error) {

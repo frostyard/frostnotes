@@ -65,11 +65,12 @@ type handlerFunc func(ctx context.Context, params jsontext.Value) (any, error)
 
 type route struct {
 	callers []Caller
+	writes  bool
 	h       handlerFunc
 }
 
-// Router maps wire method names to service implementations and the callers
-// each domain admits.
+// Router maps wire method names to service implementations, the callers
+// each method admits and the methods that write.
 type Router struct{ routes map[string]route }
 
 // NewRouter registers every service; a nil service is an error.
@@ -81,17 +82,19 @@ func NewRouter(s Services) (*Router, error) {
 	return r, nil
 }
 
-func (r *Router) handle(method string, callers []Caller, h handlerFunc) {
-	r.routes[method] = route{callers, h}
+func (r *Router) handle(method string, callers []Caller, writes bool, h handlerFunc) {
+	r.routes[method] = route{callers, writes, h}
 }
 
-// Dispatch runs one method for the caller in ctx (WithCaller). A method
-// that does not exist, or whose domain does not admit the caller, returns
+// Dispatch runs one method for the caller in ctx (WithCaller,
+// WithIdentity). A method that does not exist, that does not admit the
+// caller, or that writes under a scope that may not, returns
 // ErrMethodNotFound, so a caller cannot learn what it may not call. A ctx
-// without a caller admits nothing.
+// without a caller admits nothing. The generated handlers check the vault
+// a scoped call names (inScope).
 func (r *Router) Dispatch(ctx context.Context, method string, params jsontext.Value) (any, error) {
 	rt, ok := r.routes[method]
-	if !ok || !slices.Contains(rt.callers, CallerFrom(ctx)) {
+	if !ok || !slices.Contains(rt.callers, CallerFrom(ctx)) || rt.writes && !mayWrite(ctx) {
 		return nil, MethodNotFound("method %q does not exist", method)
 	}
 	return rt.h(ctx, params)

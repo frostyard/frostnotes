@@ -167,3 +167,15 @@ func (unbuiltLog) Pushes(context.Context, *api.LogPushesParams) ([]api.PushRecor
 func (unbuiltLog) Resolve(context.Context, *api.LogResolveParams) (*api.LogFile, error) {
 	return nil, unbuilt("log.resolve")
 }
+
+func (unbuiltHub) SetURL(context.Context, *api.HubSetURLParams) (*api.HubStatus, error) {
+	return nil, unbuilt("hub.setURL")
+}
+
+func (unbuiltSync) Relocate(context.Context, *api.SyncRelocateParams) (*api.SyncHub, error) {
+	return nil, unbuilt("sync.relocate")
+}
+
+func (unbuiltLog) Hub(context.Context, *api.LogHubParams) (*api.LogHub, error) {
+	return nil, unbuilt("log.hub")
+}

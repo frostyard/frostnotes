@@ -27,6 +27,23 @@ type logService struct{ h *Hub }
 
 var _ api.LogService = logService{}
 
+// Hub answers log.hub: the hub's ID and the URL it records for devices.
+func (s logService) Hub(ctx context.Context, _ *api.LogHubParams) (*api.LogHub, error) {
+	id, err := s.h.cfg.DB.HubIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	u, err := s.h.cfg.DB.HubURL(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &api.LogHub{Hub: id}
+	if u != "" {
+		out.URL = &u
+	}
+	return out, nil
+}
+
 // served returns the served vault with sync ID syncID.
 func (s logService) served(ctx context.Context, syncID string) (store.HubVault, error) {
 	v, err := s.h.cfg.DB.HubVaultBySync(ctx, syncID)

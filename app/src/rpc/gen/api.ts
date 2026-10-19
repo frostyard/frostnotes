@@ -86,6 +86,11 @@ export interface HubStatus {
   hub: string;
   /** The address notesd --hub serves; absent without --hub. */
   listen?: string;
+  /**
+   * The URL devices should use, from hub.setURL; absent until one is
+   * recorded.
+   */
+  url?: string;
   vaults: number;
   /** Paired devices that are not revoked. */
   devices: number;
@@ -155,10 +160,16 @@ export interface HubRevokeParams {
   device: number;
 }
 
+/** Params of hub.setURL. */
+export interface HubSetURLParams {
+  url: string;
+}
+
 /**
- * On a hub: the vaults it serves and the devices paired with it
- * (docs/specs/sync-protocol.md). Approving and revoking devices happen only
- * here, over the local socket (ADR-0016).
+ * On a hub: the vaults it serves, the devices paired with it and the URL they
+ * should use (docs/specs/sync-protocol.md, docs/specs/lodge-app.md).
+ * Approving a device, serving a vault and recording the URL happen only over
+ * the local socket (ADR-0016, ADR-0026); a session may list and revoke.
  */
 export interface HubClient {
   /** This notesd's hub role. */
@@ -184,6 +195,13 @@ export interface HubClient {
    * name.
    */
   revoke(params: HubRevokeParams): Promise<void>;
+  /**
+   * Record the URL devices should use: an https:// URL, or http:// on
+   * loopback, by sync-protocol's rules; empty forgets it. Devices learn it
+   * with log.hub and move to it, and it is the URL a relocation proof names
+   * (docs/specs/lodge-app.md#device).
+   */
+  setURL(params: HubSetURLParams): Promise<HubStatus>;
 }
 
 function hubClient(t: Transport): HubClient {
@@ -195,6 +213,7 @@ function hubClient(t: Transport): HubClient {
     approve: (params) => t.call<PendingPairing>("hub.approve", params),
     devices: (params = {}) => t.call<HubDevice[]>("hub.devices", params),
     revoke: (params) => t.call<null>("hub.revoke", params).then(() => undefined),
+    setURL: (params) => t.call<HubStatus>("hub.setURL", params),
   };
 }
 
@@ -359,12 +378,26 @@ export interface Revision {
   pruned: boolean;
 }
 
+/** The hub a device is connected to. */
+export interface LogHub {
+  /** The hub's ID. */
+  hub: string;
+  /**
+   * The URL the hub records for devices (hub.setURL); absent when it records
+   * none.
+   */
+  url?: string;
+}
+
 /** The revisions the hub appended for one push. */
 export interface PushRecord {
   push: number;
   /** Empty when the hub has no record of the push, or it changed nothing. */
   revisions: Revision[];
 }
+
+/** Params of log.hub. */
+export type LogHubParams = Record<string, never>;
 
 /** Params of log.vaults. */
 export type LogVaultsParams = Record<string, never>;
@@ -452,6 +485,12 @@ export interface LogAppended {
  * these messages (ADR-0018).
  */
 export interface LogClient {
+  /**
+   * The hub's ID and the URL it records for devices. A device asks at each
+   * connection, and moves to a URL that differs from its own record, keeping
+   * its token, replicas, agreed states and cursors.
+   */
+  hub(params?: LogHubParams): Promise<LogHub>;
   /** The vaults this hub serves. */
   vaults(params?: LogVaultsParams): Promise<LogVault[]>;
   /**
@@ -492,6 +531,7 @@ export interface LogClient {
 
 function logClient(t: Transport): LogClient {
   return {
+    hub: (params = {}) => t.call<LogHub>("log.hub", params),
     vaults: (params = {}) => t.call<LogVault[]>("log.vaults", params),
     join: (params) => t.call<Replica>("log.join", params),
     missing: (params) => t.call<string[]>("log.missing", params),
@@ -840,11 +880,14 @@ export interface NoteCreateParams {
   vaultId: number;
   path: string;
   content: string;
-  /** editor (the default) or agent. */
+  /**
+   * editor (the default) or agent; a session's or an agent's connection fixes
+   * it.
+   */
   source?: VersionSource;
   /**
    * Who is writing, for the version list; defaults to the client name given
-   * to rpc.hello.
+   * to rpc.hello. A session's or an agent's connection fixes it.
    */
   author?: string;
 }
@@ -856,11 +899,14 @@ export interface NoteWriteParams {
   /** The hash of the content this write started from. */
   base: string;
   content: string;
-  /** editor (the default) or agent. */
+  /**
+   * editor (the default) or agent; a session's or an agent's connection fixes
+   * it.
+   */
   source?: VersionSource;
   /**
    * Who is writing, for the version list; defaults to the client name given
-   * to rpc.hello.
+   * to rpc.hello. A session's or an agent's connection fixes it.
    */
   author?: string;
 }
@@ -908,11 +954,14 @@ export interface NoteDailyParams {
   vaultId: number;
   /** YYYY-MM-DD; default today in notesd's time zone. */
   date?: string;
-  /** Who creates it when it is missing: editor (the default) or agent. */
+  /**
+   * Who creates it when it is missing: editor (the default) or agent; a
+   * session's or an agent's connection fixes it.
+   */
   source?: VersionSource;
   /**
    * Who creates it, for the version list; defaults to the client name given
-   * to rpc.hello.
+   * to rpc.hello. A session's or an agent's connection fixes it.
    */
   author?: string;
 }
@@ -944,9 +993,15 @@ export interface NoteUploadParams {
   path: string;
   /** The file's bytes, base64 (standard alphabet, padded). */
   data: string;
-  /** editor (the default) or agent. */
+  /**
+   * editor (the default) or agent; a session's or an agent's connection fixes
+   * it.
+   */
   source?: VersionSource;
-  /** Who is writing; defaults to the client name given to rpc.hello. */
+  /**
+   * Who is writing; defaults to the client name given to rpc.hello. A
+   * session's or an agent's connection fixes it.
+   */
   author?: string;
 }
 
@@ -1194,12 +1249,23 @@ function noteClient(t: Transport): NoteClient {
 
 // ---- rpc ----
 
-/** Server identity and the negotiated protocol. */
+/** Server identity, the negotiated protocol, and who the connection is. */
 export interface Hello {
   /** Protocol major version the server speaks. */
   protocol: number;
   /** Server name and version, for logs. */
   server: string;
+  /**
+   * The connection's caller kind: local, session, device or agent
+   * (docs/specs/rpc-protocol.md#caller-kinds).
+   */
+  caller: string;
+  /** A session's tailnet login, from lodge. */
+  login?: string;
+  /** A session's display name, when lodge sends one. */
+  displayName?: string;
+  /** A session's node: its short host name, from lodge. */
+  node?: string;
 }
 
 /** Params of rpc.hello. */
@@ -1209,6 +1275,9 @@ export interface RPCHelloParams {
   /** Client name and version, for logs. */
   client: string;
 }
+
+/** Params of rpc.ping. */
+export type RPCPingParams = Record<string, never>;
 
 /**
  * Connection setup. A client calls rpc.hello first on every connection; the
@@ -1220,11 +1289,17 @@ export interface RPCClient {
    * additive only.
    */
   hello(params: RPCHelloParams): Promise<Hello>;
+  /**
+   * Nothing, answered: the web app's heartbeat while it is visible, which
+   * finds a connection a sleeping phone dropped.
+   */
+  ping(params?: RPCPingParams): Promise<void>;
 }
 
 function rpcClient(t: Transport): RPCClient {
   return {
     hello: (params) => t.call<Hello>("rpc.hello", params),
+    ping: (params = {}) => t.call<null>("rpc.ping", params).then(() => undefined),
   };
 }
 
@@ -1352,6 +1427,14 @@ export interface SyncPairedParams {
 /** Params of sync.hubs. */
 export type SyncHubsParams = Record<string, never>;
 
+/** Params of sync.relocate. */
+export interface SyncRelocateParams {
+  /** The paired hub's URL now, as sync.hubs lists it. */
+  hub: string;
+  /** Its new URL: https://, or http:// on loopback. */
+  url: string;
+}
+
 /** Params of sync.join. */
 export interface SyncJoinParams {
   vaultId: number;
@@ -1429,6 +1512,14 @@ export interface SyncClient {
   /** The hubs this device paired with. */
   hubs(params?: SyncHubsParams): Promise<SyncHub[]>;
   /**
+   * Move a paired hub to url, for a device that missed log.hub's move: it
+   * posts a fresh nonce to url's /sync/hub and keeps url only when the answer
+   * names that hub, records url as its own, and proves it holds this device's
+   * token's hash; else conflict, and nothing changes
+   * (docs/specs/lodge-app.md#device). The token is never sent.
+   */
+  relocate(params: SyncRelocateParams): Promise<SyncHub>;
+  /**
    * Sync a local vault with a hub vault: files the hub has had at the same
    * path match by hash, others are pushed as creates, and the hub's heads are
    * pulled.
@@ -1465,6 +1556,7 @@ function syncClient(t: Transport): SyncClient {
     pair: (params) => t.call<Pairing>("sync.pair", params),
     paired: (params) => t.call<PairResult>("sync.paired", params),
     hubs: (params = {}) => t.call<SyncHub[]>("sync.hubs", params),
+    relocate: (params) => t.call<SyncHub>("sync.relocate", params),
     join: (params) => t.call<SyncStatus>("sync.join", params),
     leave: (params) => t.call<null>("sync.leave", params).then(() => undefined),
     status: (params = {}) => t.call<SyncStatus[]>("sync.status", params),
@@ -1724,6 +1816,8 @@ export const METHODS = [
   "hub.approve",
   "hub.devices",
   "hub.revoke",
+  "hub.setURL",
+  "log.hub",
   "log.vaults",
   "log.join",
   "log.missing",
@@ -1758,9 +1852,11 @@ export const METHODS = [
   "note.moveFolder",
   "note.deleteFolder",
   "rpc.hello",
+  "rpc.ping",
   "sync.pair",
   "sync.paired",
   "sync.hubs",
+  "sync.relocate",
   "sync.join",
   "sync.leave",
   "sync.status",
@@ -1778,6 +1874,95 @@ export const METHODS = [
   "vault.settings",
   "vault.configure",
 ] as const;
+
+/** A method's wire name. */
+export type Method = (typeof METHODS)[number];
+
+/** A connection's caller kind (docs/specs/rpc-protocol.md). */
+export type CallerKind = "local" | "session" | "device" | "agent";
+
+/** The caller kinds each method admits. */
+export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {
+  "events.subscribe": ["local", "session", "device"],
+  "hub.status": ["local", "session"],
+  "hub.serve": ["local"],
+  "hub.vaults": ["local", "session"],
+  "hub.pending": ["local", "session"],
+  "hub.approve": ["local"],
+  "hub.devices": ["local", "session"],
+  "hub.revoke": ["local", "session"],
+  "hub.setURL": ["local"],
+  "log.hub": ["device"],
+  "log.vaults": ["device"],
+  "log.join": ["device"],
+  "log.missing": ["device"],
+  "log.push": ["device"],
+  "log.pull": ["device"],
+  "log.match": ["device"],
+  "log.history": ["device"],
+  "log.revision": ["device"],
+  "log.pushes": ["device"],
+  "log.resolve": ["device"],
+  "note.list": ["local", "session", "agent"],
+  "note.read": ["local", "session", "agent"],
+  "note.search": ["local", "session", "agent"],
+  "note.backlinks": ["local", "session", "agent"],
+  "note.links": ["local", "session", "agent"],
+  "note.create": ["local", "session", "agent"],
+  "note.write": ["local", "session", "agent"],
+  "note.move": ["local", "session", "agent"],
+  "note.delete": ["local", "session", "agent"],
+  "note.versions": ["local", "session", "agent"],
+  "note.revert": ["local", "session", "agent"],
+  "note.daily": ["local", "session", "agent"],
+  "note.files": ["local", "session", "agent"],
+  "note.resolve": ["local", "session", "agent"],
+  "note.render": ["local", "session", "agent"],
+  "note.upload": ["local", "session", "agent"],
+  "note.readVersion": ["local", "session", "agent"],
+  "note.tags": ["local", "session", "agent"],
+  "note.properties": ["local", "session", "agent"],
+  "note.template": ["local", "session", "agent"],
+  "note.mkdir": ["local", "session", "agent"],
+  "note.moveFolder": ["local", "session", "agent"],
+  "note.deleteFolder": ["local", "session", "agent"],
+  "rpc.hello": ["local", "session", "device", "agent"],
+  "rpc.ping": ["local", "session", "device", "agent"],
+  "sync.pair": ["local"],
+  "sync.paired": ["local"],
+  "sync.hubs": ["local"],
+  "sync.relocate": ["local"],
+  "sync.join": ["local"],
+  "sync.leave": ["local"],
+  "sync.status": ["local"],
+  "sync.conflicts": ["local"],
+  "sync.resolve": ["local"],
+  "sync.reset": ["local"],
+  "sync.verify": ["local"],
+  "sync.history": ["local"],
+  "sync.readRevision": ["local"],
+  "vault.list": ["local", "session"],
+  "vault.add": ["local"],
+  "vault.remove": ["local"],
+  "vault.status": ["local", "session"],
+  "vault.reindex": ["local", "session"],
+  "vault.settings": ["local", "session"],
+  "vault.configure": ["local", "session"],
+};
+
+/** The methods marked writes, which an agent's read scope refuses. */
+export const WRITES: ReadonlySet<Method> = new Set<Method>([
+  "note.create",
+  "note.write",
+  "note.move",
+  "note.delete",
+  "note.revert",
+  "note.daily",
+  "note.upload",
+  "note.mkdir",
+  "note.moveFolder",
+  "note.deleteFolder",
+]);
 
 /** The typed notesd API over a Transport. */
 export class Client {

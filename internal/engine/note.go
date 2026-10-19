@@ -24,9 +24,14 @@ type notes struct {
 	m  *vault.Manager
 }
 
-// author is who makes a write: source editor unless the writer says agent,
-// and the client name given to rpc.hello unless the writer names one.
+// author is who makes a write. A session's or an agent's connection fixes
+// it, whatever the params say (ADR-0026); otherwise it is source editor
+// unless the writer says agent, and the client name given to rpc.hello
+// unless the writer names one.
 func author(ctx context.Context, source *api.VersionSource, name *string) (vault.Author, error) {
+	if src, who, ok := api.IdentityFrom(ctx).Author(); ok {
+		return vault.Author{Source: src, Name: who}, nil
+	}
 	a := vault.Author{Source: api.VersionSourceEditor}
 	if source != nil {
 		if *source != api.VersionSourceEditor && *source != api.VersionSourceAgent {

@@ -1,15 +1,19 @@
 domain: rpc
 protocol: 1
-callers: [local, session, device]
+callers: [local, session, device, agent]
 doc: >-
   Connection setup. A client calls rpc.hello first on every connection; the
   server answers any other method with notReady until hello succeeds.
 types:
   - name: Hello
-    doc: Server identity and the negotiated protocol.
+    doc: Server identity, the negotiated protocol, and who the connection is.
     fields:
       - {name: protocol, type: int, doc: "Protocol major version the server speaks."}
       - {name: server, type: string, doc: "Server name and version, for logs."}
+      - {name: caller, type: string, doc: "The connection's caller kind: local, session, device or agent (docs/specs/rpc-protocol.md#caller-kinds)."}
+      - {name: login, type: string, optional: true, doc: "A session's tailnet login, from lodge."}
+      - {name: displayName, type: string, optional: true, doc: "A session's display name, when lodge sends one."}
+      - {name: node, type: string, optional: true, doc: "A session's node: its short host name, from lodge."}
 methods:
   - name: hello
     doc: Negotiate the protocol major version. Changes within a major version are additive only.
@@ -18,3 +22,7 @@ methods:
       - {name: client, type: string, doc: "Client name and version, for logs."}
     result: Hello
     errors: [protocolMismatch]
+  - name: ping
+    doc: >-
+      Nothing, answered: the web app's heartbeat while it is visible, which
+      finds a connection a sleeping phone dropped.

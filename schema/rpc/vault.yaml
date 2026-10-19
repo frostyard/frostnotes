@@ -1,5 +1,5 @@
 domain: vault
-callers: [local]
+callers: [local, session]
 doc: >-
   The vaults this notesd owns: directories of markdown notes (ADR-0003).
   Registering a vault never writes to it; add with create makes its empty
@@ -74,6 +74,7 @@ methods:
     doc: Every registered vault, by name.
     result: "[]Vault"
   - name: add
+    callers: [local]
     doc: >-
       Register a directory as a vault. The path must be absolute and name an
       existing directory, and no registered vault may contain it or lie inside it.
@@ -87,6 +88,7 @@ methods:
     result: Vault
     errors: [invalidParams, conflict]
   - name: remove
+    callers: [local]
     doc: Forget a vault. Its directory and files are untouched.
     params:
       - {name: id, type: int}

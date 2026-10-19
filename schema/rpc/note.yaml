@@ -1,5 +1,5 @@
 domain: note
-callers: [local]
+callers: [local, session, agent]
 doc: >-
   The notes and attachments in a vault, and what notesd's index knows of
   them (docs/design/vault.md). A path is vault-relative and slash-separated,
@@ -219,6 +219,7 @@ methods:
     result: "[]Link"
     errors: [notFound]
   - name: create
+    writes: true
     doc: >-
       Create a note or attachment, and any missing folders. Fails with
       conflict if the path exists.
@@ -226,11 +227,12 @@ methods:
       - {name: vaultId, type: int}
       - {name: path, type: string}
       - {name: content, type: string}
-      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent."}
-      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello."}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent; a session's or an agent's connection fixes it."}
+      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it."}
     result: WriteResult
     errors: [notFound, conflict, invalidParams]
   - name: write
+    writes: true
     doc: >-
       Replace a file's content. base is the hash the writer started from.
       If the file changed since, notesd merges: frontmatter by key, then the
@@ -245,11 +247,12 @@ methods:
       - {name: path, type: string}
       - {name: base, type: string, doc: "The hash of the content this write started from."}
       - {name: content, type: string}
-      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent."}
-      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello."}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent; a session's or an agent's connection fixes it."}
+      - {name: author, type: string, optional: true, doc: "Who is writing, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it."}
     result: WriteResult
     errors: [notFound, conflict, invalidParams]
   - name: move
+    writes: true
     doc: >-
       Rename or move a note or attachment, creating missing folders. The
       file keeps its versions. With updateLinks, every link to it from
@@ -262,6 +265,7 @@ methods:
     result: MoveResult
     errors: [notFound, conflict, invalidParams]
   - name: delete
+    writes: true
     doc: >-
       Delete a note or attachment: notesd removes the file, and its
       versions stay for 30 days, so note.revert can bring it back. base must
@@ -283,6 +287,7 @@ methods:
     result: "[]Version"
     errors: [notFound]
   - name: revert
+    writes: true
     doc: >-
       Make a file's content that of one of its versions, as a write with a
       base. A deleted file comes back at its last path.
@@ -294,14 +299,15 @@ methods:
     result: WriteResult
     errors: [notFound, conflict]
   - name: daily
+    writes: true
     doc: >-
       A day's daily note, created from the vault's daily-note template when
       missing (docs/design/vault.md#daily-notes).
     params:
       - {name: vaultId, type: int}
       - {name: date, type: string, optional: true, doc: "YYYY-MM-DD; default today in notesd's time zone."}
-      - {name: source, type: VersionSource, optional: true, doc: "Who creates it when it is missing: editor (the default) or agent."}
-      - {name: author, type: string, optional: true, doc: "Who creates it, for the version list; defaults to the client name given to rpc.hello."}
+      - {name: source, type: VersionSource, optional: true, doc: "Who creates it when it is missing: editor (the default) or agent; a session's or an agent's connection fixes it."}
+      - {name: author, type: string, optional: true, doc: "Who creates it, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it."}
     result: DailyNote
     errors: [notFound, invalidParams]
   - name: files
@@ -338,6 +344,7 @@ methods:
     result: RenderedNote
     errors: [notFound, invalidParams]
   - name: upload
+    writes: true
     doc: >-
       Create an attachment from bytes, as note.create creates a note: it
       fails with conflict if the path exists (ADR-0023). data is base64, at
@@ -346,8 +353,8 @@ methods:
       - {name: vaultId, type: int}
       - {name: path, type: string}
       - {name: data, type: string, doc: "The file's bytes, base64 (standard alphabet, padded)."}
-      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent."}
-      - {name: author, type: string, optional: true, doc: "Who is writing; defaults to the client name given to rpc.hello."}
+      - {name: source, type: VersionSource, optional: true, doc: "editor (the default) or agent; a session's or an agent's connection fixes it."}
+      - {name: author, type: string, optional: true, doc: "Who is writing; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it."}
     result: WriteResult
     errors: [notFound, conflict, invalidParams]
   - name: readVersion
@@ -382,12 +389,14 @@ methods:
     result: ExpandedTemplate
     errors: [notFound, invalidParams]
   - name: mkdir
+    writes: true
     doc: Create a folder and any missing parents. An existing folder is not an error.
     params:
       - {name: vaultId, type: int}
       - {name: path, type: string}
     errors: [notFound, invalidParams]
   - name: moveFolder
+    writes: true
     doc: >-
       Rename or move a folder with everything in it, creating missing
       parents. Each file moves as note.move moves it, keeping its versions;
@@ -401,6 +410,7 @@ methods:
     result: FolderMoveResult
     errors: [notFound, conflict, invalidParams]
   - name: deleteFolder
+    writes: true
     doc: >-
       Delete a folder's files, each with the base the caller listed, then
       the folder when nothing is left in it. A file changed since its base,
