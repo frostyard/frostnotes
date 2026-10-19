@@ -62,8 +62,21 @@ type Method struct {
 	Params []Field  `yaml:"params"`
 	Result string   `yaml:"result"`
 	Errors []string `yaml:"errors"`
+	// Callers, when listed, narrow the domain's: each must be one of them.
+	Callers []string `yaml:"callers"`
+	// Writes marks a method that changes notes, which an agent's read
+	// scope refuses (ADR-0026).
+	Writes bool `yaml:"writes"`
 
 	result *TypeRef
+}
+
+// admits is the callers a method admits: its own list, else its domain's.
+func (m Method) admits(f *File) []string {
+	if len(m.Callers) > 0 {
+		return m.Callers
+	}
+	return f.Callers
 }
 
 type Event struct {
@@ -88,15 +101,25 @@ var reservedClientMethods = map[string]bool{
 // reservedAPINames are package api's hand-written identifiers (api.go,
 // client.go, conn.go); generated names must not collide with them.
 var reservedAPINames = []string{
-	"Caller", "CallerDevice", "CallerFrom", "CallerLocal", "CallerSession",
+	"Caller", "CallerAgent", "CallerDevice", "CallerFrom", "CallerLocal", "CallerSession",
 	"Client", "Conn", "ConnFrom", "Dial", "Error", "ErrorCode", "Errorf", "Event", "EventBuffer",
-	"EventEnvelope", "EventMethod", "Frame", "HasMethod", "MaxMessageSize",
-	"NewClient", "NewEnvelope", "NewRouter", "Router", "ErrEventsOverflow", "WithCaller", "WithConn",
+	"EventEnvelope", "EventMethod", "Frame", "HasMethod", "Identity", "IdentityFrom", "MaxMessageSize",
+	"NewClient", "NewEnvelope", "NewRouter", "ParseScope", "Router", "Scope", "ErrEventsOverflow",
+	"WithCaller", "WithConn", "WithIdentity",
 }
 
-// callerKinds are the values a domain's callers may list (ADR-0008): the
-// local socket, a signed-in browser on the hub, and a paired device's sync.
-var callerKinds = []string{"local", "session", "device"}
+// callerKinds are the values a domain's callers may list (ADR-0008,
+// ADR-0026): the local socket, a browser lodge signed in, a paired
+// device's sync, and an agent behind lodge's /mcp.
+var callerKinds = []string{"local", "session", "device", "agent"}
+
+// scopeParam is the param that names a method's vault, which an agent's
+// scope checks. Every method an agent may call names one, except the
+// connection's own (unscopedDomain).
+const (
+	scopeParam     = "vaultId"
+	unscopedDomain = "rpc"
+)
 
 // builtinErrors are the JSON-RPC 2.0 codes; methods may list them by name.
 var builtinErrors = []ErrorDef{
@@ -322,6 +345,13 @@ func build(files []*File) (*Schema, error) {
 				continue
 			}
 			claim(f, paramsName(f.Domain, m.Name), "params type")
+			seen := map[string]bool{}
+			for _, c := range m.Callers {
+				if !slices.Contains(f.Callers, c) || seen[c] {
+					fail(f, "%s.%s: caller %q must be one of the domain's (%s), listed once", f.Domain, m.Name, c, strings.Join(f.Callers, ", "))
+				}
+				seen[c] = true
+			}
 		}
 		for _, ev := range f.Events {
 			if !camelRE.MatchString(ev.Name) {
@@ -376,6 +406,9 @@ func build(files []*File) (*Schema, error) {
 					fail(f, "%s: unknown error %q", where, e)
 				}
 			}
+			if slices.Contains(m.admits(f), "agent") && f.Domain != unscopedDomain && m.scopeField() == nil {
+				fail(f, "%s admits agent, so it must name its vault in a required int %s", where, scopeParam)
+			}
 		}
 		for i := range f.Events {
 			fields(f, f.Domain+"."+f.Events[i].Name, f.Events[i].Fields)
@@ -383,6 +416,17 @@ func build(files []*File) (*Schema, error) {
 	}
 	slices.SortFunc(s.Domains, func(a, b *File) int { return strings.Compare(a.Domain, b.Domain) })
 	return s, errors.Join(errs...)
+}
+
+// scopeField is the method's vault param, a required int vaultId, or nil.
+func (m Method) scopeField() *Field {
+	for i := range m.Params {
+		p := &m.Params[i]
+		if p.Name == scopeParam && !p.Optional && p.ref != nil && p.ref.Prim == "int" {
+			return p
+		}
+	}
+	return nil
 }
 
 func cmpNonNil(a, b *TypeRef) *TypeRef {
