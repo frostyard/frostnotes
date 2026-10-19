@@ -100,6 +100,12 @@ them without ADRs:
     build, never a node on the user's tailnet. So no phase but the last
     touches the user's machines, and the phone's first look at notes is
     Phase 7's.
+  - *One exception, at the user's go-ahead (2026-10-19):* an overnight
+    test deployment put lodge and notes' notesd, as `frostnotes`, on the
+    hub's virtual machine with a test vault of its own, beside the M2
+    trial hub, which nothing touched; Phase 4's live Claude Code run
+    used it. Phase 7's move script finds that deployment and sets its
+    data aside, never merging it into the hub's.
   - M4's docs name no address, host, tailnet, device, share or vault of
     the user's.
 - **The API grows within protocol 1, additively** (Phase 2):
@@ -373,8 +379,9 @@ lodge's phase 2.
   - the device routes under `/device/`, and relocation (a relay, a
     forged proof, a wrong URL), with display headers never deciding
     anything;
-  - the web app's XSS surfaces in Firefox and the phone's browser (both
-    sanitizers, as M3's review read them);
+  - the web app's XSS surfaces in Firefox on loopback, and in the
+    phone's browser at Phase 7 (both sanitizers, as M3's review read
+    them);
   - lodge-client's message handling: origins, and no message that
     navigates the frame out of lodge;
   - logs that might hold a secret;
@@ -544,6 +551,12 @@ tailnet.
 - **The phone and its browser:** Firefox for Android, Chrome or Safari
   on iOS changes how lodge's page installs, and the size the evidence
   drives. By Phase 7.
+- **Chrome's PDF viewer under lodge-content's sandbox** (the platform
+  review's L12): does Chrome show a PDF that lodge-content serves with
+  `sandbox`? The docs say the download URL serves where a browser will
+  not show a file in a sandboxed page, but a file's view offers both
+  Open in new tab and Download for every file the app does not draw
+  itself. The code stays as it is until a check in Chrome says which.
 - *Answered 2026-10-18:* **the vault's mount for `frostnotes`.** The
   mount's `uid=` and `gid=` give the user the files, with no change on
   the file server; Phase 7 sets them.

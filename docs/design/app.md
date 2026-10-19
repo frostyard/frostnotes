@@ -56,7 +56,9 @@ against the dev gateway, and in M4 as the web app the hub serves
 
 | Path | What | Owner |
 | --- | --- | --- |
-| `main.tsx` | picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, lodge's `/app/notes/api` in a `web` build, else Tauri), renders `App` | planner |
+| `main.tsx` | starts the `web` build from `lodge/main.tsx` and every other from `desktop.tsx`, each branch's imports out of the other's bundle | planner |
+| `desktop.tsx` | the desktop app's and the development browser's start: picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, else Tauri), runs a spike (`FROSTNOTES_SPIKE`), renders `App` | planner |
+| `lodge/` | the web build inside lodge: lodge-client's handshake and `connectApi` (`main.tsx`), the `LodgeBridge` (route, context, navigate, theme, open), and canonical routes (`routes.ts`) | planner |
 | `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/tauri.ts`, `transport/ws.ts`, `gen/api.ts` (generated) | planner |
 | `rpc/mock/` | `MockTransport`: an in-memory notesd with notesd's semantics and a vault of made-up notes | planner |
 | `data/` | `Session`, the stores (vaults, files, sync, settings), the document registry | planner |
@@ -67,7 +69,7 @@ against the dev gateway, and in M4 as the web app the hub serves
 | `reading/` | the reading view: notesd's HTML, DOMPurify, links, embeds, math | planner |
 | `commands/` | the command registry and the window's key listener | planner |
 | `app/` | `App`, the layout and splitters, containers that connect features to data | planner |
-| `features/<area>/` | presentational components and their tests: `chrome`, `workspace`, `explorer`, `search`, `links`, `outline`, `properties`, `tags`, `switcher`, `palette`, `status`, `settings`, `history`, `menu`, `notice` | cards |
+| `features/<area>/` | presentational components and their tests: `chrome`, `workspace`, `explorer`, `search`, `links`, `outline`, `properties`, `tags`, `switcher`, `palette`, `status`, `settings`, `history`, `menu`, `notice`, and `mobile` (a narrow window's view header, drawers, bottom bar, tab switcher and editing toolbar) | cards |
 | `lib/` | pure helpers: the keymap, fuzzy matching, the file tree, the outline, formatting | cards |
 | `styles/` | `tokens.css` (the spec's tokens), `app.css` (Tailwind entry), `editor.css` (the editor's and the reading view's styles) | planner |
 | `testing/` | Testing Library setup and render helpers | planner |
@@ -602,9 +604,9 @@ desktop's, with a different transport and frame:
     title}` follows the active note, for lodge's companion.
   - **Links.** A link to a lodge URL (the shell's origin) goes to
     `open {url}`; other web links open in a new tab.
-  - **The switcher's key.** The window's key listener never binds the
-    key `init` names. When it is pressed inside the frame, the listener
-    sends `shortcut {key}`.
+  - **The switcher's key.** lodge-client catches the key `init` names,
+    in the capture phase, before notes' key listener, and posts
+    `shortcut {key}` itself; the window's key listener never binds it.
   - **Visibility and theme.** The heartbeat follows the page's
     visibility, not the frame's
     ([lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md#visibility-and-theme)):
@@ -663,9 +665,9 @@ desktop's, with a different transport and frame:
     tokens.
   - The editing toolbar follows the visual viewport to sit on the
     on-screen keyboard.
-- **Hub settings** (`app/Settings.tsx`'s Hub section, over
-  `features/hub/`) list the hub's devices and pending pairings, with
-  Revoke where the caller may ([hub.md](hub.md#hub-settings-in-the-app)).
+- **Hub settings** (`app/Settings.tsx`'s `hubSection`, drawn as the
+  settings dialog's rows) list the hub's devices and pending pairings,
+  with Revoke where the caller may ([hub.md](hub.md#hub-settings-in-the-app)).
   lodge manages sign-in, tokens and sessions.
 - **Tests:**
   - Vitest drives the lodge transport's reconnect and heartbeat with a

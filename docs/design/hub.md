@@ -63,6 +63,10 @@ sockets only:
 - lodge may name the device's tailnet node (`Lodge-Node-Name`,
   `Lodge-Login`). The hub shows it beside a pending pairing's own name,
   to tell two pairings apart, and never admits anything by it.
+- lodge's node ID (`Lodge-Node-ID`) is a rate key, never an admission:
+  one node may have 2 pairings waiting of the hub's 8, so no peer on
+  the tailnet can fill the slots
+  ([specs/lodge-app.md](../specs/lodge-app.md#limits)).
 - TLS and the hub's public name are lodge's. A device's hub URL is
   `https://lodge.<tailnet>.ts.net/device/notes`, and the device appends
   sync-protocol's paths to it, as it does to any hub URL.
@@ -74,9 +78,13 @@ Devices paired during M2 know the hub by its old `tailscale serve` URL.
 1. On the hub, `notesctl hub url https://lodge.<tailnet>.ts.net/device/notes`
    records the URL devices should use (`hub.setURL`).
 2. At each connection a device asks `log.hub`. Over its authenticated
-   sync connection, still at the old URL, it learns the new one, keeps
-   it, and reconnects there with the same token, replicas, agreed
-   states and cursors.
+   sync connection, still at the old URL, it learns the new one. Before
+   it keeps it, it checks the host there with the relocation proof
+   below, as `notesctl hub relocate` does: a URL its hub records by
+   mistake, or that someone changed in the hub's database, would
+   otherwise collect its token. With the proof, it keeps the URL and
+   reconnects there with the same token, replicas, agreed states and
+   cursors; without it, it stays and logs why.
 3. Once every device has moved (`notesctl hub devices` shows each one
    seen at the new address), the old `tailscale serve` goes.
 
