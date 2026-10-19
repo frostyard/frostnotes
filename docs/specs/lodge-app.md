@@ -65,7 +65,7 @@ path admits one caller kind, and any other is 403:
 | --- | --- | --- |
 | `GET /health` | any, or none | the app's state for lodge's rail |
 | `GET /api`, WebSocket | `session` | JSON-RPC as caller `session` |
-| `GET`, `HEAD` `/content/blobs/<hash>.<ext>` | `content` | files by hash |
+| `GET`, `HEAD` `/content/blobs/<mac>/<hash>.<ext>` | `content` | files by hash, named by a MAC |
 | `POST`, `GET`, `DELETE` `/mcp` | `agent` | MCP Streamable HTTP |
 | `POST /device/sync/pair` | `device` | start a pairing |
 | `GET /device/sync/pair/{pairing}` | `device` | collect a device token |
@@ -116,9 +116,25 @@ only once its store is open, so a notesd that answers is serving.
 
 ### `/content/blobs/`
 
-`GET` or `HEAD /content/blobs/<hash>.<ext>`: `hash` is 64 lowercase hex
-digits, and `ext` 1 to 8 lowercase letters or digits. The public URL is
-`https://lodge-content.<tailnet>.ts.net/notes/blobs/<hash>.<ext>`. Answers:
+`GET` or `HEAD /content/blobs/<mac>/<hash>.<ext>`:
+
+- `hash` is 64 lowercase hex digits, and `ext` 1 to 8 lowercase letters
+  or digits.
+- `mac` is 43 base64url characters: HMAC-SHA256 of
+  `frostnotes content\n` + `hash`, keyed with notesd's content key, in
+  unpadded base64url.
+  - The content key is 32 random bytes that notesd keeps in its data
+    directory (`content.key`, mode 0600). It stays the same across
+    restarts, so URLs stay cacheable.
+  - `rpc.hello` hands it to a session as `contentKey`, and the web app
+    computes each file's `mac`.
+- A path without the right `mac` is 404. Under `ts.net` (a public
+  suffix) every page on every node of the tailnet is same-site to
+  lodge-content. Without the key, such a page cannot make a file's URL,
+  so it cannot learn whether the vault holds a file it knows.
+
+The public URL is
+`https://lodge-content.<tailnet>.ts.net/notes/blobs/<mac>/<hash>.<ext>`. Answers:
 
 - the content with that hash from notesd's blob store, else 404;
 - the content type the extension names
@@ -183,6 +199,10 @@ lodge-content adds its own sandbox policy and cross-origin headers
   (`Lodge-Node-Name`, and `Lodge-Login` when sent: `phone
   (ana@example.com)`), or empty when it names none. It is shown beside the device's own name and the time in
   `notesctl hub pending`, to tell pairings apart, never to admit one.
+- **Pending pairings per node:** behind lodge, one node (`Lodge-Node-ID`)
+  may have at most 2 pairings waiting, so no peer takes all 8 of the
+  hub's slots; a third answers 429. The node ID is a rate key here,
+  never an admission.
 - **The hub's URL:**
   - `hub.setURL {url}` (caller `local`) records the URL devices should
     use, an `https://` URL by sync-protocol's rules (or `http://` on
@@ -207,9 +227,12 @@ lodge-content adds its own sandbox policy and cross-origin headers
   - `proof` is HMAC-SHA256. Its key is the 32 bytes of the SHA-256 the
     hub keeps of that device's token. Its message is `frostnotes
     relocate\n` + hub ID + `\n` + url + `\n` + nonce.
-  - An unknown or revoked device is 404. A hub with no recorded URL is
-    409. A peer that reaches `/device/` can thus learn which device IDs
-    exist, the hub's ID and its recorded URL; none of them is a secret.
+  - An unknown or revoked device gets the same answer as a paired one,
+    with a proof under a key no token makes (an HMAC of its ID under a
+    random key of the hub's), so the endpoint does not tell which
+    devices exist. A hub with no recorded URL is 409. A peer that
+    reaches `/device/` can learn the hub's ID and its recorded URL,
+    neither of which is a secret. Requests are logged at debug only.
   - The proof's key is the hash of the token that the hub stores.
     Someone who can read the hub's database can make a valid proof, and
     so lead a device that runs `sync.relocate` to their URL into sending
@@ -268,6 +291,7 @@ On the server, run them as `frostnotes` (`sudo -u frostnotes notesctl
 | MCP sessions | 8 per token name, the least recently used evicted; an hour idle |
 | a blob answer | a 206 of 8 MiB; 64 MiB whole |
 | a relocation request | 1 KiB; a 32-byte nonce |
+| pending pairings | 8 in all; 2 from one node behind lodge |
 
 ## Rules
 
