@@ -82,7 +82,9 @@ file a step names before writing its frostnotes counterpart.
   (`make sync-sim`; reduced failures in its `testdata/regressions`).
   `internal/evidence`: real notesd processes for the milestones' exit
   evidence; `internal/appevidence`: M3's, over the built app under Xvfb
-  (`make m3-evidence`).
+  (`make m3-evidence`); `internal/webevidence`: M4's, Firefox ESR through
+  geckodriver in lodge's development build (`make m4-evidence`,
+  `scripts/lodge-e2e.sh`).
 - `internal/mcpserver`: the MCP tools `notesctl mcp` serves
   ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
   only package that imports the MCP SDK.

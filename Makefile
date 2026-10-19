@@ -178,6 +178,21 @@ m3-evidence: ## Record M3's exit evidence 1-3 with build/frostnotes-app (from ma
 	$(IN_NSL) 'FROSTNOTES_SPIKE=editor $(XVFB) build/frostnotes-app'
 	$(IN_NSL) 'FROSTNOTES_APP=$$PWD/build/frostnotes-app $(XVFB) go test -tags integration -count=1 -timeout 15m -v -run "^TestI" ./internal/appevidence'
 
+# M4's exit evidence 1 and 2 on loopback (docs/plans/0006-m4-notes-inside-lodge.md,
+# Phases 5 and 7): lodge's development build at LODGE_E2E_REF
+# (scripts/lodge-e2e.sh), notes' web build in it, Firefox ESR through
+# geckodriver at a desktop size and at 390 x 844, and for evidence 2 the
+# desktop app under Xvfb.
+LODGE_E2E_REF := c48d43acc70038ff07100c8f816de387570bd817
+
+.PHONY: lodge-e2e m4-evidence
+lodge-e2e: ## Build lodge's development build at LODGE_E2E_REF into build/lodge-e2e (nsl)
+	$(IN_NSL) 'scripts/lodge-e2e.sh $(LODGE_E2E_REF) build/lodge-e2e'
+
+m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 and 2 on loopback (nsl; run make app-build first)
+	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes FROSTNOTES_APP=$$PWD/build/frostnotes-app $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
+
 # Task cards (docs/design/agent-workflow.md). The executor is Codex with the
 # user's model unless EXECUTOR_MODEL names one; or opencode with
 # EXECUTOR_MODEL as its provider/model (ADR-0010).
