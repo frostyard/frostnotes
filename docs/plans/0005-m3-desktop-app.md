@@ -893,8 +893,10 @@ against the built app.
   three runs (51.7 before), frame p95 18, 17 and 17 ms (34 before): 21 or
   22 frames of about 1,120 take more than 18.4 ms (209 before), and at most
   one more than 36.7. Typing stays at 12, 10 and 11 ms at p95, and live
-  preview's checks hold. Without the height map's patch the note scrolls
-  at 58.6 to 59.4 fps. Under Xvfb in nsl, which paints in software, it
+  preview's checks hold. Over Phase 8, merged since, six runs scroll at
+  59.77 to 59.94 fps, frame p95 17 or 18 ms, but one at 58.99, taken as
+  the machine settled after a build: the margin is under 1 fps. Without
+  the height map's patch the note scrolls at 58.6 to 59.4 fps. Under Xvfb in nsl, which paints in software, it
   scrolls at 21 fps (22 before) and typing is 19 to 21 ms at p95.
   Tests cover each change: hidden marks, the field's drawing of a parse's
   steps against a full drawing, a formula drawn once and its MathML a
