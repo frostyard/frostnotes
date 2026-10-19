@@ -44,8 +44,10 @@ Status (2026-10-18): **Phase 1 is in review,** with frostyard/core
 [ADR-0057](https://github.com/frostyard/core/blob/main/docs/adr/0057-run-first-party-apps-behind-lodge.md) and lodge's first docs, all three to be published together.
 M4's first drafts (a notesd of its own on the tailnet, with its own
 sign-in, tokens and web serving) became lodge's ADRs 0004 to 0008
-before anyone accepted them. No code or card starts before the user
-accepts the ADRs.
+before anyone accepted them. No code or card merges before the user
+accepts the ADRs. On 2026-10-18 the user asked for the build to go
+ahead overnight as stacked PRs for review: Phase 2's code is in
+review on branch `m4/phase2`.
 
 ## Decisions taken for M4
 

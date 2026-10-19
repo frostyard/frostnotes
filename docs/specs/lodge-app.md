@@ -183,7 +183,9 @@ lodge-content adds its own sandbox policy and cross-origin headers
   `notesctl hub pending`, to tell pairings apart, never to admit one.
 - **The hub's URL:**
   - `hub.setURL {url}` (caller `local`) records the URL devices should
-    use, an `https://` URL by sync-protocol's rules.
+    use, an `https://` URL by sync-protocol's rules (or `http://` on
+    loopback, for tests); an empty `url` forgets it. It answers
+    `hub.status`.
   - `hub.status` reports it.
   - Devices learn it with `log.hub` (caller `device`), which answers
     `{hub, url?}`. A device calls it at each connection. When `url` is
@@ -199,8 +201,10 @@ lodge-content adds its own sandbox policy and cross-origin headers
     hub keeps of that device's token. Its message is `frostnotes
     relocate\n` + hub ID + `\n` + url + `\n` + nonce.
   - An unknown or revoked device is 404. A hub with no recorded URL is
-    409.
-- **`sync.relocate {hub, url}`** (caller `local`, on a device):
+    409. A body that is not that object, or a nonce that is not 32
+    bytes of unpadded base64url, is 400; a body over 1 KiB is 413.
+- **`sync.relocate {hub, url}`** (caller `local`, on a device; `hub` is
+  the paired hub's URL now, as `sync.hubs` lists it):
   1. Post a fresh 32-byte nonce to `url` + `/sync/hub`.
   2. Keep `url` only when all of these hold:
      - the answer names that paired hub;
