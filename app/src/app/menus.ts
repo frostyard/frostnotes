@@ -92,6 +92,27 @@ export function openTabList(groupId: string, x: number, y: number): void {
   });
 }
 
+/**
+ * openNarrowMenu opens a narrow window's Menu (docs/specs/ui.md#narrow-windows):
+ * the ribbon's actions and Settings, each run by its command.
+ */
+export function openNarrowMenu(run: (command: string) => void, x: number, y: number): void {
+  openMenu({
+    label: "Menu",
+    x,
+    y,
+    items: [
+      item("switcher:open", "Open quick switcher"),
+      item("daily-notes", "Open today's daily note"),
+      item("insert-template", "Insert template"),
+      item("command-palette:open", "Open command palette"),
+      SEP,
+      item("app:open-settings", "Settings"),
+    ],
+    onChoose: run,
+  });
+}
+
 /** revealInFiles shows the Files pane with path's row in view, its folders open; a folder path ends with "/". */
 export function revealInFiles(path?: string): void {
   update((w) => selectPane(path === undefined ? w : revealPath(w, path), "left", "files"));
