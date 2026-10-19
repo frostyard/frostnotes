@@ -206,19 +206,20 @@ func (s Scope) Excepted(p string) bool { return inAny(p, s.Except, true) }
 
 // describe says what the scope may write, for a refusal's message.
 func (s Scope) describe() string {
+	except := ""
+	if len(s.Except) > 0 {
+		except = " except " + strings.Join(s.Except, ", ")
+	}
 	var what []string
 	switch {
 	case s.Write:
-		what = append(what, "anywhere in the vault")
+		what = append(what, "write anywhere in the vault"+except)
 	case len(s.WriteTo) > 0:
-		what = append(what, "under "+strings.Join(s.WriteTo, ", "))
-	}
-	if len(what) > 0 && len(s.Except) > 0 {
-		what[0] += " except " + strings.Join(s.Except, ", ")
+		what = append(what, "write under "+strings.Join(s.WriteTo, ", ")+except)
 	}
 	if s.Daily {
 		d := "append to today's daily note"
-		if len(s.Except) > 0 && len(what) == 0 {
+		if len(what) == 0 && len(s.Except) > 0 {
 			d += " outside " + strings.Join(s.Except, ", ")
 		}
 		what = append(what, d)
@@ -226,7 +227,7 @@ func (s Scope) describe() string {
 	if len(what) == 0 {
 		return "this token writes nothing"
 	}
-	return "this token may write " + strings.Join(what, ", and ")
+	return "this token may " + strings.Join(what, ", and ")
 }
 
 // inAny reports whether p lies in one of the folder prefixes, or, with

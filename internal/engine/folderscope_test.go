@@ -105,7 +105,7 @@ func TestAgentFolderScopeFiles(t *testing.T) {
 	ctx := t.Context()
 	agent := av.srv.DialAs(t, api.Identity{Caller: api.CallerAgent, Token: "porter",
 		Scope: porterScope(t, av.id, ";write=Porter/;except=Porter/Routines/;daily")})
-	may := "under Porter/ except Porter/Routines/, and append to today's daily note"
+	may := "this token may write under Porter/ except Porter/Routines/, and append to today's daily note"
 	zero := strings.Repeat("0", 64)
 	hash := func(p string) string {
 		t.Helper()
@@ -298,7 +298,7 @@ func TestAgentDailyScope(t *testing.T) {
 		}
 	}
 	_, err := noDaily.Note().Daily(ctx, &api.NoteDailyParams{VaultID: av.id})
-	outside(t, "today's daily note without daily", err, "under Porter/")
+	outside(t, "today's daily note without daily", err, "this token may write under Porter/")
 	if err := only.Call(ctx, "note.create", map[string]any{"vaultId": av.id, "path": "Porter/x.md", "content": "x\n"}, nil); code(err) != api.CodeMethodNotFound {
 		t.Errorf("note.create under only daily = %v, want methodNotFound", err)
 	}
@@ -325,7 +325,7 @@ func TestAgentDailyScope(t *testing.T) {
 	writeFiles(t, av.dir, map[string]string{".obsidian/daily-notes.json": `{"folder": "Journal"}`})
 	journal := av.srv.DialAs(t, api.Identity{Caller: api.CallerAgent, Token: "j", Scope: porterScope(t, av.id, ";except=Journal/;daily")})
 	_, err = journal.Note().Daily(ctx, &api.NoteDailyParams{VaultID: av.id})
-	outside(t, "today's daily note in an excepted folder", err, "append to today's daily note outside Journal/")
+	outside(t, "today's daily note in an excepted folder", err, "this token may append to today's daily note outside Journal/")
 	if slices.ContainsFunc(keys(files(t, av.dir)), func(p string) bool { return strings.HasPrefix(p, "Journal/") }) {
 		t.Error("a daily note was made in Journal/")
 	}
