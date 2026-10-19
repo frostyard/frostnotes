@@ -9,6 +9,8 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "../app/App";
 import type { Connect, Retry } from "../data/session";
+import { useNotes } from "../data/stores";
+import { contentMAC, fromBase64url } from "../lib/sha256";
 import { connectApi } from "../rpc/transport/ws";
 import { LodgeBridge } from "./Bridge";
 
@@ -19,10 +21,37 @@ import { LodgeBridge } from "./Bridge";
  */
 export const WEB_RETRY: Retry = { firstMs: 1000, maxMs: 30_000 };
 
+/**
+ * contentBlobs gives a file's URL on lodge-content: blobs/<mac>/<hash>.<ext>,
+ * the mac an HMAC of the hash under the content key rpc.hello gave this
+ * session (docs/specs/lodge-app.md#contentblobs); "" until hello has.
+ * MACs are kept, since the editor asks for the same files often.
+ */
+export function contentBlobs(url: (path: string) => string): (hash: string, ext: string) => string {
+  let key = "";
+  let bytes = new Uint8Array();
+  const macs = new Map<string, string>();
+  return (hash, ext) => {
+    const now = useNotes.getState().hello?.contentKey ?? "";
+    if (now === "") return "";
+    if (now !== key) {
+      key = now;
+      bytes = fromBase64url(now);
+      macs.clear();
+    }
+    let mac = macs.get(hash);
+    if (mac === undefined) {
+      mac = contentMAC(bytes, hash);
+      macs.set(hash, mac);
+    }
+    return url(`blobs/${mac}/${hash}.${ext}`);
+  };
+}
+
 /** runInLodge connects to the shell and to notesd, then renders the app into root. */
 export async function runInLodge(root: HTMLElement): Promise<void> {
   const lodge = await connectLodge({ app: "notes" });
-  const blobs = (hash: string, ext: string) => lodge.contentURL(`blobs/${hash}.${ext}`);
+  const blobs = contentBlobs((path) => lodge.contentURL(path));
   const connect: Connect = () => connectApi(lodge.apiURL(), blobs);
   const wake = (fn: () => void) =>
     lodge.on("visible", ({ visible }) => {

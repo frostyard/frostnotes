@@ -1,6 +1,7 @@
-// SHA-256, synchronously, so the mock names content by hash as notesd does
-// (FIPS 180-4). The mock's calls answer from one function, and Web
-// Crypto's digest is asynchronous.
+// SHA-256 and HMAC-SHA256, synchronously (FIPS 180-4, RFC 2104): the mock
+// names content by hash as notesd does, and the web app names a file's
+// URL on lodge-content by an HMAC of its hash, where Web Crypto's digest
+// is asynchronous and a URL is needed at once.
 
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
@@ -18,6 +19,11 @@ const at = (a: Uint32Array, i: number): number => a[i] ?? 0;
 
 /** sha256 returns the lowercase hex SHA-256 of data. */
 export function sha256(data: Uint8Array): string {
+  return Array.from(sha256Bytes(data), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** sha256Bytes returns the SHA-256 of data. */
+export function sha256Bytes(data: Uint8Array): Uint8Array {
   const bits = data.length * 8;
   const padded = new Uint8Array(Math.ceil((data.length + 9) / 64) * 64);
   padded.set(data);
@@ -67,5 +73,46 @@ export function sha256(data: Uint8Array): string {
       h[i] = at(h, i) + x;
     });
   }
-  return Array.from(h, (x) => x.toString(16).padStart(8, "0")).join("");
+  const out = new Uint8Array(32);
+  const view32 = new DataView(out.buffer);
+  h.forEach((x, i) => view32.setUint32(i * 4, x));
+  return out;
+}
+
+/** hmacSha256 returns HMAC-SHA256 of message under key. */
+export function hmacSha256(key: Uint8Array, message: Uint8Array): Uint8Array {
+  const block = new Uint8Array(64);
+  block.set(key.length > 64 ? sha256Bytes(key) : key);
+  const inner = new Uint8Array(64 + message.length);
+  const outer = new Uint8Array(64 + 32);
+  for (let i = 0; i < 64; i++) {
+    inner[i] = (block[i] ?? 0) ^ 0x36;
+    outer[i] = (block[i] ?? 0) ^ 0x5c;
+  }
+  inner.set(message, 64);
+  outer.set(sha256Bytes(inner), 64);
+  return sha256Bytes(outer);
+}
+
+/** base64url is bytes in unpadded base64url. */
+export function base64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** fromBase64url decodes unpadded base64url. */
+export function fromBase64url(text: string): Uint8Array {
+  const b64 = text.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+}
+
+/**
+ * contentMAC names a file in its URL on lodge-content: HMAC-SHA256 of
+ * "frostnotes content\n" + its hash under the session's content key, in
+ * unpadded base64url (docs/specs/lodge-app.md#contentblobs), as notesd's
+ * blobhttp.ContentMAC computes it.
+ */
+export function contentMAC(key: Uint8Array, hash: string): string {
+  return base64url(hmacSha256(key, new TextEncoder().encode(`frostnotes content\n${hash}`)));
 }
