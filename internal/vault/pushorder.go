@@ -17,6 +17,11 @@ import (
 // parked first: Park moves its file aside, and the ring then applies in
 // order. It returns the order of cs's indexes, and the indexes to park.
 func (v *Vault) PushOrder(ctx context.Context, cs []PushChange) ([]int, []int, error) {
+	// PushOrder runs outside the vault's lock; the ignore patterns, which a
+	// scan replaces under it, are read under it.
+	v.mu.Lock()
+	ignore := v.patterns()
+	v.mu.Unlock()
 	moving := map[int64]int{} // a file, and the change that moves it
 	moves := map[int]bool{}
 	for i, c := range cs {
@@ -39,7 +44,7 @@ func (v *Vault) PushOrder(ctx context.Context, cs []PushChange) ([]int, []int, e
 			return nil, nil, err
 		}
 		if base.FileID != c.FileID || base.Hash != c.BaseHash || base.Path == c.Path ||
-			checkNotePath(c.Path) != nil || v.ignored(c.Path) || !hashRE.MatchString(c.Hash) {
+			checkNotePath(c.Path) != nil || ignore.Match(c.Path, false) || !hashRE.MatchString(c.Hash) {
 			continue
 		}
 		if ok, err := v.cfg.Blobs.Has(c.Hash); err != nil || !ok {

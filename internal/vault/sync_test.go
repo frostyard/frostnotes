@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -262,6 +263,34 @@ func TestPushMoves(t *testing.T) {
 	if hv.exists("x") {
 		t.Fatal("a move left its emptied folder")
 	}
+}
+
+// PushOrder runs on the hub's log.push outside the vault's lock, while the
+// vault's scan writes its ignore patterns under it: PushOrder reads them
+// under the lock too (go test -race).
+func TestPushOrderReadsTheIgnorePatternsUnderTheLock(t *testing.T) {
+	hv := newHubVault(t, map[string]string{"a.md": "one\n"})
+	a := hv.row("a.md").ID
+	base := hv.head(a)
+	// A move reaches the ignore check.
+	move := []PushChange{{FileID: a, Base: base.Revision, BaseHash: base.Hash, Path: "x/a.md", Hash: base.Hash}}
+	ctx := t.Context()
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 20 {
+			if _, err := hv.v.runScan(ctx, false); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	})
+	for range 20 {
+		order, _, err := hv.v.PushOrder(ctx, move)
+		if err != nil || len(order) != 1 {
+			t.Fatalf("PushOrder = %v, %v", order, err)
+		}
+	}
+	wg.Wait()
 }
 
 func TestPushRefusals(t *testing.T) {
