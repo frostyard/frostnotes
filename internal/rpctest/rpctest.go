@@ -1,6 +1,7 @@
 // Package rpctest runs a real notesd API server (store, blobs, broker,
 // vaults, engine and rpcserver) on a temporary socket, for tests of
-// clients such as notesctl.
+// clients such as notesctl. The socket, the serving goroutine and its
+// stop are lodge's kit's (github.com/frostyard/lodge/kit/rpctest).
 package rpctest
 
 import (
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	kitrpctest "github.com/frostyard/lodge/kit/rpctest"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
@@ -28,8 +31,11 @@ import (
 // Name is what the test server reports from rpc.hello.
 const Name = "notesd rpctest"
 
-// Options configure a test server.
+// Options configure a test server. Their Services, when set, edit the
+// engine's services before the router is built, so a client's tests can
+// serve a fake domain.
 type Options struct {
+	kitrpctest.Options[api.Services]
 	// Log receives the server's logs; nil discards them.
 	Log *slog.Logger
 	// DataDir holds the database; empty means a fresh temporary directory.
@@ -37,14 +43,6 @@ type Options struct {
 	DataDir string
 	// Now, when set, is the clock for stored timestamps.
 	Now func() time.Time
-	// Note, when set, serves the note domain in place of the engine's, so
-	// a client's tests can run against a fake.
-	Note api.NoteService
-	// Hub, Sync and LogDomain, when set, serve the hub, sync and log
-	// domains in place of the engine's, as Note does.
-	Hub       api.HubService
-	Sync      api.SyncService
-	LogDomain api.LogService
 	// Vault tunes the vaults' actors (intervals, batch size); its DB,
 	// Blobs, Log, Publish and, when Now is set, Now are filled in.
 	Vault vault.Config
@@ -65,6 +63,7 @@ type Options struct {
 // Server is a running test server; it stops when the test ends.
 type Server struct {
 	Socket string
+	Run    *kitrpctest.Run
 	DB     *store.DB
 	Blobs  *blobs.Store
 	Broker *events.Broker
@@ -121,15 +120,6 @@ func StartWith(t testing.TB, o Options) *Server {
 		t.Fatal(err)
 	}
 
-	socket, cleanup, err := SocketPath()
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv.Socket = socket
-	ln, err := rpcserver.Listen(srv.Socket)
-	if err != nil {
-		t.Fatal(err)
-	}
 	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log})
 	srv.RPC = rpc
 	srv.Secrets = secrets.NewFile(filepath.Join(data, "secrets.json"))
@@ -160,29 +150,17 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	srv.Syncer = syncer.New(sc)
 	eng := engine.New(db, srv.Vaults, srv.Hub, srv.Syncer)
-	note := o.Note
-	if note == nil {
-		note = eng.Notes()
-	}
-	services := api.Services{RPC: rpc, Events: rpc, Vault: eng.Vaults(), Note: note,
+	services := api.Services{RPC: rpc, Events: rpc, Vault: eng.Vaults(), Note: eng.Notes(),
 		Hub: eng.Hub(), Sync: eng.Sync(), Log: eng.Log()}
-	if o.Hub != nil {
-		services.Hub = o.Hub
-	}
-	if o.Sync != nil {
-		services.Sync = o.Sync
-	}
-	if o.LogDomain != nil {
-		services.Log = o.LogDomain
-	}
+	o.Edit(&services)
 	router, err := api.NewRouter(services)
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv.Router = router
 	srv.Hub.SetRouter(router)
-	done := make(chan error, 1)
-	go func() { done <- rpc.Serve(ctx, ln, router) }()
+	srv.Run = kitrpctest.Serve(t, func(ctx context.Context, ln net.Listener) error { return rpc.Serve(ctx, ln, router) })
+	srv.Socket = srv.Run.Socket
 	hubDone := make(chan error, 1)
 	if hubLn != nil {
 		go func() { hubDone <- srv.Hub.Serve(ctx, hubLn) }()
@@ -194,21 +172,19 @@ func StartWith(t testing.TB, o Options) *Server {
 		t.Fatal(err)
 	}
 	srv.stop = sync.OnceFunc(func() {
+		srv.Run.Stop()
 		cancel()
-		for _, ch := range []chan error{done, hubDone} {
-			select {
-			case err := <-ch:
-				if err != nil {
-					t.Errorf("Serve: %v", err)
-				}
-			case <-time.After(5 * time.Second):
-				t.Error("Serve did not stop")
+		select {
+		case err := <-hubDone:
+			if err != nil {
+				t.Errorf("the hub's Serve: %v", err)
 			}
+		case <-time.After(5 * time.Second):
+			t.Error("the hub's Serve did not stop")
 		}
 		srv.Syncer.Wait()
 		srv.Vaults.Wait()
 		_ = db.Close()
-		cleanup()
 	})
 	t.Cleanup(srv.stop)
 	return srv
@@ -235,20 +211,9 @@ func (s *Server) Dial(t testing.TB) *api.Client {
 // and completes rpc.hello; the client closes when the test ends.
 func (s *Server) DialAs(t testing.TB, id api.Identity) *api.Client {
 	t.Helper()
-	server, client := net.Pipe()
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.RPC.ServeConn(ctx, server, s.Router, id)
-	}()
-	c := api.NewClient(client)
-	t.Cleanup(func() {
-		_ = c.Close()
-		cancel()
-		<-done
-	})
-	if _, err := c.RPC().Hello(ctx, &api.RPCHelloParams{Protocol: api.Protocol, Client: "rpctest"}); err != nil {
+	c := api.NewClient(s.Run.Pipe(t, func(ctx context.Context, nc net.Conn) { s.RPC.ServeConn(ctx, nc, s.Router, id) }))
+	t.Cleanup(func() { _ = c.Close() })
+	if _, err := c.RPC().Hello(t.Context(), &api.RPCHelloParams{Protocol: api.Protocol, Client: "rpctest"}); err != nil {
 		t.Fatal(err)
 	}
 	return c

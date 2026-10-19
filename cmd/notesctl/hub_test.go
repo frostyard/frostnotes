@@ -139,7 +139,9 @@ func (f *fakeSync) ReadRevision(_ context.Context, p *api.SyncReadRevisionParams
 // registers one vault per name, so their IDs are 1, 2, ….
 func syncServer(t *testing.T, hub *fakeHub, dev *fakeSync, vaults ...string) *rpctest.Server {
 	t.Helper()
-	srv := rpctest.StartWith(t, rpctest.Options{Hub: hub, Sync: dev})
+	var o rpctest.Options
+	o.Services = func(s *api.Services) { s.Hub, s.Sync = hub, dev }
+	srv := rpctest.StartWith(t, o)
 	for _, name := range vaults {
 		dir := filepath.Join(t.TempDir(), name)
 		if err := os.Mkdir(dir, 0o755); err != nil {

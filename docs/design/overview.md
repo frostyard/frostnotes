@@ -131,16 +131,16 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | Path | Contents |
 | --- | --- |
 | `cmd/notesd`, `cmd/notesctl` | the daemon; the CLI (clix/cobra, one `newXxxCmd(opts)` per file) |
-| `schema/rpc/`, `api/` | the IDL; generated types, router and client plus the hand-written runtime |
+| `schema/rpc/`, `api/` | the IDL; generated types, router and client, on lodge kit's JSON-RPC runtime (`jsonrpc`, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)), with notes' caller kinds, scope and identities |
 | `internal/store`, `internal/events` | SQLite (modernc): migrations, the single-writer `Tx`, the changes log; event fan-out |
-| `internal/rpcserver`, `internal/engine` | the socket server; the API domains over the store and the vaults |
+| `internal/rpcserver`, `internal/engine` | `rpc.hello`, `events.subscribe` and each connection's identity over the kit's server and private socket; the API domains over the store and the vaults |
 | `internal/vault` | one actor per vault: scanning, watching, the path guard, atomic compare-and-merge writes, versions, settings, daily notes |
 | `internal/markdown` | frontmatter, links, tags, headings, blocks and tasks from a note |
 | `internal/merge` | diff3 by line and word, frontmatter by key (planner-owned) |
 | `internal/blobs` | the content-addressed blob store |
 | `internal/render` | goldmark rendering and the HTML sanitizer |
 | `internal/syncer`, `internal/hub` | the device's sync loops; the hub's device routes, pairing, the token check, relocation, and its `log` and `hub` domains |
-| `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub`; the only package importing `lodge/kit` |
+| `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub` |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
 | `internal/blobhttp` | vault files by hash for browsers: the development gateway's `/blobs/` and the lodge socket's `/content/blobs/`, with their headers and limits |
 | `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes` |

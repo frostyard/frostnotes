@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/frostyard/lodge/kit/jsonrpc"
 )
 
 // Conn is the client connection a request arrived on, for services that
@@ -19,17 +21,24 @@ type Conn interface {
 	Client() string
 }
 
-type connKey struct{}
-
-// WithConn returns ctx carrying c; the RPC server sets it for every request.
-func WithConn(ctx context.Context, c Conn) context.Context {
-	return context.WithValue(ctx, connKey{}, c)
-}
-
 // ConnFrom returns the connection a request arrived on, or nil.
 func ConnFrom(ctx context.Context) Conn {
-	c, _ := ctx.Value(connKey{}).(Conn)
-	return c
+	if c := jsonrpc.ConnFrom(ctx); c != nil {
+		return rpcConn{c}
+	}
+	return nil
+}
+
+// rpcConn is the server's connection as a Conn.
+type rpcConn struct{ *jsonrpc.Conn }
+
+// Notify sends ev as a transient event.
+func (c rpcConn) Notify(ev Event) error {
+	env, err := NewEnvelope(0, ev)
+	if err != nil {
+		return err
+	}
+	return c.Conn.Notify(EventMethod, env)
 }
 
 // Caller is the kind of client a connection serves; each domain in

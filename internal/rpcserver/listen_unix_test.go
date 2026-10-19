@@ -3,7 +3,6 @@
 package rpcserver_test
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +10,6 @@ import (
 
 	"github.com/frostyard/frostnotes/internal/rpcserver"
 )
-
-func dialConn(path string) (net.Conn, error) { return net.Dial("unix", path) }
 
 func TestListenRejectsOpenDirectory(t *testing.T) {
 	dir, err := os.MkdirTemp("", "fn")
@@ -23,7 +20,7 @@ func TestListenRejectsOpenDirectory(t *testing.T) {
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rpcserver.Listen(filepath.Join(dir, "notesd.sock")); err == nil || !strings.Contains(err.Error(), "want 0700") {
+	if _, err := rpcserver.New(rpcserver.Options{}).Listen(filepath.Join(dir, "notesd.sock")); err == nil || !strings.Contains(err.Error(), "want 0700") {
 		t.Fatalf("Listen in a 0755 directory = %v", err)
 	}
 }

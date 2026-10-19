@@ -143,6 +143,13 @@ The review of the drafts left the notes side two fixes:
   token store or static file server.
   - It depends on lodge's Go kit (`lodge/kit`), which keeps
     `tailscale.com` out.
+  - Its JSON-RPC runtime is the kit's `jsonrpc`, shared with frostmail:
+    the framing, the gate on `rpc.hello`, dispatch, the router's caller
+    kinds, the client and the private socket. The contract and its
+    generator stay notes' own
+    ([ADR-0008](0008-generate-the-rpc-contract-from-a-yaml-idl.md);
+    lodge's [ADR-0012](https://github.com/frostyard/lodge/blob/main/docs/adr/0012-the-kit-shares-the-rpc-runtime-not-the-generator.md)),
+    and so do the caller kinds, the agent's scope and identities.
   - frostmail and the assistant get sign-in, tokens and serving from
     lodge too, not from copies.
 - Using notes in a browser waits on lodge. M4 depends on lodge's

@@ -137,7 +137,9 @@ func (f *fakeNotes) Mkdir(_ context.Context, p *api.NoteMkdirParams) error {
 // vault per name, in order, so their IDs are 1, 2, ….
 func notesServer(t *testing.T, fake *fakeNotes, vaults ...string) *rpctest.Server {
 	t.Helper()
-	srv := rpctest.StartWith(t, rpctest.Options{Note: fake})
+	var o rpctest.Options
+	o.Services = func(s *api.Services) { s.Note = fake }
+	srv := rpctest.StartWith(t, o)
 	for _, name := range vaults {
 		dir := filepath.Join(t.TempDir(), name)
 		if err := os.Mkdir(dir, 0o755); err != nil {
