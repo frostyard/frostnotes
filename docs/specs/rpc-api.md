@@ -46,9 +46,9 @@ The state of a new subscription.
 
 ## hub
 
-On a hub: the vaults it serves and the devices paired with it (docs/specs/sync-protocol.md). Approving and revoking devices happen only here, over the local socket (ADR-0016).
+On a hub: the vaults it serves, the devices paired with it and the URL they should use (docs/specs/sync-protocol.md, docs/specs/lodge-app.md). Approving a device, serving a vault and recording the URL happen only over the local socket (ADR-0016, ADR-0026); a session may list and revoke.
 
-Callers: `local`.
+Callers: `local`, `session`.
 
 ### `hub.status`
 
@@ -61,6 +61,8 @@ Result: `HubStatus`.
 ### `hub.serve`
 
 Serve a registered vault to devices: it gets a sync ID, and each of its files a create revision, by path.
+
+Callers: `local`.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -89,6 +91,8 @@ Result: `[]PendingPairing`.
 
 Approve the pending pairing with this code (case, spaces and '-' ignored).
 
+Callers: `local`.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `code` | `string` |  |
@@ -115,6 +119,19 @@ Revoke a device's token and close its connections; its revisions keep its name.
 Result: none (`null`).
 Errors: `notFound`.
 
+### `hub.setURL`
+
+Record the URL devices should use: an https:// URL, or http:// on loopback, by sync-protocol's rules; empty forgets it. Devices learn it with log.hub and move to it, and it is the URL a relocation proof names (docs/specs/lodge-app.md#device).
+
+Callers: `local`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `url` | `string` |  |
+
+Result: `HubStatus`.
+Errors: `invalidParams`.
+
 ### Type `HubStatus`
 
 This notesd's hub role.
@@ -123,6 +140,7 @@ This notesd's hub role.
 | --- | --- | --- |
 | `hub` | `string` | The hub's ID; empty until it serves a vault. |
 | `listen` | `string` (optional) | The address notesd --hub serves; absent without --hub. |
+| `url` | `string` (optional) | The URL devices should use, from hub.setURL; absent until one is recorded. |
 | `vaults` | `int` |  |
 | `devices` | `int` | Paired devices that are not revoked. |
 | `connected` | `int` | Devices connected now. |
@@ -170,6 +188,14 @@ A paired device.
 A hub vault's revision log, for paired devices over the hub's /sync WebSocket (docs/specs/sync-protocol.md). A vault is named by its sync ID. Devices push changed files with the revision they last agreed on; only the hub merges (ADR-0005, ADR-0017). Contents move over /sync/blobs, never in these messages (ADR-0018).
 
 Callers: `device`.
+
+### `log.hub`
+
+The hub's ID and the URL it records for devices. A device asks at each connection, and moves to a URL that differs from its own record, keeping its token, replicas, agreed states and cursors.
+
+No params.
+
+Result: `LogHub`.
 
 ### `log.vaults`
 
@@ -421,6 +447,15 @@ An entry in a hub vault's log (ADR-0017).
 | `lostTo` | `int` (optional) | For a conflict revision: the revision whose side stood. |
 | `pruned` | `bool` | Its content is gone (ADR-0019). |
 
+### Type `LogHub`
+
+The hub a device is connected to.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `hub` | `string` | The hub's ID. |
+| `url` | `string` (optional) | The URL the hub records for devices (hub.setURL); absent when it records none. |
+
 ### Type `PushRecord`
 
 The revisions the hub appended for one push.
@@ -472,7 +507,7 @@ What a revision did to its file.
 
 The notes and attachments in a vault, and what notesd's index knows of them (docs/design/vault.md). A path is vault-relative and slash-separated, as on disk. Every write names the hash of the content it started from, as note.read returns it (ADR-0006): when the file changed since, notesd merges three ways, writes the result and returns it. Only a create has no base.
 
-Callers: `local`.
+Callers: `local`, `session`, `agent`.
 
 ### `note.list`
 
@@ -542,13 +577,15 @@ Errors: `notFound`.
 
 Create a note or attachment, and any missing folders. Fails with conflict if the path exists.
 
+Writes: an agent's read scope refuses it.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
 | `path` | `string` |  |
 | `content` | `string` |  |
-| `source` | `VersionSource` (optional) | editor (the default) or agent. |
-| `author` | `string` (optional) | Who is writing, for the version list; defaults to the client name given to rpc.hello. |
+| `source` | `VersionSource` (optional) | editor (the default) or agent; a session's or an agent's connection fixes it. |
+| `author` | `string` (optional) | Who is writing, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it. |
 
 Result: `WriteResult`.
 Errors: `notFound`, `conflict`, `invalidParams`.
@@ -557,14 +594,16 @@ Errors: `notFound`, `conflict`, `invalidParams`.
 
 Replace a file's content. base is the hash the writer started from. If the file changed since, notesd merges: frontmatter by key, then the body by line and word (ADR-0005). A base notesd has no version of (pruned after 30 days) is refused with conflict: read again, as is a stale base of a file that is not text, which does not merge. Bytes of the base that are not UTF-8, which note.read showed as U+FFFD, are kept wherever content leaves the words around them as they were (ADR-0014).
 
+Writes: an agent's read scope refuses it.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
 | `path` | `string` |  |
 | `base` | `string` | The hash of the content this write started from. |
 | `content` | `string` |  |
-| `source` | `VersionSource` (optional) | editor (the default) or agent. |
-| `author` | `string` (optional) | Who is writing, for the version list; defaults to the client name given to rpc.hello. |
+| `source` | `VersionSource` (optional) | editor (the default) or agent; a session's or an agent's connection fixes it. |
+| `author` | `string` (optional) | Who is writing, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it. |
 
 Result: `WriteResult`.
 Errors: `notFound`, `conflict`, `invalidParams`.
@@ -572,6 +611,8 @@ Errors: `notFound`, `conflict`, `invalidParams`.
 ### `note.move`
 
 Rename or move a note or attachment, creating missing folders. The file keeps its versions. With updateLinks, every link to it from another note is rewritten to the new path, each as a write.
+
+Writes: an agent's read scope refuses it.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -586,6 +627,8 @@ Errors: `notFound`, `conflict`, `invalidParams`.
 ### `note.delete`
 
 Delete a note or attachment: notesd removes the file, and its versions stay for 30 days, so note.revert can bring it back. base must be its current hash: a file changed since base is not deleted (conflict), because an edit beats a delete (ADR-0005).
+
+Writes: an agent's read scope refuses it.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -613,6 +656,8 @@ Errors: `notFound`.
 
 Make a file's content that of one of its versions, as a write with a base. A deleted file comes back at its last path.
 
+Writes: an agent's read scope refuses it.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
@@ -627,12 +672,14 @@ Errors: `notFound`, `conflict`.
 
 A day's daily note, created from the vault's daily-note template when missing (docs/design/vault.md#daily-notes).
 
+Writes: an agent's read scope refuses it.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
 | `date` | `string` (optional) | YYYY-MM-DD; default today in notesd's time zone. |
-| `source` | `VersionSource` (optional) | Who creates it when it is missing: editor (the default) or agent. |
-| `author` | `string` (optional) | Who creates it, for the version list; defaults to the client name given to rpc.hello. |
+| `source` | `VersionSource` (optional) | Who creates it when it is missing: editor (the default) or agent; a session's or an agent's connection fixes it. |
+| `author` | `string` (optional) | Who creates it, for the version list; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it. |
 
 Result: `DailyNote`.
 Errors: `notFound`, `invalidParams`.
@@ -678,13 +725,15 @@ Errors: `notFound`, `invalidParams`.
 
 Create an attachment from bytes, as note.create creates a note: it fails with conflict if the path exists (ADR-0023). data is base64, at most 10 MB decoded.
 
+Writes: an agent's read scope refuses it.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
 | `path` | `string` |  |
 | `data` | `string` | The file's bytes, base64 (standard alphabet, padded). |
-| `source` | `VersionSource` (optional) | editor (the default) or agent. |
-| `author` | `string` (optional) | Who is writing; defaults to the client name given to rpc.hello. |
+| `source` | `VersionSource` (optional) | editor (the default) or agent; a session's or an agent's connection fixes it. |
+| `author` | `string` (optional) | Who is writing; defaults to the client name given to rpc.hello. A session's or an agent's connection fixes it. |
 
 Result: `WriteResult`.
 Errors: `notFound`, `conflict`, `invalidParams`.
@@ -741,6 +790,8 @@ Errors: `notFound`, `invalidParams`.
 
 Create a folder and any missing parents. An existing folder is not an error.
 
+Writes: an agent's read scope refuses it.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `vaultId` | `int` |  |
@@ -752,6 +803,8 @@ Errors: `notFound`, `invalidParams`.
 ### `note.moveFolder`
 
 Rename or move a folder with everything in it, creating missing parents. Each file moves as note.move moves it, keeping its versions; with updateLinks, links to them from notes outside the folder are rewritten.
+
+Writes: an agent's read scope refuses it.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -766,6 +819,8 @@ Errors: `notFound`, `conflict`, `invalidParams`.
 ### `note.deleteFolder`
 
 Delete a folder's files, each with the base the caller listed, then the folder when nothing is left in it. A file changed since its base, or not listed, is kept: an edit beats a delete (ADR-0005). Every deleted file's versions stay for note.revert.
+
+Writes: an agent's read scope refuses it.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -1065,7 +1120,7 @@ Who made a version.
 
 Connection setup. A client calls rpc.hello first on every connection; the server answers any other method with notReady until hello succeeds.
 
-Callers: `local`, `session`, `device`.
+Callers: `local`, `session`, `device`, `agent`.
 
 ### `rpc.hello`
 
@@ -1079,14 +1134,26 @@ Negotiate the protocol major version. Changes within a major version are additiv
 Result: `Hello`.
 Errors: `protocolMismatch`.
 
+### `rpc.ping`
+
+Nothing, answered: the web app's heartbeat while it is visible, which finds a connection a sleeping phone dropped.
+
+No params.
+
+Result: none (`null`).
+
 ### Type `Hello`
 
-Server identity and the negotiated protocol.
+Server identity, the negotiated protocol, and who the connection is.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `protocol` | `int` | Protocol major version the server speaks. |
 | `server` | `string` | Server name and version, for logs. |
+| `caller` | `string` | The connection's caller kind: local, session, device or agent (docs/specs/rpc-protocol.md#caller-kinds). |
+| `login` | `string` (optional) | A session's tailnet login, from lodge. |
+| `displayName` | `string` (optional) | A session's display name, when lodge sends one. |
+| `node` | `string` (optional) | A session's node: its short host name, from lodge. |
 
 ## sync
 
@@ -1124,6 +1191,18 @@ The hubs this device paired with.
 No params.
 
 Result: `[]SyncHub`.
+
+### `sync.relocate`
+
+Move a paired hub to url, for a device that missed log.hub's move: it posts a fresh nonce to url's /sync/hub and keeps url only when the answer names that hub, records url as its own, and proves it holds this device's token's hash; else conflict, and nothing changes (docs/specs/lodge-app.md#device). The token is never sent.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `hub` | `string` | The paired hub's URL now, as sync.hubs lists it. |
+| `url` | `string` | Its new URL: https://, or http:// on loopback. |
+
+Result: `SyncHub`.
+Errors: `notFound`, `conflict`, `invalidParams`, `unavailable`.
 
 ### `sync.join`
 
@@ -1357,7 +1436,7 @@ Where a pairing stands.
 
 The vaults this notesd owns: directories of markdown notes (ADR-0003). Registering a vault never writes to it; add with create makes its empty directory first (ADR-0024).
 
-Callers: `local`.
+Callers: `local`, `session`.
 
 ### `vault.list`
 
@@ -1371,6 +1450,8 @@ Result: `[]Vault`.
 
 Register a directory as a vault. The path must be absolute and name an existing directory, and no registered vault may contain it or lie inside it. With create, notesd makes the directory first (Create new vault, ADR-0024): its parent must exist and it must not; it is made only when it may be registered.
 
+Callers: `local`.
+
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `path` | `string` | Absolute path of the vault directory. |
@@ -1383,6 +1464,8 @@ Errors: `invalidParams`, `conflict`.
 ### `vault.remove`
 
 Forget a vault. Its directory and files are untouched.
+
+Callers: `local`.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

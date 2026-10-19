@@ -63,7 +63,7 @@ func TestWireRules(t *testing.T) {
 	// hello and a pipelined call: the call must see the connection ready.
 	r.send(`{"jsonrpc":"2.0","id":2,"method":"rpc.hello","params":{"protocol":1,"client":"t"}}` + "\n" +
 		`{"jsonrpc":"2.0","id":3,"method":"vault.list"}`)
-	if got := r.recv(); got != `{"jsonrpc":"2.0","id":2,"result":{"protocol":1,"server":"notesd rpctest"}}` {
+	if got := r.recv(); got != `{"jsonrpc":"2.0","id":2,"result":{"protocol":1,"server":"notesd rpctest","caller":"local"}}` {
 		t.Fatalf("hello = %s", got)
 	}
 	if got := r.recv(); got != `{"jsonrpc":"2.0","id":3,"result":[]}` {
@@ -84,23 +84,31 @@ func TestWireRules(t *testing.T) {
 	}
 }
 
-// A connection serves only the domains that admit its caller kind
-// (ADR-0008): a browser session on the hub reaches rpc and events, and a
-// local-only method looks like one that does not exist.
-func TestCallerKindLimitsDomains(t *testing.T) {
+// A connection serves only the methods that admit its caller kind
+// (ADR-0008, ADR-0026): a browser session lists vaults, and a local-only
+// method looks like one that does not exist.
+func TestCallerKindLimitsMethods(t *testing.T) {
 	srv := rpctest.Start(t)
 	server, client := net.Pipe()
 	t.Cleanup(func() { _ = client.Close() })
-	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.CallerSession)
+	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.Identity{Caller: api.CallerSession, Login: "ana@example.com", Node: "phone"})
 	r := &rawConn{t: t, nc: client, sc: bufio.NewScanner(client)}
 
 	r.send(`{"jsonrpc":"2.0","id":1,"method":"rpc.hello","params":{"protocol":1,"client":"browser"}}`)
-	if got := r.recv(); !strings.Contains(got, `"result"`) {
-		t.Fatalf("hello as a session = %s", got)
+	if got := r.recv(); !strings.Contains(got, `"caller":"session","login":"ana@example.com","node":"phone"`) {
+		t.Fatalf("hello as a session = %s, want its caller, login and node", got)
 	}
 	r.send(`{"jsonrpc":"2.0","id":2,"method":"vault.list"}`)
+	if got := r.recv(); !strings.Contains(got, `"result"`) {
+		t.Fatalf("vault.list as a session = %s, want a result", got)
+	}
+	r.send(`{"jsonrpc":"2.0","id":3,"method":"vault.add","params":{"path":"/tmp/x"}}`)
 	if got := r.recv(); !strings.Contains(got, `"code":-32601`) {
-		t.Fatalf("vault.list as a session = %s, want methodNotFound", got)
+		t.Fatalf("vault.add as a session = %s, want methodNotFound", got)
+	}
+	r.send(`{"jsonrpc":"2.0","id":4,"method":"rpc.ping"}`)
+	if got := r.recv(); got != `{"jsonrpc":"2.0","id":4,"result":null}` {
+		t.Fatalf("rpc.ping = %s, want a null result", got)
 	}
 }
 
@@ -161,7 +169,7 @@ func TestEventsReachOnlyTheCallersTheirDomainAdmits(t *testing.T) {
 	srv := rpctest.Start(t)
 	server, client := net.Pipe()
 	t.Cleanup(func() { _ = client.Close() })
-	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.CallerDevice)
+	go srv.RPC.ServeConn(t.Context(), server, srv.Router, api.Identity{Caller: api.CallerDevice})
 	r := &rawConn{t: t, nc: client, sc: bufio.NewScanner(client)}
 	r.send(`{"jsonrpc":"2.0","id":1,"method":"rpc.hello","params":{"protocol":1,"client":"device"}}`)
 	r.recv()

@@ -31,24 +31,7 @@ type devicePairing struct {
 
 // checkURL accepts a hub URL whose scheme is https, or http on loopback
 // (ADR-0016), and returns it without a trailing '/'.
-func checkURL(raw string) (*url.URL, error) {
-	u, err := url.Parse(strings.TrimSuffix(raw, "/"))
-	if err != nil || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
-		return nil, api.InvalidParams("%q is not a hub URL", raw)
-	}
-	switch u.Scheme {
-	case "https":
-	case "http":
-		host := u.Hostname()
-		ip := net.ParseIP(host)
-		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			return nil, api.InvalidParams("%s: a hub on another machine needs https:// (put TLS in front of it)", raw)
-		}
-	default:
-		return nil, api.InvalidParams("%s: a hub URL is https://", raw)
-	}
-	return u, nil
-}
+func checkURL(raw string) (*url.URL, error) { return hub.CheckURL(raw) }
 
 // pair starts a pairing with the hub at rawURL (sync.pair).
 func (s *Syncer) pair(ctx context.Context, rawURL, name string) (*api.Pairing, error) {
@@ -213,8 +196,28 @@ type session struct {
 }
 
 // dial connects to hub row id's /sync WebSocket with its token and
-// completes rpc.hello and events.subscribe.
+// completes rpc.hello and events.subscribe. When the hub records another
+// URL (log.hub), the device moves its row there and connects again, once.
 func (s *Syncer) dial(ctx context.Context, hubRow int64) (*session, error) {
+	sess, err := s.dialAt(ctx, hubRow)
+	if err != nil {
+		return nil, err
+	}
+	moved, err := s.follow(ctx, sess)
+	if err != nil || moved {
+		_ = sess.client.Close()
+	}
+	if err != nil {
+		return nil, err
+	}
+	if moved {
+		return s.dialAt(ctx, hubRow)
+	}
+	return sess, nil
+}
+
+// dialAt connects to hub row id at the URL it records now.
+func (s *Syncer) dialAt(ctx context.Context, hubRow int64) (*session, error) {
 	h, err := s.cfg.DB.SyncHub(ctx, hubRow)
 	if err != nil {
 		return nil, err

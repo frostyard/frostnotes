@@ -1,15 +1,17 @@
 domain: hub
-callers: [local]
+callers: [local, session]
 doc: >-
-  On a hub: the vaults it serves and the devices paired with it
-  (docs/specs/sync-protocol.md). Approving and revoking devices happen only
-  here, over the local socket (ADR-0016).
+  On a hub: the vaults it serves, the devices paired with it and the URL
+  they should use (docs/specs/sync-protocol.md, docs/specs/lodge-app.md).
+  Approving a device, serving a vault and recording the URL happen only
+  over the local socket (ADR-0016, ADR-0026); a session may list and revoke.
 types:
   - name: HubStatus
     doc: This notesd's hub role.
     fields:
       - {name: hub, type: string, doc: "The hub's ID; empty until it serves a vault."}
       - {name: listen, type: string, optional: true, doc: "The address notesd --hub serves; absent without --hub."}
+      - {name: url, type: string, optional: true, doc: "The URL devices should use, from hub.setURL; absent until one is recorded."}
       - {name: vaults, type: int}
       - {name: devices, type: int, doc: "Paired devices that are not revoked."}
       - {name: connected, type: int, doc: "Devices connected now."}
@@ -44,6 +46,7 @@ methods:
     doc: This notesd's hub role.
     result: HubStatus
   - name: serve
+    callers: [local]
     doc: >-
       Serve a registered vault to devices: it gets a sync ID, and each of its
       files a create revision, by path.
@@ -58,6 +61,7 @@ methods:
     doc: Pairings waiting for approval, oldest first.
     result: "[]PendingPairing"
   - name: approve
+    callers: [local]
     doc: Approve the pending pairing with this code (case, spaces and '-' ignored).
     params:
       - {name: code, type: string}
@@ -71,3 +75,14 @@ methods:
     params:
       - {name: device, type: int}
     errors: [notFound]
+  - name: setURL
+    callers: [local]
+    doc: >-
+      Record the URL devices should use: an https:// URL, or http:// on
+      loopback, by sync-protocol's rules; empty forgets it. Devices learn it
+      with log.hub and move to it, and it is the URL a relocation proof
+      names (docs/specs/lodge-app.md#device).
+    params:
+      - {name: url, type: string}
+    result: HubStatus
+    errors: [invalidParams]

@@ -110,6 +110,7 @@ func (h *Hub) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sync/pair", h.startPairing)
 	mux.HandleFunc("GET /sync/pair/{pairing}", h.collectPairing)
+	mux.HandleFunc("POST /sync/hub", h.relocation)
 	mux.Handle("GET /sync", h.authenticated(h.syncSocket()))
 	mux.Handle("/sync/blobs/{hash}", h.authenticated(blobxfer.Handler(h.cfg.Blobs, h.cfg.MaxBlob, h.cfg.DB.HasContent, h.uploaded)))
 	return refuseOrigins(mux)
@@ -273,7 +274,7 @@ func (h *Hub) syncSocket() http.Handler {
 				h.cfg.Log.Error("the hub has no router")
 				return
 			}
-			h.cfg.RPC.ServeConn(ctx, ws, router, api.CallerDevice)
+			h.cfg.RPC.ServeConn(ctx, ws, router, api.Identity{Caller: api.CallerDevice})
 		},
 	}
 }

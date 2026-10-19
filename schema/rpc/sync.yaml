@@ -98,6 +98,18 @@ methods:
   - name: hubs
     doc: The hubs this device paired with.
     result: "[]SyncHub"
+  - name: relocate
+    doc: >-
+      Move a paired hub to url, for a device that missed log.hub's move: it
+      posts a fresh nonce to url's /sync/hub and keeps url only when the
+      answer names that hub, records url as its own, and proves it holds
+      this device's token's hash; else conflict, and nothing changes
+      (docs/specs/lodge-app.md#device). The token is never sent.
+    params:
+      - {name: hub, type: string, doc: "The paired hub's URL now, as sync.hubs lists it."}
+      - {name: url, type: string, doc: "Its new URL: https://, or http:// on loopback."}
+    result: SyncHub
+    errors: [notFound, conflict, invalidParams, unavailable]
   - name: join
     doc: >-
       Sync a local vault with a hub vault: files the hub has had at the same
