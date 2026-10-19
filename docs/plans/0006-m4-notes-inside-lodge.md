@@ -302,6 +302,29 @@ Needs lodge's phase 1 (lodge-client) and phase 2's development build.
     - comes back after notesd restarts;
     - follows a lodge link through `open`;
     - lets the switcher's key reach the shell from inside the frame.
+- **Recorded (2026-10-19, `make m4-evidence`, `internal/webevidence`):**
+  all of the above holds at 1280 × 800 and at 390 × 844 (notes' frame
+  1232 and 390 wide), with Firefox ESR 153.4.0esr through geckodriver
+  0.37.1 (dev/nsl/provision.sh, pinned and checksum-verified) and lodge's
+  development build at c48d43a (`make lodge-e2e`):
+  - the note from its canonical URL, an edit on the hub's disk, an
+    outside edit in the editor, the quick switcher and Create new note;
+  - an image put into the note, uploaded with `note.upload` and drawn
+    from lodge-content (Chromium's loopback CORP refusal, lodge's to
+    look at, does not happen in Firefox);
+  - a link to the shell's origin followed through `open` back into
+    notes, and Ctrl+Backquote opening lodge's switcher from the frame;
+  - an edit after notesd restarts.
+
+  How the run differs from a person's:
+  - Firefox makes no window narrower than 500 CSS pixels, so the phone's
+    width is a 509-wide window at a full zoom of 60/46, which reaches
+    notes' frame as it does the shell's;
+  - the image goes in by a made drop event, since a made
+    `ClipboardEvent` keeps no file in Firefox; the editor takes a drop
+    and a paste the same way;
+  - a narrow window's bottom bar shows once no editor has the focus, as
+    after a tap elsewhere.
 
 ## Phase 6 — Security review (planner, an independent agent)
 
@@ -405,6 +428,16 @@ tailnet.
   with no lost edit, as M2's rule asks.
 - `make m4-evidence` records evidence 1 and 2's loopback runs; the rest
   are the user's runs and the planner's notes, recorded here.
+- **Loopback runs recorded (2026-10-19, `make m4-evidence`):**
+  - evidence 1's: Phase 5's run above, at both sizes, inside lodge's
+    development build; the desktop's edit reaches the web app at phone
+    size through a device notesd paired at lodge's `/device/notes`.
+    The phone's home screen is Phase 7's;
+  - evidence 2's: 20 edits typed in Firefox at 390 × 844, timed from
+    each one's last keystroke to its text in the desktop app's editor
+    (the built app under Xvfb on a device notesd, the `watch` spike):
+    median 1.016 s, p95 1.021 s, max 1.028 s, within the 2 s budget.
+    The editor's 1 s save timer is nearly all of it.
 
 ## Later / ideas
 

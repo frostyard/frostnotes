@@ -1,8 +1,8 @@
 // Package evidence runs real notesd processes for the milestones' exit
-// evidence (make m2-evidence and make m3-evidence; plans 0004 and 0005,
-// Phase 7): each with its own data directory, private socket folder,
-// vault folder and file secrets, a hub on loopback, all stopped when the
-// test ends.
+// evidence (make m2-evidence, m3-evidence and m4-evidence; plans 0004,
+// 0005 and 0006): each with its own data directory, private socket
+// folder, vault folder and file secrets, a hub on loopback or behind
+// lodge's development build, all stopped when the test ends.
 package evidence
 
 import (
@@ -29,6 +29,10 @@ type Notesd struct {
 	Socket string
 	C      *api.Client
 	Vault  int64 // its vault, once AddVault has added it
+
+	bin  string
+	args []string
+	env  []string
 }
 
 // Build builds a command of this module, such as
@@ -47,8 +51,15 @@ func Build(t testing.TB, pkg string) string {
 // and connects to it.
 func Start(t testing.TB, bin, name string, args ...string) *Notesd {
 	t.Helper()
+	return StartEnv(t, bin, name, nil, args...)
+}
+
+// StartEnv starts notesd as Start does, with env added to its
+// environment, such as lodge's LODGE_ROOT for notesd --lodge.
+func StartEnv(t testing.TB, bin, name string, env []string, args ...string) *Notesd {
+	t.Helper()
 	root := t.TempDir()
-	p := &Notesd{Name: name, Data: filepath.Join(root, "data"), Dir: filepath.Join(root, "vault")}
+	p := &Notesd{Name: name, Data: filepath.Join(root, "data"), Dir: filepath.Join(root, "vault"), bin: bin, args: args, env: env}
 	if err := os.MkdirAll(p.Dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -57,18 +68,37 @@ func Start(t testing.TB, bin, name string, args ...string) *Notesd {
 		t.Fatal(err)
 	}
 	p.Socket = filepath.Join(run, "notesd.sock")
-	p.Cmd = exec.Command(bin, args...)
-	p.Cmd.Env = append(os.Environ(), "FROSTNOTES_DATA_DIR="+p.Data, "FROSTNOTES_SOCKET="+p.Socket, "FROSTNOTES_SECRETS=file")
-	stderr, err := p.Cmd.StderrPipe()
+	p.run(t)
+	return p
+}
+
+// Restart stops the process as an interrupt does and starts it again on
+// the same data, vault, socket, arguments and environment.
+func (p *Notesd) Restart(t testing.TB) {
+	t.Helper()
+	_ = p.C.Close()
+	_ = p.Cmd.Process.Signal(os.Interrupt)
+	_ = p.Cmd.Wait()
+	p.run(t)
+}
+
+// run starts the process, waits until it says it started, and connects to it.
+func (p *Notesd) run(t testing.TB) {
+	t.Helper()
+	cmd := exec.Command(p.bin, p.args...)
+	cmd.Env = append(os.Environ(), "FROSTNOTES_DATA_DIR="+p.Data, "FROSTNOTES_SOCKET="+p.Socket, "FROSTNOTES_SECRETS=file")
+	cmd.Env = append(cmd.Env, p.env...)
+	p.Cmd = cmd
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Cmd.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = p.Cmd.Process.Signal(os.Interrupt)
-		_ = p.Cmd.Wait()
+		_ = cmd.Process.Signal(os.Interrupt)
+		_ = cmd.Wait()
 	})
 	started := make(chan struct{})
 	lines := make(chan string, 64)
@@ -94,7 +124,7 @@ func Start(t testing.TB, bin, name string, args ...string) *Notesd {
 		for l := range lines {
 			said = append(said, l)
 		}
-		t.Fatalf("%s did not start:\n%s", name, strings.Join(said, "\n"))
+		t.Fatalf("%s did not start:\n%s", p.Name, strings.Join(said, "\n"))
 	}
 	c, _, err := api.Dial(t.Context(), p.Socket, "evidence")
 	if err != nil {
@@ -102,7 +132,6 @@ func Start(t testing.TB, bin, name string, args ...string) *Notesd {
 	}
 	t.Cleanup(func() { _ = c.Close() })
 	p.C = c
-	return p
 }
 
 // AddVault adds the process's vault folder as its vault.
