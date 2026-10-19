@@ -75,8 +75,8 @@ file a step names before writing its frostnotes counterpart.
   ([docs/specs/sync-protocol.md](docs/specs/sync-protocol.md)).
   `internal/lodgeapp`: `notesd --lodge`, lodge's app socket over
   `lodge/kit` (`/health`, `/api` as caller `session`, `/content/blobs/`,
-  `/mcp` for agents, `/device/`; [docs/specs/lodge-app.md](docs/specs/lodge-app.md)), the
-  only package importing the kit; `internal/blobhttp`: files by hash for
+  `/mcp` for agents, `/device/`; [docs/specs/lodge-app.md](docs/specs/lodge-app.md));
+  `internal/blobhttp`: files by hash for
   browsers. `packaging/`: the manifest, systemd units and `sysusers.d`.
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).

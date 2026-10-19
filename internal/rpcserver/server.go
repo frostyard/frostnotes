@@ -46,9 +46,9 @@ var (
 	_ api.EventsService = (*Server)(nil)
 )
 
-// Listen creates notesd's private socket (jsonrpc.Listen).
+// Listen creates notesd's private socket (jsonrpc.ListenWith).
 func (s *Server) Listen(path string) (net.Listener, error) {
-	return jsonrpc.Listen(path, s.opts.Logger)
+	return jsonrpc.ListenWith(path, jsonrpc.ListenOptions{Name: "notesd", Logger: s.opts.Logger})
 }
 
 // Serve accepts connections on notesd's socket until ctx ends, then waits

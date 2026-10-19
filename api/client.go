@@ -44,4 +44,6 @@ func Dial(ctx context.Context, socketPath, clientName string) (*Client, *Hello, 
 
 // NewClient starts a client on an established connection. The caller must
 // call rpc.hello before anything else; Dial does.
-func NewClient(conn net.Conn) *Client { return &Client{jsonrpc.NewClient[ErrorCode](conn)} }
+func NewClient(conn net.Conn) *Client {
+	return &Client{jsonrpc.NewClientWith[ErrorCode](conn, jsonrpc.ClientOptions{Name: "notesd"})}
+}
