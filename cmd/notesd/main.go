@@ -145,7 +145,11 @@ func run(ctx context.Context, args []string) error {
 		}()
 	}
 	if *lodge {
-		cfg := lodgeapp.Config{RPC: srv, Router: router, Blobs: blobStore, Hub: h, Version: version, Log: logger}
+		key, err := lodgeapp.LoadContentKey(paths.DataDir)
+		if err != nil {
+			return err
+		}
+		cfg := lodgeapp.Config{RPC: srv, Router: router, Blobs: blobStore, Hub: h, Version: version, ContentKey: key, Log: logger}
 		go func() {
 			if err := lodgeapp.Serve(ctx, cfg); err != nil {
 				logger.Error("lodge app socket stopped", "err", err)

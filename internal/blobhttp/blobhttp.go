@@ -7,6 +7,9 @@
 package blobhttp
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +26,19 @@ import (
 // name is a blob's last path segment: <sha256>.<extension>.
 var name = regexp.MustCompile(`^([0-9a-f]{64})\.([a-z0-9]{1,8})$`)
 
+// keyed is a keyed blob's path: <mac>/<sha256>.<extension>.
+var keyed = regexp.MustCompile(`^([A-Za-z0-9_-]{43})/([0-9a-f]{64})\.([a-z0-9]{1,8})$`)
+
+// ContentMAC names a blob in a keyed URL: HMAC-SHA256 of
+// "frostnotes content\n" + its hash under key, in unpadded base64url
+// (docs/specs/lodge-app.md#contentblobs). Without the key a page cannot
+// make a file's URL, so it cannot learn whether a file it knows is there.
+func ContentMAC(key []byte, hash string) string {
+	m := hmac.New(sha256.New, key)
+	_, _ = m.Write([]byte("frostnotes content\n" + hash))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
+}
+
 // Options configure a Handler. Zero limits are none.
 type Options struct {
 	// Prefix is the path before a blob's name, such as "/blobs/".
@@ -36,6 +52,9 @@ type Options struct {
 	// Download lets ?download=1 add Content-Disposition: attachment, for
 	// files a browser will not show in a sandboxed page.
 	Download bool
+	// Key, when set, makes paths <mac>/<sha256>.<ext>, the mac being
+	// ContentMAC under it; a path without the right one is 404.
+	Key []byte
 }
 
 // Handler serves store's blobs under opts.Prefix.
@@ -48,6 +67,13 @@ func Handler(store *blobs.Store, opts Options) http.Handler {
 		}
 		rest, ok := strings.CutPrefix(r.URL.Path, opts.Prefix)
 		m := name.FindStringSubmatch(rest)
+		if opts.Key != nil {
+			k := keyed.FindStringSubmatch(rest)
+			m = nil
+			if k != nil && hmac.Equal([]byte(k[1]), []byte(ContentMAC(opts.Key, k[2]))) {
+				m = []string{k[0], k[2], k[3]}
+			}
+		}
 		if !ok || m == nil {
 			http.NotFound(w, r)
 			return

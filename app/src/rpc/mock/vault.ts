@@ -4,6 +4,8 @@
 // merges, a base that is no version is refused, every change keeps a
 // version and emits its event. Its merges are scripted: a test supplies
 // what a merge gives, and without a script the newer side stands.
+
+import { sha256 } from "../../lib/sha256";
 import {
   type Backlink,
   ErrorCode,
@@ -26,7 +28,6 @@ import {
   type WriteResult,
 } from "../gen/api";
 import { RPCError } from "../transport";
-import { sha256 } from "./sha256";
 
 /** MergeInput is what a write with a stale base merges. */
 export interface MergeInput {

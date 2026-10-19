@@ -631,7 +631,9 @@ desktop's, with a different transport and frame:
   vaults, sync's status and conflicts, approving pairings, and the
   shell's commands.
 - **Files by hash** load from lodge-content: the transport's `blobURL`
-  is `contentURL("blobs/<hash>.<ext>")`. Open in new tab opens a PDF at
+  is `contentURL("blobs/<mac>/<hash>.<ext>")`, the `mac` an HMAC of the
+  hash under the content key `rpc.hello` gives the session, so no page
+  without it can make a file's URL ([lodge-app.md](../specs/lodge-app.md#contentblobs)). Open in new tab opens a PDF at
   its content URL; where a browser will not show a file in a sandboxed
   page, the app offers the `?download=1` URL instead.
 - **Offline**, the status bar says notes is out of reach. Editors keep

@@ -113,6 +113,9 @@ type Identity struct {
 	Login, DisplayName, Node string
 	// Token is an agent's token name, from Lodge-Token.
 	Token string
+	// ContentKey is a session's key for content URLs, unpadded base64url,
+	// which rpc.hello hands it.
+	ContentKey string
 	// Scope binds an agent's calls. An agent without one reaches no vault
 	// and writes nothing.
 	Scope *Scope

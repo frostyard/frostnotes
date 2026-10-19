@@ -1,7 +1,10 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json/v2"
+	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -59,9 +62,34 @@ type httpSessions struct {
 // opening carries a new session's notesd client and server from server
 // back to ServeHTTP, which keeps the client under the session's ID. The
 // SDK asks for a request's server more than once; it gets the same one.
+// A request without a session that is not initialize (the SDK client's
+// server/discover, say) is bare: its server has no tools and no notesd
+// connection, so only an initialize ever opens one.
 type opening struct {
 	client *api.Client
 	srv    *sdk.Server
+	bare   bool
+}
+
+// maxPeek is the most of a request's body read to tell an initialize;
+// the SDK refuses a longer body itself.
+const maxPeek = sdk.DefaultMaxRequestBodyBytes
+
+// isInitialize reports whether r is a POST of a JSON-RPC initialize
+// request, leaving its body for the SDK to read again.
+func isInitialize(r *http.Request) bool {
+	if r.Method != http.MethodPost || r.Body == nil {
+		return false
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxPeek+1))
+	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(body), r.Body))
+	if err != nil {
+		return false
+	}
+	var msg struct {
+		Method string `json:"method"`
+	}
+	return json.Unmarshal(body, &msg) == nil && msg.Method == "initialize"
 }
 
 type openingKey struct{}
@@ -77,7 +105,7 @@ func (h *httpSessions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	op := &opening{}
+	op := &opening{bare: !isInitialize(r)}
 	rec := &sessionRecorder{ResponseWriter: w}
 	h.next.ServeHTTP(rec, r.WithContext(context.WithValue(r.Context(), openingKey{}, op)))
 	if op.client == nil {
@@ -112,6 +140,11 @@ func (h *httpSessions) forget(id string) {
 func (h *httpSessions) server(r *http.Request) *sdk.Server {
 	op, _ := r.Context().Value(openingKey{}).(*opening)
 	if op != nil && op.srv != nil {
+		return op.srv
+	}
+	if op != nil && op.bare {
+		op.srv = sdk.NewServer(&sdk.Implementation{Name: ServerName, Version: h.o.Version},
+			&sdk.ServerOptions{Instructions: "Open a session with initialize first."})
 		return op.srv
 	}
 	token, raw, ok := h.o.Caller(r)
