@@ -27,6 +27,24 @@ export type Connect = () => Promise<Transport>;
 /** RETRY_MS is how long Session waits before reconnecting. */
 export const RETRY_MS = 1000;
 
+/**
+ * Retry is how Session reconnects when it is given one (the web app's):
+ * after firstMs, doubling to maxMs with ±20% jitter, and at once when the
+ * page is shown, the browser is back online, or wake calls back.
+ */
+export interface Retry {
+  firstMs: number;
+  maxMs: number;
+  /** wake calls fn when the connection should be tried now; it returns the removal. */
+  wake?: (fn: () => void) => () => void;
+}
+
+/** retryDelay is the wait before attempt n (0 first) of retry, with jitter in [0.8, 1.2). */
+export function retryDelay(retry: Retry, n: number, random = Math.random): number {
+  const base = Math.min(retry.firstMs * 2 ** n, retry.maxMs);
+  return Math.round(base * (0.8 + 0.4 * random()));
+}
+
 /** CLIENT_NAME is what rpc.hello tells notesd, for its logs and versions. */
 export const CLIENT_NAME = "frostnotes-app";
 
@@ -37,21 +55,49 @@ export const CLIENT_NAME = "frostnotes-app";
  * RETRY_MS; the children stay, with the closed client, whose calls fail
  * until the new one arrives, so open editors keep what was typed.
  */
-export function Session(props: { connect: Connect; children: ReactNode; fallback: ReactNode }) {
-  const { connect } = props;
+export function Session(props: { connect: Connect; children: ReactNode; fallback: ReactNode; retry?: Retry }) {
+  const { connect, retry: backoff } = props;
   const [client, setClient] = useState<Client | null>(null);
 
   useEffect(() => {
     let stopped = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let waiting = false;
+    let failures = 0;
     let cleanup: (() => void) | undefined;
 
     const lost = (reason: string) => {
       cleanup?.();
       cleanup = undefined;
       useNotes.setState({ connection: { state: "lost", reason } });
-      retry = setTimeout(attempt, RETRY_MS);
+      waiting = true;
+      retry = setTimeout(
+        () => {
+          waiting = false;
+          void attempt();
+        },
+        backoff ? retryDelay(backoff, failures++) : RETRY_MS,
+      );
     };
+    // A page shown again, or a browser back online, tries at once.
+    const now = () => {
+      if (!waiting || stopped) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      clearTimeout(retry);
+      waiting = false;
+      void attempt();
+    };
+    const unwake: (() => void)[] = [];
+    if (backoff) {
+      const onVisible = () => now();
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("online", onVisible);
+      unwake.push(() => {
+        document.removeEventListener("visibilitychange", onVisible);
+        window.removeEventListener("online", onVisible);
+      });
+      if (backoff.wake) unwake.push(backoff.wake(now));
+    }
 
     const attempt = async () => {
       useNotes.setState({ connection: { state: "connecting" } });
@@ -77,6 +123,7 @@ export function Session(props: { connect: Connect; children: ReactNode; fallback
         for (const e of held) route(c, e, liveFrom);
         held = null;
         useNotes.setState({ hello, connection: { state: "ready" } });
+        failures = 0;
         setClient(c);
         transport.onClose((reason) => {
           if (!stopped) lost(reason);
@@ -90,8 +137,9 @@ export function Session(props: { connect: Connect; children: ReactNode; fallback
       stopped = true;
       clearTimeout(retry);
       cleanup?.();
+      for (const off of unwake) off();
     };
-  }, [connect]);
+  }, [connect, backoff]);
 
   if (!client) return <>{props.fallback}</>;
   return <ClientContext.Provider value={client}>{props.children}</ClientContext.Provider>;

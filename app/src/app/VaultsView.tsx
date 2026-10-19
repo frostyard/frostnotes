@@ -22,6 +22,8 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
   const [creating, setCreating] = useState(false);
   const [location, setLocation] = useState<string | null>(null);
   const canPick = canPickFolders();
+  // vault.add and vault.remove admit local callers only (lodge-app.md).
+  const manage = useNotes((s) => s.hello?.caller !== "session");
   const close = () => {
     setCreating(false);
     if (props.mode === "dialog") closeVaultManager();
@@ -51,7 +53,8 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       current={current}
       mode={props.mode}
       canPick={canPick}
-      panel={creating ? form : undefined}
+      manage={manage}
+      panel={creating && manage ? form : undefined}
       onOpen={(id) => {
         if (id !== current) void openVault(client, id);
         close();

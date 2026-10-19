@@ -110,7 +110,7 @@ clean: ## Remove build output
 # The app (M0 Phase 4). Its toolchain runs in the nsl machine
 # (docs/adr/0009-development-environment-and-gates.md); CI, whose runner has
 # the toolchain, runs the same targets with IN_NSL='sh -c'.
-.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl
+.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl web-build lodge-app
 
 NSL_MACHINE ?= frostnotes
 IN_NSL := nsl run -m $(NSL_MACHINE) sh -lc
@@ -130,6 +130,17 @@ ui-fmt: ## Format the app's sources and organize imports with Biome (nsl)
 
 ui-dev: build ## Run notesd -devgw and Vite in the nsl machine; open http://127.0.0.1:5173 on the host
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && cd .. && scripts/dev-app.sh --browser'
+
+web-build: ## Build the web app for lodge into build/web, base /app/notes/ (nsl)
+	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec tsc --noEmit && pnpm exec vite build --mode web --outDir ../build/web --emptyOutDir'
+	cp app/src-tauri/icons/icon.svg build/web/icon.svg
+
+# notes' install tree for lodge (docs/specs/lodge-app.md, What notesd
+# installs): copy build/lodge/apps/notes to /usr/share/lodge/apps/notes.
+lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version and web/
+	rm -rf build/lodge/apps/notes && mkdir -p build/lodge/apps/notes
+	cp -R build/web build/lodge/apps/notes/web
+	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/lodge/apps/notes/app.json
 
 app-build: ## Build the release app binary into build/frostnotes-app (nsl)
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm tauri build && mkdir -p ../build && cp "$$CARGO_TARGET_DIR/release/frostnotes" ../build/frostnotes-app'

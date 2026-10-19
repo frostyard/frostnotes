@@ -23,6 +23,11 @@ export interface VaultManagerProps {
   canPick: boolean;
   /** When given, shown in the actions' place: the create form. */
   panel?: ReactNode;
+  /**
+   * The caller may add and remove vaults (true by default). A browser
+   * inside lodge may only open them: it gets no actions and no options.
+   */
+  manage?: boolean;
   onOpen: (id: number) => void;
   onRemove: (vault: VaultEntry) => void;
   onCreate: () => void;
@@ -65,7 +70,9 @@ export function VaultManager(props: VaultManagerProps) {
       }}
     >
       <VaultList {...props} />
-      <div className="min-w-0 flex-1 overflow-y-auto p-8">{panel ?? <VaultActions {...props} />}</div>
+      <div className="min-w-0 flex-1 overflow-y-auto p-8">
+        {panel ?? (props.manage === false ? <NoActions /> : <VaultActions {...props} />)}
+      </div>
       {modal && (
         <button
           type="button"
@@ -94,8 +101,17 @@ export function VaultManager(props: VaultManagerProps) {
   );
 }
 
-function VaultList({ vaults, current, onOpen, onRemove }: VaultManagerProps) {
+function NoActions() {
+  return (
+    <p className="text-sm leading-5 text-secondary">
+      Vaults are added and removed on the machine that runs notesd, with notesctl vault.
+    </p>
+  );
+}
+
+function VaultList({ vaults, current, manage, onOpen, onRemove }: VaultManagerProps) {
   const [menu, setMenu] = useState<{ vault: VaultEntry; x: number; y: number } | null>(null);
+  const options = manage !== false;
 
   return (
     <div className="flex w-[280px] shrink-0 flex-col overflow-y-auto bg-sidebar p-2">
@@ -109,7 +125,7 @@ function VaultList({ vaults, current, onOpen, onRemove }: VaultManagerProps) {
               className={`group relative rounded-md ${vault.id === current ? "bg-selection-sidebar" : "hover:bg-selection-inactive"}`}
               onContextMenu={(event) => {
                 event.preventDefault();
-                setMenu({ vault, x: event.clientX, y: event.clientY });
+                if (options) setMenu({ vault, x: event.clientX, y: event.clientY });
               }}
             >
               <button
@@ -121,20 +137,22 @@ function VaultList({ vaults, current, onOpen, onRemove }: VaultManagerProps) {
                 <span className="block truncate text-sidebar-row font-semibold">{vault.name}</span>
                 <span className="block truncate text-xs leading-4 text-secondary">{vault.path}</span>
               </button>
-              <button
-                type="button"
-                aria-label={`Options for ${vault.name}`}
-                title={`Options for ${vault.name}`}
-                aria-haspopup="menu"
-                aria-expanded={menu?.vault.id === vault.id}
-                className="absolute top-3.5 right-2 flex size-6 items-center justify-center rounded text-secondary opacity-0 group-hover:opacity-100 hover:bg-selection-inactive focus:opacity-100"
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setMenu({ vault, x: rect.left, y: rect.bottom });
-                }}
-              >
-                <Ellipsis size={16} aria-hidden="true" />
-              </button>
+              {options && (
+                <button
+                  type="button"
+                  aria-label={`Options for ${vault.name}`}
+                  title={`Options for ${vault.name}`}
+                  aria-haspopup="menu"
+                  aria-expanded={menu?.vault.id === vault.id}
+                  className="absolute top-3.5 right-2 flex size-6 items-center justify-center rounded text-secondary opacity-0 group-hover:opacity-100 hover:bg-selection-inactive focus:opacity-100"
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setMenu({ vault, x: rect.left, y: rect.bottom });
+                  }}
+                >
+                  <Ellipsis size={16} aria-hidden="true" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
