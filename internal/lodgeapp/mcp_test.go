@@ -89,8 +89,13 @@ func TestAnEvictedOrIdleMCPSessionClosesItsConnection(t *testing.T) {
 		}
 	}
 
+	// A second apart, so the first session is the least recently used:
+	// the kit evicts by last use, and at one instant any of the token's
+	// sessions may go.
 	initialize()
+	now.Add(int64(time.Second))
 	initialize()
+	now.Add(int64(time.Second))
 	// A third session on the token evicts the least recently used: the first.
 	initialize()
 	if !closed(conn(0), 10*time.Second) {
