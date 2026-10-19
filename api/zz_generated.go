@@ -1182,6 +1182,15 @@ type DailyNote struct {
 	Created bool `json:"created"`
 }
 
+// DailyAppend: A day's daily note after an append.
+type DailyAppend struct {
+	// The append's write.
+	Write WriteResult `json:"write"`
+	// notesd created the note from the vault's template for this call, before
+	// appending.
+	Created bool `json:"created"`
+}
+
 // VaultFile: A file of a vault, as the index has it.
 type VaultFile struct {
 	Path string   `json:"path"`
@@ -1398,6 +1407,21 @@ type NoteDailyParams struct {
 	Author *string `json:"author,omitzero"`
 }
 
+// NoteAppendDailyParams holds the params of note.appendDaily.
+type NoteAppendDailyParams struct {
+	VaultID int64 `json:"vaultId"`
+	// The text to append; not empty.
+	Text string `json:"text"`
+	// YYYY-MM-DD; default today in notesd's time zone.
+	Date *string `json:"date,omitzero"`
+	// editor (the default) or agent; a session's or an agent's connection fixes
+	// it.
+	Source *VersionSource `json:"source,omitzero"`
+	// Who is writing, for the version list; defaults to the client name given to
+	// rpc.hello. A session's or an agent's connection fixes it.
+	Author *string `json:"author,omitzero"`
+}
+
 // NoteFilesParams holds the params of note.files.
 type NoteFilesParams struct {
 	VaultID int64 `json:"vaultId"`
@@ -1541,6 +1565,13 @@ type NoteService interface {
 	// Daily implements note.daily. A day's daily note, created from the vault's
 	// daily-note template when missing (docs/design/vault.md#daily-notes).
 	Daily(ctx context.Context, p *NoteDailyParams) (*DailyNote, error)
+	// AppendDaily implements note.appendDaily. Append text at the end of a day's
+	// daily note, after a line break when the note does not end in one, ending it
+	// with a line break. A missing note is created first, as note.daily creates
+	// it. The append is a write whose base is the note as notesd reads it under
+	// the vault's lock, so it never changes text already there (ADR-0028); an
+	// edit that lands on disk meanwhile merges as for note.write.
+	AppendDaily(ctx context.Context, p *NoteAppendDailyParams) (*DailyAppend, error)
 	// Files implements note.files. Every file and folder of a vault: the Files
 	// pane's listing and the hashes the app loads files by (ADR-0023).
 	// note.changed, note.moved and note.removed keep it current.
@@ -1708,6 +1739,16 @@ func registerNote(r *Router, s NoteService) {
 			return nil, err
 		}
 		return s.Daily(ctx, &p)
+	})
+	r.handle("note.appendDaily", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteAppendDailyParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "text"}); err != nil {
+			return nil, err
+		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
+		return s.AppendDaily(ctx, &p)
 	})
 	r.handle("note.files", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteFilesParams
@@ -1923,6 +1964,16 @@ func (x NoteClient) Revert(ctx context.Context, p *NoteRevertParams) (*WriteResu
 func (x NoteClient) Daily(ctx context.Context, p *NoteDailyParams) (*DailyNote, error) {
 	var r DailyNote
 	err := x.c.Call(ctx, "note.daily", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// AppendDaily calls note.appendDaily.
+func (x NoteClient) AppendDaily(ctx context.Context, p *NoteAppendDailyParams) (*DailyAppend, error) {
+	var r DailyAppend
+	err := x.c.Call(ctx, "note.appendDaily", p, &r)
 	if err != nil {
 		return nil, err
 	}
@@ -3130,6 +3181,7 @@ var Methods = []string{
 	"note.versions",
 	"note.revert",
 	"note.daily",
+	"note.appendDaily",
 	"note.files",
 	"note.resolve",
 	"note.render",

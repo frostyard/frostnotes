@@ -63,7 +63,7 @@ func (t *tools) readNote(ctx context.Context, _ *sdk.CallToolRequest, in readIn)
 		Properties: properties,
 		Tags:       append([]string{}, note.Tags...),
 		Aliases:    append([]string{}, note.Aliases...),
-		Content:    note.Content, Notice: Notice,
+		Content:    note.Content, Writable: t.writable(note.Path), Notice: Notice,
 	}
 	return nil, out, nil
 }
@@ -96,6 +96,7 @@ func (t *tools) listNotes(ctx context.Context, _ *sdk.CallToolRequest, in listIn
 	for _, note := range notes[:min(in.Limit, len(notes))] {
 		out.Notes = append(out.Notes, listEntry{
 			Path: note.Path, Title: note.Title, Modified: note.ModifiedAt.UTC().Format(time.RFC3339),
+			Writable: t.writable(note.Path),
 		})
 	}
 	return nil, out, nil

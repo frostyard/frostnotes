@@ -718,6 +718,17 @@ export interface DailyNote {
   created: boolean;
 }
 
+/** A day's daily note after an append. */
+export interface DailyAppend {
+  /** The append's write. */
+  write: WriteResult;
+  /**
+   * notesd created the note from the vault's template for this call, before
+   * appending.
+   */
+  created: boolean;
+}
+
 /** A file of a vault, as the index has it. */
 export interface VaultFile {
   path: string;
@@ -966,6 +977,25 @@ export interface NoteDailyParams {
   author?: string;
 }
 
+/** Params of note.appendDaily. */
+export interface NoteAppendDailyParams {
+  vaultId: number;
+  /** The text to append; not empty. */
+  text: string;
+  /** YYYY-MM-DD; default today in notesd's time zone. */
+  date?: string;
+  /**
+   * editor (the default) or agent; a session's or an agent's connection fixes
+   * it.
+   */
+  source?: VersionSource;
+  /**
+   * Who is writing, for the version list; defaults to the client name given
+   * to rpc.hello. A session's or an agent's connection fixes it.
+   */
+  author?: string;
+}
+
 /** Params of note.files. */
 export interface NoteFilesParams {
   vaultId: number;
@@ -1156,6 +1186,15 @@ export interface NoteClient {
    */
   daily(params: NoteDailyParams): Promise<DailyNote>;
   /**
+   * Append text at the end of a day's daily note, after a line break when the
+   * note does not end in one, ending it with a line break. A missing note is
+   * created first, as note.daily creates it. The append is a write whose base
+   * is the note as notesd reads it under the vault's lock, so it never
+   * changes text already there (ADR-0028); an edit that lands on disk
+   * meanwhile merges as for note.write.
+   */
+  appendDaily(params: NoteAppendDailyParams): Promise<DailyAppend>;
+  /**
    * Every file and folder of a vault: the Files pane's listing and the hashes
    * the app loads files by (ADR-0023). note.changed, note.moved and
    * note.removed keep it current.
@@ -1233,6 +1272,7 @@ function noteClient(t: Transport): NoteClient {
     versions: (params) => t.call<Version[]>("note.versions", params),
     revert: (params) => t.call<WriteResult>("note.revert", params),
     daily: (params) => t.call<DailyNote>("note.daily", params),
+    appendDaily: (params) => t.call<DailyAppend>("note.appendDaily", params),
     files: (params) => t.call<VaultFiles>("note.files", params),
     resolve: (params) => t.call<Resolution[]>("note.resolve", params),
     render: (params) => t.call<RenderedNote>("note.render", params),
@@ -1846,6 +1886,7 @@ export const METHODS = [
   "note.versions",
   "note.revert",
   "note.daily",
+  "note.appendDaily",
   "note.files",
   "note.resolve",
   "note.render",
@@ -1921,6 +1962,7 @@ export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {
   "note.versions": ["local", "session", "agent"],
   "note.revert": ["local", "session", "agent"],
   "note.daily": ["local", "session", "agent"],
+  "note.appendDaily": ["local", "session", "agent"],
   "note.files": ["local", "session", "agent"],
   "note.resolve": ["local", "session", "agent"],
   "note.render": ["local", "session", "agent"],
@@ -1964,6 +2006,7 @@ export const WRITES: ReadonlySet<Method> = new Set<Method>([
   "note.delete",
   "note.revert",
   "note.daily",
+  "note.appendDaily",
   "note.upload",
   "note.mkdir",
   "note.moveFolder",

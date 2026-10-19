@@ -30,43 +30,83 @@ func DailyPath(s DailySettings, date time.Time) (string, error) {
 // Daily returns date's daily note, creating it from the vault's daily-note
 // template when it is missing (docs/design/vault.md#daily-notes).
 func (v *Vault) Daily(ctx context.Context, date time.Time, who Author) (*api.DailyNote, error) {
+	var out *api.DailyNote
+	err := v.withDaily(ctx, date, who, func(_ *os.Root, n *api.Note, created bool) error {
+		out = &api.DailyNote{Note: *n, Created: created}
+		return nil
+	})
+	return out, err
+}
+
+// AppendDaily appends text at the end of date's daily note, after a line
+// break when the note does not end in one, and ends it with one; it
+// creates the note first as Daily does. The append is a write whose base
+// is the note as read under the vault's lock, so it changes no text that
+// is there (ADR-0028).
+func (v *Vault) AppendDaily(ctx context.Context, date time.Time, text string, who Author) (*api.DailyAppend, error) {
+	var out *api.DailyAppend
+	err := v.withDaily(ctx, date, who, func(r *os.Root, n *api.Note, created bool) error {
+		res, err := v.write(ctx, r, n.Path, n.Hash, []byte(appendText(n.Content, text)), true, who)
+		if err == nil {
+			out = &api.DailyAppend{Write: *res, Created: created}
+		}
+		return err
+	})
+	return out, err
+}
+
+// appendText is content with text after it, each ending in a line break.
+func appendText(content, text string) string {
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	return content + text
+}
+
+// withDaily calls fn with date's daily note, created from the template
+// when it is missing, under the vault's lock. ctx's write guard judges the
+// note's path first, whether or not it exists.
+func (v *Vault) withDaily(ctx context.Context, date time.Time, who Author, fn func(r *os.Root, n *api.Note, created bool) error) error {
 	settings, err := LoadSettings(v.root)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	p, err := DailyPath(settings.Daily, date)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	r, err := v.open()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = r.Close() }()
 	if err := v.lock(); err != nil {
-		return nil, err
+		return err
 	}
 	defer v.mu.Unlock()
 	if err := v.checkIgnored(p); err != nil {
-		return nil, err
+		return err
 	}
 	if err := checkGuard(ctx, p); err != nil {
-		return nil, err
+		return err
 	}
 	n, err := v.read(ctx, r, p)
 	if err == nil {
-		return &api.DailyNote{Note: *n}, nil
+		return fn(r, n, false)
 	}
 	if !errors.Is(err, api.ErrNotFound) {
-		return nil, err
+		return err
 	}
 	if _, err := v.create(ctx, r, p, v.dailyContent(r, settings, p, date), who, 0); err != nil {
-		return nil, err
+		return err
 	}
 	if n, err = v.read(ctx, r, p); err != nil {
-		return nil, err
+		return err
 	}
-	return &api.DailyNote{Note: *n, Created: true}, nil
+	return fn(r, n, true)
 }
 
 // dailyContent expands the daily-note template for the note at p, as

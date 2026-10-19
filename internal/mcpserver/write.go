@@ -51,21 +51,16 @@ func (t *tools) appendToDailyNote(ctx context.Context, req *sdk.CallToolRequest,
 		return nil, dailyOut{}, fmt.Errorf("text must not be empty")
 	}
 	source, name := t.agentWrite(req)
-	params := &api.NoteDailyParams{VaultID: t.o.VaultID, Source: source, Author: name}
+	params := &api.NoteAppendDailyParams{VaultID: t.o.VaultID, Text: in.Text, Source: source, Author: name}
 	if in.Date != "" {
 		params.Date = &in.Date
 	}
-	notes := t.o.Client.Note()
-	daily, err := notes.Daily(ctx, params)
+	// notesd appends under the vault's lock, so the append never rewrites
+	// text already there (ADR-0028).
+	daily, err := t.o.Client.Note().AppendDaily(ctx, params)
 	if err != nil {
 		return nil, dailyOut{}, err
 	}
-	result, err := notes.Write(ctx, &api.NoteWriteParams{
-		VaultID: t.o.VaultID, Path: daily.Note.Path, Base: daily.Note.Hash,
-		Content: appendText(daily.Note.Content, in.Text), Source: source, Author: name,
-	})
-	if err != nil {
-		return nil, dailyOut{}, err
-	}
-	return nil, dailyOut{Path: result.Path, Hash: result.Hash, Created: daily.Created, Merged: result.Merged}, nil
+	w := daily.Write
+	return nil, dailyOut{Path: w.Path, Hash: w.Hash, Created: daily.Created, Merged: w.Merged}, nil
 }

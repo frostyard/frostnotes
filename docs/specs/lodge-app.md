@@ -201,7 +201,7 @@ lodge-content adds its own sandbox policy and cross-origin headers
   - Only `rpc` and `note` admit `agent`.
   - A call that names another vault is `notFound`.
   - Under a scope with no write right, a method marked `writes` is
-    `methodNotFound`. `daily` admits `note.daily`.
+    `methodNotFound`. `daily` admits `note.daily` and `note.appendDaily`.
   - **A write outside the scope** is `invalidParams`, and its message
     says what the token may write.
   - **How a path is judged:** after the path guard, segment by segment
@@ -218,9 +218,9 @@ lodge-content adds its own sandbox policy and cross-origin headers
       whole, with no `except` at, above or under it.
     - A move with `updateLinks` whose rewrites would reach a note
       outside the scope is refused whole.
-    - `note.daily`: the day's note writable, or under `daily` today's,
-      and not under `except`. It is judged under the vault's lock, at
-      the path the daily-note settings give.
+    - `note.daily` and `note.appendDaily`: the day's note writable, or
+      under `daily` today's, and not under `except`. It is judged under
+      the vault's lock, at the path the daily-note settings give.
 - **Attribution:** an agent's writes are source `agent`, with
   `Lodge-Token` as author. The client's `clientInfo.name` goes to the
   log only.

@@ -89,6 +89,10 @@ func (f *fakeNotes) Daily(_ context.Context, p *api.NoteDailyParams) (*api.Daily
 	return nil, f.record(p)
 }
 
+func (f *fakeNotes) AppendDaily(_ context.Context, p *api.NoteAppendDailyParams) (*api.DailyAppend, error) {
+	return nil, f.record(p)
+}
+
 func (f *fakeNotes) Files(_ context.Context, p *api.NoteFilesParams) (*api.VaultFiles, error) {
 	return nil, f.record(p)
 }

@@ -28,17 +28,28 @@ Work is split per
 Status (2026-10-19):
 - **Phase 1.** ADR-0028 is Proposed. The user approved building this
   plan on 2026-10-19, ahead of its acceptance, as PRs for review.
-- **Phase 2 is built in two PRs.**
+- **Phases 2 and 3 are built, in two PRs.**
   - The first PR has the grammar, the engine's checks on every writing
     method, the router's `daily`, the tests at the boundaries, and the
     specs.
-  - The second has `note.appendDaily`, with Phase 3's tools.
+  - The second has `note.appendDaily` and Phase 3's tools.
+  - `append_to_daily_note` is offered under `daily` or a bare `write`,
+    not under "a write right that covers today's daily note". An agent
+    cannot learn the daily note's path without writing it, so the
+    session could not tell. Under `write=` alone, `edit_note` and
+    `create_note` reach a daily note in their folders.
+  - This was confirmed on 2026-10-19. A whole-vault writer can already
+    write the daily note, so taking the tool from `vault=<id>;write`
+    tokens would be a regression rather than a limit. Under folder
+    writes, `daily` is the only way to append, which is what Porter
+    needs.
   - Two rules were added to ADR-0028 while building:
     - a prefix is written one way, in NFC and `url.PathEscape`'s
       encoding;
     - a path that reaches an existing file by a name its folder does
       not list is refused (a share's 8.3 names, trimmed dots and other
       foldings).
+- **Phase 4,** the evidence through lodge, is still to come.
 - **Today's time zone,** the open question below, is checked when the
   hub runs it.
 
@@ -119,8 +130,8 @@ Status (2026-10-19):
   - `create_note` and `edit_note` under a write right, their
     descriptions naming the writable folders when `write=` or `except=`
     limits them;
-  - `append_to_daily_note` under `daily` or a write right that covers
-    today's daily note. Under `daily` alone it takes no `date`.
+  - `append_to_daily_note` under `daily` or a bare `write`. It takes a
+    `date` only under a bare `write`.
 - **`append_to_daily_note` calls `note.appendDaily`** under every scope,
   so an append never rewrites earlier text.
 - **`read_note` and `list_notes` cope with notes an agent may read but

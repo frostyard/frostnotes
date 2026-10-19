@@ -34,6 +34,7 @@ type noteOut struct {
 	Tags       []string       `json:"tags"`
 	Aliases    []string       `json:"aliases"`
 	Content    string         `json:"content" jsonschema:"the note's markdown, frontmatter included"`
+	Writable   *bool          `json:"writable,omitzero" jsonschema:"whether this session may write the note; present only when its writes are limited to folders"`
 	Notice     string         `json:"notice"`
 }
 
@@ -49,6 +50,7 @@ type listEntry struct {
 	Path     string `json:"path"`
 	Title    string `json:"title"`
 	Modified string `json:"modified" jsonschema:"RFC 3339 in UTC"`
+	Writable *bool  `json:"writable,omitzero" jsonschema:"whether this session may write the note; present only when its writes are limited to folders"`
 }
 
 type listOut struct {
@@ -103,6 +105,11 @@ type editOut struct {
 type dailyIn struct {
 	Text string `json:"text" jsonschema:"the text to append"`
 	Date string `json:"date,omitzero" jsonschema:"the day, YYYY-MM-DD; default today"`
+}
+
+// todayIn is dailyIn under a scope that appends to today's note only.
+type todayIn struct {
+	Text string `json:"text" jsonschema:"the text to append"`
 }
 
 type dailyOut struct {

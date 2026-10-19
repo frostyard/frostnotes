@@ -24,6 +24,10 @@ type Options struct {
 	VaultID int64
 	// ReadOnly offers only the read tools.
 	ReadOnly bool
+	// Scope, through lodge, is the token's: the write tools follow it,
+	// and under a limited scope the read tools mark what it may write
+	// (ADR-0028). nil serves the whole vault, as notesctl mcp does.
+	Scope *api.Scope
 	// Version is reported to the MCP host as the server's.
 	Version string
 	// Author, when set, is every write's author in place of the MCP
@@ -60,12 +64,43 @@ func Serve(ctx context.Context, o Options, r io.Reader, w io.Writer) error {
 // tools holds what every tool handler needs.
 type tools struct{ o Options }
 
-// newServer builds the server and its tools: the read tools always, the
-// write tools unless o.ReadOnly.
+// limited reports whether o's scope writes only some of the vault, so the
+// read tools mark what it may write.
+func (o Options) limited() bool {
+	sc := o.Scope
+	return sc != nil && sc.CanWrite() && (len(sc.WriteTo) > 0 || len(sc.Except) > 0)
+}
+
+// writable is the read tools' mark for p: nil but under a limited scope.
+func (t *tools) writable(p string) *bool {
+	if !t.o.limited() {
+		return nil
+	}
+	w := t.o.Scope.Writable(p)
+	return &w
+}
+
+// newServer builds the server and its tools: the read tools always, and
+// unless o.ReadOnly the write tools o.Scope allows: create_note and
+// edit_note under a write right, append_to_daily_note under daily or a
+// bare write, taking a date only where any day's note may be written.
 func newServer(o Options) *sdk.Server {
 	text := instructions
 	if o.ReadOnly {
 		text = readOnlyInstructions
+	}
+	sc := o.Scope
+	canWrite := sc == nil || sc.CanWrite()
+	canAppend := sc == nil || sc.Write || sc.Daily
+	anyDay := sc == nil || sc.Write
+	// limits names the scope's folders in the instructions and the write
+	// tools' descriptions, when it writes less than the whole vault.
+	limits := ""
+	if sc != nil && (len(sc.WriteTo) > 0 || len(sc.Except) > 0 || !sc.CanWrite()) {
+		limits = " Writes are limited: " + sc.Describe() + ". A write elsewhere is refused."
+	}
+	if !o.ReadOnly {
+		text += limits
 	}
 	s := sdk.NewServer(&sdk.Implementation{Name: ServerName, Version: o.Version}, &sdk.ServerOptions{Instructions: text})
 	t := &tools{o: o}
@@ -93,7 +128,32 @@ embeds. ` + Notice}, t.getBacklinks)
 	if o.ReadOnly {
 		return s
 	}
-	history := ` The note's history records the write as yours, and the user can revert it.`
+	history := ` The note's history records the write as yours, and the user can revert it.` + limits
+	if canWrite {
+		addWriteTools(s, t, history)
+	}
+	if !canAppend {
+		return s
+	}
+	daily := &sdk.ToolAnnotations{DestructiveHint: new(false), OpenWorldHint: new(false)}
+	appended := ` The text goes after what the note holds, which it never changes.` + history
+	if anyDay {
+		sdk.AddTool(s, &sdk.Tool{Name: "append_to_daily_note", Annotations: daily, Description: `Append text to a day's daily
+note, today's unless date is given (YYYY-MM-DD), creating the note from the
+vault's daily-note template when it does not exist yet.` + appended}, t.appendToDailyNote)
+		return s
+	}
+	sdk.AddTool(s, &sdk.Tool{Name: "append_to_daily_note", Annotations: daily, Description: `Append text to today's daily
+note, creating it from the vault's daily-note template when it does not
+exist yet.` + appended}, func(ctx context.Context, req *sdk.CallToolRequest, in todayIn) (*sdk.CallToolResult, dailyOut, error) {
+		return t.appendToDailyNote(ctx, req, dailyIn{Text: in.Text})
+	})
+	return s
+}
+
+// addWriteTools adds create_note and edit_note, history ending their
+// descriptions.
+func addWriteTools(s *sdk.Server, t *tools, history string) {
 	sdk.AddTool(s, &sdk.Tool{Name: "create_note",
 		Annotations: &sdk.ToolAnnotations{DestructiveHint: new(false), OpenWorldHint: new(false)},
 		Description: `Create a note at a new path
@@ -108,12 +168,6 @@ at the start, after the properties; properties sets keys of the YAML
 frontmatter, and a null value removes a key. The tool reads the note,
 applies the edit and writes it naming the version it read, so an edit
 someone made meanwhile is merged, not lost.` + history}, t.editNote)
-	sdk.AddTool(s, &sdk.Tool{Name: "append_to_daily_note",
-		Annotations: &sdk.ToolAnnotations{DestructiveHint: new(false), OpenWorldHint: new(false)},
-		Description: `Append text to a day's daily
-note, today's unless date is given (YYYY-MM-DD), creating the note from the
-vault's daily-note template when it does not exist yet.` + history}, t.appendToDailyNote)
-	return s
 }
 
 // author is who a write is from: the name the MCP client gave in its
