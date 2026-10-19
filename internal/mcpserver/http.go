@@ -56,17 +56,23 @@ type httpSessions struct {
 	clients map[string]*api.Client // by MCP session ID
 }
 
-// opening carries a new session's notesd client from server back to
-// ServeHTTP, which keeps it under the session's ID.
-type opening struct{ client *api.Client }
+// opening carries a new session's notesd client and server from server
+// back to ServeHTTP, which keeps the client under the session's ID. The
+// SDK asks for a request's server more than once; it gets the same one.
+type opening struct {
+	client *api.Client
+	srv    *sdk.Server
+}
 
 type openingKey struct{}
 
 func (h *httpSessions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := r.Header.Get(sessionHeader)
 	if id != "" {
-		h.next.ServeHTTP(w, r)
-		if r.Method == http.MethodDelete {
+		rec := &sessionRecorder{ResponseWriter: w}
+		h.next.ServeHTTP(rec, r)
+		// A deleted session, or one the SDK no longer knows, is over.
+		if r.Method == http.MethodDelete || rec.code == http.StatusNotFound {
 			h.forget(id)
 		}
 		return
@@ -105,6 +111,9 @@ func (h *httpSessions) forget(id string) {
 // (mcpsession refuses it), but is refused again.
 func (h *httpSessions) server(r *http.Request) *sdk.Server {
 	op, _ := r.Context().Value(openingKey{}).(*opening)
+	if op != nil && op.srv != nil {
+		return op.srv
+	}
 	token, raw, ok := h.o.Caller(r)
 	if op == nil || !ok || token == "" {
 		return nil
@@ -120,9 +129,10 @@ func (h *httpSessions) server(r *http.Request) *sdk.Server {
 		return nil
 	}
 	op.client = c
-	h.o.Log.Info("MCP session", "token", token, "scope", scope.String())
-	return newServer(Options{Client: c, VaultID: scope.Vault, ReadOnly: !scope.Write, Version: h.o.Version,
+	op.srv = newServer(Options{Client: c, VaultID: scope.Vault, ReadOnly: !scope.Write, Version: h.o.Version,
 		Author: token, Log: h.o.Log})
+	h.o.Log.Info("MCP session", "token", token, "scope", scope.String())
+	return op.srv
 }
 
 // sessionRecorder notes the session ID a response issues, keeping
@@ -130,12 +140,14 @@ func (h *httpSessions) server(r *http.Request) *sdk.Server {
 type sessionRecorder struct {
 	http.ResponseWriter
 	id    string
+	code  int
 	wrote bool
 }
 
 func (r *sessionRecorder) WriteHeader(code int) {
 	if !r.wrote {
 		r.wrote = true
+		r.code = code
 		if code/100 == 2 {
 			r.id = r.Header().Get(sessionHeader)
 		}
