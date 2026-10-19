@@ -57,6 +57,10 @@ type httpSessions struct {
 
 	mu      sync.Mutex
 	clients map[string]*api.Client // by MCP session ID
+
+	// served, in tests, runs when a new session's request has been served,
+	// its response's header gone out.
+	served func(id string)
 }
 
 // opening carries a new session's notesd client and server from server
@@ -106,21 +110,34 @@ func (h *httpSessions) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op := &opening{bare: !isInitialize(r)}
-	rec := &sessionRecorder{ResponseWriter: w}
+	// The client is kept under the session's ID as the response's header
+	// is written, before it reaches lodge kit's mcpsession or the client:
+	// either may end the session with a DELETE as soon as it has the ID,
+	// before this handler resumes, and the DELETE must find the client to
+	// close. Nothing can name the session sooner: the ID is the SDK's,
+	// random, and leaves only in that header.
+	rec := &sessionRecorder{ResponseWriter: w, issued: func(id string) { h.keep(id, op.client) }}
 	h.next.ServeHTTP(rec, r.WithContext(context.WithValue(r.Context(), openingKey{}, op)))
-	if op.client == nil {
-		return
+	if h.served != nil {
+		h.served(rec.id)
 	}
-	if rec.id == "" {
+	if op.client != nil && rec.id == "" {
 		_ = op.client.Close()
+	}
+}
+
+// keep keeps a new session's notesd client under its ID, closing another
+// the ID named before.
+func (h *httpSessions) keep(id string, c *api.Client) {
+	if c == nil {
 		return
 	}
 	h.mu.Lock()
-	if old := h.clients[rec.id]; old != nil {
+	defer h.mu.Unlock()
+	if old := h.clients[id]; old != nil && old != c {
 		_ = old.Close()
 	}
-	h.clients[rec.id] = op.client
-	h.mu.Unlock()
+	h.clients[id] = c
 }
 
 // forget closes an ended session's notesd client.
@@ -168,13 +185,14 @@ func (h *httpSessions) server(r *http.Request) *sdk.Server {
 	return op.srv
 }
 
-// sessionRecorder notes the session ID a response issues, keeping
-// streams streaming.
+// sessionRecorder notes the session ID a response issues, telling issued
+// before the header goes out, and keeps streams streaming.
 type sessionRecorder struct {
 	http.ResponseWriter
-	id    string
-	code  int
-	wrote bool
+	issued func(id string)
+	id     string
+	code   int
+	wrote  bool
 }
 
 func (r *sessionRecorder) WriteHeader(code int) {
@@ -183,6 +201,9 @@ func (r *sessionRecorder) WriteHeader(code int) {
 		r.code = code
 		if code/100 == 2 {
 			r.id = r.Header().Get(sessionHeader)
+		}
+		if r.id != "" && r.issued != nil {
+			r.issued(r.id)
 		}
 	}
 	r.ResponseWriter.WriteHeader(code)
