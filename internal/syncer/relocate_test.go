@@ -72,6 +72,41 @@ func TestADeviceFollowsTheHubsURL(t *testing.T) {
 	}
 }
 
+// A device follows log.hub only to a host that proves it is the hub: a
+// recorded URL some other host answers (a typo, a changed database) never
+// gets the device's token, and sync stays at the old URL.
+func TestADeviceFollowsOnlyAProvenURL(t *testing.T) {
+	h := newHub(t, map[string]string{"n.md": fiveLines})
+	a := newPartitioned(t, h, "a", nil)
+	settle(t, h, a.node)
+	old := hubURL(t, a.node)
+	var tokens atomic.Int64
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			tokens.Add(1)
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(other.Close)
+	if _, err := h.c.Hub().SetURL(t.Context(), &api.HubSetURLParams{URL: other.URL + "/device/notes"}); err != nil {
+		t.Fatal(err)
+	}
+	a.net.cut()
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	a.write("n.md", fiveLines+"six\n")
+	settle(t, h, a.node)
+	if got := hubURL(t, a.node); got != old {
+		t.Fatalf("the device moved to %s, which proved nothing", got)
+	}
+	if n := tokens.Load(); n != 0 {
+		t.Fatalf("the unproven host got the device's token %d times", n)
+	}
+	if got := same(t, h, a.node); got["n.md"] != fiveLines+"six\n" {
+		t.Fatalf("n.md = %q: sync stopped at the old URL", got["n.md"])
+	}
+}
+
 // fake answers POST /sync/hub with answer(nonce), and fails the test if
 // a device sends its token.
 func fake(t *testing.T, answer func(req hub.RelocationRequest) any) string {
