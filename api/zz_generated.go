@@ -2082,6 +2082,10 @@ type Hello struct {
 	DisplayName *string `json:"displayName,omitzero"`
 	// A session's node: its short host name, from lodge.
 	Node *string `json:"node,omitzero"`
+	// A session's key for content URLs, 32 bytes in unpadded base64url: a file's
+	// URL on lodge-content names it by an HMAC under this key
+	// (docs/specs/lodge-app.md#contentblobs).
+	ContentKey *string `json:"contentKey,omitzero"`
 }
 
 // RPCHelloParams holds the params of rpc.hello.

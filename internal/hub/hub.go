@@ -9,6 +9,7 @@ package hub
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -67,6 +68,9 @@ type Hub struct {
 	// logs guards whole push batches and their answers against other log
 	// calls on the same vault. mu guards this map; each lock guards the log.
 	logs map[int64]*sync.RWMutex
+	// decoy keys the relocation proofs of devices that do not exist
+	// (proofKey); random for each process.
+	decoy []byte
 }
 
 // New returns a hub over cfg.
@@ -80,8 +84,10 @@ func New(cfg Config) *Hub {
 	if cfg.MaxBlob == 0 {
 		cfg.MaxBlob = blobxfer.DefaultMaxSize
 	}
+	decoy := make([]byte, sha256.Size)
+	_, _ = rand.Read(decoy)
 	return &Hub{cfg: cfg, pairings: map[string]*pairing{}, conns: map[int64]map[net.Conn]int{}, uploads: map[int64]map[string]time.Time{},
-		logs: map[int64]*sync.RWMutex{}}
+		logs: map[int64]*sync.RWMutex{}, decoy: decoy}
 }
 
 // logLock keeps a push's ordered moves and answers together: another
@@ -148,21 +154,28 @@ func TokenHash(token string) string {
 
 type peerKey struct{}
 
-// WithPeer returns ctx naming the peer a request came from as a listener
-// in front of the hub saw it: lodge's Lodge-Node-Name and Lodge-Login, or
-// "" when lodge names none. It is shown beside a pending pairing, to tell
-// pairings apart, and decides nothing (docs/specs/lodge-app.md#device).
-func WithPeer(ctx context.Context, name string) context.Context {
-	return context.WithValue(ctx, peerKey{}, name)
+// Peer is the node a request came from as a listener in front of the hub
+// saw it (lodge's Lodge-* headers): Name is shown beside a pending
+// pairing, to tell pairings apart, and Key, its node ID, bounds how many
+// pairings one node may have waiting. Neither admits anything
+// (docs/specs/lodge-app.md#device).
+type Peer struct {
+	Name string
+	Key  string
 }
 
-// peerOf is the address a request came from: the peer WithPeer named, else
-// the connection's remote address.
-func peerOf(r *http.Request) string {
-	if name, ok := r.Context().Value(peerKey{}).(string); ok {
-		return name
+// WithPeer returns ctx naming the peer a request came from.
+func WithPeer(ctx context.Context, p Peer) context.Context {
+	return context.WithValue(ctx, peerKey{}, p)
+}
+
+// peerOf is the peer a request came from: the one WithPeer named, else the
+// connection's remote address, with no key.
+func peerOf(r *http.Request) Peer {
+	if p, ok := r.Context().Value(peerKey{}).(Peer); ok {
+		return p
 	}
-	return r.RemoteAddr
+	return Peer{Name: r.RemoteAddr}
 }
 
 type deviceKey struct{}
