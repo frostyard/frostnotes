@@ -207,9 +207,12 @@ lodge-content adds its own sandbox policy and cross-origin headers
   - `proof` is HMAC-SHA256. Its key is the 32 bytes of the SHA-256 the
     hub keeps of that device's token. Its message is `frostnotes
     relocate\n` + hub ID + `\n` + url + `\n` + nonce.
-  - An unknown or revoked device is 404. A hub with no recorded URL is
-    409. A peer that reaches `/device/` can thus learn which device IDs
-    exist, the hub's ID and its recorded URL; none of them is a secret.
+  - An unknown or revoked device gets the same answer as a paired one,
+    with a proof under a key no token makes (an HMAC of its ID under a
+    random key of the hub's), so the endpoint does not tell which
+    devices exist. A hub with no recorded URL is 409. A peer that
+    reaches `/device/` can learn the hub's ID and its recorded URL,
+    neither of which is a secret. Requests are logged at debug only.
   - The proof's key is the hash of the token that the hub stores.
     Someone who can read the hub's database can make a valid proof, and
     so lead a device that runs `sync.relocate` to their URL into sending

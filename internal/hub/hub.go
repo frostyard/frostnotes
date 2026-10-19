@@ -9,6 +9,7 @@ package hub
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -67,6 +68,9 @@ type Hub struct {
 	// logs guards whole push batches and their answers against other log
 	// calls on the same vault. mu guards this map; each lock guards the log.
 	logs map[int64]*sync.RWMutex
+	// decoy keys the relocation proofs of devices that do not exist
+	// (proofKey); random for each process.
+	decoy []byte
 }
 
 // New returns a hub over cfg.
@@ -80,8 +84,10 @@ func New(cfg Config) *Hub {
 	if cfg.MaxBlob == 0 {
 		cfg.MaxBlob = blobxfer.DefaultMaxSize
 	}
+	decoy := make([]byte, sha256.Size)
+	_, _ = rand.Read(decoy)
 	return &Hub{cfg: cfg, pairings: map[string]*pairing{}, conns: map[int64]map[net.Conn]int{}, uploads: map[int64]map[string]time.Time{},
-		logs: map[int64]*sync.RWMutex{}}
+		logs: map[int64]*sync.RWMutex{}, decoy: decoy}
 }
 
 // logLock keeps a push's ordered moves and answers together: another
