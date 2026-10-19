@@ -1,4 +1,4 @@
-# 0024 — Patch what costs the editor its frames
+# 0025 — Patch what costs the editor its frames
 
 - **Status:** Proposed
 - **Date:** 2026-10-18

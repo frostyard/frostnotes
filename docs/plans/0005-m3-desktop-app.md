@@ -35,9 +35,19 @@ notes (T-0076 to T-0079), are merged. What the spec still asked of Phase
 6 (opening links and files outside the app, zoom, the Editor settings,
 aliases, page previews, indentation guides and the reading view's
 properties; T-0080 and T-0081) is merged. Phase 7, the review's fixes
-and evidence 1 to 3, is merged: typing, the hotkeys and the writer pairs
-meet their targets in the built app, and scrolling, after its follow-up
-(in review), meets its own. Evidence 4 is the user's 7-day trial.
+and evidence 1 to 3, is merged
+([#39](https://github.com/frostyard/frostnotes/pull/39)): typing, the
+hotkeys and the writer pairs meet their targets in the built app, and
+scrolling, after its follow-up (in review), meets its own. Phase 8, which
+lets the app open and create vaults
+([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
+accepted 2026-10-18; batch 2's vault switcher only ever switched
+vaults), is merged too
+([#41](https://github.com/frostyard/frostnotes/pull/41)): the contract,
+the shell's folder picker, T-0082 and T-0083, and the wiring. What
+remains is evidence 4, the user's 7-day trial on their one Linux
+desktop, framework, from 2026-10-19 through 2026-10-25, alongside M2's
+trial.
 
 ## Decisions taken for M3
 
@@ -70,6 +80,17 @@ Phase 1 before any code:
   the Tauri side, the dev gateway serves `/blobs/` in a browser, and the
   hub will in M4; pasted and dropped files go up through `note.upload`,
   base64, at most 10 MB.
+
+A fourth came with Phase 8 (2026-10-18):
+
+- **The app opens and creates vaults, and a window switches between
+  them**
+  ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md),
+  accepted 2026-10-18). Open folder as vault, Create new vault and Remove from
+  list go through notesd's `vault.add` (which gains `create`) and
+  `vault.remove`; the folder comes from the system's picker
+  (`tauri-plugin-dialog`, open only); one window shows one vault and
+  switches in place; without a vault the window is the vault manager.
 
 These follow from ADRs 0003 to 0023 and from what the user's Obsidian
 does, so the plan records them without ADRs:
@@ -493,7 +514,9 @@ into its container as it merges.
   Backlinks, Outgoing links, Tags, All properties and the Outline pane;
   the quick switcher and the command palette over T-0039; the status
   bar; menus and notices; the settings dialog's sections; the history
-  list; the vault switcher.
+  list; the vault switcher (its menu came with the vault row; opening,
+  creating and removing vaults never got a card, and moved to
+  [Phase 8](#phase-8--vaults-from-the-app) on 2026-10-18).
 - **Batch 3** (after Phase 3's contracts and Phase 5's framework): the
   Lezer extensions (embeds, tags, highlights, comments, callouts, block
   IDs, math, footnotes) against the spec's fixtures; live-preview
@@ -775,9 +798,13 @@ against the built app.
   3. Each writer pair with the editor loses no token and keeps the
      cursor: vim saving the open note, a pull from another device
      through a hub, an agent's append through MCP, and a second tab.
-  4. The user uses Frostnotes instead of Obsidian on two machines, synced
-     through M2's hub, for 7 days, finds no edit missing, and names
-     anything they went back to Obsidian for.
+  4. The user uses Frostnotes instead of Obsidian on their desktop
+     (framework) for 7 days, synced through M2's hub with the minideb VM
+     still a syncing device, finds no edit missing, and names anything
+     they went back to Obsidian for. The user has one Linux desktop
+     (2026-10-18), so the same notes on a second machine wait for M4's
+     web app ([roadmap](0002-roadmap.md)). The 7 days start on
+     2026-10-19, alongside M2's trial (see the open questions).
 - `make m3-evidence` records evidence 1 to 3; evidence 4 is the user's.
 
 - **Result (2026-10-18): the review.** An agent that had not written the
@@ -858,8 +885,8 @@ against the built app.
   | A step of the parse redraws only the blocks it added | `editor/preview/framework.ts` |
   | KaTeX draws each formula once and widgets clone it; the MathML is attached a frame later | `editor/preview/math.ts` |
   | Rendered blocks and display math estimate their height from their source | `editor/preview/rendered.ts`, `editor/preview/math.ts` |
-  | The preflight's pseudo-element reset leaves out the editor's lines and gutter | `styles/preflight.css` ([ADR-0024](../adr/0024-patch-what-costs-the-editor-its-frames.md)) |
-  | CodeMirror's height map walks only what is outdated | `app/patches/` ([ADR-0024](../adr/0024-patch-what-costs-the-editor-its-frames.md)) |
+  | The preflight's pseudo-element reset leaves out the editor's lines and gutter | `styles/preflight.css` ([ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md)) |
+  | CodeMirror's height map walks only what is outdated | `app/patches/` ([ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md)) |
 
   On the host's GPU, `make app-build && FROSTNOTES_SPIKE=editor
   build/frostnotes-app` now scrolls at 59.86, 59.93 and 59.99 fps in
@@ -912,23 +939,142 @@ against the built app.
     window over the Tauri bridge.
 
   **The user's steps for evidence 4** (the real vault, so the human runs
-  them, ADR-0010):
+  them, ADR-0010), once [Phase 8](#phase-8--vaults-from-the-app) is
+  merged:
 
-  1. Decide the open question of the two trials (below): M3's 7 days
-     alongside M2's, or after.
-  2. On each of the two machines, whose notesd is joined to the hub (M2's
-     trial): from this repository, `make app-build`, then
+  1. The trials overlap (decided 2026-10-19): M3's 7 days start on
+     framework on 2026-10-19, while M2's run through 2026-10-24.
+  2. On framework, whose notesd is joined to the hub (M2's trial): from
+     this repository, `make app-build`, then
      `install -m 0755 build/frostnotes-app ~/.local/bin/frostnotes`, and
-     start `frostnotes`; it connects to the running notesd.
-  3. For 7 days, write in Frostnotes on both machines instead of
-     Obsidian.
-  4. Each day, on both: `notesctl sync verify`; note the result, any edit
-     found missing, and anything you went back to Obsidian for.
+     start `frostnotes`; it connects to the running notesd. The minideb
+     VM stays joined as M2's trial set it up, a second device syncing
+     the same vault.
+  3. For 7 days, write in Frostnotes on framework instead of Obsidian.
+  4. Each day, on framework: `notesctl sync verify`; note the result,
+     any edit found missing, and anything you went back to Obsidian
+     for.
   5. Once, check by hand what no test reaches: copy from a code block with
      its button and paste elsewhere; open a web link (the browser opens)
      and Open in default app on a PDF and an image; play and seek a video
      over 8 MiB embedded in a note (`notesblob://` now answers 8 MiB at a
-     time); and type with an input method, if you use one.
+     time); type with an input method, if you use one; and Open folder as
+     vault, which opens the system's folder picker (Phase 8).
+
+## Phase 8 — Vaults from the app
+
+The app opens, creates and forgets vaults, so the user can begin with it
+alone
+([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)).
+Today only `notesctl vault add` registers one, and a window without a
+vault says to run it. Batch 2 listed the vault switcher; the vault
+row's menu switches between registered vaults, but opening, creating
+and removing them never got a card, and the plan did not say so. It
+comes before evidence 4, since a day's use starts here. Builds
+[design/app.md](../design/app.md#data) (one vault per window) and the
+vault manager in [specs/ui.md](../specs/ui.md#sidebars-and-panes), over
+`vault.add` and `vault.remove` in [specs/rpc-api.md](../specs/rpc-api.md).
+
+Obsidian is the model. Its start screen lists the vaults it knows (name
+and path, each with a menu) beside Create new vault (a name and a
+location picked with Browse) and Open folder as vault (the system's
+folder picker). The vault menu at the foot of its left sidebar lists
+the vaults and ends with Manage vaults…, which opens the same screen
+as a dialog. Choosing a vault there switches the window in place
+(Obsidian opens another window).
+
+- **Planner, first** (the contract, the spec and the shell, so the
+  cards have what they draw):
+  - `schema/rpc/vault.yaml`: `vault.add` gains `create` (bool,
+    optional): "Make the directory first; its parent must exist and it
+    must not." notesd implements it with the same overlap check, made
+    before the folder is; `notesctl vault add` gains `--create`; the
+    mock does the same. Tests: a made folder registers; an existing
+    one answers `conflict`; a missing parent `invalidParams`; an
+    overlap answers `conflict` and makes no folder; `vault.remove`
+    leaves the folder as it was.
+  - `specs/ui.md`: the vault manager (as the whole window, and as a
+    dialog), the vault menu's Manage vaults…, the create form, Remove
+    from list's confirmation, and the window's title.
+  - The shell: `tauri-plugin-dialog` and `@tauri-apps/plugin-dialog`
+    2.8.1 (released 2026-10-01, Apache-2.0 OR MIT, frostmail's pin;
+    the crate brings `tauri-plugin-fs`'s, which the app does not
+    register), registered in `main.rs`. The capability adds
+    `dialog:allow-open` and `core:window:allow-set-title`, and its test
+    lists them. `app/system.ts` gains `pickFolder(title)`, the open
+    dialog choosing a folder; it returns null in a browser, where the
+    manager asks for a path instead.
+- **Cards (batch 4)**, presentational, over the spec:
+  - **T-0082 the vault manager** (`features/vaults/VaultManager.tsx`):
+    the vaults by name, each with its path, the window's vault marked;
+    a row opens its vault, and its menu holds Remove from list. Beside
+    the list are Create new vault, Open folder as vault, and how to
+    join a vault on a hub (`notesctl hub join`). It draws as the whole
+    window or as a dialog with Close.
+  - **T-0083 the create form** (`features/vaults/CreateVault.tsx` and
+    `lib/vaultName.ts`): a name, checked as notesd and Obsidian check a
+    folder's name (not empty, no `/`, `\` or leading `.`, none of
+    Obsidian's forbidden characters); a location, a folder chosen with
+    Browse, or typed where there is no picker; Create, enabled once
+    both are good; Back.
+- **Planner wiring:**
+  - `data/vaults.ts`: Open folder as vault, Create new vault and Remove
+    from list over `vault.add` and `vault.remove`. The window switches
+    to a vault it opens or creates (`openVault`); notesd's errors show
+    as notices in the person's words; Remove asks first (`ask`),
+    naming what goes (notesd's history of the vault and, if it syncs,
+    its place on the hub; never its files).
+  - `MainWindow`: the manager in place of today's notesctl hint when
+    there is no vault. The vault menu's Manage vaults…, and the command
+    Open another vault (Obsidian's `app:open-vault`), open it as a
+    dialog.
+  - The window's title, `<note> - <vault> - Frostnotes` (the vault
+    alone when no note is active): `setTitle` in the desktop app, the
+    document's title in a browser.
+- **Done when:**
+  - With no vault, the window is the manager. Create new vault makes
+    `<location>/<name>`, registers it and shows it. Open folder as
+    vault registers a folder and shows it. A folder inside a vault,
+    one holding a vault, or a name that exists shows notesd's reason
+    as a notice and changes nothing. Each is a window test over the
+    mock.
+  - Manage vaults… lists the vaults and opens one in place. Remove from
+    list asks, then forgets the vault and shows another, or the
+    manager. Window tests, and notesd's test that the folder stays.
+  - The window's title names the note and the vault (a window test).
+  - In the built app, Open folder as vault opens the system's folder
+    picker and its choice becomes the window's vault: a hand check in
+    the user's steps for evidence 4.
+  - Evidence 4 starts once this phase is merged.
+
+- **Result (2026-10-18, merged in
+  [#41](https://github.com/frostyard/frostnotes/pull/41)).** The
+  contract came first: `vault.add`'s
+  `create` in notesd (the folder is made only once the vault may be
+  registered; a refused one is never made), `notesctl vault add
+  --create`, and the mock, each with tests. The shell gained
+  `tauri-plugin-dialog` 2.8.1 for its open dialog alone, with the
+  crates under it pinned to releases at least two weeks old
+  (`tauri-plugin-fs` 2.6.0, `tauri-plugin` 2.7.1); the capability grants
+  `dialog:allow-open` and `core:window:allow-set-title`, and its test
+  lists them. `specs/ui.md` describes the vault manager. Codex passed
+  T-0082 and T-0083 on the first attempt each, and a mutation of each
+  failed its given tests (Open passing a path with a picker; a name
+  starting with a dot taken). The planner's part: `data/vaults.ts`
+  (adding, with notesd's refusals in the person's words, and removing
+  after asking what goes), the container, the manager as the window
+  without a vault (between the title bar row and the status bar, which
+  still tells of the connection) and as a dialog from Manage vaults… and
+  Open another vault, and the window's title. Window tests over the mock
+  cover the first run's create, open with each refusal, switching in
+  place with the title, Remove from list with Cancel and Remove, and the
+  command. Still to see by hand: the system's folder picker in the built
+  app (the user's steps for evidence 4).
+
+  | Card | Attempts | Review |
+  | --- | --- | --- |
+  | T-0082 vault manager | 1 | correct; focuses itself as a dialog and gives focus back |
+  | T-0083 create form | 1 | correct |
 
 ## Later / ideas
 
@@ -946,6 +1092,9 @@ against the built app.
 - Saves that send changes instead of whole text, if large notes prove
   slow (ADR-0022).
 - Unlinked mentions' Link action, which writes to another note.
+- Obsidian's other vault actions: Rename vault, Move vault, Reveal in
+  the file manager, Open in new window (with more windows), and joining
+  a vault on a hub from the app (Obsidian's Open vault from Sync).
 
 ## Open questions
 
@@ -954,15 +1103,16 @@ against the built app.
   no provider waits for typing to pause. Scrolling is what misses its
   target, by a frame now and then (Phase 7, evidence 1); that is the
   follow-up's.
-- **The two trials:** M3's needs M2's hub on the user's two machines.
-  Run M2's 7 days first and M3's after, or overlap them once Phase 6
-  ends? The user decides by Phase 7.
+- *Answered 2026-10-19:* **the two trials overlap.** M3's runs on
+  framework through M2's hub, with the minideb VM syncing beside it. Its
+  7 days start on 2026-10-19, while M2's run through 2026-10-24, so the
+  app's daily use is also sync's.
 
 ## References
 
 - Implements: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), [specs/rpc-api.md](../specs/rpc-api.md) (`note` and `vault` additions), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run)
-- Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
+- Decisions: [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md); [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Builds on: [plan 0001](0001-m0-foundations.md) (the app shell, spike 1), [plan 0003](0003-m1-headless-vault.md) (the write path, versions), [plan 0004](0004-m2-sync.md) (conflicts, the hub)
-- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/)
+- Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/), [T-0082 and T-0083](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)

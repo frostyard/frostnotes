@@ -187,8 +187,9 @@ ribbon preference off (it is on) hides it.
 - **The vault row** closes the left sidebar: 36 high, 1px `--separator`
   top, 8px side padding. The vault's name (13/18, 600) and
   `chevrons-up-down` (12px) form one button that opens the vault menu
-  (the vaults by name, the current one checked); Settings (`settings`,
-  "Settings (Ctrl + ,)") sits at the right.
+  (the vaults by name, the current one checked, then a separator and
+  Manage vaults…, which opens the [vault manager](#vault-manager));
+  Settings (`settings`, "Settings (Ctrl + ,)") sits at the right.
 
 ### Files pane *(batch 2)*
 
@@ -506,6 +507,68 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset
 ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)).
 
+### Vault manager
+
+Obsidian's vault chooser
+([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)).
+
+- **The frame:** while there is no vault, the whole window between the
+  title bar row (which keeps the window controls and drags the window)
+  and the status bar (which still tells of the connection).
+  Otherwise a dialog, opened by the vault menu's Manage vaults… and the
+  command Open another vault: 720 × 480 (at most 90% × 85% of the
+  window), `--bg-window`, 1px `--separator`, rounded 12,
+  `--popover-shadow`, the window behind dimmed (`--backdrop`), a 28 × 28
+  Close button (`x`, "Close") at the top right; Escape and a click
+  outside close it. Either is `role="dialog"`, named "Manage vaults".
+- **The vault list** at the left, 280 wide, `--bg-sidebar`, 8px
+  padding, scrolling: a 52-high button per vault, by name, rounded 6,
+  12px side padding: its name (13/18, 600) over its path (12/16
+  `--text-secondary`, truncated). The window's vault is
+  `--selection-sidebar`; another is `--selection-inactive` under the
+  pointer. A click opens the vault in the window and closes the dialog.
+  A row's menu, from a 24 × 24 `ellipsis` button at its right on hover
+  or focus ("Options for <name>") and from the row's context menu,
+  holds Remove from list. With no vault the list reads "No vaults yet"
+  (13/18 `--text-secondary`, centered).
+- **The actions** at the right, 32px padding: the app's name,
+  Frostnotes (20/28, 600), then three rows 16 apart, 1px `--separator`
+  between, each a title (13/18, 600) over a description (12/16
+  `--text-secondary`) at the left and its control at the right:
+  - **Create new vault:** "Make a new vault in a folder you choose."
+    Create (`--accent`) shows the create form in the actions' place.
+  - **Open folder as vault:** "Choose a folder of Markdown files."
+    Open opens the system's folder picker. Where there is none (a
+    browser), a 240-wide path input and Open take its place.
+  - **Join a vault on a hub:** "Join it with `notesctl hub join URL
+    NAME`, then open its folder here." The command is selectable
+    monospace text; there is no control.
+- **The create form**, in the actions' place: Back (`arrow-left`, "Back")
+  and the title "Create new vault" (15/20, 600); Vault name, a 240-wide
+  input, focused; Location, the chosen folder's path (12/16
+  `--text-secondary`, truncated, "No folder chosen" before one is) and
+  Browse, which opens the folder picker (where there is none, a
+  240-wide path input instead); then Create (`--accent`), enabled once
+  the name is good and a location is chosen. Under the name, in 12/16
+  `--flag-1`: "A vault needs a name.", "A vault's name cannot start
+  with a dot.", or "A vault's name cannot hold any of these: `\ / : *
+  ? " < > | # ^ [ ]`" (the characters a note's title cannot hold).
+- **What they do:** Open folder as vault registers the folder
+  (`vault.add`); Create registers `<location>/<name>`, which notesd
+  makes (`vault.add` with `create`). Either makes it the window's vault
+  and closes the manager. notesd's refusals show as notices and leave
+  the manager open: "<path> lies inside the vault <name>.", "<path>
+  holds the vault <name>.", "<path> is not a folder.", "<path> already
+  exists.". Remove from list asks first (the confirmation dialog,
+  Remove, danger): 'Remove "<name>" from the list?', "Its folder and
+  files stay where they are. Frostnotes forgets its index and version
+  history on this device." (for a synced vault also "and its place on
+  the hub; open it again to sync it, after joining"). Then
+  `vault.remove`; the window then shows another vault, or the manager.
+- **The window's title** (the system's, as a task bar shows it):
+  `<note> - <vault> - Frostnotes`, `<vault> - Frostnotes` when the
+  active tab shows no note, `Frostnotes` without a vault.
+
 ### History *(batch 2)*
 
 A `history` tab, titled "History of <name>": at the left a 280-wide list
@@ -626,6 +689,6 @@ belongs to the field, a prompt or a menu.
 
 ## References
 
-- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); frostmail's `docs/specs/ui.md` for the tokens and the chrome
+- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager); frostmail's `docs/specs/ui.md` for the tokens and the chrome
 - Context: [design/app.md](../design/app.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md)

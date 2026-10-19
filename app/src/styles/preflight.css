@@ -5,7 +5,7 @@
    quarter of the cost of laying out live preview's lines; nothing in a line
    or the gutter draws a pseudo-element the reset would change (KaTeX's are
    empty). preflight.test.ts keeps this copy equal to Tailwind's but for
-   that (docs/adr/0024-patch-what-costs-the-editor-its-frames.md). */
+   that (docs/adr/0025-patch-what-costs-the-editor-its-frames.md). */
 
 /*
   1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)

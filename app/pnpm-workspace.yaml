@@ -9,7 +9,7 @@ overrides:
   "@lezer/lr": 1.4.10
 # CodeMirror's height map walked the whole of itself, a node per line the
 # view ever measured, on every measure; the patch walks only what is
-# outdated (docs/adr/0024-patch-what-costs-the-editor-its-frames.md). Drop it
+# outdated (docs/adr/0025-patch-what-costs-the-editor-its-frames.md). Drop it
 # once @codemirror/view walks only what changed.
 patchedDependencies:
   "@codemirror/view@6.43.13": patches/@codemirror__view@6.43.13.patch

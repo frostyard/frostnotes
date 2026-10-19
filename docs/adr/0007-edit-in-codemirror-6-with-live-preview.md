@@ -61,6 +61,6 @@ the hub serves them to browsers over the network.
 ## References
 
 - Shapes: [design/overview.md](../design/overview.md), [design/app.md](../design/app.md), [specs/markdown.md](../specs/markdown.md) (the fixtures both parsers run), [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML and sanitizer)
-- Extended by: [ADR-0022](0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md) (saves and merges), [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (attachments), [ADR-0024](0024-patch-what-costs-the-editor-its-frames.md) (CodeMirror's height map patched)
+- Extended by: [ADR-0022](0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md) (saves and merges), [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (attachments), [ADR-0025](0025-patch-what-costs-the-editor-its-frames.md) (CodeMirror's height map patched)
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0006](0006-every-write-names-the-version-it-changes.md)
 - Built in: [roadmap — M0 spike, M3](../plans/0002-roadmap.md), [plan 0005](../plans/0005-m3-desktop-app.md)

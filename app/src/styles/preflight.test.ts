@@ -1,6 +1,6 @@
 // The app's copy of Tailwind's preflight (preflight.css): Tailwind's own
 // but for its reset's pseudo-elements, which leave out the editor's lines
-// and gutter (docs/adr/0024-patch-what-costs-the-editor-its-frames.md).
+// and gutter (docs/adr/0025-patch-what-costs-the-editor-its-frames.md).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

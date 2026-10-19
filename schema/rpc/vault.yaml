@@ -2,7 +2,8 @@ domain: vault
 callers: [local]
 doc: >-
   The vaults this notesd owns: directories of markdown notes (ADR-0003).
-  Registering a vault never writes to it.
+  Registering a vault never writes to it; add with create makes its empty
+  directory first (ADR-0024).
 enums:
   - name: ScanState
     doc: What a vault's scanner is doing.
@@ -76,9 +77,13 @@ methods:
     doc: >-
       Register a directory as a vault. The path must be absolute and name an
       existing directory, and no registered vault may contain it or lie inside it.
+      With create, notesd makes the directory first (Create new vault, ADR-0024):
+      its parent must exist and it must not; it is made only when it may be
+      registered.
     params:
       - {name: path, type: string, doc: "Absolute path of the vault directory."}
       - {name: name, type: string, optional: true, doc: "Display name; defaults to the directory's base name."}
+      - {name: create, type: bool, optional: true, doc: "Make the directory first; its parent must exist and it must not."}
     result: Vault
     errors: [invalidParams, conflict]
   - name: remove

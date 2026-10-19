@@ -1355,7 +1355,7 @@ Where a pairing stands.
 
 ## vault
 
-The vaults this notesd owns: directories of markdown notes (ADR-0003). Registering a vault never writes to it.
+The vaults this notesd owns: directories of markdown notes (ADR-0003). Registering a vault never writes to it; add with create makes its empty directory first (ADR-0024).
 
 Callers: `local`.
 
@@ -1369,12 +1369,13 @@ Result: `[]Vault`.
 
 ### `vault.add`
 
-Register a directory as a vault. The path must be absolute and name an existing directory, and no registered vault may contain it or lie inside it.
+Register a directory as a vault. The path must be absolute and name an existing directory, and no registered vault may contain it or lie inside it. With create, notesd makes the directory first (Create new vault, ADR-0024): its parent must exist and it must not; it is made only when it may be registered.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `path` | `string` | Absolute path of the vault directory. |
 | `name` | `string` (optional) | Display name; defaults to the directory's base name. |
+| `create` | `bool` (optional) | Make the directory first; its parent must exist and it must not. |
 
 Result: `Vault`.
 Errors: `invalidParams`, `conflict`.

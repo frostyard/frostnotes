@@ -94,9 +94,18 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   order, and queues those that arrive while it loads, so it ends where
   the disk is; a changed file's time is the event's arrival, until the
   next listing.
-- **One vault per window.** The window shows one vault; the switcher at
-  the bottom of the left sidebar changes it, and the app remembers the
-  last one.
+- **One vault per window** ([ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md)). The window shows one
+  vault; the vault menu at the foot of the left sidebar switches it in
+  place, and the app reopens the last one. The vault manager
+  (`app/VaultsView.tsx` over `features/vaults/`, and `data/vaults.ts`)
+  opens a folder as a vault (`vault.add` of a folder from the system's
+  picker, `pickFolder`, or a typed path in a browser), creates one
+  (`vault.add` with `create`, notesd making the folder) and removes one
+  from the list (`vault.remove`, which keeps its files) after asking
+  what goes. It is the whole window while there is no vault, and
+  otherwise a dialog from the menu's Manage vaults… or the command Open
+  another vault. notesd's refusals show as notices in the person's
+  words. The window's title names the active note and the vault.
 - **Files:** `note.files` lists a vault's files and folders (path, kind,
   hash, size, modification time) once, and `note.changed`, `note.moved`
   and `note.removed` keep the list current. Folders have no events: after
@@ -319,7 +328,7 @@ The framework (`editor/preview/`) owns:
   KaTeX draws each formula once and widgets clone the drawing; its MathML,
   read only by assistive technology, is attached a frame later. Two
   changes in dependencies complete it
-  ([ADR-0024](../adr/0024-patch-what-costs-the-editor-its-frames.md)):
+  ([ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md)):
   the app's copy of Tailwind's preflight leaves the editor's lines out of
   its pseudo-element reset, and a patch makes CodeMirror's height map walk
   only what is outdated.
@@ -572,7 +581,7 @@ serves `/blobs/` from Vite there if it must.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-patch-what-costs-the-editor-its-frames.md); frostmail's `docs/design/app.md`, which this copies
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
