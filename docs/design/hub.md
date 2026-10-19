@@ -132,6 +132,20 @@ lodge.
   mount, the mount's `uid=` and `gid=` name `frostnotes`: the files'
   local owner comes from the mount options, and the file server sees
   every write as the mount's credential.
+- **Moving the M2 hub:** `sudo scripts/move-hub-behind-lodge.sh` on the
+  hub's machine checks lodge, the `frostnotes` user and units, the M2
+  unit and its data, and the vault's mount, and prints the move. With
+  `--apply --url https://lodge.<tailnet>.ts.net/device/notes` it stops
+  and disables the M2 unit, copies its data directory whole to
+  `/var/lib/frostnotes`, sets the mount's `uid=` and `gid=` to
+  `frostnotes`, checks that `frostnotes` writes to the share, starts
+  the lodge socket and service, records the URL and reloads lodge. It
+  never touches the vault's files, keeps the old data directory and
+  fstab, and prints `--rollback BACKUP --apply`, which puts the M2 hub
+  back. The rollback is for before devices sync through lodge: the M2
+  notesd cannot open the moved database, whose schema is newer, and its
+  own copy would be behind its devices, so the rollback refuses once
+  the hub's log has moved, unless `--force` ([plan 0006, Phase 7](../plans/0006-m4-notes-inside-lodge.md#phase-7--the-users-hub-in-lodge-and-exit-evidence)).
 - **Pairing a new device:**
   - on the device, `notesctl hub join https://lodge.<tailnet>.ts.net/device/notes NAME`;
   - on the hub, `sudo -u frostnotes notesctl hub approve CODE`.

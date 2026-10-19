@@ -363,6 +363,15 @@ tailnet.
   - the trial's devices move on their own, and the old `tailscale
     serve` for the hub goes once `notesctl hub devices` shows all of
     them seen;
+  - the steps from stopping the M2 unit to `notesctl hub url` are one command,
+    [`scripts/move-hub-behind-lodge.sh`](../../scripts/move-hub-behind-lodge.sh),
+    run as root on the hub's machine
+    ([design/hub.md](../design/hub.md#operational-notes)). It takes the
+    `sysusers.d` user, prints what it finds and would do, changes
+    nothing without `--apply`, refuses a state it cannot read
+    unambiguously, keeps a backup of what it moves or edits, and prints
+    the command that rolls it back. A test deployment's data in
+    `/var/lib/frostnotes` goes aside, never merged into the hub's;
   - the phone and the second machine allowed in lodge.
 - **Done when**, each shown by a test or a recorded run:
   1. **The same UI on a second machine and on the phone.** Notes
