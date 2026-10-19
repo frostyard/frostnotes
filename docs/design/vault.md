@@ -362,4 +362,4 @@ long-term history ([sync.md](sync.md)).
 - Related: [overview.md](overview.md), [sync.md](sync.md), [app.md](app.md) (the editor as a writer)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/render.md](../specs/render.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md); written settings in [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
-- Planned: an agent's append to today's daily note, and the write scope's path check after the path guard ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md), [plan 0007](../plans/0007-folder-limited-agent-scopes.md))
+- Planned: an agent's append to today's daily note, and the write scope's path check after the path guard ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md), [plan 0007](../plans/0007-folder-scopes-for-agents.md))
