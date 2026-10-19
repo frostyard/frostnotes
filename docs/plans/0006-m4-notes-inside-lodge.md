@@ -40,16 +40,23 @@ Work is split per
   `relocate` commands, the phone layout's components, the Hub settings'
   lists, and the editing commands the phone toolbar lacks.
 
-Status (2026-10-18): **Phase 1 is in review,** with frostyard/core
-[ADR-0057](https://github.com/frostyard/core/blob/main/docs/adr/0057-run-first-party-apps-behind-lodge.md) and lodge's first docs, all three to be published together.
-M4's first drafts (a notesd of its own on the tailnet, with its own
-sign-in, tokens and web serving) became lodge's ADRs 0004 to 0008
-before anyone accepted them. No code or card merges before the user
-accepts the ADRs. On 2026-10-18 the user asked for the build to go
-ahead overnight as stacked PRs for review: Phases 2, 3, 4 and 5 are in
-review on branches `m4/phase2` to `m4/phase5`, each on the one before:
-agents through `/mcp`, then the web app at desktop widths first (the
-narrow layout and its cards follow).
+Status (2026-10-19):
+- **Phase 1.** M4's first drafts (a notesd of its own on the tailnet,
+  with its own sign-in, tokens and web serving) became lodge's ADRs 0004
+  to 0008 before anyone accepted them. ADR-0026 and ADR-0027 are still
+  Proposed, so Phase 1 waits on the user's acceptance.
+- **Phases 2 to 5 merged on 2026-10-19 (#45–#56).** The user asked on
+  2026-10-18 for them to be built ahead of that acceptance, as PRs for
+  review.
+  - Phase 4's live run with Claude Code is still to come.
+  - Phase 5's web app and phone components are built, by the planner
+    rather than on cards. Some of ui.md's narrow and browser items are
+    still to come, and so is `make m4-evidence`.
+- **Phase 6.** The review ran on 2026-10-19, and its notes findings are
+  fixed. Its record, and the user's acceptance of the findings left open,
+  are still to come.
+- **Phase 7.** The move script is merged (#55) and has not run. Phase 7
+  starts from 2026-10-26, on the user's go-ahead.
 
 ## Decisions taken for M4
 

@@ -106,7 +106,10 @@ The review of the drafts left the notes side two fixes:
       author.
     - The request's own `source` and `author` are ignored.
   - **The JSON-RPC behind `/api`,** whose frames lodge only moves.
-  - **Files by hash** at `/content/blobs/<hash>.<ext>`. lodge-content
+  - **Files by hash** at `/content/blobs/<mac>/<hash>.<ext>`, the MAC
+    an HMAC of the hash under a key notesd keeps, since a bare hash can be
+    guessed by anyone who holds the same file
+    ([lodge-app.md](../specs/lodge-app.md#contentblobs)). lodge-content
     serves them, and they keep notesd's blob headers.
   - **The MCP tools behind `/mcp`.** Notes defines the scope grammar,
     `vault=<id>` with an optional `;write`, and binds each MCP session

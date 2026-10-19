@@ -59,7 +59,8 @@ export interface ApiOptions {
  * connectApi connects to notesd's /api through lodge (docs/design/app.md#in-a-browser):
  * url is lodge-client's apiURL(), with no token, since lodge signed the
  * browser in and names it to notesd; blobs is where files load by hash,
- * lodge-content's contentURL("blobs/<hash>.<ext>"). While the page is
+ * lodge-content's contentURL("blobs/<mac>/<hash>.<ext>") (contentBlobs in
+ * lodge/main.tsx). While the page is
  * visible it calls rpc.ping every PING_EVERY_MS, at once when the page
  * becomes visible, and closes a connection whose ping goes unanswered for
  * PING_TIMEOUT_MS: lodge ends a session after 90 s without a frame, and a

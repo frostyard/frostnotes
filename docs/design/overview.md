@@ -8,11 +8,15 @@ Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-
 Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md),
 [specs/lodge-app.md](../specs/lodge-app.md).
 
-**Status: M0 built** ([plan 0001](../plans/0001-m0-foundations.md)): notesd
-with the store, the socket and caller kinds; `notesctl hello` and `vault`;
-the app shell on the desktop and in a browser; `internal/merge` and
-`internal/markdown`'s first parsers. Everything else here is the planned
-system, rewritten as each milestone lands ([roadmap](../plans/0002-roadmap.md)).
+**Status (2026-10-19):**
+- **M0 and M1 are done:** the headless vault, the index and MCP.
+- **M2 and M3 are built and in their 7-day trials:** sync through a hub,
+  and the desktop app.
+- **M4 is built in part:** notesd as lodge's notes app, `/mcp` through
+  lodge, and the web app.
+
+What M5 and later add is the planned system. This document is rewritten as
+each milestone lands ([roadmap](../plans/0002-roadmap.md)).
 
 ## Overview
 
