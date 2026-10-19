@@ -121,4 +121,24 @@ describe("a narrow window", () => {
     await user.click(within(toolbar).getByRole("button", { name: "Bold" }));
     await waitFor(() => expect(editorText()).toBe("**Alpha**\n"));
   });
+
+  it("lists the tabs full screen from the bottom bar, to activate, close or add one", async () => {
+    const user = userEvent.setup();
+    await start();
+    // In reading view, so no editor takes the focus (and the bottom bar).
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(screen.getByRole("button", { name: "New tab" }));
+    await user.click(screen.getByRole("button", { name: /^Tabs / }));
+    const sw = screen.getByRole("dialog", { name: "Tabs" });
+    const rows = within(sw).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    await user.click(within(sw).getByRole("button", { name: "a" }));
+    expect(screen.queryByRole("dialog", { name: "Tabs" })).toBeNull();
+    expect(activePath()).toBe("a.md");
+    await user.click(screen.getByRole("button", { name: /^Tabs / }));
+    await user.click(within(screen.getByRole("dialog", { name: "Tabs" })).getByRole("button", { name: "Close a" }));
+    expect(within(screen.getByRole("dialog", { name: "Tabs" })).getAllByRole("listitem")).toHaveLength(1);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Tabs" })).toBeNull();
+  });
 });

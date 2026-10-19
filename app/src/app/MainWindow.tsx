@@ -25,18 +25,30 @@ import { WindowControls } from "../features/chrome/WindowControls";
 import { BottomBar } from "../features/mobile/BottomBar";
 import { Drawer } from "../features/mobile/Drawer";
 import { EditingToolbar } from "../features/mobile/EditingToolbar";
+import { TabSwitcher } from "../features/mobile/TabSwitcher";
 import { StatusBar } from "../features/status/StatusBar";
 import { PaneTabs } from "../features/workspace/PaneTabs";
 import { Splitter } from "../features/workspace/Splitter";
 import { VaultRow } from "../features/workspace/VaultRow";
 import { formatHotkey, type HotkeyCommand, hotkeysFor } from "../lib/keymap";
-import { type PaneId, SIDEBAR_MIN, type Side } from "../workspace/model";
-import { activeGroup, activeTab, back, forward, selectPane, setSidebarWidth } from "../workspace/ops";
+import { type PaneId, SIDEBAR_MIN, type Side, tabTitle } from "../workspace/model";
+import {
+  activate,
+  activeGroup,
+  activeTab,
+  back,
+  close,
+  closeAll,
+  forward,
+  openNewTab,
+  selectPane,
+  setSidebarWidth,
+} from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { useMaximized, windowCommand } from "./chrome";
 import { editorCommands, workspaceCommands } from "./commands";
 import { useEditorFocus, useKeyboardInset } from "./keyboard";
-import { openConflictsMenu, openEditingModeMenu, openNarrowMenu, openTabList } from "./menus";
+import { openConflictsMenu, openEditingModeMenu, openNarrowMenu } from "./menus";
 import { useNarrow } from "./narrow";
 import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
@@ -135,6 +147,7 @@ export function MainWindow() {
   // A narrow window's sidebars are drawers, one open at a time, closed
   // when the active tab shows another view (a note opened from one).
   const [drawer, setDrawer] = useState<Side | null>(null);
+  const [switching, setSwitching] = useState(false);
   const activeKey = `${active.id}:${active.view.type === "empty" ? "" : active.view.path}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeKey is the trigger
   useEffect(() => setDrawer(null), [activeKey]);
@@ -285,8 +298,35 @@ export function MainWindow() {
                 onForward={() => update((w) => forward(w))}
                 onSwitcher={() => registry.run("switcher:open")}
                 onNewTab={() => registry.run("workspace:new-tab")}
-                onTabs={(x, y) => openTabList(group.id, x, y)}
+                onTabs={() => setSwitching(true)}
                 onMenu={(x, y) => openNarrowMenu((c) => registry.run(c), x, y)}
+              />
+            )}
+            {switching && (
+              <TabSwitcher
+                tabs={group.tabs.map((t, i) => {
+                  const path = t.view.type === "empty" ? "" : t.view.path;
+                  return {
+                    id: t.id,
+                    title: tabTitle(t.view),
+                    folder: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "",
+                    active: i === group.active,
+                  };
+                })}
+                onActivate={(id) => {
+                  update((w) => activate(w, id));
+                  setSwitching(false);
+                }}
+                onClose={(id) => update((w) => close(w, id))}
+                onNewTab={() => {
+                  update((w) => openNewTab(w));
+                  setSwitching(false);
+                }}
+                onCloseAll={() => {
+                  update((w) => closeAll(w, group.id));
+                  setSwitching(false);
+                }}
+                onDismiss={() => setSwitching(false)}
               />
             )}
             {drawer && (
