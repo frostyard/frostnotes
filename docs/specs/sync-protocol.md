@@ -60,7 +60,9 @@ name 1 to 64 bytes of UTF-8 without control characters):
 ```
 
 - 201 with the body above; 400 for a bad body, 413 over 1 KiB, 429 while
-  8 pairings are pending.
+  8 pairings are pending, or with `Retry-After` past a peer's requests
+  without a token (30 at once, then one a second, shared with
+  `POST /sync/hub`; [lodge-app.md](lodge-app.md#limits)).
 - The code is 8 characters of Crockford's base32 alphabet
   (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`), shown as two groups of four. A
   pairing lasts 10 minutes. Pending pairings live in the hub's memory: a
