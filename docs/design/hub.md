@@ -128,8 +128,10 @@ lodge.
 - **Data directory:** `/var/lib/frostnotes`, the service's state
   directory, passed as `FROSTNOTES_DATA_DIR`. Like every notesd's, it is
   on a local disk.
-- **Vault directory:** `frostnotes` must be able to write it. A vault on
-  a network share needs mount options that give `frostnotes` the files.
+- **Vault directory:** `frostnotes` must be able to write it. On a CIFS
+  mount, the mount's `uid=` and `gid=` name `frostnotes`: the files'
+  local owner comes from the mount options, and the file server sees
+  every write as the mount's credential.
 - **Pairing a new device:**
   - on the device, `notesctl hub join https://lodge.<tailnet>.ts.net/device/notes NAME`;
   - on the hub, `sudo -u frostnotes notesctl hub approve CODE`.

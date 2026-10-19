@@ -335,9 +335,19 @@ tailnet.
 
 - **Moving the hub** (the user's hands, the planner's steps):
   - lodge v1 on the hub's machine (lodge's plan);
-  - the hub's data directory, whole, moved to `/var/lib/frostnotes`
-    for the user `frostnotes`, so its hub ID, log and blobs stay;
-  - the vault's mount writable by `frostnotes`;
+  - the user `frostnotes` on the hub's virtual machine: the system user
+    of the `sysusers.d` entry, or the dedicated user that runs notesd
+    there now, renamed, since it runs nothing else;
+  - the vault's network mount (CIFS) with `uid=` and `gid=` set to
+    `frostnotes`. Its files' local owner comes from those options, and
+    the file server sees every write as the mount's one credential, so
+    nothing changes on the file server;
+  - the hub's data directory moved, whole, to `/var/lib/frostnotes` on
+    the virtual machine's local disk, so its hub ID, log and blobs stay
+    and SQLite never lives on the share;
+  - a check before any device moves: a scratch note that notesd,
+    running as `frostnotes`, writes appears on the share, read from
+    another of the share's clients, and is then deleted;
   - `notesd --lodge` as `frostnotes`, then `notesctl hub url
     https://lodge.<tailnet>.ts.net/device/notes`;
   - the trial's devices move on their own, and the old `tailscale
@@ -396,9 +406,9 @@ tailnet.
 - **The phone and its browser:** Firefox for Android, Chrome or Safari
   on iOS changes how lodge's page installs, and the size the evidence
   drives. By Phase 7.
-- **The vault's mount for `frostnotes`:** whether the share's mount can
-  give the new system user the files without other changes on its
-  server. By Phase 7, on the user's machine.
+- *Answered 2026-10-18:* **the vault's mount for `frostnotes`.** The
+  mount's `uid=` and `gid=` give the user the files, with no change on
+  the file server; Phase 7 sets them.
 
 ## References
 
