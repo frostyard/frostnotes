@@ -355,8 +355,11 @@ tailnet.
   - a check before any device moves: a scratch note that notesd,
     running as `frostnotes`, writes appears on the share, read from
     another of the share's clients, and is then deleted;
-  - `notesd --lodge` as `frostnotes`, then `notesctl hub url
-    https://lodge.<tailnet>.ts.net/device/notes`;
+  - `notesd --lodge` as `frostnotes` (`packaging/systemd/`), then
+    `notesctl hub url https://lodge.<tailnet>.ts.net/device/notes`. The
+    M2 hub's own unit is stopped and disabled first: both use
+    `/run/frostnotes` for the private socket, and only one notesd owns
+    the hub's data directory;
   - the trial's devices move on their own, and the old `tailscale
     serve` for the hub goes once `notesctl hub devices` shows all of
     them seen;
