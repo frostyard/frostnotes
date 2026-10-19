@@ -3,7 +3,7 @@
 M4 brings the notes to every machine and to the user's phone, and to
 agents on the tailnet, as an app of lodge, frostyard's tailnet-only web
 shell ([frostyard/lodge](https://github.com/frostyard/lodge);
-frostyard/core ADR-0057):
+[core ADR-0057](https://github.com/frostyard/core/blob/main/docs/adr/0057-run-first-party-apps-behind-lodge.md)):
 
 - lodge signs browsers in, issues agents' tokens, serves notes' web
   build and frames it beside the other apps;
@@ -41,7 +41,7 @@ Work is split per
   lists, and the editing commands the phone toolbar lacks.
 
 Status (2026-10-18): **Phase 1 is in review,** with frostyard/core
-ADR-0057 and lodge's first docs, all three to be published together.
+[ADR-0057](https://github.com/frostyard/core/blob/main/docs/adr/0057-run-first-party-apps-behind-lodge.md) and lodge's first docs, all three to be published together.
 M4's first drafts (a notesd of its own on the tailnet, with its own
 sign-in, tokens and web serving) became lodge's ADRs 0004 to 0008
 before anyone accepted them. No code or card starts before the user
@@ -134,7 +134,7 @@ them without ADRs:
     [specs/mcp.md](../specs/mcp.md#through-lodge) and
     [specs/ui.md](../specs/ui.md);
   - this plan and the roadmap's M4 row.
-- **Reviewed together** with frostyard/core ADR-0057 and lodge's ADRs
+- **Reviewed together** with frostyard/core [ADR-0057](https://github.com/frostyard/core/blob/main/docs/adr/0057-run-first-party-apps-behind-lodge.md) and lodge's ADRs
   and specs, and published with them.
 - **Done when:** the docs are indexed and cross-linked both ways, and
   the user has accepted ADR-0026 and ADR-0027, with the platform's ADRs,
@@ -403,7 +403,7 @@ tailnet.
 ## References
 
 - Implements: [specs/lodge-app.md](../specs/lodge-app.md), [design/hub.md](../design/hub.md), [design/overview.md](../design/overview.md#notesd-as-a-lodge-app), [design/app.md](../design/app.md#in-a-browser), [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/mcp.md](../specs/mcp.md#through-lodge), [specs/ui.md](../specs/ui.md#narrow-windows), [specs/sync-protocol.md](../specs/sync-protocol.md) (the device routes under `/device/`)
-- Decisions: [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md); [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md); frostyard/core ADR-0057
+- Decisions: [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md); [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md); frostyard/core [ADR-0057](https://github.com/frostyard/core/blob/main/docs/adr/0057-run-first-party-apps-behind-lodge.md)
 - lodge: [roadmap](https://github.com/frostyard/lodge/blob/main/docs/plans/0001-roadmap.md), [app contract](https://github.com/frostyard/lodge/blob/main/docs/specs/app-contract.md), [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Builds on: [plan 0003](0003-m1-headless-vault.md) (MCP), [plan 0004](0004-m2-sync.md) (the hub, devices), [plan 0005](0005-m3-desktop-app.md) (the app, its evidence harness)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
