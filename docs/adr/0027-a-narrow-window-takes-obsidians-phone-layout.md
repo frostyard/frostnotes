@@ -1,4 +1,4 @@
-# 0031 — A narrow window takes Obsidian's phone layout
+# 0027 — A narrow window takes Obsidian's phone layout
 
 - **Status:** Proposed
 - **Date:** 2026-10-18
@@ -14,8 +14,11 @@ phone's browser is 360 to 430 pixels wide, and is driven by touch and an
 on-screen keyboard. The desktop UI relies on hover (tooltips, a tab's
 close button, page previews), on right clicks, and on keys.
 
-M4's exit asks for the same UI on the user's phone. Obsidian's own
-phone app (version 1.14.4, read from its code):
+M4's exit asks for the same UI on the user's phone, where notes runs in
+a frame of lodge's shell
+([ADR-0026](0026-notesd-runs-as-a-lodge-app.md),
+[lodge ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md)).
+Obsidian's own phone app (version 1.14.4, read from its code):
 
 - shows one note at a time;
 - slides each sidebar in over it as a drawer;
@@ -32,7 +35,8 @@ Its touch targets are 44 and 52 pixels.
 
 - **One UI, two layouts.** Below 600 CSS pixels wide, the window takes
   Obsidian's phone layout; at 600 and above, the desktop layout of
-  `specs/ui.md`. The same panes, prompts, editor, reading view and
+  `specs/ui.md`. In a browser the width is that of notes' frame in
+  lodge's shell, whose own rail and switcher are lodge's. The same panes, prompts, editor, reading view and
   commands serve both. Only the frame around them changes:
   - **One tab group.** The workspace shows the active group's active
     tab. Splits made on a wide screen stay in the stored workspace but
@@ -90,5 +94,5 @@ refined from Obsidian 1.14.4's phone styles when its cards are written.
 
 ## References
 
-- Shapes: [specs/ui.md](../specs/ui.md#narrow-windows), [design/app.md](../design/app.md#in-a-browser), [plan 0006](../plans/0006-m4-web-app.md)
-- Builds on: [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](0021-keep-the-workspace-and-app-preferences-on-each-device.md)
+- Shapes: [specs/ui.md](../specs/ui.md#narrow-windows), [design/app.md](../design/app.md#in-a-browser), [plan 0006](../plans/0006-m4-notes-inside-lodge.md)
+- Builds on: [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0026](0026-notesd-runs-as-a-lodge-app.md)

@@ -96,4 +96,5 @@ exists ([rpc-protocol](../specs/rpc-protocol.md#caller-kinds)).
 - Shapes: [design/sync.md](../design/sync.md#pairing-and-sessions), [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/rpc-protocol.md](../specs/rpc-protocol.md)
 - Builds on: [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), frostmail ADR-0011
 - Related: [ADR-0018](0018-move-blobs-over-http-named-by-their-hash.md)
+- Followed by: [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (M4: TLS from lodge, the device routes under its `/device/notes/`, browser sign-in and agents' tokens in lodge)
 - Built in: [plan 0004](../plans/0004-m2-sync.md)

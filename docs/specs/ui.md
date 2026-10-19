@@ -16,8 +16,8 @@ Sections marked *(batch N)* are refined when their cards are written
 M4 brings the same window to a browser
 ([In a browser](#in-a-browser)) and to a phone, in Obsidian's phone
 layout ([Narrow windows](#narrow-windows),
-[ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md));
-sections marked *(M4)* bind as [plan 0006](../plans/0006-m4-web-app.md)
+[ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md));
+sections marked *(M4)* bind as [plan 0006](../plans/0006-m4-notes-inside-lodge.md)
 lands them.
 
 ## Tokens
@@ -602,46 +602,59 @@ its hub, resolves it (`sync.resolve`).
 
 ## In a browser
 
-*(M4.)* The same window in a browser, served by the hub
-([design/app.md](../design/app.md#in-a-browser)), differs at any width:
+*(M4.)* The same window in a frame of lodge's shell
+([design/app.md](../design/app.md#in-a-browser),
+[lodge ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md))
+differs at any width:
 
 - **No window chrome of its own:** no window controls and no drag
-  regions; the browser draws its own. The page's title is the window's
-  (`<note> - <vault> - Frostnotes`).
-- **The status bar's first item is the hub,** in place of sync, which
-  is a device's: `cloud` while connected (tooltip "Connected to HUB as
-  LOGIN on NODE"), `cloud-off` while out of reach ("Hub out of reach;
-  reconnecting"); its menu shows who is signed in and the hub's name.
+  regions. The shell draws its own rail and switcher. The frame's title,
+  sent with `route`, is the window's (`<note> - <vault> - Frostnotes`).
+- **The status bar's first item is notes' connection,** in place of
+  sync, which is a device's:
+  - `cloud` while connected, with the tooltip "Connected as LOGIN on
+    NODE";
+  - `cloud-off` while out of reach, with "Notes out of reach;
+    reconnecting";
+  - its menu shows who is signed in.
 - **The vault manager** lists the hub's vaults and switches between
   them. It offers no Open folder as vault, Create new vault or Remove
   from list, and says that vaults are added on the hub's machine
   (`notesctl vault add`, then `notesctl hub serve`).
-- **Files:** Open in default app becomes Open in new tab for files the
-  browser shows (images, audio, video, PDF), which opens the file's
-  `/blobs/` URL; it is hidden for other files. Attach file opens the
-  browser's file picker (on a phone, the camera too) and uploads with
-  `note.upload`.
+- **Files:**
+  - Open in default app becomes Open in new tab for files the browser
+    shows (images, audio, video, PDF). It opens the file's content URL
+    on lodge-content, or its download URL where a browser will not show
+    the file in a sandboxed page. It is hidden for other files.
+  - Attach file opens the browser's file picker (on a phone, the camera
+    too) and uploads with `note.upload`.
+- **Links** to the shell's own origin open through the shell (`open`),
+  in notes or another app; other web links open in a new tab.
+- **Keys:** the switcher's key, which lodge-client names in `init`, is
+  never bound by the window and reaches the shell from inside the
+  frame. Every other key is the [keyboard map](#keyboard-map)'s.
 - **Zoom** is the browser's own; View's zoom commands are not
   registered.
-- **Leaving the page** with unsaved text asks first (`beforeunload`).
+- **Leaving the page** with unsaved text asks first (`beforeunload`),
+  where the browser allows.
 - **The Hub section of Settings** (also on the desktop when its notesd
   is a hub; [design/hub.md](../design/hub.md#hub-settings-in-the-app)):
-  - Devices, each with Revoke; pending pairings, with the command that
-    approves one on the hub's machine;
-  - MCP tokens, each with Revoke, and the command that issues one;
-  - Allowed logins, read-only;
-  - Sessions, each with End, the current one marked.
+  - devices, each with Revoke;
+  - pending pairings, each with the node it came from and the command
+    that approves it on the hub's machine.
 
-  Each row says what it is in the person's words.
-- **The home-screen page:** a manifest names the app Frostnotes, with
-  its icon, `--bg-window` as background and theme color, and
-  `display: standalone`
-  ([ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md)).
+  Each row says what it is in the person's words. Sign-in, MCP tokens
+  and sessions are lodge's settings, not notes'.
+- **Home screen:** lodge's, for every app
+  ([lodge ADR-0008](https://github.com/frostyard/lodge/blob/main/docs/adr/0008-lodge-installs-as-one-home-screen-app.md)).
+  Notes gives lodge its icon (`icon.svg`), and its page uses
+  `viewport-fit=cover`.
 
 ## Narrow windows
 
-*(M4.)* Below 600 CSS pixels wide, the window takes Obsidian's phone layout
-([ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md)).
+*(M4.)* Below 600 CSS pixels wide (the width of notes' frame in a
+browser), the window takes Obsidian's phone layout
+([ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)).
 The measures here are refined from Obsidian 1.14.4's phone styles
 (`.is-phone`, `.mobile-navbar`, `.mobile-toolbar`) when the cards are
 written; the structure binds now.
@@ -822,6 +835,6 @@ belongs to the field, a prompt or a menu.
 
 ## References
 
-- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0027](../adr/0027-browsers-sign-in-with-their-tailnet-identity.md) (who is signed in), [ADR-0030](../adr/0030-the-web-app-installs-on-a-home-screen-and-needs-the-hub.md) (the home-screen page), [ADR-0031](../adr/0031-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows); frostmail's `docs/specs/ui.md` for the tokens and the chrome
-- Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings)
-- Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-web-app.md)
+- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows); frostmail's `docs/specs/ui.md` for the tokens and the chrome
+- Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
+- Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md)

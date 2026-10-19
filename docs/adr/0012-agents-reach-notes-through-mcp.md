@@ -54,3 +54,4 @@ note content an agent reads can carry instructions.
 - Shapes: [design/overview.md](../design/overview.md)
 - Builds on: [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0006](0006-every-write-names-the-version-it-changes.md)
 - Built in: [roadmap — M1 (local), M4 (hub)](../plans/0002-roadmap.md)
+- Followed by: [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (M4: the hub's MCP through lodge's `/mcp/notes`, its tokens lodge's; OAuth for claude.ai left for later)
