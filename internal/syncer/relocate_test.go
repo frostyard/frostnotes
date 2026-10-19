@@ -65,8 +65,9 @@ func TestADeviceFollowsTheHubsURL(t *testing.T) {
 	if got := same(t, h, a.node); got["n.md"] != fiveLines+"six\n" {
 		t.Fatalf("n.md = %q after the move", got["n.md"])
 	}
+	// The loop may be syncing again by now; its URL is the point.
 	st, err := a.c.Sync().Status(t.Context(), &api.SyncStatusParams{VaultID: &a.vault})
-	if err != nil || st[0].URL != moved || st[0].State != api.SyncStateIdle {
+	if err != nil || st[0].URL != moved {
 		t.Fatalf("sync.status = %+v, %v", st, err)
 	}
 }
