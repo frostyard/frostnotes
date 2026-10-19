@@ -252,6 +252,31 @@ Its live run needs lodge's phase 2's development build.
   Code, through lodge's development build on loopback with a lodge
   token, lists the tools and reads a note. The run also records whether
   Claude Code sends an `Origin`, for lodge (review 10).
+- **Result (2026-10-19): Claude Code through lodge, live.** Claude Code
+  2.1.300 (`claude -p` with a temporary `--strict-mcp-config`: an HTTP
+  server and an `Authorization: Bearer` header) ran on an allowed node
+  over the tailnet against LODGE's `/mcp/notes` and `/mcp/mail`, with
+  lodge 23c9f80, notesd af6fe45 and maild d73ad39. Its tokens were scoped
+  `vault=1` (the test vault, read only) and `account=*`; both were
+  revoked after, and the next request with each was 401.
+  - **Origin (review 10): Claude Code sends none.** A local recorder saw
+    `accept`, `accept-encoding`, `authorization`, `connection`,
+    `content-length`, `content-type`, `host` and `user-agent` on every
+    POST and GET, and no `Origin` or `Sec-Fetch-*`. Through lodge, which
+    refuses any `Origin` on `/mcp`, every request was 200 or 202. Claude
+    Code first sends a `server/discover` probe (MCP protocol
+    2026-07-28); the kit answers 400 and Claude Code falls back to
+    `initialize` at 2025-11-25. Nothing breaks; the kit does not speak
+    the newer discovery yet.
+  - **A session lost to eviction (review 11): Claude Code recovers on
+    its own,** for notes and mail alike. After `list_notes`, 8 more
+    sessions on the same token, each holding a GET stream, pushed past
+    the cap; Claude Code's next `list_notes` met 404 on its stream and
+    its POST, re-initialized, retried, and the model saw only the
+    result. The kit evicts idle sessions first, and Claude Code holds
+    its stream open, so a connected Claude Code is evicted only when 8
+    other sessions on its token are active. While it recovers it holds
+    two sessions for a moment, within the cap.
 
 ## Phase 5 — The web app inside lodge (planner, with cards)
 
@@ -355,6 +380,63 @@ lodge's phase 2.
 - **Done when:** neither notes' review nor lodge's lists an open XSS,
   CSRF or session finding, and every other finding is fixed with a test
   or accepted by the user in writing.
+- **Result (2026-10-19): the reviews of notes' surface.** Independent
+  agents reviewed each of Phases 2 to 4 as it was built (on PRs #45, #46
+  and #48), and the platform's review of lodge, notes and mail together
+  (M1 to N8) read notes' side. Notes' findings:
+
+  | Finding | Fix | Test |
+  | --- | --- | --- |
+  | Phase 2 (high) a device followed `log.hub` to any URL its hub recorded, and would give its token to whoever answered there | `follow` checks the host at the new URL with the relocation proof first, as `sync.relocate` does | `TestADeviceFollowsOnlyAProvenURL`, `TestRelocateChecksTheHubsProof` |
+  | Phase 2 (low) hub URLs differing only in the host's case were different strings | `CheckURL` writes the host in lower case | `TestSameURL` |
+  | Phase 3 (medium) `If-Range` fetched a blob whole past its limits | The handler drops `If-Range`: a blob never changes under its hash | `TestContentServesBlobsWithinTheirLimits` |
+  | M1 / Phase 4 (medium) every MCP request without a session leaked a notesd connection; the SDK's `server/discover` opened one too | A request's server is built once, and only `initialize` opens a connection; a request that opened no session closes it; a session the SDK answers 404 for is forgotten | `TestASessionHoldsOneConnectionUntilItEnds` counts connections per `initialize`, stray request and malformed body |
+  | L5 (low) content named by the file's hash let any same-site page in the tailnet probe whether a vault held a known file | Content URLs are `blobs/<mac>/<hash>.<ext>`, the MAC under notesd's content key, which `rpc.hello` gives a session | `TestContentServesBlobsWithinTheirLimits`, `TestTheContentKeyIsKept`, the app's MAC tests against notesd's |
+  | N5 (nit) `POST /sync/hub` revealed which device IDs exist, and logged each call | Unknown and revoked devices get the same answer, a proof under a key no token makes; calls log at debug; a peer gets 30 requests at once and one a second after, across `POST /sync/hub` and `POST /sync/pair` ([lodge-app.md](../specs/lodge-app.md#limits)) | `TestTheRelocationProof`, `TestAPeerHasItsBucketOfRequests`, `TestTheBucketsAreBounded`, `TestUntokenedRequestsAreLimitedPerPeer` |
+  | N6 (nit) any tailnet peer could fill the 8 pairing slots | One node (`Lodge-Node-ID`) may have 2 pairings waiting, a rate key and never an admission | `TestANodeMayHaveTwoPairingsWaiting` |
+  | N7 (nit, the kit's) an MCP session was swept only when a request arrived | The kit sweeps on a ticker (lodge/kit 2017aec and since) | the kit's tests; notes' side, a session's end closing its connection, in `TestASessionHoldsOneConnectionUntilItEnds` |
+
+  **Accepted, not fixed, for the user's written acceptance:**
+  - *The relocation proof is keyed by the stored token hash*
+    ([lodge-app.md](../specs/lodge-app.md#device)): whoever can read the
+    hub's database can make a valid proof. They could already serve the
+    hub's data; the proof only stops a host without it.
+  - *M2, notes' part:* notesd reads the bodies of `POST /sync/pair` and
+    `POST /sync/hub` (1 KiB each) with no deadline of its own. It relies
+    on lodge's per-read body deadline of 30 s on device requests, which
+    is lodge's fix for M2.
+
+  **The scope's other items,** checked on 2026-10-19:
+  - *XSS in Firefox:* `TestIRenderedNotesRunNoScript` (`make
+    m4-evidence`) opens a note of `<script>`, `onerror`, `onload`,
+    `ontoggle`, `srcdoc` and `javascript:` links in live preview and in
+    reading view, inside lodge's development build, clicks the links,
+    and opens an SVG carrying a script at its lodge-content URL: no
+    script runs in notes' frame, the shell, or the SVG, which
+    lodge-content serves sandboxed.
+  - *lodge-client's message handling:* the client takes a message only
+    from its own origin and from `window.parent`, and posts to its own
+    origin only; notes never sets its frame's location, and opens links
+    through lodge's `open` (or `window.open` with `noopener` outside
+    lodge), which refuses `javascript:`, `data:` and `blob:`.
+  - *Logs holding a secret:* no log line names a device token, a
+    pairing secret or code, the content key or an MCP token; MCP logs
+    the token's name, which lodge sends, and pairing the device's name
+    and address.
+  - *What `session` and `agent` can call:* `TestEveryMethodAdmitsItsCallers`
+    tries every method as each caller kind, and the engine's
+    `TestAgentScope…` tests every `note` method on another vault and
+    every write under a read scope.
+  - *Each path's caller, the peer check and the headers' trust:*
+    `TestTheSocketKeepsLodgesRules`, and the platform review's "checked
+    and sound".
+
+  **Pending:**
+  - XSS in the phone's browser, on the user's phone (Phase 7);
+  - Chrome's PDF viewer under lodge-content's sandbox (review 12, an
+    open question);
+  - lodge's own review of sign-in, sessions, tokens and headers
+    (lodge's phase 2).
 
 ## Phase 7 — The user's hub in lodge, and exit evidence
 

@@ -71,6 +71,8 @@ type Hub struct {
 	// decoy keys the relocation proofs of devices that do not exist
 	// (proofKey); random for each process.
 	decoy []byte
+	// limit bounds what a peer asks without a device token (limited).
+	limit limiter
 }
 
 // New returns a hub over cfg.
@@ -114,9 +116,9 @@ func (h *Hub) SetRouter(r *api.Router) {
 // Endpoints).
 func (h *Hub) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /sync/pair", h.startPairing)
+	mux.HandleFunc("POST /sync/pair", h.limited(h.startPairing))
 	mux.HandleFunc("GET /sync/pair/{pairing}", h.collectPairing)
-	mux.HandleFunc("POST /sync/hub", h.relocation)
+	mux.HandleFunc("POST /sync/hub", h.limited(h.relocation))
 	mux.Handle("GET /sync", h.authenticated(h.syncSocket()))
 	mux.Handle("/sync/blobs/{hash}", h.authenticated(blobxfer.Handler(h.cfg.Blobs, h.cfg.MaxBlob, h.cfg.DB.HasContent, h.uploaded)))
 	return refuseOrigins(mux)

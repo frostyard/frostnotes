@@ -292,6 +292,7 @@ On the server, run them as `frostnotes` (`sudo -u frostnotes notesctl
 | a blob answer | a 206 of 8 MiB; 64 MiB whole |
 | a relocation request | 1 KiB; a 32-byte nonce |
 | pending pairings | 8 in all; 2 from one node behind lodge |
+| requests without a device token (`POST /sync/pair`, `POST /sync/hub`) | 30 at once per peer, then one a second; past it 429 with `Retry-After`. The peer is lodge's node ID, a rate key and never an admission, or the remote address without lodge |
 
 ## Rules
 
