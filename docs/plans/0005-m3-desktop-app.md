@@ -46,7 +46,8 @@ vaults), is merged too
 ([#41](https://github.com/frostyard/frostnotes/pull/41)): the contract,
 the shell's folder picker, T-0082 and T-0083, and the wiring. What
 remains is evidence 4, the user's 7-day trial on their one Linux
-desktop, framework.
+desktop, framework, from 2026-10-19 through 2026-10-25, alongside M2's
+trial.
 
 ## Decisions taken for M3
 
@@ -802,7 +803,8 @@ against the built app.
      still a syncing device, finds no edit missing, and names anything
      they went back to Obsidian for. The user has one Linux desktop
      (2026-10-18), so the same notes on a second machine wait for M4's
-     web app ([roadmap](0002-roadmap.md)).
+     web app ([roadmap](0002-roadmap.md)). The 7 days start on
+     2026-10-19, alongside M2's trial (see the open questions).
 - `make m3-evidence` records evidence 1 to 3; evidence 4 is the user's.
 
 - **Result (2026-10-18): the review.** An agent that had not written the
@@ -885,8 +887,8 @@ against the built app.
   them, ADR-0010), once [Phase 8](#phase-8--vaults-from-the-app) is
   merged:
 
-  1. Decide the open question of the two trials (below): M3's 7 days
-     alongside M2's, or after.
+  1. The trials overlap (decided 2026-10-19): M3's 7 days start on
+     framework on 2026-10-19, while M2's run through 2026-10-24.
   2. On framework, whose notesd is joined to the hub (M2's trial): from
      this repository, `make app-build`, then
      `install -m 0755 build/frostnotes-app ~/.local/bin/frostnotes`, and
@@ -1046,9 +1048,10 @@ as a dialog. Choosing a vault there switches the window in place
   no provider waits for typing to pause. Scrolling is what misses its
   target, by a frame now and then (Phase 7, evidence 1); that is the
   follow-up's.
-- **The two trials:** M3's runs on framework through M2's hub, with the
-  minideb VM syncing beside it. Run M2's 7 days first and M3's after,
-  or overlap them? The user decides.
+- *Answered 2026-10-19:* **the two trials overlap.** M3's runs on
+  framework through M2's hub, with the minideb VM syncing beside it. Its
+  7 days start on 2026-10-19, while M2's run through 2026-10-24, so the
+  app's daily use is also sync's.
 
 ## References
 
