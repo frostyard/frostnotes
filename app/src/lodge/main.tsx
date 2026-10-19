@@ -29,7 +29,7 @@ export const WEB_RETRY: Retry = { firstMs: 1000, maxMs: 30_000 };
  */
 export function contentBlobs(url: (path: string) => string): (hash: string, ext: string) => string {
   let key = "";
-  let bytes = new Uint8Array();
+  let bytes: Uint8Array = new Uint8Array();
   const macs = new Map<string, string>();
   return (hash, ext) => {
     const now = useNotes.getState().hello?.contentKey ?? "";
