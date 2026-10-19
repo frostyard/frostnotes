@@ -299,7 +299,8 @@ The framework (`editor/preview/`) owns:
   a context (the document, link resolution, blob URLs, preferences) to
   decorations. Inline providers run over the visible ranges in a view
   plugin; block providers, which replace line breaks, run in a state
-  field over the whole document, incrementally by changed ranges.
+  field over the whole document, incrementally by changed ranges and by
+  what each step of the background parse adds.
 - **The reveal rule.** Syntax shows as typed on every line a selection
   touches; a block widget (a callout, a table, an embed, display math, the
   properties block) shows its source when a selection enters its range.
@@ -309,6 +310,19 @@ The framework (`editor/preview/`) owns:
   code block), or that it handled the click itself (a callout's fold).
 - **Caching.** Widgets compare equal by their source text and inputs, so
   a keystroke elsewhere redraws nothing.
+- **Cost.** A fling makes the view render a screen's worth of new lines
+  every other frame, so what a line costs to build, style and lay out is
+  the frame's budget ([plan 0005, Phase 7](../plans/0005-m3-desktop-app.md#phase-7--review-and-exit-evidence)).
+  Hidden syntax is a mark that does not display, not a replacement, which
+  the view would pad with two buffer images. A block widget estimates its
+  height from its source, so the view renders no more than a scroll needs.
+  KaTeX draws each formula once and widgets clone the drawing; its MathML,
+  read only by assistive technology, is attached a frame later. Two
+  changes in dependencies complete it
+  ([ADR-0024](../adr/0024-patch-what-costs-the-editor-its-frames.md)):
+  the app's copy of Tailwind's preflight leaves the editor's lines out of
+  its pseudo-element reset, and a patch makes CodeMirror's height map walk
+  only what is outdated.
 - **The environment** (`PreviewEnv`) is what the app gives the
   providers: link resolution, where commands go, a vault file's URL
   (its hash's blob URL), the Load remote images preference, and
@@ -558,7 +572,7 @@ serves `/blobs/` from Vite there if it must.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md); frostmail's `docs/design/app.md`, which this copies
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-patch-what-costs-the-editor-its-frames.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))

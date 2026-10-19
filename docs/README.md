@@ -42,6 +42,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0021 — Keep the workspace and app preferences on each device](adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)
 - [0022 — The editor saves as you type and applies merges as remote changes](adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)
 - [0023 — The app shows files by their hash and uploads them through notesd](adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
+- [0024 — Patch what costs the editor its frames](adr/0024-patch-what-costs-the-editor-its-frames.md)
 
 ### Design
 
