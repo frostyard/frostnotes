@@ -53,6 +53,10 @@ export async function runDesktop(root: HTMLElement): Promise<void> {
   } else if (spike?.name === "writers") {
     const { runWriters } = await import("./spike/writers");
     void runWriters(root, connect);
+  } else if (spike?.name === "watch") {
+    // M4's exit evidence 2 watches the editor (src/spike/watch.ts).
+    const { runWatch } = await import("./spike/watch");
+    void runWatch(root, connect);
   } else if (spike) {
     const { Spike } = await import("./spike/Spike");
     createRoot(root).render(<Spike name={spike.name} auto={spike.auto} report={spike.report} />);

@@ -235,6 +235,23 @@ func TestTheUntokenedBodiesAreAKibibyte(t *testing.T) {
 	}
 }
 
+// A peer past its bucket of requests without a token gets 429 with
+// Retry-After, at POST /sync/pair and POST /sync/hub alike (N5).
+func TestUntokenedRequestsAreLimitedPerPeer(t *testing.T) {
+	h := newHub(t)
+	nonce := strings.Repeat("A", 43)
+	for i := range 30 {
+		resp := h.do(http.MethodPost, "/sync/hub", "", strings.NewReader(`{"device": 1, "nonce": "`+nonce+`"}`), nil)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			t.Fatalf("request %d of 30 = 429", i+1)
+		}
+	}
+	resp := h.do(http.MethodPost, "/sync/pair", "", strings.NewReader(`{"name": "late"}`), nil)
+	if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") == "" {
+		t.Fatalf("the 31st request = %s (Retry-After %q), want 429 with Retry-After", resp.Status, resp.Header.Get("Retry-After"))
+	}
+}
+
 func TestPairingRefusals(t *testing.T) {
 	h := newHub(t)
 	for name, body := range map[string]string{

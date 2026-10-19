@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Provision the nsl `frostnotes` machine (Debian 13) with the Tauri, WebKitGTK,
-# Node, Rust and Go toolchains the app build needs, and Xvfb, xdotool and vim
-# for the built app's evidence runs (make m3-evidence). The host is atomic and
+# Node, Rust and Go toolchains the app build needs, Xvfb, xdotool and vim for
+# the built app's evidence runs (make m3-evidence), and Firefox ESR with
+# geckodriver for the web app's (make m4-evidence). The host is atomic and
 # cannot install -dev packages; the engine itself builds and tests on the host.
 #
 # Run from the repository root on the host (idempotent; safe to re-run):
@@ -20,6 +21,15 @@ GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
 RUSTUP_VERSION=1.29.1
 RUSTUP_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
 RUST_TOOLCHAIN=1.99.0
+# Firefox ESR and geckodriver drive the web app inside lodge's development
+# build (docs/plans/0006-m4-notes-inside-lodge.md, Phase 5): Mozilla's
+# SHA256SUMS for Firefox; for geckodriver, which publishes none, the hash of
+# the release checked against its .asc (Mozilla's release key, 14F2 6682 D091
+# 6CDD 81E3 7B6D 61B7 B526 D98F 0353).
+FIREFOX_VERSION=153.4.0esr
+FIREFOX_SHA256=1832c20dd8c5f69cee933debe62372f5c997845413c8eff846317f6463172032
+GECKODRIVER_VERSION=0.37.1
+GECKODRIVER_SHA256=e815130ea95983e162ae91843b48d3a3ce991735635fce83a647afde21e09f7e
 
 TARGET_USER=${1:?usage: provision.sh USER (the nsl account that builds the app)}
 id "$TARGET_USER" >/dev/null
@@ -39,7 +49,8 @@ apt-get update -q
 apt-get install -y -q --no-install-recommends \
 	build-essential ca-certificates curl file git make pkg-config wget xz-utils \
 	libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
-	librsvg2-dev webkit2gtk-driver xvfb xauth xdotool vim
+	librsvg2-dev webkit2gtk-driver xvfb xauth xdotool vim \
+	libasound2t64 libdbus-glib-1-2 libx11-xcb1 libxtst6
 
 if [[ "$(/opt/node/bin/node --version 2>/dev/null)" != "v$NODE_VERSION" ]]; then
 	fetch "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
@@ -57,6 +68,21 @@ if [[ "$(/usr/local/go/bin/go env GOVERSION 2>/dev/null)" != "go$GO_VERSION" ]];
 	fetch "https://go.dev/dl/go$GO_VERSION.linux-amd64.tar.gz" "$GO_SHA256" "$TMP/go.tar.gz"
 	rm -rf /usr/local/go
 	tar -xzf "$TMP/go.tar.gz" -C /usr/local
+fi
+
+if [[ "$(/opt/firefox/firefox --version 2>/dev/null)" != "Mozilla Firefox $FIREFOX_VERSION" ]]; then
+	fetch "https://ftp.mozilla.org/pub/firefox/releases/$FIREFOX_VERSION/linux-x86_64/en-US/firefox-$FIREFOX_VERSION.tar.xz" \
+		"$FIREFOX_SHA256" "$TMP/firefox.tar.xz"
+	rm -rf "/opt/firefox-$FIREFOX_VERSION"
+	mkdir -p "/opt/firefox-$FIREFOX_VERSION"
+	tar -xJf "$TMP/firefox.tar.xz" -C "/opt/firefox-$FIREFOX_VERSION" --strip-components=1
+	ln -sfn "/opt/firefox-$FIREFOX_VERSION" /opt/firefox
+fi
+if [[ "$(/usr/local/bin/geckodriver --version 2>/dev/null | head -1)" != "geckodriver $GECKODRIVER_VERSION"* ]]; then
+	fetch "https://github.com/mozilla/geckodriver/releases/download/v$GECKODRIVER_VERSION/geckodriver-v$GECKODRIVER_VERSION-linux64.tar.gz" \
+		"$GECKODRIVER_SHA256" "$TMP/geckodriver.tar.gz"
+	tar -xzf "$TMP/geckodriver.tar.gz" -C "$TMP"
+	install -m 0755 "$TMP/geckodriver" /usr/local/bin/geckodriver
 fi
 
 # Rust lives in /opt so it never touches a home directory shared with the host.
@@ -85,4 +111,5 @@ export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 export NSL=1
 EOF
 
-echo "frostnotes machine provisioned: node $NODE_VERSION, go $GO_VERSION, rust $RUST_TOOLCHAIN"
+echo "frostnotes machine provisioned: node $NODE_VERSION, go $GO_VERSION, rust $RUST_TOOLCHAIN," \
+	"firefox $FIREFOX_VERSION, geckodriver $GECKODRIVER_VERSION"
