@@ -146,6 +146,25 @@ func TokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+type peerKey struct{}
+
+// WithPeer returns ctx naming the peer a request came from as a listener
+// in front of the hub saw it: lodge's Lodge-Node-Name and Lodge-Login, or
+// "" when lodge names none. It is shown beside a pending pairing, to tell
+// pairings apart, and decides nothing (docs/specs/lodge-app.md#device).
+func WithPeer(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, peerKey{}, name)
+}
+
+// peerOf is the address a request came from: the peer WithPeer named, else
+// the connection's remote address.
+func peerOf(r *http.Request) string {
+	if name, ok := r.Context().Value(peerKey{}).(string); ok {
+		return name
+	}
+	return r.RemoteAddr
+}
+
 type deviceKey struct{}
 
 // deviceFrom returns the device a request or connection authenticated as.

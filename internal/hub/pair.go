@@ -121,7 +121,7 @@ func (h *Hub) startPairing(w http.ResponseWriter, r *http.Request) {
 	_, _ = rand.Read(secret)
 	encoded := base64.RawURLEncoding.EncodeToString(secret)
 	p := &pairing{id: randomHex(16), secretHash: TokenHash(encoded), code: newCode(), name: req.Name,
-		addr: r.RemoteAddr, created: now, expires: now.Add(pairingTTL), changed: make(chan struct{})}
+		addr: peerOf(r), created: now, expires: now.Add(pairingTTL), changed: make(chan struct{})}
 	h.mu.Lock()
 	h.sweep(now)
 	pending := 0

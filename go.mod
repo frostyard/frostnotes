@@ -6,6 +6,7 @@ toolchain go1.27.1
 
 require (
 	github.com/frostyard/clix v0.4.0
+	github.com/frostyard/lodge/kit v0.0.0-20261019030549-38f7be71e665
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -29,6 +30,7 @@ require (
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/frostyard/std v0.2.2 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
