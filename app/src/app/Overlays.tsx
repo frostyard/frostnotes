@@ -36,6 +36,7 @@ import type { SwitcherNote } from "../lib/switcher";
 import { type OpenWhere, open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { insertTemplate, openOrCreate, viewOf } from "./commands";
+import { useNarrow } from "./narrow";
 import { move } from "./panes/files";
 import { SettingsContainer } from "./Settings";
 import { VaultsView } from "./VaultsView";
@@ -44,6 +45,7 @@ const WHERE: Record<SwitcherWhere, OpenWhere> = { current: "here", tab: "tab", r
 
 /** Overlays draws the window's menu, prompt and notices. */
 export function Overlays() {
+  const narrow = useNarrow();
   const menu = useOverlays((s) => s.menu);
   const prompt = useOverlays((s) => s.prompt);
   const notices = useOverlays((s) => s.notices);
@@ -89,6 +91,7 @@ export function Overlays() {
           y={menu.y}
           onChoose={menu.onChoose}
           onClose={closeMenu}
+          sheet={narrow}
         />
       )}
       {prompt === "switcher" && <Switcher />}

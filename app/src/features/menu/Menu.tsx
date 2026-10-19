@@ -42,6 +42,12 @@ export interface MenuProps {
   /** An item was chosen; the menu closes after it. */
   onChoose: (id: string) => void;
   onClose: () => void;
+  /**
+   * A sheet from the bottom, the whole width, items 44 high, as a narrow
+   * window draws menus (docs/specs/ui.md#narrow-windows); x and y are then
+   * not used.
+   */
+  sheet?: boolean;
 }
 
 /** Menu draws a menu in a portal on the document's body. */
@@ -76,7 +82,7 @@ interface MenuListProps extends MenuProps {
   menuRef?: RefObject<HTMLDivElement | null>;
 }
 
-function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef }: MenuListProps) {
+function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef, sheet }: MenuListProps) {
   const ownList = useRef<HTMLDivElement>(null);
   const list = menuRef ?? ownList;
   const childList = useRef<HTMLDivElement>(null);
@@ -86,12 +92,12 @@ function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef }: Me
 
   useLayoutEffect(() => {
     const rect = list.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect || sheet) return;
     setPosition({
       x: Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)),
       y: Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)),
     });
-  }, [x, y, list]);
+  }, [x, y, list, sheet]);
 
   useLayoutEffect(() => {
     list.current?.focus();
@@ -184,8 +190,16 @@ function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef }: Me
         role="menu"
         aria-label={label}
         tabIndex={-1}
-        className="fixed z-50 min-w-[180px] rounded-lg border border-separator bg-window p-1 shadow-popover"
-        style={{ left: position.x, top: position.y }}
+        className={
+          sheet
+            ? "fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-y-auto rounded-t-xl border-t border-separator bg-window p-2 shadow-popover"
+            : "fixed z-50 min-w-[180px] rounded-lg border border-separator bg-window p-1 shadow-popover"
+        }
+        style={
+          sheet
+            ? { paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }
+            : { left: position.x, top: position.y }
+        }
         onKeyDown={keyDown}
         onContextMenu={(event) => event.preventDefault()}
       >
@@ -197,7 +211,7 @@ function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef }: Me
           const highlighted = highlight === index;
           const common = {
             "aria-label": item.label,
-            className: `text-sidebar-row flex h-7 items-center gap-2 rounded px-2 ${highlighted ? "bg-accent text-accent-contrast" : ""} ${item.kind === "item" && item.disabled ? "opacity-40" : ""}`,
+            className: `text-sidebar-row flex ${sheet ? "h-11" : "h-7"} items-center gap-2 rounded px-2 ${highlighted ? "bg-accent text-accent-contrast" : ""} ${item.kind === "item" && item.disabled ? "opacity-40" : ""}`,
           };
           const contents = <ItemContents item={item} highlighted={highlighted} />;
           if (item.kind === "submenu") {
@@ -244,6 +258,7 @@ function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef }: Me
           y={submenu.y}
           onChoose={onChoose}
           onClose={onClose}
+          sheet={sheet}
           onBack={() => {
             setSubmenu(null);
             focus(submenu.index);
