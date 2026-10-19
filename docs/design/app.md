@@ -435,9 +435,13 @@ shell's `open_file`; [Window](#window)). Rendered HTML is finished
 the page has it: with the Load remote images preference off, a remote
 `img` loses its source there and is never requested. `notesblob://`
 answers a range at most 8 MiB long and a file without a range only up to
-64 MiB, so a large video plays without sitting whole in memory. M3 pastes
-plain text only; pasting or dropping an image to call `note.upload` and
-insert `![[name]]` is later work.
+64 MiB, so a large video plays without sitting whole in memory. Pasting
+or dropping a file into an editor, or the command Attach file (the
+phone's toolbar has it), calls `note.upload` with the file, at most 10 MB,
+under the vault's Default location for new attachments and a name no
+file has (a nameless pasted image is `Pasted image YYYYMMDDHHmmss.png`),
+then inserts `![[name]]` (a markdown image without wikilinks) at the
+cursor, on a line of its own at a line's start (`editor/attach.ts`, M4).
 
 Both servers of a hash (`protocol.rs` in Tauri, `internal/devgw` in a
 browser; [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports))

@@ -6,13 +6,15 @@ import { EditorView } from "@codemirror/view";
 import { useEffect, useMemo, useRef } from "react";
 
 import { useFiles } from "../data/files";
-import { openPreview } from "../data/overlays";
+import { notify, openPreview } from "../data/overlays";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
+import { useVaultState } from "../data/vaultState";
 import { TabNotice, type TabNoticeAction } from "../features/workspace/TabNotice";
 import { extensionOf } from "../lib/fileTree";
 import { fill } from "../reading/finish";
 import { createSanitizer } from "../reading/sanitize";
+import { insertAt, uploadFiles } from "./attach";
 import { completionCatalog } from "./catalog";
 import type { NoteDoc, Notice } from "./document";
 import {
@@ -130,6 +132,20 @@ export function NoteEditor(props: NoteEditorProps) {
   useEffect(() => {
     if (!ready || !doc || !resolver || !renderer || !host.current) return;
     const start = latest.current;
+    // A pasted or dropped file goes to notesd and into the note as an embed.
+    const attach = (view: EditorView, files: File[], pos: number) => {
+      const ctx = {
+        client: client.current,
+        vaultId,
+        notePath: doc.path,
+        settings: useVaultState.getState().settings,
+        paths: () => useFiles.getState().files.keys(),
+      };
+      uploadFiles(ctx, files).then(
+        (text) => insertAt(view, Math.min(pos, view.state.doc.length), text),
+        (err: unknown) => notify(err instanceof Error ? err.message : String(err)),
+      );
+    };
     const v = new EditorView({
       parent: host.current,
       state: doc.createState(
@@ -150,6 +166,20 @@ export function NoteEditor(props: NoteEditorProps) {
           title: inlineTitle(usePrefs.getState().inlineTitle, titleOf(doc.path), rename),
           // Ctrl over a link shows the note it leads to (its page preview).
           extra: EditorView.domEventHandlers({
+            paste: (e, view) => {
+              const files = [...(e.clipboardData?.files ?? [])];
+              if (files.length === 0 || view.state.readOnly) return false;
+              e.preventDefault();
+              attach(view, files, view.state.selection.main.head);
+              return true;
+            },
+            drop: (e, view) => {
+              const files = [...(e.dataTransfer?.files ?? [])];
+              if (files.length === 0 || view.state.readOnly) return false;
+              e.preventDefault();
+              attach(view, files, view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head);
+              return true;
+            },
             mousemove: (e) => {
               if (!e.ctrlKey || !(e.target instanceof Element)) return false;
               const el = e.target.closest<HTMLElement>(".cm-pv-link[data-target]");

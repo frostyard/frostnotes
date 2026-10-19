@@ -4,6 +4,7 @@
 // formatting commands (editor/format.ts). Each reads the stores when it
 // runs, so the registry holds them once.
 
+import { indentLess, indentMore, redo, undo } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import type { EditorState, StateCommand } from "@codemirror/state";
@@ -14,21 +15,26 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
-import { ask, notify, openPrompt, openSettings, openTemplates, openVaultManager } from "../data/overlays";
+import { ask, notify, openMenu, openPrompt, openSettings, openTemplates, openVaultManager } from "../data/overlays";
 import { setRenaming, usePanes } from "../data/panes";
 import { usePrefs, zoomStep } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
+import { insertAt, pickFiles, uploadFiles } from "../editor/attach";
 import {
   deleteParagraph,
   insertLink,
+  insertPair,
   setHeading,
+  toggleBlockquote,
   toggleBold,
+  toggleBulletList,
   toggleChecklist,
   toggleCode,
   toggleComment,
   toggleHighlight,
   toggleItalics,
+  toggleNumberedList,
   toggleStrikethrough,
 } from "../editor/format";
 import { titleOf } from "../editor/NoteEditor";
@@ -392,6 +398,68 @@ export function editorCommands(c: Client, docs: DocumentRegistry): Command[] {
     format("editor:delete-paragraph", "Delete paragraph", deleteParagraph),
     ...[1, 2, 3, 4, 5, 6].map((n) => format(`editor:set-heading-${n}`, `Set heading ${n}`, setHeading(n))),
     format("editor:set-heading-0", "Remove heading", setHeading(0)),
+    // The phone's editing toolbar's commands (docs/specs/ui.md#narrow-windows).
+    format("editor:undo", "Undo", undo),
+    format("editor:redo", "Redo", redo),
+    format("editor:insert-wikilink", "Add internal link", insertPair("[[", "]]")),
+    format("editor:insert-embed", "Add embed", insertPair("![[", "]]")),
+    format("editor:insert-tag", "Add tag", insertPair("#", "")),
+    format("editor:toggle-blockquote", "Toggle blockquote", toggleBlockquote),
+    format("editor:toggle-bullet-list", "Toggle bullet list", toggleBulletList),
+    format("editor:toggle-numbered-list", "Toggle numbered list", toggleNumberedList),
+    format("editor:indent-list", "Indent list", indentMore),
+    format("editor:unindent-list", "Unindent list", indentLess),
+    {
+      id: "editor:set-heading",
+      name: "Set heading",
+      applies: has,
+      run: () => {
+        const e = editor();
+        if (!e) return;
+        const r = e.view.coordsAtPos(e.view.state.selection.main.head);
+        openMenu({
+          label: "Set heading",
+          x: r?.left ?? 0,
+          y: r?.bottom ?? 0,
+          items: [
+            ...[1, 2, 3, 4, 5, 6].map((n) => ({ kind: "item" as const, id: String(n), label: `Heading ${n}` })),
+            { kind: "item" as const, id: "0", label: "No heading" },
+          ],
+          onChoose: (id) => {
+            setHeading(Number(id))(e.view);
+            e.view.focus();
+          },
+        });
+      },
+    },
+    {
+      id: "editor:attach-file",
+      name: "Attach file",
+      applies: has,
+      run: async () => {
+        const e = editor();
+        const vaultId = useNotes.getState().vaultId;
+        if (!e || vaultId === null) return;
+        const files = await pickFiles();
+        if (files.length === 0) return;
+        try {
+          const text = await uploadFiles(
+            {
+              client: c,
+              vaultId,
+              notePath: e.doc.path,
+              settings: useVaultState.getState().settings,
+              paths: () => useFiles.getState().files.keys(),
+            },
+            files,
+          );
+          insertAt(e.view, e.view.state.selection.main.head, text);
+          e.view.focus();
+        } catch (err) {
+          notify(err instanceof Error ? err.message : String(err));
+        }
+      },
+    },
     {
       id: "markdown:add-metadata-property",
       name: "Add file property",

@@ -178,3 +178,55 @@ export function setHeading(level: number): StateCommand {
     return { from, to, insert: level === 0 ? "" : `${"#".repeat(level)} ` };
   });
 }
+
+// toggleLines gives every touched line a prefix, or takes it off when every
+// one has it: a blockquote's "> ", a list item's marker. matched is the
+// prefix a line has (after its indent), or null; insert is what a line
+// without it gets, by its place among the touched lines.
+function toggleLines(matched: (rest: string) => string | null, insert: (i: number) => string): StateCommand {
+  return formatting((state) => {
+    const lines = touchedLines(state).filter((l, _, all) => all.length === 1 || l.text.trim() !== "");
+    const indentOf = (l: Line) => l.text.match(/^\s*/)?.[0].length ?? 0;
+    const all = lines.every((l) => matched(l.text.slice(indentOf(l))) !== null);
+    const edits = lines.map((l, i) => {
+      const from = l.from + indentOf(l);
+      const has = matched(l.text.slice(indentOf(l)));
+      if (all) return { from, to: from + (has ?? "").length };
+      const other = /^(?:[-*+]|\d+[.)])[ \t]+/.exec(l.text.slice(indentOf(l)))?.[0] ?? "";
+      return has !== null ? { from, to: from } : { from, to: from + other.length, insert: insert(i) };
+    });
+    const changes = state.changes(edits);
+    return { changes, selection: state.selection.map(changes, 1) };
+  });
+}
+
+/** toggleBlockquote quotes each touched line with "> ", or unquotes them when all are quoted. */
+export const toggleBlockquote: StateCommand = toggleLines(
+  (rest) => /^> ?/.exec(rest)?.[0] ?? null,
+  () => "> ",
+);
+
+/** toggleBulletList makes each touched line a "- " item, a numbered item included, or plain when all are bullets. */
+export const toggleBulletList: StateCommand = toggleLines(
+  (rest) => /^[-*+][ \t]+/.exec(rest)?.[0] ?? null,
+  () => "- ",
+);
+
+/** toggleNumberedList numbers the touched lines from 1, or makes them plain when all are numbered. */
+export const toggleNumberedList: StateCommand = toggleLines(
+  (rest) => /^\d+[.)][ \t]+/.exec(rest)?.[0] ?? null,
+  (i) => `${i + 1}. `,
+);
+
+/** insertPair writes before and after around the selection, the cursor after the selection: [[ ]], ![[ ]], #. */
+export function insertPair(before: string, after: string): StateCommand {
+  return formatting((state) =>
+    state.changeByRange((range) => {
+      const text = state.sliceDoc(range.from, range.to);
+      return {
+        changes: { from: range.from, to: range.to, insert: before + text + after },
+        range: EditorSelection.cursor(range.from + before.length + text.length),
+      };
+    }),
+  );
+}
