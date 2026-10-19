@@ -8,6 +8,7 @@ import { useFiles } from "../data/files";
 import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { useDocuments } from "../editor/registry";
+import { NarrowHeader } from "../features/mobile/NarrowHeader";
 import { Splitter } from "../features/workspace/Splitter";
 import { TabStrip } from "../features/workspace/TabStrip";
 import { ViewHeader } from "../features/workspace/ViewHeader";
@@ -15,6 +16,7 @@ import { type MergeSide, type Split, type TabGroup, tabTitle, type WorkspaceNode
 import {
   activate,
   activateGroup,
+  activeGroup,
   back,
   close,
   type Edge,
@@ -43,9 +45,21 @@ interface Drag {
 
 const DragContext = createContext<Drag>({ tab: null, setTab: () => {} });
 
-/** WorkspaceView draws the window's workspace; reserve keeps the top-right strip clear of the window controls. */
-export function WorkspaceView(props: { reserve: number }) {
+/** Narrow is how a narrow window's view header opens its drawers. */
+export interface Narrow {
+  onLeft: () => void;
+  onRight: () => void;
+}
+
+/**
+ * WorkspaceView draws the window's workspace; reserve keeps the top-right
+ * strip clear of the window controls. In a narrow window it draws the
+ * active group's active tab alone, under the narrow view header; the
+ * other groups stay in the stored workspace (docs/specs/ui.md#narrow-windows).
+ */
+export function WorkspaceView(props: { reserve: number; narrow?: Narrow }) {
   const root = useWorkspace((s) => s.ws.root);
+  const active = useWorkspace((s) => activeGroup(s.ws));
   const [tab, setTab] = useState<string | null>(null);
   useEffect(() => {
     const end = () => setTab(null);
@@ -59,7 +73,11 @@ export function WorkspaceView(props: { reserve: number }) {
   return (
     <DragContext.Provider value={{ tab, setTab }}>
       <main aria-label="Workspace" className="flex min-w-0 flex-1 bg-window">
-        <NodeView node={root} top rightmost reserve={props.reserve} />
+        {props.narrow ? (
+          <GroupView node={active} group={active} top rightmost reserve={0} narrow={props.narrow} />
+        ) : (
+          <NodeView node={root} top rightmost reserve={props.reserve} />
+        )}
       </main>
     </DragContext.Provider>
   );
@@ -137,7 +155,7 @@ function SplitView(props: NodeProps & { split: Split }) {
   );
 }
 
-function GroupView(props: NodeProps & { group: TabGroup }) {
+function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
   const { group } = props;
   const update = useWorkspace((s) => s.update);
   const focused = useWorkspace((s) => s.ws.activeGroup === group.id);
@@ -206,52 +224,68 @@ function GroupView(props: NodeProps & { group: TabGroup }) {
       }}
       onDrop={onDrop}
     >
-      <div
-        ref={strip}
-        data-tauri-drag-region={props.top ? true : undefined}
-        className="relative shrink-0 overflow-hidden border-b border-separator bg-toolbar"
-        style={{ paddingRight: props.top && props.rightmost ? props.reserve : 0 }}
-      >
-        <TabStrip
-          label="Tabs"
-          tabs={group.tabs.map((t, i) => ({
-            id: t.id,
-            title: tabTitle(t.view),
-            active: i === group.active,
-            pinned: t.pinned,
-          }))}
-          focused={focused}
-          dragRegion={props.top}
-          onCommand={(c) => {
-            switch (c.kind) {
-              case "activate":
-                update((w) => activate(w, c.id));
-                break;
-              case "close":
-                update((w) => close(w, c.id));
-                break;
-              case "newTab":
-                update((w) => openNewTab(activateGroup(w, group.id)));
-                break;
-              case "menu":
-                openTabMenu(c.id, c.x, c.y);
-                break;
-              case "list":
-                openTabList(group.id, c.x, c.y);
-                break;
-            }
-          }}
-          onDragStart={(id, e) => {
-            e.dataTransfer.effectAllowed = "move";
-            e.dataTransfer.setData("text/plain", tabTitle(group.tabs.find((t) => t.id === id)?.view ?? view));
-            drag.setTab(id);
-          }}
+      {!props.narrow && (
+        <div
+          ref={strip}
+          data-tauri-drag-region={props.top ? true : undefined}
+          className="relative shrink-0 overflow-hidden border-b border-separator bg-toolbar"
+          style={{ paddingRight: props.top && props.rightmost ? props.reserve : 0 }}
+        >
+          <TabStrip
+            label="Tabs"
+            tabs={group.tabs.map((t, i) => ({
+              id: t.id,
+              title: tabTitle(t.view),
+              active: i === group.active,
+              pinned: t.pinned,
+            }))}
+            focused={focused}
+            dragRegion={props.top}
+            onCommand={(c) => {
+              switch (c.kind) {
+                case "activate":
+                  update((w) => activate(w, c.id));
+                  break;
+                case "close":
+                  update((w) => close(w, c.id));
+                  break;
+                case "newTab":
+                  update((w) => openNewTab(activateGroup(w, group.id)));
+                  break;
+                case "menu":
+                  openTabMenu(c.id, c.x, c.y);
+                  break;
+                case "list":
+                  openTabList(group.id, c.x, c.y);
+                  break;
+              }
+            }}
+            onDragStart={(id, e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", tabTitle(group.tabs.find((t) => t.id === id)?.view ?? view));
+              drag.setTab(id);
+            }}
+          />
+          {zone?.kind === "index" && (
+            <div className="pointer-events-none absolute inset-y-2 w-0.5 bg-accent" style={{ left: zone.x }} />
+          )}
+        </div>
+      )}
+      {props.narrow && (
+        <NarrowHeader
+          title={tabTitle(view)}
+          mode={view.type === "note" ? view.mode : undefined}
+          onLeft={props.narrow.onLeft}
+          onRight={props.narrow.onRight}
+          onToggleMode={() =>
+            update((w) =>
+              view.type === "note" ? setView(w, tab.id, { ...view, mode: view.mode === "edit" ? "read" : "edit" }) : w,
+            )
+          }
+          onMore={(x, y) => openMoreOptions(client, tab.id, view, x, y)}
         />
-        {zone?.kind === "index" && (
-          <div className="pointer-events-none absolute inset-y-2 w-0.5 bg-accent" style={{ left: zone.x }} />
-        )}
-      </div>
-      {viewHeader && (
+      )}
+      {viewHeader && !props.narrow && (
         <ViewHeader
           path={path}
           title={tabTitle(view)}

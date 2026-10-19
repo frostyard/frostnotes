@@ -5,7 +5,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CalendarDays, FileSearch, Files, PanelLeft, Terminal } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
@@ -22,17 +22,20 @@ import { IconButton } from "../features/chrome/IconButton";
 import { Ribbon } from "../features/chrome/Ribbon";
 import { TitleBar } from "../features/chrome/TitleBar";
 import { WindowControls } from "../features/chrome/WindowControls";
+import { BottomBar } from "../features/mobile/BottomBar";
+import { Drawer } from "../features/mobile/Drawer";
 import { StatusBar } from "../features/status/StatusBar";
 import { PaneTabs } from "../features/workspace/PaneTabs";
 import { Splitter } from "../features/workspace/Splitter";
 import { VaultRow } from "../features/workspace/VaultRow";
 import { formatHotkey, type HotkeyCommand, hotkeysFor } from "../lib/keymap";
 import { type PaneId, SIDEBAR_MIN, type Side } from "../workspace/model";
-import { activeTab, selectPane, setSidebarWidth } from "../workspace/ops";
+import { activeGroup, activeTab, back, forward, selectPane, setSidebarWidth } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { useMaximized, windowCommand } from "./chrome";
 import { editorCommands, workspaceCommands } from "./commands";
-import { openConflictsMenu, openEditingModeMenu } from "./menus";
+import { openConflictsMenu, openEditingModeMenu, openNarrowMenu, openTabList } from "./menus";
+import { useNarrow } from "./narrow";
 import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
 import { statusSync, useBacklinkCount, useNoteCounts } from "./status";
@@ -123,6 +126,13 @@ export function MainWindow() {
   const activeNote = active.view.type === "note" ? active.view : null;
   const backlinks = useBacklinkCount(activeNote?.path ?? null);
   const counts = useNoteCounts(docs);
+  const narrow = useNarrow();
+  // A narrow window's sidebars are drawers, one open at a time, closed
+  // when the active tab shows another view (a note opened from one).
+  const [drawer, setDrawer] = useState<Side | null>(null);
+  const activeKey = `${active.id}:${active.view.type === "empty" ? "" : active.view.path}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeKey is the trigger
+  useEffect(() => setDrawer(null), [activeKey]);
   const widths = fitSidebars(useWindowWidth(), ws.left, ws.right);
   const shown = { left: widths.left > 0, right: widths.right > 0 };
   const controls = isTauri();
@@ -206,6 +216,76 @@ export function MainWindow() {
   const vaultName = vaults.find((v) => v.id === vaultId)?.name ?? null;
   const noteTitle = activeNote ? titleOf(activeNote.path) : null;
   useEffect(() => setWindowTitle(windowTitle(noteTitle, vaultName)), [noteTitle, vaultName]);
+
+  // A narrow window takes the phone layout (docs/specs/ui.md#narrow-windows,
+  // ADR-0027): the active tab under its view header, the sidebars as
+  // drawers, and the bottom bar; no ribbon, title bar row, tab strips,
+  // splits or status bar.
+  const drawerContent = (side: Side) => {
+    const bar = ws[side];
+    const selected = bar.panes[bar.active] ?? (bar.panes[0] as PaneId);
+    return (
+      <>
+        <div className="flex shrink-0 items-center border-b border-separator bg-toolbar">
+          <PaneTabs
+            label={side === "left" ? "Left sidebar panes" : "Right sidebar panes"}
+            panes={bar.panes.map((id) => ({ id, ...PANE_INFO[id] }))}
+            selected={selected}
+            onSelect={(id) => update((w) => selectPane(w, side, id as PaneId))}
+          />
+        </div>
+        <Pane id={selected} />
+        {side === "left" && (
+          <VaultRow
+            vaults={vaults}
+            current={vaultId}
+            settingsDisabled={!registry.applies("app:open-settings")}
+            onChoose={(id) => void openVault(id)}
+            onManage={openVaultManager}
+            onSettings={() => registry.run("app:open-settings")}
+          />
+        )}
+      </>
+    );
+  };
+  if (narrow && vaultId !== null) {
+    const group = activeGroup(ws);
+    return (
+      <CommandsContext.Provider value={registry}>
+        <DocumentsContext.Provider value={docs}>
+          <div className="flex h-full flex-col bg-window" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+            <div className="relative flex min-h-0 flex-1">
+              <WorkspaceView
+                reserve={0}
+                narrow={{ onLeft: () => setDrawer("left"), onRight: () => setDrawer("right") }}
+              />
+            </div>
+            <BottomBar
+              canBack={active.back.length > 0}
+              canForward={active.forward.length > 0}
+              tabs={group.tabs.length}
+              onBack={() => update((w) => back(w))}
+              onForward={() => update((w) => forward(w))}
+              onSwitcher={() => registry.run("switcher:open")}
+              onNewTab={() => registry.run("workspace:new-tab")}
+              onTabs={(x, y) => openTabList(group.id, x, y)}
+              onMenu={(x, y) => openNarrowMenu((c) => registry.run(c), x, y)}
+            />
+            {drawer && (
+              <Drawer
+                side={drawer}
+                label={drawer === "left" ? "Left sidebar" : "Right sidebar"}
+                onClose={() => setDrawer(null)}
+              >
+                {drawerContent(drawer)}
+              </Drawer>
+            )}
+            <Overlays />
+          </div>
+        </DocumentsContext.Provider>
+      </CommandsContext.Provider>
+    );
+  }
 
   // Without a vault the window is the vault manager between the title bar
   // row and the status bar, which still tells of the connection (ADR-0024).
