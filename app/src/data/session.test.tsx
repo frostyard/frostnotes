@@ -6,7 +6,7 @@ import { MockTransport, mockVaults } from "../rpc/mock/mock";
 import { feed } from "./events";
 import { emptyFiles, useFiles } from "./files";
 import { usePrefs } from "./prefs";
-import { Session } from "./session";
+import { type Retry, retryDelay, Session } from "./session";
 import { useNotes } from "./stores";
 import { emptyVault, useVaultState } from "./vaultState";
 
@@ -94,5 +94,43 @@ describe("Session", () => {
     off();
     expect(seen.map((e) => e.event)).toEqual(["note.moved"]);
     expect(feed.since()).toBe(seen[0]?.seq);
+  });
+
+  it("as a session inside lodge, reads no sync state, and reconnects at once when woken", async () => {
+    const mock = new MockTransport(mockVaults(), { caller: "session", node: "phone", files: { 3: { "a.md": "a\n" } } });
+    let wake: (() => void) | undefined;
+    const retry: Retry = {
+      firstMs: 60_000,
+      maxMs: 60_000,
+      wake: (fn) => {
+        wake = fn;
+        return () => {
+          wake = undefined;
+        };
+      },
+    };
+    render(
+      <Session connect={async () => mock} retry={retry} fallback={<p>connecting</p>}>
+        <Probe />
+      </Session>,
+    );
+    await waitFor(() => expect(probe()).toMatch(/^vault=3 files=a.md .* sync=false$/));
+    expect(useNotes.getState().hello).toMatchObject({ caller: "session", node: "phone" });
+    act(() => mock.close("the phone slept"));
+    mock.reopen();
+    await waitFor(() => expect(useNotes.getState().connection.state).toBe("lost"));
+    act(() => wake?.());
+    await waitFor(() => expect(useNotes.getState().connection.state).toBe("ready"));
+  });
+});
+
+describe("retryDelay", () => {
+  it("doubles from the first wait to the most, within 20% either way", () => {
+    const r: Retry = { firstMs: 1000, maxMs: 30_000 };
+    expect([0, 1, 2, 3, 4, 5, 9].map((n) => retryDelay(r, n, () => 0.5))).toEqual([
+      1000, 2000, 4000, 8000, 16_000, 30_000, 30_000,
+    ]);
+    expect(retryDelay(r, 0, () => 0)).toBe(800);
+    expect(retryDelay(r, 0, () => 0.999)).toBe(1200);
   });
 });

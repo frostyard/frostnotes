@@ -66,6 +66,17 @@ describe("VaultManager", () => {
     expect(props.onRemove).toHaveBeenCalledWith(VAULTS[0]);
   });
 
+  it("only opens vaults for a caller that may not manage them", async () => {
+    const { props, user } = setup({ manage: false });
+    expect(screen.queryByRole("button", { name: "Options for Work" })).toBeNull();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /^garden/ }), { clientX: 40, clientY: 60 });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create" })).toBeNull();
+    expect(screen.getByText(/added and removed on the machine that runs notesd/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /^Work/ }));
+    expect(props.onOpen).toHaveBeenCalledWith(2);
+  });
+
   it("says there are no vaults yet", () => {
     setup({ vaults: [], current: null, mode: "window" });
     expect(screen.getByText("No vaults yet")).toBeTruthy();

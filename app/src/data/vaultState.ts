@@ -53,13 +53,18 @@ export async function loadSettings(c: Client, vaultId: number): Promise<void> {
   }
 }
 
-/** loadSync reads the vault's sync state; a notesd that does not sync answers unavailable. */
+/**
+ * loadSync reads the vault's sync state; a notesd that does not sync
+ * answers unavailable, and one that does not let this caller ask (a
+ * session inside lodge) methodNotFound.
+ */
 export async function loadSync(c: Client, vaultId: number): Promise<void> {
   try {
     const all = await c.sync.status({ vaultId });
     current(vaultId, () => ({ sync: all.find((x) => x.vaultId === vaultId) ?? null, syncAvailable: true }));
   } catch (err) {
-    const unavailable = err instanceof RPCError && err.code === ErrorCode.unavailable;
+    const unavailable =
+      err instanceof RPCError && (err.code === ErrorCode.unavailable || err.code === ErrorCode.methodNotFound);
     current(vaultId, () => ({ sync: null, syncAvailable: !unavailable }));
   }
 }

@@ -9,8 +9,15 @@ export interface KeyValue {
   remove(key: string): void;
 }
 
+/**
+ * STORAGE_PREFIX starts every key the app keeps. Inside lodge every app
+ * shares one origin's storage, so the web build's keys are "notes:…"
+ * (lodge-client's storageKey); the desktop app's have none.
+ */
+export const STORAGE_PREFIX = import.meta.env.MODE === "web" ? "notes:" : "";
+
 /** localStore returns local storage, or a store that keeps nothing where there is none. */
-export function localStore(): KeyValue {
+export function localStore(prefix = STORAGE_PREFIX): KeyValue {
   const ls = (): Storage | null => {
     try {
       return globalThis.localStorage ?? null;
@@ -21,21 +28,21 @@ export function localStore(): KeyValue {
   return {
     get: (key) => {
       try {
-        return ls()?.getItem(key) ?? null;
+        return ls()?.getItem(prefix + key) ?? null;
       } catch {
         return null;
       }
     },
     set: (key, value) => {
       try {
-        ls()?.setItem(key, value);
+        ls()?.setItem(prefix + key, value);
       } catch {
         // Full or refused: the value is not kept.
       }
     },
     remove: (key) => {
       try {
-        ls()?.removeItem(key);
+        ls()?.removeItem(prefix + key);
       } catch {
         // Refused: nothing to remove.
       }

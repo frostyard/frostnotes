@@ -9,11 +9,21 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { notify } from "../data/overlays";
 import { useNotes } from "../data/stores";
+import { useLodge } from "../lodge/lodge";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-/** openExternal opens a web link (http, https, mailto) outside the app. */
+/**
+ * openExternal opens a web link (http, https, mailto) outside the app:
+ * inside lodge the shell opens it, a lodge URL in its app and any other in
+ * a new tab (lodge-client's open).
+ */
 export async function openExternal(url: string): Promise<void> {
+  const shell = useLodge.getState().lodge;
+  if (shell) {
+    shell.open(url);
+    return;
+  }
   if (!isTauri()) {
     window.open(url, "_blank", "noopener,noreferrer");
     return;
