@@ -80,37 +80,49 @@ func TestAnEvictedOrIdleMCPSessionClosesItsConnection(t *testing.T) {
 		}
 		return opened[i]
 	}
-	closed := func(c *api.Client, within time.Duration) bool {
+	// isOpen reports, without waiting, whether c's connection is open.
+	isOpen := func(c *api.Client) bool {
 		select {
 		case <-c.Done():
-			return true
-		case <-time.After(within):
 			return false
+		default:
+			return true
 		}
 	}
-
-	// A second apart, so the first session is the least recently used:
-	// the kit evicts by last use, and at one instant any of the token's
-	// sessions may go.
 	initialize()
-	now.Add(int64(time.Second))
 	initialize()
-	now.Add(int64(time.Second))
-	// A third session on the token evicts the least recently used: the first.
+	// A third session on the token evicts one of the first two. Which one
+	// is the kit's to choose (its own tests own the order); this test is
+	// about the evicted session's connection closing.
 	initialize()
-	if !closed(conn(0), 10*time.Second) {
-		t.Fatal("the evicted session's notesd connection is still open")
+	var kept *api.Client // the one of the first two the kit kept
+	select {
+	case <-conn(0).Done():
+		kept = conn(1)
+	case <-conn(1).Done():
+		kept = conn(0)
+	case <-time.After(10 * time.Second):
+		t.Fatal("no evicted session's notesd connection closed")
 	}
-	for i := 1; i <= 2; i++ {
-		if closed(conn(i), 0) {
-			t.Fatalf("live session %d's notesd connection closed", i+1)
-		}
+	if !isOpen(kept) || !isOpen(conn(2)) {
+		t.Fatal("a live session's notesd connection closed with the evicted one")
 	}
-	// An hour later the sweep ends the two idle sessions.
+	// An hour later the sweep ends the two idle sessions. The kit stamps a
+	// session's last use again once its answer is written, on the server's
+	// goroutine, so a late stamp can follow the clock's move: the clock
+	// moves on again while a connection stays open.
 	now.Add(int64(idle + time.Minute))
-	for i := 1; i <= 2; i++ {
-		if !closed(conn(i), 10*time.Second) {
-			t.Fatalf("idle session %d's notesd connection is still open", i+1)
+	giveUp := time.After(10 * time.Second)
+	for _, c := range []*api.Client{kept, conn(2)} {
+		for open := true; open; {
+			select {
+			case <-c.Done():
+				open = false
+			case <-time.After(time.Second):
+				now.Add(int64(idle + time.Minute))
+			case <-giveUp:
+				t.Fatal("an idle session's notesd connection is still open")
+			}
 		}
 	}
 }
