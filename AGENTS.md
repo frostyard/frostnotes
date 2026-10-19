@@ -97,7 +97,9 @@ file a step names before writing its frostnotes counterpart.
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
   the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
 - `dev/nsl/provision.sh`: the nsl machine for the app toolchain;
-  `scripts/dev-app.sh` runs notesd beside the app or Vite there.
+  `scripts/dev-app.sh` runs notesd beside the app or Vite there;
+  `scripts/move-hub-behind-lodge.sh` moves the M2 hub behind lodge
+  (plan 0006, Phase 7; a dry run unless `--apply`).
   `tools/rpcgen`, `tools/taskrun`: the contract generator and the task-card
   runner.
 
