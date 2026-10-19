@@ -1,7 +1,9 @@
 // The status bar (docs/specs/ui.md#status-bar): the connection's state at
 // the left while it is not ready; at the right the vault's sync state and
 // conflicts, the active note's backlinks, its words and characters, and
-// the editing mode. The container supplies the counts and handles actions.
+// the editing mode. In a browser (docs/specs/ui.md#in-a-browser) notes'
+// connection, with who is signed in, takes the place of sync, which is a
+// device's. The container supplies the counts and handles actions.
 
 import { BookOpen, CircleAlert, Cloud, CloudOff, CodeXml, Pencil, RefreshCw } from "lucide-react";
 import type { Connection } from "../../data/stores";
@@ -21,11 +23,28 @@ export interface StatusCounts {
   characters: number;
 }
 
+/** StatusIdentity is who a browser session is signed in as, from rpc.hello. */
+export interface StatusIdentity {
+  login: string;
+  displayName?: string;
+  node?: string;
+}
+
+/** connectionText is the browser's connection item's tooltip and name. */
+export function connectionText(connected: boolean, who: StatusIdentity): string {
+  if (!connected) return "Notes out of reach; reconnecting";
+  return who.node ? `Connected as ${who.login} on ${who.node}` : `Connected as ${who.login}`;
+}
+
 /** EditingMode is the active note's mode: live preview, source mode or reading. */
 export type EditingMode = "live" | "source" | "read";
 
 export interface StatusBarProps {
   connection: Connection;
+  /** Who a browser session is signed in as; null in the desktop app, where sync shows instead. */
+  identity?: StatusIdentity | null;
+  /** Open the connection's menu at (x, y): the item's left and top, in client coordinates. */
+  onIdentity?: (x: number, y: number) => void;
   /** The vault's sync; null for a vault that does not sync. */
   sync: StatusSync | null;
   /** The active note's backlinks; null without an active note. */
@@ -53,6 +72,8 @@ function countText(count: number, noun: string): string {
 /** StatusBar draws the window's status bar. */
 export function StatusBar({
   connection,
+  identity = null,
+  onIdentity,
   sync,
   backlinks,
   counts,
@@ -69,11 +90,27 @@ export function StatusBar({
       role="status"
       className="text-status flex h-6 shrink-0 items-center gap-4 border-t border-separator bg-toolbar px-3 text-secondary"
     >
+      {identity !== null && (
+        <button
+          type="button"
+          className={buttonClass}
+          aria-haspopup="menu"
+          aria-label={connectionText(connection.state === "ready", identity)}
+          title={connectionText(connection.state === "ready", identity)}
+          data-connection={connection.state}
+          onClick={(event) => {
+            const { left, top } = event.currentTarget.getBoundingClientRect();
+            onIdentity?.(left, top);
+          }}
+        >
+          {connection.state === "ready" ? <Cloud size={14} /> : <CloudOff size={14} />}
+        </button>
+      )}
       <span className="min-w-0 flex-1 truncate">
-        {connection.state === "connecting" && "Connecting to notesd…"}
-        {connection.state === "lost" && `Reconnecting to notesd… (${connection.reason})`}
+        {identity === null && connection.state === "connecting" && "Connecting to notesd…"}
+        {identity === null && connection.state === "lost" && `Reconnecting to notesd… (${connection.reason})`}
       </span>
-      {sync !== null && SyncIcon !== null && (
+      {identity === null && sync !== null && SyncIcon !== null && (
         <>
           <span role="img" aria-label={sync.text} title={sync.text} data-sync-state={sync.state}>
             <SyncIcon size={14} className={sync.state === "syncing" ? "animate-spin" : undefined} />

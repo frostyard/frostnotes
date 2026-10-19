@@ -1,6 +1,8 @@
 // The settings dialog (docs/specs/ui.md, Settings): section navigation,
-// editable controls and read-only values in a focused modal frame.
-import { X } from "lucide-react";
+// editable controls and read-only values in a focused modal frame. In a
+// narrow window (docs/specs/ui.md#narrow-windows) it is full screen: the
+// list of sections, then a section over it with a back button.
+import { ChevronLeft, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -41,12 +43,23 @@ export interface SettingsDialogProps {
   /** A setting changed: a toggle's boolean, a select's or text's string, a number's number. */
   onChange: (id: string, value: boolean | string | number) => void;
   onClose: () => void;
+  /** A narrow window's: the list of sections first, each section over it with Back. */
+  narrow?: boolean;
 }
 
 /** SettingsDialog draws the settings dialog in a portal on the document's body. */
-export function SettingsDialog({ sections, section, onSection, onChange, onClose }: SettingsDialogProps) {
+export function SettingsDialog({
+  sections,
+  section,
+  onSection,
+  onChange,
+  onClose,
+  narrow = false,
+}: SettingsDialogProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const current = sections.find((entry) => entry.id === section) ?? sections[0];
+  // A narrow window shows the list until a section is chosen.
+  const [listing, setListing] = useState(narrow);
 
   useEffect(() => {
     const before = document.activeElement;
@@ -78,24 +91,51 @@ export function SettingsDialog({ sections, section, onSection, onChange, onClose
           }
         }}
       >
-        <nav aria-label="Settings sections" className="w-[200px] shrink-0 overflow-y-auto bg-sidebar p-2">
-          {sections.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              aria-current={entry.id === current?.id ? "page" : undefined}
-              className={`block h-7 w-full rounded-md px-2 text-left text-sidebar-row ${entry.id === current?.id ? "bg-selection-sidebar" : "hover:bg-selection-inactive"}`}
-              onClick={() => onSection(entry.id)}
-            >
-              {entry.name}
-            </button>
-          ))}
-        </nav>
-        {current && <Section key={current.id} section={current} onChange={onChange} />}
+        {narrow && (
+          <div className="flex h-11 shrink-0 items-center border-b border-separator px-1">
+            {!listing && (
+              <button
+                type="button"
+                aria-label="Back"
+                className="flex size-11 items-center justify-center text-secondary"
+                onClick={() => setListing(true)}
+              >
+                <ChevronLeft size={20} aria-hidden="true" />
+              </button>
+            )}
+            <h2 className={`min-w-0 flex-1 truncate font-semibold ${listing ? "px-3" : ""}`}>
+              {listing ? "Settings" : current?.name}
+            </h2>
+          </div>
+        )}
+        {(!narrow || listing) && (
+          <nav
+            aria-label="Settings sections"
+            className={`shrink-0 overflow-y-auto bg-sidebar p-2 ${narrow ? "min-h-0 flex-1" : "w-[200px]"}`}
+          >
+            {sections.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                aria-current={entry.id === current?.id && !narrow ? "page" : undefined}
+                className={`block w-full rounded-md px-2 text-left text-sidebar-row ${narrow ? "h-11" : "h-7 pointer-coarse:h-11"} ${entry.id === current?.id && !narrow ? "bg-selection-sidebar" : "hover:bg-selection-inactive"}`}
+                onClick={() => {
+                  onSection(entry.id);
+                  setListing(false);
+                }}
+              >
+                {entry.name}
+              </button>
+            ))}
+          </nav>
+        )}
+        {current && (!narrow || !listing) && (
+          <Section key={current.id} section={current} onChange={onChange} titled={!narrow} />
+        )}
         <button
           type="button"
           aria-label="Close"
-          className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md text-secondary hover:bg-selection-inactive"
+          className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md text-secondary hover:bg-selection-inactive max-[599px]:top-0 max-[599px]:right-1 max-[599px]:size-11 pointer-coarse:size-11"
           onClick={onClose}
         >
           <X size={16} aria-hidden="true" />
@@ -106,10 +146,19 @@ export function SettingsDialog({ sections, section, onSection, onChange, onClose
   );
 }
 
-function Section({ section, onChange }: { section: SettingsSection; onChange: SettingsDialogProps["onChange"] }) {
+function Section({
+  section,
+  onChange,
+  titled,
+}: {
+  section: SettingsSection;
+  onChange: SettingsDialogProps["onChange"];
+  /** Whether the section draws its own title: a narrow window's header names it instead. */
+  titled: boolean;
+}) {
   return (
-    <section aria-label={section.name} className="min-w-0 flex-1 overflow-y-auto p-6">
-      <h2 className="pr-6 text-empty font-semibold">{section.name}</h2>
+    <section aria-label={section.name} className="min-h-0 min-w-0 flex-1 overflow-y-auto p-6 max-[599px]:p-4">
+      {titled && <h2 className="pr-6 text-empty font-semibold">{section.name}</h2>}
       {section.rows.map((row) => (
         <div key={row.id} data-setting={row.id} className="flex items-center gap-6 border-b border-separator py-3">
           <div className="min-w-0 flex-1">

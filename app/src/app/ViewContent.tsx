@@ -2,6 +2,7 @@
 // commands; a note is its editor or its reading view; a file shows by its
 // hash; history and merge tabs are their views.
 
+import { isTauri } from "@tauri-apps/api/core";
 import { useCommands } from "../commands/registry";
 import { useFiles } from "../data/files";
 import { usePrefs } from "../data/prefs";
@@ -18,8 +19,10 @@ import { ReadingView } from "../reading/ReadingView";
 import { type MergeSide, tabTitle, type ViewState } from "../workspace/model";
 import type { OpenWhere } from "../workspace/ops";
 import { HistoryView } from "./HistoryView";
+import { useNarrow } from "./narrow";
 import { renameNote } from "./panes/files";
-import { openInDefaultApp } from "./system";
+
+import { openExternal, openInDefaultApp } from "./system";
 
 export interface ViewContentProps {
   tabId: string;
@@ -50,6 +53,7 @@ export function ViewContent(props: ViewContentProps) {
   const vaultId = useNotes((s) => s.vaultId);
   const commands = useCommands();
   const client = useClient();
+  const narrow = useNarrow();
   if (view.type === "empty") {
     const action = (command: string, label: string, keys: string) => ({
       command,
@@ -104,6 +108,7 @@ export function ViewContent(props: ViewContentProps) {
       case "merge":
         return (
           <MergePane
+            narrow={narrow}
             vaultId={vaultId}
             path={view.path}
             other={view.other}
@@ -173,9 +178,16 @@ function FileView({ path }: { path: string }) {
       // biome-ignore lint/a11y/useMediaCaption: a vault's video has no captions to offer
       return <video src={url} controls className="mx-auto max-w-full p-8" />;
     default:
-      return shell && url !== "" ? (
-        <ContentFile name={name} url={url} open={(u) => shell.open(u)} />
-      ) : (
+      // In a browser a file opens by its content URL in a new tab; there
+      // is no default app (docs/specs/ui.md#in-a-browser).
+      if (!isTauri()) {
+        return url === "" ? (
+          <Message text={`${name} opens outside the app.`} />
+        ) : (
+          <ContentFile name={name} url={url} open={(u) => (shell ? shell.open(u) : void openExternal(u))} />
+        );
+      }
+      return (
         <div className="flex flex-col items-center gap-3 p-8 text-secondary">
           <p className="text-empty">{name} opens outside the app.</p>
           <button

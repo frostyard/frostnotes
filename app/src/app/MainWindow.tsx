@@ -26,7 +26,7 @@ import { BottomBar } from "../features/mobile/BottomBar";
 import { Drawer } from "../features/mobile/Drawer";
 import { EditingToolbar } from "../features/mobile/EditingToolbar";
 import { TabSwitcher } from "../features/mobile/TabSwitcher";
-import { StatusBar } from "../features/status/StatusBar";
+import { connectionText, StatusBar } from "../features/status/StatusBar";
 import { PaneTabs } from "../features/workspace/PaneTabs";
 import { Splitter } from "../features/workspace/Splitter";
 import { VaultRow } from "../features/workspace/VaultRow";
@@ -48,7 +48,7 @@ import { useWorkspace } from "../workspace/store";
 import { useMaximized, windowCommand } from "./chrome";
 import { editorCommands, workspaceCommands } from "./commands";
 import { useEditorFocus, useKeyboardInset } from "./keyboard";
-import { openConflictsMenu, openEditingModeMenu, openNarrowMenu } from "./menus";
+import { NARROW_BACKLINKS, openConflictsMenu, openEditingModeMenu, openIdentityMenu, openNarrowMenu } from "./menus";
 import { useNarrow } from "./narrow";
 import { Overlays } from "./Overlays";
 import { PANE_INFO, Pane } from "./Panes";
@@ -131,7 +131,16 @@ export function MainWindow() {
   const ws = useWorkspace((s) => s.ws);
   const update = useWorkspace((s) => s.update);
   const showRibbon = usePrefs((s) => s.showRibbon);
-  const { connection, vaults, vaultId } = useNotes();
+  const { connection, vaults, vaultId, hello } = useNotes();
+  // A browser session's identity: the status bar's connection item, in
+  // place of sync (docs/specs/ui.md#in-a-browser).
+  const identity = useMemo(
+    () =>
+      hello?.caller === "session" && hello.login
+        ? { login: hello.login, displayName: hello.displayName, node: hello.node }
+        : null,
+    [hello],
+  );
   useAliasesSync();
   const openVault = useOpenVault();
   const maximized = useMaximized();
@@ -299,7 +308,29 @@ export function MainWindow() {
                 onSwitcher={() => registry.run("switcher:open")}
                 onNewTab={() => registry.run("workspace:new-tab")}
                 onTabs={() => setSwitching(true)}
-                onMenu={(x, y) => openNarrowMenu((c) => registry.run(c), x, y)}
+                onMenu={(x, y) =>
+                  openNarrowMenu(
+                    (c) => {
+                      if (c === NARROW_BACKLINKS) {
+                        update((w) => selectPane(w, "right", "backlinks"));
+                        setDrawer("right");
+                      } else {
+                        registry.run(c);
+                      }
+                    },
+                    x,
+                    y,
+                    {
+                      hub: identity
+                        ? connectionText(connection.state === "ready", identity)
+                        : sync
+                          ? statusSync(sync).text
+                          : null,
+                      backlinks: activeNote ? backlinks : null,
+                      counts: activeNote ? counts : null,
+                    },
+                  )
+                }
               />
             )}
             {switching && (
@@ -366,6 +397,8 @@ export function MainWindow() {
             <VaultsView mode="window" />
             <StatusBar
               connection={connection}
+              identity={identity}
+              onIdentity={(x, y) => identity && openIdentityMenu(identity, x, y)}
               sync={null}
               backlinks={null}
               counts={null}
@@ -415,6 +448,8 @@ export function MainWindow() {
           </div>
           <StatusBar
             connection={connection}
+            identity={identity}
+            onIdentity={(x, y) => identity && openIdentityMenu(identity, x, y)}
             sync={sync && statusSync(sync)}
             backlinks={activeNote ? backlinks : null}
             counts={activeNote ? counts : null}

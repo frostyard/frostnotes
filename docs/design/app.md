@@ -630,15 +630,19 @@ desktop's, with a different transport and frame:
   Sign-in failures are the shell's to show. The app only says that
   notes is out of reach, and keeps trying.
 - **Who is signed in** comes from `rpc.hello`: the caller kind, the
-  login, the display name and the node. With caller `session` the app
+  login, the display name and the node. The status bar's first item,
+  notes' connection, names them in its tooltip and its menu
+  (`StatusBar`'s `identity`, `openIdentityMenu`). With caller `session` the app
   hides what a session may not call: opening, creating and removing
   vaults, sync's status and conflicts, approving pairings, and the
   shell's commands.
 - **Files by hash** load from lodge-content: the transport's `blobURL`
   is `contentURL("blobs/<mac>/<hash>.<ext>")`, the `mac` an HMAC of the
   hash under the content key `rpc.hello` gives the session, so no page
-  without it can make a file's URL ([lodge-app.md](../specs/lodge-app.md#contentblobs)). Open in new tab opens a PDF at
-  its content URL; where a browser will not show a file in a sandboxed
+  without it can make a file's URL ([lodge-app.md](../specs/lodge-app.md#contentblobs)). Open in new browser tab,
+  the menus' Open in default app in a browser (`system.ts`'s
+  `openOutside`), opens an image, audio, video or PDF at its content URL
+  and is hidden for other files; a file's view opens it at that URL too; where a browser will not show a file in a sandboxed
   page, the app offers the `?download=1` URL instead.
 - **Offline**, the status bar says notes is out of reach. Editors keep
   their text and save it with its base on reconnect (the registry's

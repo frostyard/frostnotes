@@ -77,6 +77,20 @@ function setup(over: Partial<SettingsDialogProps> = {}) {
 const dialog = () => screen.getByRole("dialog", { name: "Settings" });
 const nav = () => screen.getByRole("navigation", { name: "Settings sections" });
 
+describe("SettingsDialog in a narrow window", () => {
+  it("lists the sections, then shows one over the list with Back", async () => {
+    const { props, user } = setup({ narrow: true });
+    expect(within(nav()).getAllByRole("button").length).toBe(SECTIONS.length);
+    expect(screen.queryByRole("region")).toBeNull();
+    const second = SECTIONS[1] as SettingsSection;
+    await user.click(within(nav()).getByRole("button", { name: second.name }));
+    expect(props.onSection).toHaveBeenCalledWith(second.id);
+    expect(screen.queryByRole("navigation", { name: "Settings sections" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(nav()).toBeTruthy();
+  });
+});
+
 describe("SettingsDialog", () => {
   it("draws a modal dialog in the document's body over a dimmed window, focused", () => {
     const { view } = setup();

@@ -280,7 +280,11 @@ Needs lodge's phase 1 (lodge-client) and phase 2's development build.
 - **First, the planner reads** Obsidian 1.14.4's phone styles and code
   in the user's install, as M3 read its desktop, and refines
   [specs/ui.md](../specs/ui.md#narrow-windows)'s measures before
-  writing the cards.
+  writing the cards. *Read on 2026-10-19, after the cards (the overnight
+  build wrote the narrow layout first, from the spec's structure):* the
+  styles confirm the spec's 44 and 52 touch sizes, the drawers' 84% up to
+  450, the 52-high bottom bar and editing toolbar, and notices at the
+  top; a phone's view header is 44, not 52, and the narrow header now is.
 - **Cards,** presentational, each with given tests:
   - the view header's narrow form;
   - drawers;

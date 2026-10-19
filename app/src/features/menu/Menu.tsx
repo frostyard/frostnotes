@@ -211,7 +211,7 @@ function MenuList({ label, items, x, y, onChoose, onClose, onBack, menuRef, shee
           const highlighted = highlight === index;
           const common = {
             "aria-label": item.label,
-            className: `text-sidebar-row flex ${sheet ? "h-11" : "h-7"} items-center gap-2 rounded px-2 ${highlighted ? "bg-accent text-accent-contrast" : ""} ${item.kind === "item" && item.disabled ? "opacity-40" : ""}`,
+            className: `text-sidebar-row flex ${sheet ? "h-11" : "h-7 pointer-coarse:h-11"} items-center gap-2 rounded px-2 ${highlighted ? "bg-accent text-accent-contrast" : ""} ${item.kind === "item" && item.disabled ? "opacity-40" : ""}`,
           };
           const contents = <ItemContents item={item} highlighted={highlighted} />;
           if (item.kind === "submenu") {

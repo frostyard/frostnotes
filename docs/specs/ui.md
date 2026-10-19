@@ -616,16 +616,18 @@ differs at any width:
     NODE";
   - `cloud-off` while out of reach, with "Notes out of reach;
     reconnecting";
-  - its menu shows who is signed in.
+  - its menu shows who is signed in: the display name or login, the
+    login, and the node.
 - **The vault manager** lists the hub's vaults and switches between
   them. It offers no Open folder as vault, Create new vault or Remove
   from list, and says that vaults are added on the hub's machine
   (`notesctl vault add`, then `notesctl hub serve`).
 - **Files:**
-  - Open in default app becomes Open in new tab for files the browser
-    shows (images, audio, video, PDF). It opens the file's content URL
-    on lodge-content, or its download URL where a browser will not show
-    the file in a sandboxed page. It is hidden for other files.
+  - Open in default app becomes Open in new browser tab for files the
+    browser shows (images, audio, video, PDF); a file menu's Open in new
+    tab stays the workspace's. It opens the file's content URL on
+    lodge-content, or its download URL where a browser will not show the
+    file in a sandboxed page. It is hidden for other files.
   - Attach file opens the browser's file picker (on a phone, the camera
     too) and uploads with `note.upload`.
 - **Links** to the shell's own origin open through the shell (`open`),
@@ -655,13 +657,18 @@ differs at any width:
 *(M4.)* Below 600 CSS pixels wide (the width of notes' frame in a
 browser), the window takes Obsidian's phone layout
 ([ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)).
-The measures here are refined from Obsidian 1.14.4's phone styles
-(`.is-phone`, `.mobile-navbar`, `.mobile-toolbar`) when the cards are
-written; the structure binds now.
+The measures here are Obsidian 1.14.4's phone styles (`.is-phone`,
+`.mobile-navbar`, `.mobile-toolbar`), read in the user's install on
+2026-10-19: its touch sizes are 44 (`--touch-size-m`) and 52
+(`--touch-size-l`); a phone's view header is 44 and a tablet's 52; the
+bottom bar and the editing toolbar are 52; drawers are 84% of the width,
+at most 450; menu items are padded to 44; notices sit at the top, under
+the top safe area. Its floating, pill-shaped bottom bar is a choice the
+person makes in Obsidian; notes keeps the full-width bar.
 
 ```
 ┌────────────────────────────────────┐
-│ ▤        Garden plan       📖 ⋯  ▥ │ view header 52
+│ ▤        Garden plan       📖 ⋯  ▥ │ view header 44
 │                                    │
 │   Garden plan                      │
 │   ┌ Properties ──────────────┐     │
@@ -679,11 +686,12 @@ written; the structure binds now.
   the status bar. The workspace draws the active tab group's active tab
   under its view header; other groups stay in the stored workspace,
   undrawn, and the split commands do not apply.
-- **The view header** is 52 high: Open left sidebar (`panel-left`) at
+- **The view header** is 44 high: Open left sidebar (`panel-left`) at
   the left; the note's title in the middle (a tap shows its folders as
-  the breadcrumb does); Reading view or Editing view, More options, and
-  Open right sidebar (`panel-right`) at the right. Back and forward move
-  to the bottom bar.
+  the breadcrumb does, and a tap on a folder reveals it in Files, in the
+  left drawer); Reading view or Editing view, More options, and Open
+  right sidebar (`panel-right`) at the right. Back and forward move to
+  the bottom bar.
 - **Drawers:** a sidebar opens over the workspace from its own edge,
   84% of the width and at most 450, `--bg-sidebar`, with its pane tabs
   in a row at its top and, in the left one, the vault row at its foot.
@@ -708,8 +716,9 @@ written; the structure binds now.
   - the ribbon's actions: quick switcher, today's daily note, insert
     template, command palette;
   - Settings;
-  - the status bar's items as text: the hub, backlinks, words and
-    characters.
+  - the status bar's items as text: the hub (notes' connection in a
+    browser, the vault's sync on the desktop), backlinks (which open the
+    Backlinks pane), words and characters.
 - **The editing toolbar** shows while an editor has focus. It is a row
   52 high, docked to the top of the on-screen keyboard (the visual
   viewport's bottom), that scrolls sideways. It holds Obsidian's default
@@ -728,14 +737,20 @@ written; the structure binds now.
   and open on a long press (500 ms) as well as a right click.
 - **Settings** are full screen: the list of sections, then a section
   over it with a back button.
-- **Notices** sit at the top, the width less 8 pixels on each side.
-- **The merge view** stacks its two sides, the document above.
+- **Notices** sit at the top, under the top safe area, the width less 8
+  pixels on each side.
+- **The merge view** stacks its two sides, the document above, each
+  half scrolling on its own. Its arrows have no column between the sides
+  there, so a narrow window draws none, and a chunk is taken by editing
+  the document.
 
 **Touch sizes** follow the pointer at any width: when
 `(pointer: coarse)` matches, chrome buttons are 44 × 44 with 20-pixel
 icons, rows of lists, menus and prompts are at least 44 high, a tab's
-Close is always shown, and tooltips and hover previews do not show. A
-hardware keyboard still runs the [keyboard map](#keyboard-map).
+Close is always shown, and tooltips and hover previews do not show (the
+tooltips are `title`s, which touch browsers do not show; page previews
+are not opened). A hardware keyboard still runs the
+[keyboard map](#keyboard-map).
 
 ## Keyboard map
 

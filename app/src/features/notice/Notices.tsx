@@ -1,6 +1,8 @@
 // The window's notices (docs/specs/ui.md#notices): short messages stacked
 // at the top right, each leaving on its own after a while or when
-// clicked; one may carry an action. Timers follow each notice's first appearance.
+// clicked; one may carry an action. In a narrow window they sit at the
+// top, the width less 8 pixels on each side, under the top safe area.
+// Timers follow each notice's first appearance.
 
 import { useEffect, useRef } from "react";
 
@@ -64,7 +66,7 @@ export function Notices({ notices, onDismiss }: NoticesProps) {
   }
 
   return (
-    <div className="pointer-events-none fixed top-[52px] right-2 z-40 flex w-80 max-w-[calc(100vw-16px)] flex-col gap-2">
+    <div className="pointer-events-none fixed top-[52px] right-2 z-40 flex w-80 max-w-[calc(100vw-16px)] flex-col gap-2 max-[599px]:top-[calc(env(safe-area-inset-top)+8px)] max-[599px]:left-2 max-[599px]:w-auto max-[599px]:max-w-none">
       {notices.map((notice) => (
         // biome-ignore lint/a11y/useKeyWithClickEvents: Clicking only hastens the timer; the action is a keyboard-accessible button.
         <div

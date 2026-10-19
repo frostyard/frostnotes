@@ -2,14 +2,18 @@
 // app the shell's two checked commands (src-tauri/src/open.rs) open a web
 // link in the system's browser and a vault file in its default app, the
 // system's folder picker names a folder (ADR-0024), and the window's title
-// is the system's; in a browser, a web link opens in a new tab, files do
-// not open, a folder's path is typed, and the title is the page's.
+// is the system's; in a browser, a web link opens in a new tab, a file the
+// browser shows opens in one by its content URL, a folder's path is typed,
+// and the title is the page's.
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import { useFiles } from "../data/files";
 import { notify } from "../data/overlays";
 import { useNotes } from "../data/stores";
+import { extensionOf, fileType } from "../lib/fileTree";
 import { useLodge } from "../lodge/lodge";
+import type { Client } from "../rpc/gen/api";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -47,6 +51,36 @@ export async function openInDefaultApp(vaultId: number, path: string): Promise<v
   } catch (err) {
     notify(`Cannot open ${path}: ${message(err)}`);
   }
+}
+
+/** browserShows reports whether a browser shows a file of path's type in a tab of its own: images, audio, video and PDF. */
+export function browserShows(path: string): boolean {
+  const type = fileType(path);
+  return type === "image" || type === "audio" || type === "video" || type === "pdf";
+}
+
+/**
+ * openOutsideLabel names a file's way out of the app, or is null where it
+ * has none: Open in default app in the desktop app; in a browser, Open in
+ * new browser tab for a file the browser shows, and nothing for any other
+ * (docs/specs/ui.md#in-a-browser). A file menu's Open in new tab is the
+ * workspace's.
+ */
+export function openOutsideLabel(path: string): string | null {
+  if (isTauri()) return "Open in default app";
+  return browserShows(path) ? "Open in new browser tab" : null;
+}
+
+/** openOutside opens a vault file outside the app: with its default app, or in a browser by its content URL in a new tab. */
+export async function openOutside(c: Client, vaultId: number, path: string): Promise<void> {
+  if (isTauri()) return openInDefaultApp(vaultId, path);
+  const hash = useFiles.getState().files.get(path)?.hash;
+  const url = hash === undefined ? undefined : c.transport.blobURL?.(hash, extensionOf(path));
+  if (!url) {
+    notify(`Cannot open ${path} here.`);
+    return;
+  }
+  await openExternal(url);
 }
 
 /**

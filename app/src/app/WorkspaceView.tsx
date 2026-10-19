@@ -274,7 +274,12 @@ function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
       {props.narrow && (
         <NarrowHeader
           title={tabTitle(view)}
+          path={path}
           mode={view.type === "note" ? view.mode : undefined}
+          onFolder={(folder) => {
+            revealInFiles(`${folder}/`);
+            props.narrow?.onLeft();
+          }}
           onLeft={props.narrow.onLeft}
           onRight={props.narrow.onRight}
           onToggleMode={() =>

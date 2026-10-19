@@ -193,7 +193,7 @@ export function FilesPane(props: FilesPaneProps) {
               title={row.path}
               draggable={row.path !== renaming}
               tabIndex={row.path === tabPath ? 0 : -1}
-              className={`text-sidebar-row relative mx-2 flex h-7 min-w-0 items-center rounded-md ${
+              className={`text-sidebar-row relative mx-2 flex h-7 min-w-0 items-center rounded-md pointer-coarse:h-11 ${
                 row.path === active ? "bg-selection-sidebar" : "hover:bg-selection-inactive"
               } ${row.kind === "folder" && row.path === dropFolder ? "ring-1 ring-accent ring-inset" : ""}`}
               style={{ paddingLeft: 4 + 16 * row.depth }}

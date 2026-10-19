@@ -7,6 +7,7 @@ import { setRenaming } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import type { MenuItem } from "../features/menu/Menu";
+import type { StatusCounts, StatusIdentity } from "../features/status/StatusBar";
 import type { Client, SyncConflict } from "../rpc/gen/api";
 import { tabTitle, type ViewState } from "../workspace/model";
 import {
@@ -26,7 +27,7 @@ import {
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { copyPath, deleteFile } from "./commands";
-import { openInDefaultApp } from "./system";
+import { openOutside, openOutsideLabel } from "./system";
 
 const update = (op: Parameters<ReturnType<typeof useWorkspace.getState>["update"]>[0]) =>
   useWorkspace.getState().update(op);
@@ -92,25 +93,52 @@ export function openTabList(groupId: string, x: number, y: number): void {
   });
 }
 
+/** NarrowStatus is what a narrow window's Menu shows of the status bar it lacks. */
+export interface NarrowStatus {
+  /** The hub's item as text: notes' connection in a browser, the vault's sync on the desktop; null for neither. */
+  hub: string | null;
+  backlinks: number | null;
+  counts: StatusCounts | null;
+}
+
+/** NARROW_BACKLINKS is the narrow Menu's backlinks item, which opens the Backlinks pane. */
+export const NARROW_BACKLINKS = "status:backlinks";
+
+const counted = (n: number, noun: string) => `${n.toLocaleString("en-US")} ${noun}${n === 1 ? "" : "s"}`;
+
 /**
  * openNarrowMenu opens a narrow window's Menu (docs/specs/ui.md#narrow-windows):
- * the ribbon's actions and Settings, each run by its command.
+ * the ribbon's actions and Settings, each run by its command, then the
+ * status bar's items as text; choosing the backlinks runs NARROW_BACKLINKS.
  */
-export function openNarrowMenu(run: (command: string) => void, x: number, y: number): void {
-  openMenu({
-    label: "Menu",
-    x,
-    y,
-    items: [
-      item("switcher:open", "Open quick switcher"),
-      item("daily-notes", "Open today's daily note"),
-      item("insert-template", "Insert template"),
-      item("command-palette:open", "Open command palette"),
-      SEP,
-      item("app:open-settings", "Settings"),
-    ],
-    onChoose: run,
-  });
+export function openNarrowMenu(run: (command: string) => void, x: number, y: number, status?: NarrowStatus): void {
+  const items: MenuItem[] = [
+    item("switcher:open", "Open quick switcher"),
+    item("daily-notes", "Open today's daily note"),
+    item("insert-template", "Insert template"),
+    item("command-palette:open", "Open command palette"),
+    SEP,
+    item("app:open-settings", "Settings"),
+  ];
+  const shown: MenuItem[] = [];
+  if (status?.hub) shown.push(item("status:hub", status.hub, { disabled: true }));
+  if (status && status.backlinks !== null) shown.push(item(NARROW_BACKLINKS, counted(status.backlinks, "backlink")));
+  if (status?.counts) {
+    shown.push(
+      item("status:words", counted(status.counts.words, "word"), { disabled: true }),
+      item("status:characters", counted(status.counts.characters, "character"), { disabled: true }),
+    );
+  }
+  if (shown.length > 0) items.push(SEP, ...shown);
+  openMenu({ label: "Menu", x, y, items, onChoose: run });
+}
+
+/** openIdentityMenu opens the browser's connection menu above (x, y): who is signed in, and on which node. */
+export function openIdentityMenu(who: StatusIdentity, x: number, y: number): void {
+  const items: MenuItem[] = [item("name", `Signed in as ${who.displayName || who.login}`, { disabled: true })];
+  if (who.displayName && who.displayName !== who.login) items.push(item("login", who.login, { disabled: true }));
+  if (who.node) items.push(item("node", `on ${who.node}`, { disabled: true }));
+  openMenu({ label: "Connection", x, y: y - items.length * 28 - 10, items, onChoose: () => {} });
 }
 
 /** revealInFiles shows the Files pane with path's row in view, its folders open; a folder path ends with "/". */
@@ -125,13 +153,14 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
   if (file !== null) items.push(item("history", "Open version history"), SEP);
   items.push(item("split-right", "Split right"), item("split-down", "Split down"));
   if (file !== null) {
+    const outside = openOutsideLabel(file);
     items.push(
       SEP,
       item("rename", "Rename…", { keys: "F2" }),
       item("move", "Move file to…"),
       item("copy-path", "Copy path"),
       item("reveal", "Reveal in Files"),
-      item("open-default", "Open in default app"),
+      ...(outside === null ? [] : [item("open-default", outside)]),
       SEP,
       item("delete", "Delete file"),
     );
@@ -161,7 +190,7 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
           return;
         case "open-default": {
           const vaultId = useNotes.getState().vaultId;
-          if (file !== null && vaultId !== null) void openInDefaultApp(vaultId, file);
+          if (file !== null && vaultId !== null) void openOutside(c, vaultId, file);
           return;
         }
         case "rename":

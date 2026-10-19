@@ -108,7 +108,7 @@ export function SearchPane({ query, onQuery, results, error, focusRequest, onOpe
                     {open && hit.snippet.length > 0 && (
                       <button
                         type="button"
-                        className="mx-2 block w-[calc(100%-1rem)] rounded-md pl-6 text-left text-xs leading-4 hover:bg-selection-inactive"
+                        className="mx-2 block w-[calc(100%-1rem)] rounded-md pl-6 text-left text-xs leading-4 hover:bg-selection-inactive pointer-coarse:min-h-11"
                         onClick={(event) => onOpen(hit.path, paneClick(event))}
                         onAuxClick={(event) => {
                           if (event.button === 1) onOpen(hit.path, paneClick(event));

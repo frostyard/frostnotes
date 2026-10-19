@@ -86,7 +86,8 @@ describe("LodgeBridge", () => {
   it("opens the frame's own route on load, then reports it with the note's context", async () => {
     const { lodge } = await start("/3/Deep/b%20c.md");
     await waitFor(() => expect(activePath()).toBe("Deep/b c.md"));
-    await waitFor(() => expect(lodge.routes.at(-1)).toEqual(["/3/Deep/b%20c.md", "b c"]));
+    // The frame's title is the window's: note, vault, Frostnotes.
+    await waitFor(() => expect(lodge.routes.at(-1)).toEqual(["/3/Deep/b%20c.md", "b c - garden - Frostnotes"]));
     expect(lodge.contexts.at(-1)).toEqual({ kind: "note", ref: "notes/3/Deep/b%20c.md", title: "b c" });
   });
 
@@ -111,7 +112,7 @@ describe("LodgeBridge", () => {
     await act(async () => lodge.send("navigate", { route: "/1/n.md?x=1#top" }));
     await waitFor(() => expect(useNotes.getState().vaultId).toBe(1));
     await waitFor(() => expect(activePath()).toBe("n.md"));
-    await waitFor(() => expect(lodge.routes.at(-1)).toEqual(["/1/n.md", "n"]));
+    await waitFor(() => expect(lodge.routes.at(-1)).toEqual(["/1/n.md", "n - Notes - Frostnotes"]));
   });
 
   it("opens the quick switcher for a note that is gone", async () => {
