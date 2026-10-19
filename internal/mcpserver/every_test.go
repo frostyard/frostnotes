@@ -55,4 +55,10 @@ func TestEveryTool(t *testing.T) {
 	if !strings.Contains(h.disk(edited.Path), "Prune in winter.") {
 		t.Error("revert did not undo the agent's edit")
 	}
+	// Over stdio, the vault's ID is not lodge's: no result carries a url.
+	for _, u := range []string{hits.Hits[0].URL, note.URL, list.Notes[0].URL, back.Backlinks[0].URL, made.URL, edited.URL, daily.URL} {
+		if u != "" {
+			t.Errorf("a stdio result carries url %q", u)
+		}
+	}
 }

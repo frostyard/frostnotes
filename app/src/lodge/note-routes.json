@@ -1,0 +1,45 @@
+[
+  { "vaultId": 1, "path": "Plan.md", "route": "/1/Plan.md" },
+  {
+    "vaultId": 1,
+    "path": "Projects/Q3 plan #2?/Ünïcode & 100%.md",
+    "route": "/1/Projects/Q3%20plan%20%232%3F/%C3%9Cn%C3%AFcode%20%26%20100%25.md"
+  },
+  { "vaultId": 7, "path": "Porter/Briefs/2026-10-19.md", "route": "/7/Porter/Briefs/2026-10-19.md" },
+  { "vaultId": 7, "path": "Daily/Réunion à 9h.md", "route": "/7/Daily/R%C3%A9union%20%C3%A0%209h.md" },
+  { "vaultId": 7, "path": "Notes/cafe\u0301 nai\u0308ve.md", "route": "/7/Notes/cafe%CC%81%20nai%CC%88ve.md" },
+  {
+    "vaultId": 42,
+    "path": "Inbox/a+b=c; d,e @home: $5.md",
+    "route": "/42/Inbox/a%2Bb%3Dc%3B%20d%2Ce%20%40home%3A%20%245.md"
+  },
+  {
+    "vaultId": 42,
+    "path": "Wiki/(draft) it's *really* ~fine!.md",
+    "route": "/42/Wiki/(draft)%20it's%20*really*%20~fine!.md"
+  },
+  {
+    "vaultId": 42,
+    "path": "Inbox/50% off [sale] {x} <y>.md",
+    "route": "/42/Inbox/50%25%20off%20%5Bsale%5D%20%7Bx%7D%20%3Cy%3E.md"
+  },
+  { "vaultId": 42, "path": "Percent/%25 literal and %.md", "route": "/42/Percent/%2525%20literal%20and%20%25.md" },
+  { "vaultId": 42, "path": "Hash/#tag ##two.md", "route": "/42/Hash/%23tag%20%23%23two.md" },
+  {
+    "vaultId": 3,
+    "path": "日本語/メモ 一.md",
+    "route": "/3/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%A1%E3%83%A2%20%E4%B8%80.md"
+  },
+  {
+    "vaultId": 3,
+    "path": "Emoji 🌱 notes/seed 🌳.md",
+    "route": "/3/Emoji%20%F0%9F%8C%B1%20notes/seed%20%F0%9F%8C%B3.md"
+  },
+  { "vaultId": 3, "path": "Assets/photo #1.png", "route": "/3/Assets/photo%20%231.png" },
+  {
+    "vaultId": 3,
+    "path": "Back\\slash `tick` \"quote\" ^caret | pipe.md",
+    "route": "/3/Back%5Cslash%20%60tick%60%20%22quote%22%20%5Ecaret%20%7C%20pipe.md"
+  },
+  { "vaultId": 1234567890123, "path": "Deep/a/b/c/d.md", "route": "/1234567890123/Deep/a/b/c/d.md" }
+]

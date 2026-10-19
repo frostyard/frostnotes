@@ -23,7 +23,7 @@ func (t *tools) createNote(ctx context.Context, req *sdk.CallToolRequest, in cre
 	if err != nil {
 		return nil, createOut{}, err
 	}
-	return nil, createOut{Path: result.Path, Hash: result.Hash}, nil
+	return nil, createOut{Path: result.Path, URL: t.url(result.Path), Hash: result.Hash}, nil
 }
 
 func (t *tools) editNote(ctx context.Context, req *sdk.CallToolRequest, in editIn) (*sdk.CallToolResult, editOut, error) {
@@ -43,7 +43,7 @@ func (t *tools) editNote(ctx context.Context, req *sdk.CallToolRequest, in editI
 	if err != nil {
 		return nil, editOut{}, err
 	}
-	return nil, editOut{Path: result.Path, Hash: result.Hash, Merged: result.Merged, Conflicts: int(result.Conflicts)}, nil
+	return nil, editOut{Path: result.Path, URL: t.url(result.Path), Hash: result.Hash, Merged: result.Merged, Conflicts: int(result.Conflicts)}, nil
 }
 
 func (t *tools) appendToDailyNote(ctx context.Context, req *sdk.CallToolRequest, in dailyIn) (*sdk.CallToolResult, dailyOut, error) {
@@ -62,5 +62,5 @@ func (t *tools) appendToDailyNote(ctx context.Context, req *sdk.CallToolRequest,
 		return nil, dailyOut{}, err
 	}
 	w := daily.Write
-	return nil, dailyOut{Path: w.Path, Hash: w.Hash, Created: daily.Created, Merged: w.Merged}, nil
+	return nil, dailyOut{Path: w.Path, URL: t.url(w.Path), Hash: w.Hash, Created: daily.Created, Merged: w.Merged}, nil
 }
