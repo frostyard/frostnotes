@@ -70,7 +70,6 @@ func TestTheSocketKeepsLodgesRules(t *testing.T) {
 	if m.ID != lodgeapp.ID || m.User != "frostnotes" || !m.Content || !m.Device || !m.MCP || !m.RemoteImages || m.ContentLinks {
 		t.Fatalf("app.json = %+v, not lodge-app.md's", m)
 	}
-	m.MCP = false // /mcp is plan 0006's Phase 4
 	kittest.CheckRules(t, n.lodge, m)
 	h, err := n.lodge.Health(t.Context())
 	if err != nil || !h.OK || h.Version != "test" || h.Protocol != api.Protocol {

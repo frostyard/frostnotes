@@ -1,5 +1,7 @@
 // Package mcpserver serves a vault to agents over the Model Context
-// Protocol (ADR-0012), with the tools docs/specs/mcp.md specifies. It is a
+// Protocol (ADR-0012), with the tools docs/specs/mcp.md specifies: over
+// stdio for notesctl mcp, and over Streamable HTTP behind lodge's /mcp
+// (Handler). It is a
 // client of notesd's RPC API like any other: every tool calls the note
 // domain, and every write is an ordinary write with a base. It is the only
 // package that imports the MCP SDK, and no SDK type is in its exported API.
@@ -8,6 +10,7 @@ package mcpserver
 import (
 	"context"
 	"io"
+	"log/slog"
 
 	"github.com/frostyard/frostnotes/api"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,6 +26,13 @@ type Options struct {
 	ReadOnly bool
 	// Version is reported to the MCP host as the server's.
 	Version string
+	// Author, when set, is every write's author in place of the MCP
+	// client's name, which then goes to Log only: through lodge, the
+	// token's name (docs/specs/mcp.md#through-lodge).
+	Author string
+	// Log receives the MCP client's name when Author replaces it; nil
+	// discards it.
+	Log *slog.Logger
 }
 
 // Notice is the sentence every read tool's result carries, so text from a
@@ -117,9 +127,16 @@ func author(req *sdk.CallToolRequest) string {
 	return "mcp"
 }
 
-// agentWrite is the source and author of a write by the agent behind req.
-func agentWrite(req *sdk.CallToolRequest) (*api.VersionSource, *string) {
+// agentWrite is the source and author of a write by the agent behind req:
+// Options.Author when set, else the MCP client's name.
+func (t *tools) agentWrite(req *sdk.CallToolRequest) (*api.VersionSource, *string) {
 	source, name := api.VersionSourceAgent, author(req)
+	if t.o.Author != "" {
+		if t.o.Log != nil {
+			t.o.Log.Info("an MCP write", "author", t.o.Author, "client", name)
+		}
+		name = t.o.Author
+	}
 	return &source, &name
 }
 
