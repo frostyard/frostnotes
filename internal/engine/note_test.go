@@ -63,6 +63,21 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
+// editFile replaces the file at p whole, as an editor saving through a
+// temporary file does. os.WriteFile truncates the file first, and a scan
+// that reads it before the write lands indexes an empty outside version.
+func editFile(t *testing.T, dir, p, content string) {
+	t.Helper()
+	full := filepath.Join(dir, filepath.FromSlash(p))
+	tmp := filepath.Join(filepath.Dir(full), "."+filepath.Base(full)+".swp")
+	if err := os.WriteFile(tmp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, full); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // waitFor reads events until one matches, failing after a minute: a
 // scan under the race detector on a slow runner takes seconds.
 func (av *apiVault) waitFor(what string, match func(api.EventEnvelope) bool) {

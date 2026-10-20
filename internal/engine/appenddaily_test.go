@@ -55,7 +55,7 @@ func TestAppendDaily(t *testing.T) {
 	// The user edits the note by hand, leaving no final line break; the
 	// next append keeps the edit, and changes none of the text before it.
 	edited := "# " + today() + "\n- first, by hand\n- second"
-	writeFiles(t, av.dir, map[string]string{p: edited})
+	editFile(t, av.dir, p, edited)
 	third, err := av.c.Note().AppendDaily(ctx, &api.NoteAppendDailyParams{VaultID: av.id, Text: "- third"})
 	if err != nil || third.Write.Merged {
 		t.Fatalf("the append after an edit = %+v, %v", third, err)
