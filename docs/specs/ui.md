@@ -263,7 +263,8 @@ holds a space.
   opens the source at the line.
 - **Outgoing links:** the active note's links (`note.links`), each target
   once: resolved ones by title, then unresolved ones in
-  `--text-tertiary`. A click opens it; an unresolved one creates it.
+  `--text-tertiary`. A click opens it; an unresolved one creates it
+  (inside lodge, not a rooted one: [In a browser](#in-a-browser)).
 - **Tags:** every tag in the vault with its count, nested at `/` (a
   parent counts its own notes and its children's), sorted by name (A to
   Z) or count (a toolbar menu). A click searches `tag:#name`.
@@ -631,7 +632,17 @@ differs at any width:
   - Attach file opens the browser's file picker (on a phone, the camera
     too) and uploads with `note.upload`.
 - **Links** to the shell's own origin open through the shell (`open`),
-  in notes or another app; other web links open in a new tab.
+  in notes or another app; other web links open in a new tab. A rooted
+  link (`/…`) that no vault file answers is lodge's address, never a new
+  note ([ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)), from the editor, the reading view or
+  Outgoing links:
+  - when its first segment can name a lodge app (lodge-client's
+    `validApp`), it opens through `open`, each segment percent-encoded
+    as `encodeURIComponent` does;
+  - otherwise the notice "Nothing in this vault or in lodge is at
+    TARGET." shows, and nothing else happens.
+
+  A rooted link that resolves opens its file.
 - **Keys:** the switcher's key, which lodge-client names in `init`, is
   never bound by the window and reaches the shell from inside the
   frame. Every other key is the [keyboard map](#keyboard-map)'s.
@@ -850,6 +861,6 @@ belongs to the field, a prompt or a menu.
 
 ## References
 
-- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows); frostmail's `docs/specs/ui.md` for the tokens and the chrome
+- Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) (rooted links inside lodge); frostmail's `docs/specs/ui.md` for the tokens and the chrome
 - Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md)

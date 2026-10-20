@@ -1,6 +1,8 @@
 // Notes' routes inside lodge (docs/design/app.md#in-a-browser): a note's
 // canonical URL is /notes/<vault id>/<path>, each segment percent-encoded,
-// and its route, relative to the app's root, /<vault id>/<path>.
+// and its route, relative to the app's root, /<vault id>/<path>. A rooted
+// link no vault file answers is lodge's address (ADR-0029).
+import { MAX_ROUTE, validApp } from "@frostyard/lodge-client";
 
 /** NoteRoute is what a route names: a vault, and a file in it ("" for none). */
 export interface NoteRoute {
@@ -36,4 +38,16 @@ export function parseNoteRoute(pathname: string): NoteRoute | null {
 /** noteTitle is how the shell titles a note: its name without .md. */
 export function noteTitle(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+}
+
+/**
+ * lodgeAddress is a rooted link's target as lodge's address, each segment
+ * percent-encoded as encodeURIComponent does, or null when its first
+ * segment can name no lodge app or the route is too long for the shell.
+ */
+export function lodgeAddress(target: string): string | null {
+  const segments = target.split("/").slice(1);
+  if (!target.startsWith("/") || !validApp(segments[0] ?? "")) return null;
+  const address = `/${segments.map(encodeURIComponent).join("/")}`;
+  return address.length <= MAX_ROUTE ? address : null;
 }

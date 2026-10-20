@@ -16,7 +16,7 @@ import { type OutgoingLink, outgoingLinks } from "../../lib/outgoing";
 import type { Backlink, Client } from "../../rpc/gen/api";
 import { activeTab } from "../../workspace/ops";
 import { useWorkspace } from "../../workspace/store";
-import { openOrCreate } from "../commands";
+import { openInLodge, openOrCreate } from "../commands";
 import { openAtLine, openFile, whereOf } from "./open";
 
 const titleOf = (p: string) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
@@ -143,6 +143,7 @@ export function OutgoingContainer() {
       links={path === null ? null : state?.path === path ? state.links : []}
       onOpen={(link, click) => {
         if (link.path !== null) return openFile(link.path, click);
+        if (openInLodge(link.target)) return;
         openOrCreate(client, link.target, whereOf(click)).catch((err: unknown) =>
           notify(err instanceof Error ? err.message : String(err)),
         );

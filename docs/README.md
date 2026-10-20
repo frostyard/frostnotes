@@ -47,6 +47,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0026 — notesd runs as a lodge app](adr/0026-notesd-runs-as-a-lodge-app.md)
 - [0027 — A narrow window takes Obsidian's phone layout](adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)
 - [0028 — An agent's scope can limit writes to folders](adr/0028-an-agents-scope-can-limit-writes-to-folders.md)
+- [0029 — Inside lodge, a rooted link no file answers opens through lodge](adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)
 
 ### Design
 
