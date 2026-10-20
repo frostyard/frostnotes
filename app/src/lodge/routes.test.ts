@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { noteRef, noteRoute, noteTitle, parseNoteRoute } from "./routes";
+import { lodgeAddress, noteRef, noteRoute, noteTitle, parseNoteRoute } from "./routes";
 
 // The cases notesd's MCP tools share: their url is /notes plus each route
 // (internal/mcpserver/url_test.go reads the same file).
@@ -54,5 +54,28 @@ describe("notes' routes", () => {
   it("titles a note by its name", () => {
     expect(noteTitle("Projects/Plan.md")).toBe("Plan");
     expect(noteTitle("Assets/photo.png")).toBe("photo.png");
+  });
+
+  it("takes a rooted link as lodge's address, each segment encoded", () => {
+    expect(lodgeAddress("/mail/message/abc@example.com")).toBe("/mail/message/abc%40example.com");
+    expect(lodgeAddress("/notes/2/Daily/2026-10-20.md")).toBe("/notes/2/Daily/2026-10-20.md");
+    expect(lodgeAddress("/notes/2/Q3 plan #2?.md")).toBe("/notes/2/Q3%20plan%20%232%3F.md");
+    expect(lodgeAddress("/mail")).toBe("/mail");
+  });
+
+  it("refuses an address no lodge app can have", () => {
+    for (const bad of [
+      "/",
+      "mail/message/1",
+      "/Projects/Plan",
+      "/my notes/Plan",
+      "/app/notes/1/Plan.md",
+      "/lodge",
+      "/mcp/notes",
+      "/device/notes",
+      `/mail/${"x".repeat(2048)}`,
+    ]) {
+      expect(lodgeAddress(bad)).toBeNull();
+    }
   });
 });

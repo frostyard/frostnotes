@@ -43,6 +43,8 @@ import { addProperty, replaceText } from "../editor/preview/properties";
 import { readFrontmatter, setProperties } from "../editor/properties";
 import type { DocumentRegistry } from "../editor/registry";
 import { findLinks, frontmatterEnd } from "../editor/syntax/extract";
+import { useLodge } from "../lodge/lodge";
+import { lodgeAddress } from "../lodge/routes";
 import type { Client } from "../rpc/gen/api";
 import type { ViewState } from "../workspace/model";
 import {
@@ -179,10 +181,26 @@ export async function deleteFile(c: Client, path: string): Promise<void> {
 const WEB = /^(https?|mailto):/i;
 
 /**
+ * openInLodge follows a rooted link no vault file answers inside lodge, as
+ * lodge's address rather than a new note (ADR-0029): the shell opens it,
+ * or a notice says nothing is there. It reports whether it took the link:
+ * false outside lodge and for a target that is not rooted.
+ */
+export function openInLodge(target: string): boolean {
+  const shell = useLodge.getState().lodge;
+  const rooted = target.trim();
+  if (!shell || !rooted.startsWith("/") || rooted.startsWith("//")) return false;
+  const address = lodgeAddress(rooted);
+  if (address) shell.open(address);
+  else notify(`Nothing in this vault or in lodge is at ${rooted}.`);
+  return true;
+}
+
+/**
  * followLink follows a link an editor drew, from its tab: a vault file
  * opens; a web link opens outside the app; an unresolved note link creates
  * the note, as Obsidian does: under its own folders when it names any,
- * else where new notes go.
+ * else where new notes go. Inside lodge a rooted one is lodge's address.
  */
 export async function followLink(
   c: Client,
@@ -201,6 +219,7 @@ export async function followLink(
   }
   // A protocol-relative URL (//host) names no note, as the reading view's sanitizer has it.
   if (cmd.target.trim().startsWith("//")) return;
+  if (openInLodge(cmd.target)) return;
   const target = cmd.target.trim().replace(/^\/+/, "");
   if (target === "" || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target)) return;
   const name = target.endsWith(".md") ? target : `${target}.md`;

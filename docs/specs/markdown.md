@@ -221,7 +221,9 @@ resolved)
    Each step below tries the names in order and stops at the first name
    that matches a file. (Obsidian docs)
 3. **Rooted:** a rooted target resolves only to the file whose path equals
-   a name; otherwise it is unresolved. (choice)
+   a name; otherwise it is unresolved. (choice) Inside lodge, the app
+   follows an unresolved rooted link as lodge's address rather than
+   creating the note ([ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)).
 4. **Relative:** the file at a name joined to the source's folder. (dump:
    25 of the 29 bare-name links Obsidian resolved point into the linking
    note's own folder, 14 of them with 3 files of that name; 21 links with
@@ -667,5 +669,6 @@ b]] are not links, nor is \[[Escaped]] or [Single].
 
 - Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (invalid UTF-8), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) (comments, ties)
 - Context: [design/vault.md](../design/vault.md) (parse, index, link resolution), [design/app.md](../design/app.md#extensions) (the editor's parser runs the same fixtures)
+- Followed: [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) (an unresolved rooted link inside lodge)
 - Rendered: [specs/render.md](render.md) renders the same tree into HTML
 - Built in: [plan 0003](../plans/0003-m1-headless-vault.md); evidence from [plan 0001, spike 4](../plans/0001-m0-foundations.md#phase-5--spikes-go-or-no-go)

@@ -11,8 +11,9 @@ editor and the reading view),
 (saves and merges),
 [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)
 (attachments),
-[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) and
-[ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md)
+[ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md),
+[ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) and
+[ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)
 (the web app inside lodge).
 Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
 [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
@@ -298,8 +299,9 @@ after the last tab goes until what it holds is saved:
   batched call cached until a file is added, moved or removed (the files
   store's `pathsVersion`; `editor/links.ts`); unresolved links show
   dimmed, and following one creates the note under its own folders when
-  it names any, else where new notes go. A web link opens outside the
-  app.
+  it names any, else where new notes go (inside lodge, a rooted one
+  opens through lodge instead: [In a browser](#in-a-browser)). A web
+  link opens outside the app.
 - **Modes:** live preview (the default), source mode (the same editor
   without the preview decorations) and the reading view. Ctrl+E switches
   between editing and reading; source and live preview are a preference
@@ -607,6 +609,14 @@ desktop's, with a different transport and frame:
     title}` follows the active note, for lodge's companion.
   - **Links.** A link to a lodge URL (the shell's origin) goes to
     `open {url}`; other web links open in a new tab.
+    - A rooted link no vault file answers goes to `open` too, and is
+      never made a note
+      ([ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)). `followLink` and the Outgoing links
+      pane ask `openInLodge` (`app/commands.ts`), which encodes the
+      target with `lodgeAddress` (`src/lodge/routes.ts`); a first
+      segment no lodge app can have gets a notice instead.
+    - A rooted link that resolves opens its file, and outside lodge an
+      unresolved one still creates the note.
   - **The switcher's key.** lodge-client catches the key `init` names,
     in the capture phase, before notes' key listener, and posts
     `shortcut {key}` itself; the window's key listener never binds it.
@@ -721,7 +731,7 @@ desktop's, with a different transport and frame:
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md) ([roadmap](../plans/0002-roadmap.md))
