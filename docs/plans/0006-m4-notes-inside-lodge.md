@@ -113,6 +113,15 @@ them without ADRs:
     trial hub, which nothing touched; Phase 4's live Claude Code run
     used it. Phase 7's move script finds that deployment and sets its
     data aside, never merging it into the hub's.
+  - *A second use, reported by the user on 2026-10-21:* on 2026-10-20
+    the user tried Porter's daily brief through lodge and opened it in the
+    web app on their phone
+    ([ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)).
+    The user reports that this was probably the M2 trial's vault, not the
+    test vault, and is not sure. If so, Porter wrote into the trial's vault,
+    and the phone looked at notes before Phase 7, both against the rule
+    above. The user reports that sync is working well, and the M2 trial
+    ([plan 0004](0004-m2-sync.md)) is not restarted.
   - M4's docs name no address, host, tailnet, device, share or vault of
     the user's.
 - **The API grows within protocol 1, additively** (Phase 2):
