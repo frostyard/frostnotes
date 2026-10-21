@@ -1,6 +1,6 @@
 # 0029 — Inside lodge, a rooted link no file answers opens through lodge
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-21)
 - **Date:** 2026-10-20
 
 ## Context
@@ -26,6 +26,10 @@ On 2026-10-20 a daily brief that Porter, frostyard's assistant, wrote into
 the vault held links like `[…](/mail/message/…)` and `[…](/notes/2/…)`.
 Following them in the web app on the owner's phone created empty notes
 under `mail/message/` and `notes/2/`, which sync carried to every device.
+The owner reports that the vault was probably the one in notes' M2 trial
+([plan 0004](../plans/0004-m2-sync.md)), and is not sure; the trial was
+not restarted
+([plan 0006](../plans/0006-m4-notes-inside-lodge.md#decisions-taken-for-m4)).
 Porter now writes wiki links for notes and `https://` URLs for lodge's
 other pages. Older notes, and other writers, still hold rooted links that
 mean lodge's addresses. A click is the only input before the note is made.
@@ -91,3 +95,4 @@ mean lodge's addresses. A click is the only input before the note is made.
   [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md#open)
   (`open`)
 - Built in: [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md)
+- Roadmap: [plan 0002](../plans/0002-roadmap.md) (M4)

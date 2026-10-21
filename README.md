@@ -12,15 +12,19 @@ markdown files with YAML frontmatter, in a folder you own
   edits. No conflict copies.
 - **The desktop app** is Tauri v2 with a React UI and a CodeMirror 6 editor
   with live preview, a sibling of [Frostmail](https://github.com/frostyard/frostmail).
-- **The web app** is the same UI, served by the hub.
+- **The web app** is the same UI, served by
+  [lodge](https://github.com/frostyard/lodge), frostyard's tailnet-only
+  web shell, with Obsidian's phone layout on a narrow screen.
 - **Agents** search, read and write notes through MCP: `notesctl mcp`
-  locally, `/mcp` on the hub.
+  locally, or lodge's `/mcp/notes` with a scoped token.
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties.
 
-Pre-release: M0 (foundations) and M1, the headless vault, are done:
-notesd indexes, watches and writes vaults, and `notesctl` and
-`notesctl mcp` drive it. Sync (M2) is next; the app comes in M3.
+Pre-release. M0 (foundations) and M1 (the headless vault) are done. Sync
+(M2) and the desktop app (M3) are built and in their 7-day trials, through
+2026-10-24 and 2026-10-25. M4, notes inside lodge, is in progress: notesd
+runs as lodge's `notes` app, and the hub moves behind lodge from
+2026-10-26. See the [roadmap](docs/plans/0002-roadmap.md).
 
 ## Try it
 

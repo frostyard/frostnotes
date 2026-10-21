@@ -40,11 +40,10 @@ Work is split per
   `relocate` commands, the phone layout's components, the Hub settings'
   lists, and the editing commands the phone toolbar lacks.
 
-Status (2026-10-19):
-- **Phase 1.** M4's first drafts (a notesd of its own on the tailnet,
-  with its own sign-in, tokens and web serving) became lodge's ADRs 0004
-  to 0008 before anyone accepted them. ADR-0026 and ADR-0027 are still
-  Proposed, so Phase 1 waits on the user's acceptance.
+Status (2026-10-21):
+- **Phase 1 is done.** M4's first drafts became lodge's ADRs 0004 to
+  0008. The user accepted ADR-0026 and ADR-0027, with lodge's ADRs, on
+  2026-10-21.
 - **Phases 2 to 5 merged on 2026-10-19 (#45–#56).** The user asked on
   2026-10-18 for them to be built ahead of that acceptance, as PRs for
   review.
@@ -52,9 +51,10 @@ Status (2026-10-19):
   - Phase 5's web app and phone components are built, by the planner
     rather than on cards. Some of ui.md's narrow and browser items are
     still to come, and so is `make m4-evidence`.
-- **Phase 6.** The review ran on 2026-10-19, and its notes findings are
-  fixed. Its record, and the user's acceptance of the findings left open,
-  are still to come.
+- **Phase 6.** The review ran on 2026-10-19, its notes findings are
+  fixed, and its record is below. The user accepted the two findings left
+  open in writing on 2026-10-21. Phase 6 still waits on XSS on the phone
+  and Chrome's PDF viewer (Phase 7).
 - **Phase 7.** The move script is merged (#55) and has not run. Phase 7
   starts from 2026-10-26, on the user's go-ahead.
 
@@ -113,6 +113,15 @@ them without ADRs:
     trial hub, which nothing touched; Phase 4's live Claude Code run
     used it. Phase 7's move script finds that deployment and sets its
     data aside, never merging it into the hub's.
+  - *A second use, reported by the user on 2026-10-21:* on 2026-10-20
+    the user tried Porter's daily brief through lodge and opened it in the
+    web app on their phone
+    ([ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)).
+    The user reports that this was probably the M2 trial's vault, not the
+    test vault, and is not sure. If so, Porter wrote into the trial's vault,
+    and the phone looked at notes before Phase 7, both against the rule
+    above. The user reports that sync is working well, and the M2 trial
+    ([plan 0004](0004-m2-sync.md)) is not restarted.
   - M4's docs name no address, host, tailnet, device, share or vault of
     the user's.
 - **The API grows within protocol 1, additively** (Phase 2):
@@ -141,7 +150,7 @@ them without ADRs:
 ## Phase 1 — Decisions (planner)
 
 - **This phase's documents:**
-  - ADR-0026 and ADR-0027 (proposed);
+  - ADR-0026 and ADR-0027 (accepted 2026-10-21);
   - [specs/lodge-app.md](../specs/lodge-app.md) and
     [design/hub.md](../design/hub.md);
   - M4's sections of [design/overview.md](../design/overview.md#notesd-as-a-lodge-app),
@@ -156,6 +165,9 @@ them without ADRs:
 - **Done when:** the docs are indexed and cross-linked both ways, and
   the user has accepted ADR-0026 and ADR-0027, with the platform's ADRs,
   or said what to change, before any of Phase 2's code merges.
+- **Result (2026-10-21):** done, out of order. On 2026-10-18 the user
+  asked for Phases 2 to 5 to be built before acceptance, as PRs for
+  review; they merged on 2026-10-19, and the user accepted on 2026-10-21.
 
 ## Phase 2 — Contracts, scope and relocation (planner, with cards)
 
@@ -418,7 +430,8 @@ lodge's phase 2.
   | N6 (nit) any tailnet peer could fill the 8 pairing slots | One node (`Lodge-Node-ID`) may have 2 pairings waiting, a rate key and never an admission | `TestANodeMayHaveTwoPairingsWaiting` |
   | N7 (nit, the kit's) an MCP session was swept only when a request arrived | The kit sweeps on a ticker (lodge/kit 2017aec and since) | the kit's tests; notes' side, a session's end closing its connection, in `TestASessionHoldsOneConnectionUntilItEnds` |
 
-  **Accepted, not fixed, for the user's written acceptance:**
+  **Accepted, not fixed; the user accepted both in writing on
+  2026-10-21:**
   - *The relocation proof is keyed by the stored token hash*
     ([lodge-app.md](../specs/lodge-app.md#device)): whoever can read the
     hub's database can make a valid proof. They could already serve the
@@ -456,9 +469,11 @@ lodge's phase 2.
   **Pending:**
   - XSS in the phone's browser, on the user's phone (Phase 7);
   - Chrome's PDF viewer under lodge-content's sandbox (review 12, an
-    open question);
-  - lodge's own review of sign-in, sessions, tokens and headers
-    (lodge's phase 2).
+    open question).
+
+  *Done:* lodge's own review of sign-in, sessions, tokens and headers
+  lists no open XSS, CSRF or session finding
+  ([lodge's roadmap, Phase 2](https://github.com/frostyard/lodge/blob/main/docs/plans/0001-roadmap.md#phase-2--lodge-v1-with-notes-as-its-only-app)).
 
 ## Phase 7 — The user's hub in lodge, and exit evidence
 

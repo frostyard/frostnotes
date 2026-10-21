@@ -26,14 +26,13 @@ inside lodge (frostyard's tailnet web shell), is in progress
 of lodge's app contract is
 [docs/specs/lodge-app.md](docs/specs/lodge-app.md)):
 - **Built:** Phases 2 to 5 (notesd as lodge's notes app, `/mcp` and the
-  web app), merged on 2026-10-19.
-- **Still to come:** the rest of the narrow layout, the evidence and the
-  review's record.
-- **Next:** [plan 0007](docs/plans/0007-folder-scopes-for-agents.md)
-  limits an agent's writes to folders and lets it append to today's
-  daily note, for Porter, frostyard's assistant
-  ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md),
-  proposed).
+  web app), merged on 2026-10-19, with their evidence and the security
+  review recorded in plan 0006.
+- **Also built:** [plan 0007](docs/plans/0007-folder-scopes-for-agents.md)'s
+  Phases 2 and 3, which limit an agent's writes to folders and let it
+  append to today's daily note, for Porter, frostyard's assistant
+  ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
+  Its evidence through lodge (Phase 4) is still to come.
 - **Phase 7** moves the user's hub behind lodge from 2026-10-26. The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
