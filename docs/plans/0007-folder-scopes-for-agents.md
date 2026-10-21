@@ -25,9 +25,9 @@ Work is split per
   boundary and its contract.
 - **No cards.**
 
-Status (2026-10-19):
-- **Phase 1.** ADR-0028 is Proposed. The user approved building this
-  plan on 2026-10-19, ahead of its acceptance, as PRs for review.
+Status (2026-10-21):
+- **Phase 1 is done.** The user approved building this plan on
+  2026-10-19, ahead of acceptance, and accepted ADR-0028 on 2026-10-21.
 - **Phases 2 and 3 are built, in two PRs.**
   - The first PR has the grammar, the engine's checks on every writing
     method, the router's `daily`, the tests at the boundaries, and the

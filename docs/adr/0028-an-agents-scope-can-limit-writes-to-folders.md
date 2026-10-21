@@ -1,6 +1,6 @@
 # 0028 — An agent's scope can limit writes to folders
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-21)
 - **Date:** 2026-10-19
 
 ## Context
