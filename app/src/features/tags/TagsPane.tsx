@@ -1,9 +1,10 @@
 // The Tags pane (docs/specs/ui.md, Right sidebar panes): expandable tag
 // counts with callbacks for searching a tag and choosing the sort order.
+
+import { IconButton } from "@frostyard/lodge-ui/react";
 import { ArrowUpNarrowWide, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import type { TagNode } from "../../lib/tagTree";
-import { IconButton } from "../chrome/IconButton";
 import { paneEmpty, paneRow, paneToolbar } from "../panes/common";
 
 export interface TagsPaneProps {
@@ -33,7 +34,7 @@ export function TagsPane({ tags, onSortMenu, onChoose }: TagsPaneProps) {
         <IconButton
           label="Change sort order"
           size={24}
-          icon={<ArrowUpNarrowWide size={16} />}
+          icon={ArrowUpNarrowWide}
           onClick={(event) => {
             const { left, bottom } = event.currentTarget.getBoundingClientRect();
             onSortMenu(left, bottom);

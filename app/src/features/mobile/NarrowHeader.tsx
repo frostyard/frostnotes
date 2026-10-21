@@ -30,7 +30,7 @@ export function NarrowHeader(props: NarrowHeaderProps) {
   const title = <span className="truncate">{props.title}</span>;
   return (
     <div className="flex h-11 shrink-0 items-center gap-1 border-b border-separator bg-window px-1">
-      <TouchButton label="Open left sidebar" icon={<PanelLeft size={20} />} onClick={props.onLeft} />
+      <TouchButton label="Open left sidebar" icon={PanelLeft} onClick={props.onLeft} />
       <h1 className="flex min-w-0 flex-1 justify-center text-toolbar-title">
         {parts.length === 0 ? (
           title
@@ -69,19 +69,19 @@ export function NarrowHeader(props: NarrowHeaderProps) {
       {props.mode !== undefined && (
         <TouchButton
           label={props.mode === "edit" ? "Reading view" : "Editing view"}
-          icon={props.mode === "edit" ? <BookOpen size={20} /> : <Pencil size={20} />}
+          icon={props.mode === "edit" ? BookOpen : Pencil}
           onClick={props.onToggleMode}
         />
       )}
       <TouchButton
         label="More options"
-        icon={<Ellipsis size={20} />}
+        icon={Ellipsis}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           props.onMore(r.left, r.bottom);
         }}
       />
-      <TouchButton label="Open right sidebar" icon={<PanelRight size={20} />} onClick={props.onRight} />
+      <TouchButton label="Open right sidebar" icon={PanelRight} onClick={props.onRight} />
     </div>
   );
 }

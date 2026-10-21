@@ -1,9 +1,10 @@
 // The Files pane (docs/specs/ui.md, Files pane): its toolbar and the
 // vault's tree, with keyboard navigation, inline renaming and drag targets.
+
+import { IconButton } from "@frostyard/lodge-ui/react";
 import { ArrowUpNarrowWide, ChevronRight, ChevronsDownUp, ChevronsUpDown, FolderPlus, SquarePen } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { TreeRow } from "../../lib/fileTree";
-import { IconButton } from "../chrome/IconButton";
 import { type PaneClick, paneClick, paneToolbar } from "../panes/common";
 
 /** DRAG_TYPE is the data type a dragged row carries: a JSON array of vault paths. */
@@ -270,19 +271,14 @@ function FilesToolbar({ anyExpanded, onCommand }: Pick<FilesPaneProps, "anyExpan
         size={24}
         label="New note"
         keys="Ctrl + N"
-        icon={<SquarePen size={16} />}
+        icon={SquarePen}
         onClick={() => onCommand({ kind: "newNote" })}
       />
-      <IconButton
-        size={24}
-        label="New folder"
-        icon={<FolderPlus size={16} />}
-        onClick={() => onCommand({ kind: "newFolder" })}
-      />
+      <IconButton size={24} label="New folder" icon={FolderPlus} onClick={() => onCommand({ kind: "newFolder" })} />
       <IconButton
         size={24}
         label="Change sort order"
-        icon={<ArrowUpNarrowWide size={16} />}
+        icon={ArrowUpNarrowWide}
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
           onCommand({ kind: "sortMenu", x: rect.left, y: rect.bottom });
@@ -291,7 +287,7 @@ function FilesToolbar({ anyExpanded, onCommand }: Pick<FilesPaneProps, "anyExpan
       <IconButton
         size={24}
         label={anyExpanded ? "Collapse all" : "Expand all"}
-        icon={anyExpanded ? <ChevronsDownUp size={16} /> : <ChevronsUpDown size={16} />}
+        icon={anyExpanded ? ChevronsDownUp : ChevronsUpDown}
         onClick={() => onCommand({ kind: anyExpanded ? "collapseAll" : "expandAll" })}
       />
     </div>

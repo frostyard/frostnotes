@@ -2,10 +2,10 @@
 // breadcrumb of the file's folders, and the mode switch and More options.
 // The container decides what each does; More options asks for a menu at
 // the button.
+
+import { IconButton } from "@frostyard/lodge-ui/react";
 import { ArrowLeft, ArrowRight, BookOpen, Ellipsis, Pencil } from "lucide-react";
 import { Fragment } from "react";
-
-import { IconButton } from "../chrome/IconButton";
 
 export interface ViewHeaderProps {
   /** The file's vault path; none for an empty tab. */
@@ -34,7 +34,7 @@ export function ViewHeader(props: ViewHeaderProps) {
         size={24}
         label="Navigate back"
         keys="Ctrl + Alt + ←"
-        icon={<ArrowLeft size={16} />}
+        icon={ArrowLeft}
         disabled={!props.canBack}
         onClick={props.onBack}
       />
@@ -42,7 +42,7 @@ export function ViewHeader(props: ViewHeaderProps) {
         size={24}
         label="Navigate forward"
         keys="Ctrl + Alt + →"
-        icon={<ArrowRight size={16} />}
+        icon={ArrowRight}
         disabled={!props.canForward}
         onClick={props.onForward}
       />
@@ -69,14 +69,14 @@ export function ViewHeader(props: ViewHeaderProps) {
           size={24}
           label={props.mode === "edit" ? "Reading view" : "Editing view"}
           keys="Ctrl + E"
-          icon={props.mode === "edit" ? <BookOpen size={16} /> : <Pencil size={16} />}
+          icon={props.mode === "edit" ? BookOpen : Pencil}
           onClick={props.onToggleMode}
         />
       )}
       <IconButton
         size={24}
         label="More options"
-        icon={<Ellipsis size={16} />}
+        icon={Ellipsis}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           props.onMore(r.left, r.bottom);

@@ -1,5 +1,7 @@
 // The All properties pane (docs/specs/ui.md, Right sidebar panes): sorted
 // frontmatter keys with type icons, counts, and callbacks for choosing a key.
+
+import { IconButton } from "@frostyard/lodge-ui/react";
 import {
   ArrowUpNarrowWide,
   Binary,
@@ -12,9 +14,7 @@ import {
   Tags,
   Text,
 } from "lucide-react";
-
 import type { PropertyCount } from "../../rpc/gen/api";
-import { IconButton } from "../chrome/IconButton";
 import { type CountSort, paneEmpty, paneRow, paneToolbar } from "../panes/common";
 
 export interface PropertiesPaneProps {
@@ -54,7 +54,7 @@ export function PropertiesPane({ properties, sort, onSortMenu, onChoose }: Prope
         <IconButton
           label="Change sort order"
           size={24}
-          icon={<ArrowUpNarrowWide size={16} aria-hidden="true" />}
+          icon={ArrowUpNarrowWide}
           onClick={(event) => {
             const { left, bottom } = event.currentTarget.getBoundingClientRect();
             onSortMenu(left, bottom);

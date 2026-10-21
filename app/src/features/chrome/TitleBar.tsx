@@ -4,6 +4,7 @@
 // sidebar toggle, the window's title and our own window controls; the tab
 // bar takes the title's place when notes open (M3). Containers decide what
 // each command does.
+import { IconButton } from "@frostyard/lodge-ui/react";
 import { Copy, Minus, PanelLeft, Square, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 
@@ -25,32 +26,6 @@ export interface TitleBarProps {
   onCommand: (cmd: WindowCommand) => void;
 }
 
-const BUTTON_CLASS =
-  "flex size-7 items-center justify-center rounded-md text-secondary hover:bg-selection-inactive disabled:opacity-40";
-
-interface TitleBarButtonProps {
-  label: string;
-  shortcut?: string;
-  icon: ReactNode;
-  pressed?: boolean;
-  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
-}
-
-function TitleBarButton({ label, shortcut, icon, pressed, onClick }: TitleBarButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      title={shortcut ? `${label} (${shortcut})` : label}
-      onClick={onClick}
-      className={BUTTON_CLASS}
-    >
-      {icon}
-    </button>
-  );
-}
-
 /** TitleBar is the window's top strip. */
 export function TitleBar(props: TitleBarProps) {
   const { onCommand } = props;
@@ -66,9 +41,9 @@ export function TitleBar(props: TitleBarProps) {
         className="flex h-full shrink-0 items-center gap-1 px-2"
         style={props.sidebarWidth > 0 ? { width: `${props.sidebarWidth + 1}px` } : undefined}
       >
-        <TitleBarButton
+        <IconButton
           label="Toggle Sidebar"
-          icon={<PanelLeft size={16} />}
+          icon={PanelLeft}
           pressed={props.sidebarWidth > 0}
           onClick={() => onCommand({ kind: "toggleSidebar" })}
         />
@@ -78,13 +53,13 @@ export function TitleBar(props: TitleBarProps) {
       </span>
       {props.windowControls && (
         <div className="flex shrink-0 items-center gap-1 px-2">
-          <TitleBarButton label="Minimize" icon={<Minus size={16} />} onClick={() => onCommand({ kind: "minimize" })} />
-          <TitleBarButton
+          <IconButton label="Minimize" icon={Minus} onClick={() => onCommand({ kind: "minimize" })} />
+          <IconButton
             label={props.maximized ? "Restore" : "Maximize"}
-            icon={props.maximized ? <Copy size={16} /> : <Square size={16} />}
+            icon={props.maximized ? Copy : Square}
             onClick={() => onCommand({ kind: "toggleMaximize" })}
           />
-          <TitleBarButton label="Close" icon={<X size={16} />} onClick={() => onCommand({ kind: "close" })} />
+          <IconButton label="Close" icon={X} onClick={() => onCommand({ kind: "close" })} />
         </div>
       )}
     </div>

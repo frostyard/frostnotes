@@ -3,10 +3,10 @@
 // the title bar row, and the status bar under them. It holds the window's
 // command registry and its one key listener.
 
-import { Splitter } from "@frostyard/lodge-ui/react";
+import { IconButton, Splitter } from "@frostyard/lodge-ui/react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { CalendarDays, FileSearch, Files, PanelLeft, Terminal } from "lucide-react";
+import { CalendarDays, FileSearch, Files, type LucideIcon, PanelLeft, Terminal } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
@@ -19,7 +19,6 @@ import { useNotes } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
 import { titleOf } from "../editor/NoteEditor";
 import { DocumentRegistry, DocumentsContext } from "../editor/registry";
-import { IconButton } from "../features/chrome/IconButton";
 import { Ribbon } from "../features/chrome/Ribbon";
 import { TitleBar } from "../features/chrome/TitleBar";
 import { WindowControls } from "../features/chrome/WindowControls";
@@ -236,7 +235,7 @@ export function MainWindow() {
     );
   };
 
-  const ribbonItem = (command: string, label: string, icon: ReactNode) => ({
+  const ribbonItem = (command: string, label: string, icon: LucideIcon) => ({
     command,
     label,
     icon,
@@ -423,7 +422,7 @@ export function MainWindow() {
                 <div className="flex h-11 items-center">
                   <IconButton
                     label="Toggle left sidebar"
-                    icon={<PanelLeft size={16} />}
+                    icon={PanelLeft}
                     pressed={shown.left}
                     onClick={() => registry.run("app:toggle-left-sidebar")}
                   />
@@ -432,10 +431,10 @@ export function MainWindow() {
               {showRibbon && (
                 <Ribbon
                   items={[
-                    ribbonItem("switcher:open", "Open quick switcher", <FileSearch size={16} />),
-                    ribbonItem("daily-notes", "Open today's daily note", <CalendarDays size={16} />),
-                    ribbonItem("insert-template", "Insert template", <Files size={16} />),
-                    ribbonItem("command-palette:open", "Open command palette", <Terminal size={16} />),
+                    ribbonItem("switcher:open", "Open quick switcher", FileSearch),
+                    ribbonItem("daily-notes", "Open today's daily note", CalendarDays),
+                    ribbonItem("insert-template", "Insert template", Files),
+                    ribbonItem("command-palette:open", "Open command palette", Terminal),
                   ]}
                   onRun={(c) => registry.run(c)}
                 />

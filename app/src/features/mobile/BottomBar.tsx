@@ -25,20 +25,15 @@ export function BottomBar(props: BottomBarProps) {
       className="flex shrink-0 items-center justify-around border-t border-separator bg-toolbar"
       style={{ minHeight: 52, paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <TouchButton
-        label="Navigate back"
-        icon={<ChevronLeft size={20} />}
-        disabled={!props.canBack}
-        onClick={props.onBack}
-      />
+      <TouchButton label="Navigate back" icon={ChevronLeft} disabled={!props.canBack} onClick={props.onBack} />
       <TouchButton
         label="Navigate forward"
-        icon={<ChevronRight size={20} />}
+        icon={ChevronRight}
         disabled={!props.canForward}
         onClick={props.onForward}
       />
-      <TouchButton label="Open quick switcher" icon={<Search size={20} />} onClick={props.onSwitcher} />
-      <TouchButton label="New tab" icon={<Plus size={20} />} onClick={props.onNewTab} />
+      <TouchButton label="Open quick switcher" icon={Search} onClick={props.onSwitcher} />
+      <TouchButton label="New tab" icon={Plus} onClick={props.onNewTab} />
       <button
         type="button"
         aria-label={`Tabs (${props.tabs})`}
@@ -55,7 +50,7 @@ export function BottomBar(props: BottomBarProps) {
       </button>
       <TouchButton
         label="Menu"
-        icon={<Menu size={20} />}
+        icon={Menu}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           props.onMenu(r.left, r.top);
