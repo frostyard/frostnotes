@@ -1,10 +1,9 @@
 // The vault manager (docs/specs/ui.md#vault-manager): registered vaults,
 // folder opening and creation actions in a window or a modal frame.
 
-import { Sheet } from "@frostyard/lodge-ui/react";
+import { Menu, Sheet } from "@frostyard/lodge-ui/react";
 import { Ellipsis, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Menu } from "../menu/Menu";
 
 /** VaultEntry is a vault the manager lists. */
 export interface VaultEntry {
@@ -163,7 +162,7 @@ function VaultList({ vaults, current, manage, onOpen, onRemove }: VaultManagerPr
           items={[{ kind: "item", id: "remove", label: "Remove from list" }]}
           x={menu.x}
           y={menu.y}
-          onChoose={() => onRemove(menu.vault)}
+          onSelect={() => onRemove(menu.vault)}
           onClose={() => setMenu(null)}
         />
       )}

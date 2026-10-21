@@ -3,10 +3,9 @@
 // with the current one checked, then Manage vaults…; Settings sits at the
 // right.
 
-import { IconButton } from "@frostyard/lodge-ui/react";
+import { IconButton, Menu } from "@frostyard/lodge-ui/react";
 import { ChevronsUpDown, Settings } from "lucide-react";
 import { useState } from "react";
-import { Menu } from "../menu/Menu";
 
 /** VaultChoice is a vault the menu lists. */
 export interface VaultChoice {
@@ -69,7 +68,7 @@ export function VaultRow(props: VaultRowProps) {
           ]}
           x={menuAt.x}
           y={menuAt.y}
-          onChoose={(id) => (id === "manage" ? props.onManage() : props.onChoose(Number(id)))}
+          onSelect={(id) => (id === "manage" ? props.onManage() : props.onChoose(Number(id)))}
           onClose={() => setMenuAt(null)}
         />
       )}

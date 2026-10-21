@@ -2,8 +2,9 @@
 // menu, the quick switcher or the command palette, and the notices. The
 // switcher lists the vault's notes and the workspace's recent files; the
 // palette, the commands that apply when it opens.
-import { useMemo } from "react";
 
+import { Menu } from "@frostyard/lodge-ui/react";
+import { useMemo } from "react";
 import { useCommands } from "../commands/registry";
 import { useAliases } from "../data/aliases";
 import { useFiles } from "../data/files";
@@ -23,7 +24,6 @@ import { useNotes } from "../data/stores";
 import { titleOf } from "../editor/NoteEditor";
 import { useDocuments } from "../editor/registry";
 import { ConfirmDialog } from "../features/dialog/ConfirmDialog";
-import { Menu } from "../features/menu/Menu";
 import { Notices } from "../features/notice/Notices";
 import { PagePreview } from "../features/preview/PagePreview";
 import { CommandPalette } from "../features/prompt/CommandPalette";
@@ -89,7 +89,7 @@ export function Overlays() {
           items={menu.items}
           x={menu.x}
           y={menu.y}
-          onChoose={menu.onChoose}
+          onSelect={menu.onChoose}
           onClose={closeMenu}
           sheet={narrow}
         />
