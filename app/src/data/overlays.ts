@@ -3,9 +3,9 @@
 // Commands and containers open them through this store; app/Overlays.tsx
 // draws them. The commands run from the palette are kept on this device
 // (frostnotes.recentCommands), newest first.
-import { create } from "zustand";
 
-import type { MenuItem } from "../features/menu/Menu";
+import type { MenuEntry as MenuItem } from "@frostyard/lodge-ui/react";
+import { create } from "zustand";
 import type { NoticeItem } from "../features/notice/Notices";
 import { PALETTE_RECENT } from "../lib/palette";
 import { type KeyValue, localStore } from "./storage";

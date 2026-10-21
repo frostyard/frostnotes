@@ -122,7 +122,7 @@ describe("the tab menus", () => {
     fireEvent.click(fileRow("Deep/b.md"), { ctrlKey: true });
     await user.click(screen.getByRole("button", { name: "Tab list" }));
     const items = within(screen.getByRole("menu", { name: "Tab list" })).getAllByRole("menuitemcheckbox");
-    expect(items.map((i) => [i.getAttribute("aria-label"), i.getAttribute("aria-checked")])).toEqual([
+    expect(items.map((i) => [i.textContent, i.getAttribute("aria-checked")])).toEqual([
       ["a", "false"],
       ["b", "true"],
     ]);
