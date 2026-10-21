@@ -1,6 +1,6 @@
 # 0026 — notesd runs as a lodge app
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-21)
 - **Date:** 2026-10-18
 
 ## Context

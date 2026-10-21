@@ -1,6 +1,6 @@
 # 0027 — A narrow window takes Obsidian's phone layout
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-10-21)
 - **Date:** 2026-10-18
 
 ## Context

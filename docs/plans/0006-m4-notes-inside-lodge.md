@@ -40,11 +40,10 @@ Work is split per
   `relocate` commands, the phone layout's components, the Hub settings'
   lists, and the editing commands the phone toolbar lacks.
 
-Status (2026-10-19):
-- **Phase 1.** M4's first drafts (a notesd of its own on the tailnet,
-  with its own sign-in, tokens and web serving) became lodge's ADRs 0004
-  to 0008 before anyone accepted them. ADR-0026 and ADR-0027 are still
-  Proposed, so Phase 1 waits on the user's acceptance.
+Status (2026-10-21):
+- **Phase 1 is done.** M4's first drafts became lodge's ADRs 0004 to
+  0008. The user accepted ADR-0026 and ADR-0027, with lodge's ADRs, on
+  2026-10-21.
 - **Phases 2 to 5 merged on 2026-10-19 (#45–#56).** The user asked on
   2026-10-18 for them to be built ahead of that acceptance, as PRs for
   review.
@@ -141,7 +140,7 @@ them without ADRs:
 ## Phase 1 — Decisions (planner)
 
 - **This phase's documents:**
-  - ADR-0026 and ADR-0027 (proposed);
+  - ADR-0026 and ADR-0027 (accepted 2026-10-21);
   - [specs/lodge-app.md](../specs/lodge-app.md) and
     [design/hub.md](../design/hub.md);
   - M4's sections of [design/overview.md](../design/overview.md#notesd-as-a-lodge-app),
@@ -156,6 +155,9 @@ them without ADRs:
 - **Done when:** the docs are indexed and cross-linked both ways, and
   the user has accepted ADR-0026 and ADR-0027, with the platform's ADRs,
   or said what to change, before any of Phase 2's code merges.
+- **Result (2026-10-21):** done, out of order. On 2026-10-18 the user
+  asked for Phases 2 to 5 to be built before acceptance, as PRs for
+  review; they merged on 2026-10-19, and the user accepted on 2026-10-21.
 
 ## Phase 2 — Contracts, scope and relocation (planner, with cards)
 
