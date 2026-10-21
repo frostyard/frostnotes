@@ -1,14 +1,14 @@
 // The ribbon (docs/specs/ui.md#ribbon): a column of buttons that run
 // commands, under the title bar row's Toggle left sidebar.
-import type { ReactNode } from "react";
 
-import { IconButton } from "./IconButton";
+import { IconButton } from "@frostyard/lodge-ui/react";
+import type { LucideIcon } from "lucide-react";
 
 /** RibbonItem is a ribbon button and the command it runs. */
 export interface RibbonItem {
   command: string;
   label: string;
-  icon: ReactNode;
+  icon: LucideIcon;
   keys?: string;
   /** The command does not apply now. */
   disabled: boolean;

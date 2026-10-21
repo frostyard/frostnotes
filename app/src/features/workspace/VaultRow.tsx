@@ -2,10 +2,10 @@
 // the vault's name opens the vault menu, which lists the vaults by name
 // with the current one checked, then Manage vaults…; Settings sits at the
 // right.
+
+import { IconButton } from "@frostyard/lodge-ui/react";
 import { ChevronsUpDown, Settings } from "lucide-react";
 import { useState } from "react";
-
-import { IconButton } from "../chrome/IconButton";
 import { Menu } from "../menu/Menu";
 
 /** VaultChoice is a vault the menu lists. */
@@ -50,7 +50,7 @@ export function VaultRow(props: VaultRowProps) {
         size={24}
         label="Settings"
         keys="Ctrl + ,"
-        icon={<Settings size={16} />}
+        icon={Settings}
         disabled={props.settingsDisabled}
         onClick={props.onSettings}
       />

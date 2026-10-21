@@ -53,7 +53,7 @@ export function TabSwitcher(props: TabSwitcherProps) {
     >
       <div className="flex h-[52px] shrink-0 items-center border-b border-separator px-1">
         <h2 className="flex-1 px-3 text-toolbar-title">Tabs</h2>
-        <TouchButton label="Done" icon={<X size={20} />} onClick={props.onDismiss} />
+        <TouchButton label="Done" icon={X} onClick={props.onDismiss} />
       </div>
       <ul aria-label="Open tabs" className="min-h-0 flex-1 overflow-y-auto p-2">
         {props.tabs.map((t) => (
@@ -67,7 +67,7 @@ export function TabSwitcher(props: TabSwitcherProps) {
               <span className="truncate text-sidebar-row">{t.title}</span>
               {t.folder !== "" && <span className="truncate text-xs leading-4 text-secondary">{t.folder}</span>}
             </button>
-            <TouchButton label={`Close ${t.title}`} icon={<X size={18} />} onClick={() => props.onClose(t.id)} />
+            <TouchButton label={`Close ${t.title}`} icon={X} onClick={() => props.onClose(t.id)} />
           </li>
         ))}
       </ul>

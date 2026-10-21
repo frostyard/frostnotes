@@ -1,9 +1,9 @@
 // The title bar row's right end (docs/specs/ui.md#title-bar-row): Toggle
 // right sidebar, then the window controls on the desktop; a browser draws
 // its own.
-import { Copy, Minus, PanelRight, Square, X } from "lucide-react";
 
-import { IconButton } from "./IconButton";
+import { IconButton } from "@frostyard/lodge-ui/react";
+import { Copy, Minus, PanelRight, Square, X } from "lucide-react";
 import type { WindowCommand } from "./TitleBar";
 
 export interface WindowControlsProps {
@@ -23,24 +23,20 @@ export function WindowControls(props: WindowControlsProps) {
       {props.onToggleRight && (
         <IconButton
           label="Toggle right sidebar"
-          icon={<PanelRight size={16} />}
+          icon={PanelRight}
           pressed={props.rightOpen}
           onClick={props.onToggleRight}
         />
       )}
       {props.windowControls && (
         <>
-          <IconButton
-            label="Minimize"
-            icon={<Minus size={16} />}
-            onClick={() => props.onWindow({ kind: "minimize" })}
-          />
+          <IconButton label="Minimize" icon={Minus} onClick={() => props.onWindow({ kind: "minimize" })} />
           <IconButton
             label={props.maximized ? "Restore" : "Maximize"}
-            icon={props.maximized ? <Copy size={14} /> : <Square size={14} />}
+            icon={props.maximized ? Copy : Square}
             onClick={() => props.onWindow({ kind: "toggleMaximize" })}
           />
-          <IconButton label="Close" icon={<X size={16} />} onClick={() => props.onWindow({ kind: "close" })} />
+          <IconButton label="Close" icon={X} onClick={() => props.onWindow({ kind: "close" })} />
         </>
       )}
     </div>

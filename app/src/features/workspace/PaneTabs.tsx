@@ -1,9 +1,9 @@
 // A sidebar's pane tabs (docs/specs/ui.md#sidebars-and-panes): one button
 // per pane in the title bar row over the sidebar, the selected one drawn
 // selected.
-import type { ReactNode } from "react";
 
-import { iconButtonClass } from "../chrome/IconButton";
+import { iconButtonClass } from "@frostyard/lodge-ui/react";
+import type { ReactNode } from "react";
 
 /** PaneTab is a pane as its tab shows it. */
 export interface PaneTab {
