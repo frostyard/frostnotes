@@ -51,9 +51,10 @@ Status (2026-10-21):
   - Phase 5's web app and phone components are built, by the planner
     rather than on cards. Some of ui.md's narrow and browser items are
     still to come, and so is `make m4-evidence`.
-- **Phase 6.** The review ran on 2026-10-19, and its notes findings are
-  fixed. Its record, and the user's acceptance of the findings left open,
-  are still to come.
+- **Phase 6.** The review ran on 2026-10-19, its notes findings are
+  fixed, and its record is below. The user accepted the two findings left
+  open in writing on 2026-10-21. Phase 6 still waits on XSS on the phone
+  and Chrome's PDF viewer (Phase 7).
 - **Phase 7.** The move script is merged (#55) and has not run. Phase 7
   starts from 2026-10-26, on the user's go-ahead.
 
@@ -420,7 +421,8 @@ lodge's phase 2.
   | N6 (nit) any tailnet peer could fill the 8 pairing slots | One node (`Lodge-Node-ID`) may have 2 pairings waiting, a rate key and never an admission | `TestANodeMayHaveTwoPairingsWaiting` |
   | N7 (nit, the kit's) an MCP session was swept only when a request arrived | The kit sweeps on a ticker (lodge/kit 2017aec and since) | the kit's tests; notes' side, a session's end closing its connection, in `TestASessionHoldsOneConnectionUntilItEnds` |
 
-  **Accepted, not fixed, for the user's written acceptance:**
+  **Accepted, not fixed; the user accepted both in writing on
+  2026-10-21:**
   - *The relocation proof is keyed by the stored token hash*
     ([lodge-app.md](../specs/lodge-app.md#device)): whoever can read the
     hub's database can make a valid proof. They could already serve the
