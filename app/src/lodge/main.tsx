@@ -11,7 +11,7 @@ import { App } from "../app/App";
 import type { Connect, Retry } from "../data/session";
 import { useNotes } from "../data/stores";
 import { contentMAC, fromBase64url } from "../lib/sha256";
-import { connectApi } from "../rpc/transport/ws";
+import { connectLodgeAPI } from "../rpc/transport/lodge";
 import { LodgeBridge } from "./Bridge";
 
 /**
@@ -52,7 +52,7 @@ export function contentBlobs(url: (path: string) => string): (hash: string, ext:
 export async function runInLodge(root: HTMLElement): Promise<void> {
   const lodge = await connectLodge({ app: "notes" });
   const blobs = contentBlobs((path) => lodge.contentURL(path));
-  const connect: Connect = () => connectApi(lodge.apiURL(), blobs);
+  const connect: Connect = () => connectLodgeAPI(lodge, blobs);
   const wake = (fn: () => void) =>
     lodge.on("visible", ({ visible }) => {
       if (visible) fn();
