@@ -57,6 +57,6 @@ v1's answer on phones.
 - Icon extension: [ADR-0013](0013-use-a-sibling-frostyard-notebook-icon.md),
   [overview — application icon](../design/overview.md#application-icon)
 - Shapes: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md)
-- Extended by: [ADR-0021](0021-keep-the-workspace-and-app-preferences-on-each-device.md) (where the workspace and preferences live), [ADR-0025](0025-patch-what-costs-the-editor-its-frames.md) (the app's copy of Tailwind's preflight)
+- Extended by: [ADR-0021](0021-keep-the-workspace-and-app-preferences-on-each-device.md) (where the workspace and preferences live), [ADR-0025](0025-patch-what-costs-the-editor-its-frames.md) (the app's copy of Tailwind's preflight), [ADR-0030](0030-the-look-comes-from-lodges-ui-package.md) (the look comes from lodge's UI package)
 - Builds on: frostmail ADR-0009; [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](0007-edit-in-codemirror-6-with-live-preview.md)
 - Built in: [roadmap — M3, M4](../plans/0002-roadmap.md), [plan 0005](../plans/0005-m3-desktop-app.md)

@@ -5,6 +5,8 @@ Living document. Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clie
 editor and the reading view),
 [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 (the look and the layout),
+[ADR-0030](../adr/0030-the-look-comes-from-lodges-ui-package.md) (the
+shared look comes from lodge's UI package),
 [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)
 (the workspace and preferences),
 [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)
@@ -72,7 +74,7 @@ against the dev gateway, and in M4 as the web app the hub serves
 | `app/` | `App`, the layout and splitters, containers that connect features to data | planner |
 | `features/<area>/` | presentational components and their tests: `chrome`, `workspace`, `explorer`, `search`, `links`, `outline`, `properties`, `tags`, `switcher`, `palette`, `status`, `settings`, `history`, `menu`, `notice`, and `mobile` (a narrow window's view header, drawers, bottom bar, tab switcher and editing toolbar) | cards |
 | `lib/` | pure helpers: the keymap, fuzzy matching, the file tree, the outline, formatting | cards |
-| `styles/` | `tokens.css` (the spec's tokens), `app.css` (Tailwind entry), `editor.css` (the editor's and the reading view's styles) | planner |
+| `styles/` | `tokens.css` (Frostnotes' own two tokens), `app.css` (Tailwind entry, imports the shared look), `editor.css` (the editor's and the reading view's styles) | planner |
 | `testing/` | Testing Library setup and render helpers | planner |
 | `spike/` | M0's CodeMirror spike (`make spike-cm6`), its measurement of the app's editor, and the drivers of M3's exit evidence (`make m3-evidence`) | planner |
 

@@ -29,7 +29,13 @@ rules give the same light or dark values. Components MUST use
 tokens through the Tailwind theme (`app/src/styles/app.css`), never
 literal colors.
 
-Frostmail's tokens, copied at M0 (frostmail's `docs/specs/ui.md`):
+The shared tokens come from
+[lodge's UI package](https://github.com/frostyard/lodge/blob/main/docs/specs/ui-package.md)
+(`@frostyard/lodge-ui`, [ADR-0030](../adr/0030-the-look-comes-from-lodges-ui-package.md)):
+`app.css` imports its `tokens.css` and `accents.css` after Tailwind's own
+layers. The tables below are the contract those files keep.
+
+Frostmail's tokens, from the package:
 
 | Token | Light | Dark | Use here |
 | --- | --- | --- | --- |
@@ -49,15 +55,17 @@ Frostmail's tokens, copied at M0 (frostmail's `docs/specs/ui.md`):
 | `--focus-ring` | `rgb(0 122 255 / 0.5)` | `rgb(10 132 255 / 0.6)` | keyboard focus outline |
 | `--flag-1` … `--flag-7` | red, orange, yellow, green, blue, purple, gray | the same, dark | callout colors (below) |
 
-New for Frostnotes:
+Four of Frostnotes' extras went into the package too, so this app no
+longer defines them: `--bg-code` (inline code, code blocks, a property row
+on hover), `--bg-highlight` (`==highlights==`, search matches),
+`--popover-shadow` (menus, prompts, notices) and `--backdrop`.
+
+Frostnotes' own, in `app/src/styles/tokens.css`:
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| `--bg-code` | `#f5f5f7` | `#2a2a2c` | inline code, code blocks, a property row on hover |
-| `--bg-highlight` | `rgb(255 204 0 / 0.4)` | `rgb(255 214 10 / 0.3)` | `==highlights==`, search matches |
 | `--bg-tag` | `rgb(0 122 255 / 0.1)` | `rgb(10 132 255 / 0.2)` | tag pills (text `--accent`) |
 | `--callout-cyan` | `#30b0c7` | `#40c8e0` | tip, important and summary callouts |
-| `--popover-shadow` | `0 8px 24px rgb(0 0 0 / 0.16)` | `0 8px 24px rgb(0 0 0 / 0.5)` | menus, prompts, notices |
 | `--backdrop` | `rgb(0 0 0 / 0.2)` | `rgb(0 0 0 / 0.4)` | the window behind a prompt or dialog (`bg-backdrop`) |
 
 **Callout colors**, by the callout's type, ignoring case; an unknown type
