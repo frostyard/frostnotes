@@ -2,11 +2,12 @@
 // sidebars and the workspace side by side, each column drawing its part of
 // the title bar row, and the status bar under them. It holds the window's
 // command registry and its one key listener.
+
+import { Splitter } from "@frostyard/lodge-ui/react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CalendarDays, FileSearch, Files, PanelLeft, Terminal } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";
@@ -28,7 +29,6 @@ import { EditingToolbar } from "../features/mobile/EditingToolbar";
 import { TabSwitcher } from "../features/mobile/TabSwitcher";
 import { connectionText, StatusBar } from "../features/status/StatusBar";
 import { PaneTabs } from "../features/workspace/PaneTabs";
-import { Splitter } from "../features/workspace/Splitter";
 import { VaultRow } from "../features/workspace/VaultRow";
 import { formatHotkey, type HotkeyCommand, hotkeysFor } from "../lib/keymap";
 import { type PaneId, SIDEBAR_MIN, type Side, tabTitle } from "../workspace/model";

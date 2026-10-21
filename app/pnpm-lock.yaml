@@ -201,11 +201,11 @@ importers:
         specifier: 5.3.0
         version: 5.3.0
       '@frostyard/lodge-client':
-        specifier: github:frostyard/lodge#07f2f64c161e2f0e1b1bea9cf425c6fb86e40b31&path:client
-        version: git+https://github.com/frostyard/lodge.git#07f2f64c161e2f0e1b1bea9cf425c6fb86e40b31&path:client
+        specifier: github:frostyard/lodge#client/v0.3.1&path:client
+        version: https://codeload.github.com/frostyard/lodge/tar.gz/7283658477814141f9d161ea032e7c78f0f799ba#path:client
       '@frostyard/lodge-ui':
-        specifier: github:frostyard/lodge#6975d3b8967af154a08b8d87d3cd4beee12e2dea&path:ui
-        version: https://codeload.github.com/frostyard/lodge/tar.gz/6975d3b8967af154a08b8d87d3cd4beee12e2dea#path:ui(lucide-react@1.52.0(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
+        specifier: github:frostyard/lodge#ui/v0.1.0&path:ui
+        version: https://codeload.github.com/frostyard/lodge/tar.gz/892b65211ad79ac9960e29bdcb1545b30e84df49#path:ui(lucide-react@1.52.0(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
       '@lezer/common':
         specifier: 1.5.3
         version: 1.5.3
@@ -459,12 +459,12 @@ packages:
   '@fontsource-variable/inter@5.3.0':
     resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
 
-  '@frostyard/lodge-client@git+https://github.com/frostyard/lodge.git#07f2f64c161e2f0e1b1bea9cf425c6fb86e40b31&path:client':
-    resolution: {commit: 07f2f64c161e2f0e1b1bea9cf425c6fb86e40b31, path: client, repo: https://github.com/frostyard/lodge.git, type: git}
+  '@frostyard/lodge-client@https://codeload.github.com/frostyard/lodge/tar.gz/7283658477814141f9d161ea032e7c78f0f799ba#path:client':
+    resolution: {gitHosted: true, integrity: sha512-JrZ5c6P78tzhCxZL2mZVZl4zBv4pDSNykxLurviynTbFBrN8pe/U+7Nu8H+WqPun8FZauahmzc5qTEYh0N+Rzg==, path: client, tarball: https://codeload.github.com/frostyard/lodge/tar.gz/7283658477814141f9d161ea032e7c78f0f799ba}
     version: 0.3.1
 
-  '@frostyard/lodge-ui@https://codeload.github.com/frostyard/lodge/tar.gz/6975d3b8967af154a08b8d87d3cd4beee12e2dea#path:ui':
-    resolution: {gitHosted: true, integrity: sha512-Kb9RQN1Lcv5aIxLSqmnR7Kn5iSdFN4JSBZ8iBpHni66G7iwAUcIU/2AFR48U1fWQasNcLHcGEnQ7gObN/ZFq/A==, path: ui, tarball: https://codeload.github.com/frostyard/lodge/tar.gz/6975d3b8967af154a08b8d87d3cd4beee12e2dea}
+  '@frostyard/lodge-ui@https://codeload.github.com/frostyard/lodge/tar.gz/892b65211ad79ac9960e29bdcb1545b30e84df49#path:ui':
+    resolution: {gitHosted: true, integrity: sha512-F2jT905z56luyDr/4cgvD9CXRKqE+4GegieHRFp4Qt5NryNX536/yT9uiKXXYVynJsa9J/GIt3NB45u9SGKkJA==, path: ui, tarball: https://codeload.github.com/frostyard/lodge/tar.gz/892b65211ad79ac9960e29bdcb1545b30e84df49}
     version: 0.1.0
     peerDependencies:
       lucide-react: ^1
@@ -1771,9 +1771,9 @@ snapshots:
 
   '@fontsource-variable/inter@5.3.0': {}
 
-  '@frostyard/lodge-client@git+https://github.com/frostyard/lodge.git#07f2f64c161e2f0e1b1bea9cf425c6fb86e40b31&path:client': {}
+  '@frostyard/lodge-client@https://codeload.github.com/frostyard/lodge/tar.gz/7283658477814141f9d161ea032e7c78f0f799ba#path:client': {}
 
-  '@frostyard/lodge-ui@https://codeload.github.com/frostyard/lodge/tar.gz/6975d3b8967af154a08b8d87d3cd4beee12e2dea#path:ui(lucide-react@1.52.0(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)':
+  '@frostyard/lodge-ui@https://codeload.github.com/frostyard/lodge/tar.gz/892b65211ad79ac9960e29bdcb1545b30e84df49#path:ui(lucide-react@1.52.0(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@fontsource-variable/inter': 5.3.0
     optionalDependencies:
