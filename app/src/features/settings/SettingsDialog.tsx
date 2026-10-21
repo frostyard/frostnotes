@@ -2,9 +2,10 @@
 // editable controls and read-only values in a focused modal frame. In a
 // narrow window (docs/specs/ui.md#narrow-windows) it is full screen: the
 // list of sections, then a section over it with a back button.
+
+import { Sheet } from "@frostyard/lodge-ui/react";
 import { ChevronLeft, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 
 /** SettingControl is a setting's control and value. */
 export type SettingControl =
@@ -56,41 +57,21 @@ export function SettingsDialog({
   onClose,
   narrow = false,
 }: SettingsDialogProps) {
-  const dialog = useRef<HTMLDivElement>(null);
   const current = sections.find((entry) => entry.id === section) ?? sections[0];
   // A narrow window shows the list until a section is chosen.
   const [listing, setListing] = useState(narrow);
 
-  useEffect(() => {
-    const before = document.activeElement;
-    dialog.current?.focus();
-    return () => {
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
-  }, []);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-backdrop"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+  return (
+    <Sheet
+      ariaLabel="Settings"
+      width={900}
+      className="relative flex h-[640px] max-h-[85vh] max-w-[90vw] overflow-hidden p-0! max-[599px]:h-[100dvh] max-[599px]:max-h-[100dvh] max-[599px]:max-w-full max-[599px]:flex-col max-[599px]:rounded-none max-[599px]:border-0"
+      showClose={false}
+      portal
+      onClose={onClose}
     >
-      <div
-        ref={dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Settings"
-        tabIndex={-1}
-        className="relative flex h-[640px] max-h-[85vh] w-[900px] max-w-[90vw] overflow-hidden rounded-xl border border-separator bg-window shadow-popover max-[599px]:h-[100dvh] max-[599px]:max-h-[100dvh] max-[599px]:w-full max-[599px]:max-w-full max-[599px]:flex-col max-[599px]:rounded-none max-[599px]:border-0"
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-        }}
-      >
+      {/* The package's frame pads itself for a form; this layout fills it. */}
+      <div className="absolute inset-0 flex min-h-0 min-w-0 max-[599px]:flex-col">
         {narrow && (
           <div className="flex h-11 shrink-0 items-center border-b border-separator px-1">
             {!listing && (
@@ -141,8 +122,7 @@ export function SettingsDialog({
           <X size={16} aria-hidden="true" />
         </button>
       </div>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 

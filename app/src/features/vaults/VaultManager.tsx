@@ -1,7 +1,7 @@
 // The vault manager (docs/specs/ui.md#vault-manager): registered vaults,
 // folder opening and creation actions in a window or a modal frame.
 
-import { Menu } from "@frostyard/lodge-ui/react";
+import { Menu, Sheet } from "@frostyard/lodge-ui/react";
 import { Ellipsis, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -51,24 +51,9 @@ export function VaultManager(props: VaultManagerProps) {
     };
   }, [modal]);
 
-  const frame = (
-    <div
-      ref={dialog}
-      role="dialog"
-      aria-label="Manage vaults"
-      aria-modal={modal ? true : undefined}
-      tabIndex={-1}
-      className={`relative flex min-h-0 min-w-0 overflow-hidden bg-window ${modal ? "h-[480px] max-h-[85vh] w-[720px] max-w-[90vw] rounded-xl border border-separator shadow-popover" : "flex-1"}`}
-      onKeyDown={(event) => {
-        if (modal) {
-          event.stopPropagation();
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onClose();
-          }
-        }
-      }}
-    >
+  // The manager in a page and the manager in a dialog hold the same parts.
+  const parts = (
+    <>
       <VaultList {...props} />
       <div className="min-w-0 flex-1 overflow-y-auto p-8">
         {panel ?? (props.manage === false ? <NoActions /> : <VaultActions {...props} />)}
@@ -84,20 +69,34 @@ export function VaultManager(props: VaultManagerProps) {
           <X size={16} aria-hidden="true" />
         </button>
       )}
-    </div>
+    </>
   );
 
-  return modal ? (
+  if (modal) {
+    return (
+      <Sheet
+        ariaLabel="Manage vaults"
+        width={720}
+        className="relative flex h-[480px] max-h-[85vh] max-w-[90vw] overflow-hidden p-0!"
+        showClose={false}
+        portal
+        onClose={onClose}
+      >
+        {/* The package's frame pads itself for a form; this layout fills it. */}
+        <div className="absolute inset-0 flex min-h-0 min-w-0">{parts}</div>
+      </Sheet>
+    );
+  }
+  return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-backdrop"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      ref={dialog}
+      role="dialog"
+      aria-label="Manage vaults"
+      tabIndex={-1}
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-window"
     >
-      {frame}
+      {parts}
     </div>
-  ) : (
-    frame
   );
 }
 
