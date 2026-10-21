@@ -36,7 +36,13 @@ class FakeLodge implements Lodge {
   readonly routes: [string, string | undefined][] = [];
   readonly contexts: unknown[] = [];
   readonly opened: string[] = [];
-  readonly handlers: Handlers = { navigate: new Set(), visible: new Set(), theme: new Set(), context: new Set() };
+  readonly handlers: Handlers = {
+    navigate: new Set(),
+    visible: new Set(),
+    theme: new Set(),
+    context: new Set(),
+    ask: new Set(),
+  };
   history: Lodge["history"];
 
   constructor(start: string) {
