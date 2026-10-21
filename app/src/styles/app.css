@@ -1,77 +1,36 @@
-/* Tailwind entry, from frostmail's (ADR-0011). The theme exposes the tokens
-   (tokens.css) and type roles as utilities: bg-sidebar, text-secondary,
-   border-separator, text-sidebar-row, and so on. Mail's list, reader and
-   compose roles are left out; tabs, badges, code, highlights, tags and
-   popovers are Frostnotes' own (docs/specs/ui.md). Tailwind's layers come
-   one by one, as "tailwindcss" itself imports them, so that the preflight is
-   the app's copy (preflight.css). */
+/* Tailwind entry, from frostmail's (ADR-0011). The look comes from
+   @frostyard/lodge-ui (ADR-0030): its tokens, its accents and its theme
+   carry the colour utilities and the shared type roles. This file keeps
+   what Frostnotes owns: the preflight (its own copy, ADR-0025), the
+   utilities of its own extras, its own type roles, the editor styles and
+   the base layer. Tailwind's layers come one by one, as "tailwindcss"
+   itself imports them, so that the preflight is the app's copy
+   (preflight.css). */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "./preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
-@import "@fontsource-variable/inter";
+@import "@frostyard/lodge-ui/fonts.css";
+@import "@frostyard/lodge-ui/tokens.css";
+@import "@frostyard/lodge-ui/accents.css";
+@import "@frostyard/lodge-ui/theme.css";
 @import "./tokens.css";
 @import "./editor.css";
 
-@theme inline {
-  --font-sans: "Inter Variable", system-ui, sans-serif;
+/* Tailwind v4 does not scan node_modules, so the utilities the package's
+   components use are found here. */
+@source "../../node_modules/@frostyard/lodge-ui/src";
 
-  --color-window: var(--bg-window);
-  --color-sidebar: var(--bg-sidebar);
-  --color-toolbar: var(--bg-toolbar);
-  --color-banner: var(--bg-banner);
-  --color-primary: var(--text-primary);
-  --color-secondary: var(--text-secondary);
-  --color-tertiary: var(--text-tertiary);
-  --color-separator: var(--separator);
-  --color-accent: var(--accent);
-  --color-accent-contrast: var(--accent-contrast);
-  --color-selection-inactive: var(--selection-inactive);
-  --color-selection-sidebar: var(--selection-sidebar);
-  --color-badge: var(--badge-bg);
-  --color-badge-text: var(--badge-text);
-  --color-focus: var(--focus-ring);
-  --color-flag-1: var(--flag-1);
-  --color-flag-2: var(--flag-2);
-  --color-flag-3: var(--flag-3);
-  --color-flag-4: var(--flag-4);
-  --color-flag-5: var(--flag-5);
-  --color-flag-6: var(--flag-6);
-  --color-flag-7: var(--flag-7);
-  --color-quote-1: var(--quote-1);
-  --color-quote-2: var(--quote-2);
-  --color-quote-3: var(--quote-3);
-  --color-avatar-0: var(--avatar-0);
-  --color-avatar-1: var(--avatar-1);
-  --color-avatar-2: var(--avatar-2);
-  --color-avatar-3: var(--avatar-3);
-  --color-avatar-4: var(--avatar-4);
-  --color-avatar-5: var(--avatar-5);
-  --color-avatar-6: var(--avatar-6);
-  --color-avatar-7: var(--avatar-7);
-  --color-code: var(--bg-code);
-  --color-highlight: var(--bg-highlight);
+/* The utilities of Frostnotes' own tokens (tokens.css). */
+@theme inline {
   --color-tag: var(--bg-tag);
   --color-callout-cyan: var(--callout-cyan);
-  --color-backdrop: var(--backdrop);
-  --shadow-popover: var(--popover-shadow);
 }
 
+/* Frostnotes' own type roles; the shared ones come from the package. */
 @theme {
-  --text-sidebar-row: 13px;
-  --text-sidebar-row--line-height: 18px;
-  --text-sidebar-section: 11px;
-  --text-sidebar-section--line-height: 14px;
-  --text-sidebar-section--font-weight: 600;
-  --text-toolbar-title: 13px;
-  --text-toolbar-title--line-height: 16px;
-  --text-toolbar-title--font-weight: 600;
-  --text-toolbar-subtitle: 11px;
-  --text-toolbar-subtitle--line-height: 14px;
   --text-status: 11px;
   --text-status--line-height: 14px;
-  --text-empty: 15px;
-  --text-empty--line-height: 20px;
   --text-tab: 13px;
   --text-tab--line-height: 16px;
   --text-keycap: 10px;
