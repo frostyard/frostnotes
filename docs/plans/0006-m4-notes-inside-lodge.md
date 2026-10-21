@@ -460,9 +460,11 @@ lodge's phase 2.
   **Pending:**
   - XSS in the phone's browser, on the user's phone (Phase 7);
   - Chrome's PDF viewer under lodge-content's sandbox (review 12, an
-    open question);
-  - lodge's own review of sign-in, sessions, tokens and headers
-    (lodge's phase 2).
+    open question).
+
+  *Done:* lodge's own review of sign-in, sessions, tokens and headers
+  lists no open XSS, CSRF or session finding
+  ([lodge's roadmap, Phase 2](https://github.com/frostyard/lodge/blob/main/docs/plans/0001-roadmap.md#phase-2--lodge-v1-with-notes-as-its-only-app)).
 
 ## Phase 7 — The user's hub in lodge, and exit evidence
 
