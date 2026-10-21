@@ -2,14 +2,14 @@
 // the split tree, each tab group with its strip and view header, the
 // splitters between them, and dragging tabs between groups. Groups whose
 // top edge is the workspace's draw their strips in the title bar row.
-import { createContext, type DragEvent, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 
+import { Splitter } from "@frostyard/lodge-ui/react";
+import { createContext, type DragEvent, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { useFiles } from "../data/files";
 import { usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { useDocuments } from "../editor/registry";
 import { NarrowHeader } from "../features/mobile/NarrowHeader";
-import { Splitter } from "../features/workspace/Splitter";
 import { TabStrip } from "../features/workspace/TabStrip";
 import { ViewHeader } from "../features/workspace/ViewHeader";
 import { type MergeSide, type Split, type TabGroup, tabTitle, type WorkspaceNode } from "../workspace/model";
