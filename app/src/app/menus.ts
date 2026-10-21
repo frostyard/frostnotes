@@ -2,11 +2,12 @@
 // bar, Sidebars and panes): what each lists and what choosing an item
 // does. Each opens through the overlays store at a point; app/Overlays.tsx
 // draws it.
+
+import type { MenuEntry as MenuItem } from "@frostyard/lodge-ui/react";
 import { openMenu, openMove } from "../data/overlays";
 import { setRenaming } from "../data/panes";
 import { usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
-import type { MenuItem } from "../features/menu/Menu";
 import type { StatusCounts, StatusIdentity } from "../features/status/StatusBar";
 import type { Client, SyncConflict } from "../rpc/gen/api";
 import { tabTitle, type ViewState } from "../workspace/model";

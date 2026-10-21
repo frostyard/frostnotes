@@ -2,8 +2,9 @@
 // the files store and the workspace's sort and open folders, and what its
 // commands do: open, create, rename and move through notesd, with links
 // updated as the vault's setting says (asking when it is off).
-import { useMemo } from "react";
 
+import type { MenuEntry as MenuItem } from "@frostyard/lodge-ui/react";
+import { useMemo } from "react";
 import { refreshFolders, useFiles } from "../../data/files";
 import { ask, notify, openMenu, openMove } from "../../data/overlays";
 import { setRenaming, usePanes } from "../../data/panes";
@@ -12,7 +13,6 @@ import { useClient } from "../../data/session";
 import { useNotes } from "../../data/stores";
 import { useVaultState } from "../../data/vaultState";
 import { type FilesCommand, FilesPane } from "../../features/explorer/FilesPane";
-import type { MenuItem } from "../../features/menu/Menu";
 import { type SortOrder, treeRows } from "../../lib/fileTree";
 import type { Client } from "../../rpc/gen/api";
 import { activeTab, open, setFileSort, setFolderOpen, setFoldersOpen } from "../../workspace/ops";

@@ -95,7 +95,7 @@ describe("the Files pane", () => {
   it("renames a file in place from its menu, keeping its extension", async () => {
     const { mock, user } = await start();
     fireEvent.contextMenu(fileRow("Deep/Seeds.md"));
-    await user.click(screen.getByRole("menuitem", { name: "Rename…" }));
+    await user.click(screen.getByRole("menuitem", { name: /^Rename…/ }));
     const field = screen.getByRole("textbox", { name: "Name" });
     await user.clear(field);
     await user.type(field, "Beans{Enter}");
