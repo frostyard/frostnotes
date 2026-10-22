@@ -1,10 +1,10 @@
 // The quick switcher (docs/specs/ui.md, Prompts): Ctrl+O's prompt over
 // the vault's notes, with highlighted names and aliases and open/create actions.
+
+import { highlight, Prompt, type PromptMods } from "@frostyard/lodge-ui/react";
 import { Forward } from "lucide-react";
 import { useMemo, useState } from "react";
-
 import { type SwitcherNote, type SwitcherResult, stripMd, switcherResults } from "../../lib/switcher";
-import { highlight, Prompt, type PromptMods } from "./Prompt";
 
 /** SwitcherWhere is where a note opens: in the current tab, a new tab, or to the right. */
 export type SwitcherWhere = "current" | "tab" | "right";

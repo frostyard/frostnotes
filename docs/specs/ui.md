@@ -176,7 +176,10 @@ pane boundaries:
 4. Over the right sidebar, when open: its pane tabs.
 5. Toggle right sidebar (`panel-right`, pressed while open), then the
    window controls (minimize, maximize or restore, close) on the
-   desktop; a browser draws its own.
+   desktop; a browser draws its own. The three window buttons are
+   `WindowControls` from `@frostyard/lodge-ui/react`
+   ([ADR-0030](../adr/0030-the-look-comes-from-lodges-ui-package.md)); the
+   toggle stays Frostnotes' (`TitleBarEnd`).
 
 ### Ribbon
 
@@ -408,6 +411,12 @@ Retrying." Retry now).
 
 ### Prompts: quick switcher and command palette *(batch 2)*
 
+- **Where the frame lives:** the frame below, with its input, results
+  and footer, is `Prompt` from `@frostyard/lodge-ui/react` (with
+  `highlight` and the prompt types), shared with the other apps. The
+  quick switcher, the command palette and the choosers stay Frostnotes':
+  their commands, data and ranking (`lib/fuzzy.ts`, `lib/switcher.ts`,
+  `lib/palette.ts`) are not in the package.
 - **The frame:** a dialog, 700 wide (at most 80% of the window),
   centered, its top 60 from the window's, at most 70% of the window's
   height; `--bg-window`, 1px `--separator`, rounded 12,

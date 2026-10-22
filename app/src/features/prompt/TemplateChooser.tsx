@@ -1,9 +1,9 @@
 // The template chooser (docs/specs/ui.md, Prompts; Insert template): a
 // searchable prompt over the template folder's notes, shown by name.
-import { useMemo, useState } from "react";
 
+import { highlight, Prompt } from "@frostyard/lodge-ui/react";
+import { useMemo, useState } from "react";
 import { type TemplateResult, templateResults } from "../../lib/templates";
-import { highlight, Prompt } from "./Prompt";
 
 export interface TemplateChooserProps {
   /** The template folder's notes, by path. */
