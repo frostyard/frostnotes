@@ -1,9 +1,9 @@
 // The command palette (docs/specs/ui.md, Prompts): Ctrl+P's prompt over
 // the commands that apply now, with fuzzy highlights and shortcut caps.
-import { useMemo, useState } from "react";
 
+import { highlight, Prompt } from "@frostyard/lodge-ui/react";
+import { useMemo, useState } from "react";
 import { type PaletteCommand, paletteResults } from "../../lib/palette";
-import { highlight, Prompt } from "./Prompt";
 
 export interface CommandPaletteProps {
   /** The commands that apply now. */

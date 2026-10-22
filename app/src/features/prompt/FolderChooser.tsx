@@ -1,9 +1,9 @@
 // The folder chooser (docs/specs/ui.md, Files pane: Move file to…): a
 // searchable prompt over the vault's folders, including its root.
-import { useMemo, useState } from "react";
 
+import { highlight, Prompt } from "@frostyard/lodge-ui/react";
+import { useMemo, useState } from "react";
 import { type FolderResult, folderResults, folderText } from "../../lib/folders";
-import { highlight, Prompt } from "./Prompt";
 
 export interface FolderChooserProps {
   /** Every folder of the vault, the root not among them. */

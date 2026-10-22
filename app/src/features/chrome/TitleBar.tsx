@@ -1,11 +1,11 @@
 // The title bar: client-side window chrome, from frostmail's toolbar
 // (ADR-0011). One strip that drags the window; double-clicking its empty
 // space toggles maximize (Tauri's data-tauri-drag-region). It carries the
-// sidebar toggle, the window's title and our own window controls; the tab
+// sidebar toggle, the window's title and the window controls (lodge-ui's); the tab
 // bar takes the title's place when notes open (M3). Containers decide what
 // each command does.
-import { IconButton } from "@frostyard/lodge-ui/react";
-import { Copy, Minus, PanelLeft, Square, X } from "lucide-react";
+import { IconButton, WindowControls } from "@frostyard/lodge-ui/react";
+import { PanelLeft } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 
 /** WindowCommand is what a title bar control asks for. */
@@ -51,17 +51,7 @@ export function TitleBar(props: TitleBarProps) {
       <span data-tauri-drag-region className="text-toolbar-title min-w-0 flex-1 truncate px-3">
         {props.title}
       </span>
-      {props.windowControls && (
-        <div className="flex shrink-0 items-center gap-1 px-2">
-          <IconButton label="Minimize" icon={Minus} onClick={() => onCommand({ kind: "minimize" })} />
-          <IconButton
-            label={props.maximized ? "Restore" : "Maximize"}
-            icon={props.maximized ? Copy : Square}
-            onClick={() => onCommand({ kind: "toggleMaximize" })}
-          />
-          <IconButton label="Close" icon={X} onClick={() => onCommand({ kind: "close" })} />
-        </div>
-      )}
+      {props.windowControls && <WindowControls maximized={props.maximized} onWindow={onCommand} className="px-2" />}
     </div>
   );
 }

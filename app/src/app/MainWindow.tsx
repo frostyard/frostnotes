@@ -21,7 +21,7 @@ import { titleOf } from "../editor/NoteEditor";
 import { DocumentRegistry, DocumentsContext } from "../editor/registry";
 import { Ribbon } from "../features/chrome/Ribbon";
 import { TitleBar } from "../features/chrome/TitleBar";
-import { WindowControls } from "../features/chrome/WindowControls";
+import { TitleBarEnd } from "../features/chrome/TitleBarEnd";
 import { BottomBar } from "../features/mobile/BottomBar";
 import { Drawer } from "../features/mobile/Drawer";
 import { EditingToolbar } from "../features/mobile/EditingToolbar";
@@ -168,7 +168,7 @@ export function MainWindow() {
   const controls = isTauri();
 
   const windowControls = (
-    <WindowControls
+    <TitleBarEnd
       rightOpen={shown.right}
       maximized={maximized}
       windowControls={controls}
@@ -386,12 +386,7 @@ export function MainWindow() {
               data-tauri-drag-region
               className="flex h-11 shrink-0 items-center justify-end border-b border-separator bg-toolbar"
             >
-              <WindowControls
-                rightOpen={false}
-                maximized={maximized}
-                windowControls={controls}
-                onWindow={windowCommand}
-              />
+              <TitleBarEnd rightOpen={false} maximized={maximized} windowControls={controls} onWindow={windowCommand} />
             </div>
             <VaultsView mode="window" />
             <StatusBar
