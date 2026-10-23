@@ -46,7 +46,7 @@ vaults), is merged too
 ([#41](https://github.com/frostyard/frostnotes/pull/41)): the contract,
 the shell's folder picker, T-0082 and T-0083, and the wiring. What
 remains is evidence 4, the user's 7-day trial on their one Linux
-desktop, framework, from 2026-10-19 through 2026-10-25, alongside M2's
+desktop, the laptop, from 2026-10-19 through 2026-10-25, alongside M2's
 trial.
 
 ## Decisions taken for M3
@@ -799,7 +799,7 @@ against the built app.
      cursor: vim saving the open note, a pull from another device
      through a hub, an agent's append through MCP, and a second tab.
   4. The user uses Frostnotes instead of Obsidian on their desktop
-     (framework) for 7 days, synced through M2's hub with the minideb VM
+     (the laptop) for 7 days, synced through M2's hub with the device VM
      still a syncing device, finds no edit missing, and names anything
      they went back to Obsidian for. The user has one Linux desktop
      (2026-10-18), so the same notes on a second machine wait for M4's
@@ -946,15 +946,15 @@ against the built app.
   merged:
 
   1. The trials overlap (decided 2026-10-19): M3's 7 days start on
-     framework on 2026-10-19, while M2's run through 2026-10-24.
-  2. On framework, whose notesd is joined to the hub (M2's trial): from
+     the laptop on 2026-10-19, while M2's run through 2026-10-24.
+  2. On the laptop, whose notesd is joined to the hub (M2's trial): from
      this repository, `make app-build`, then
      `install -m 0755 build/frostnotes-app ~/.local/bin/frostnotes`, and
-     start `frostnotes`; it connects to the running notesd. The minideb
+     start `frostnotes`; it connects to the running notesd. The device
      VM stays joined as M2's trial set it up, a second device syncing
      the same vault.
-  3. For 7 days, write in Frostnotes on framework instead of Obsidian.
-  4. Each day, on framework: `notesctl sync verify`; note the result,
+  3. For 7 days, write in Frostnotes on the laptop instead of Obsidian.
+  4. Each day, on the laptop: `notesctl sync verify`; note the result,
      any edit found missing, and anything you went back to Obsidian
      for.
   5. Once, check by hand what no test reaches: copy from a code block with
@@ -1107,7 +1107,7 @@ as a dialog. Choosing a vault there switches the window in place
   target, by a frame now and then (Phase 7, evidence 1); that is the
   follow-up's.
 - *Answered 2026-10-19:* **the two trials overlap.** M3's runs on
-  framework through M2's hub, with the minideb VM syncing beside it. Its
+  the laptop through M2's hub, with the device VM syncing beside it. Its
   7 days start on 2026-10-19, while M2's run through 2026-10-24, so the
   app's daily use is also sync's.
 
