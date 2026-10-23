@@ -121,9 +121,10 @@ func loadMigrations() ([]migration, error) {
 }
 
 // migrate checks that the migrations the database applied are this
-// notesd's, byte for byte, and applies the pending ones. Pre-release,
-// 0001_init.sql is edited in place, so a database that applied an earlier
-// text of it lacks what the code expects: Open refuses it.
+// notesd's, byte for byte, and applies the pending ones. Migrations are
+// append-only since M2, but before it 0001_init.sql was edited in place, so
+// a database that applied an earlier text of it lacks what the code
+// expects: Open refuses it.
 func (d *DB) migrate(ctx context.Context) error {
 	ms, err := loadMigrations()
 	if err != nil {
