@@ -130,6 +130,9 @@ file a step names before writing its frostnotes counterpart.
   node or cargo on the host. `make vault-it` (the `kill -9` harness) and
   `make obsidian-links` (Obsidian's link dump, local only) are the
   integration runs for changes to the scan, the write path or parsing.
+  `make vulncheck` runs govulncheck (pinned in the Makefile; needs the
+  network). It is not part of `check`, `verify` or `ci`; the CI job
+  "Vulnerabilities (make vulncheck)" runs it.
 
 - Unit tests run with `-run '^Test[^I]'` (frostyard/core ADR-0022): never
   name a unit test `TestI…`; `internal/repocheck` fails if you do.

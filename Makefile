@@ -1,4 +1,4 @@
-.PHONY: help build fmt gen gen-check lint lint-version-check test verify check ci clean
+.PHONY: help build fmt gen gen-check lint lint-version-check test verify check ci vulncheck clean
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -6,6 +6,8 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
 # golangci-lint's release, read from mise.toml (frostyard/core ADR-0043).
 GOLANGCI_LINT_VERSION := $(strip $(shell sed -n 's/^golangci-lint = "\(.*\)"/\1/p' mise.toml))
+# govulncheck's release; the Go checksum database verifies the module.
+GOVULNCHECK_VERSION := v1.9.0
 # Tracked or new Go files outside docs/tasks (given files are checked when
 # copied into place), skipping files deleted but not yet staged.
 GO_FILES = $(shell git ls-files --cached --others --exclude-standard '*.go' | grep -v -e '^docs/tasks/' | while read -r f; do [ -e "$$f" ] && echo "$$f"; done)
@@ -103,6 +105,9 @@ check: fmt verify ## Format, then verify (the developer gate)
 
 ci: verify ui-check app-build app-test ## verify plus race tests and the app checks (nsl)
 	go test -race -timeout 25m -run '^Test[^I]' ./...
+
+vulncheck: ## Report reachable vulnerabilities (govulncheck; needs the network)
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 clean: ## Remove build output
 	rm -rf build dist coverage.out coverage.html

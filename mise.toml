@@ -9,4 +9,4 @@ lockfile = true
 
 [tools]
 # make lint, and so make verify, check and ci; the Makefile checks this release.
-golangci-lint = "2.13.1"
+golangci-lint = "2.15.0"
