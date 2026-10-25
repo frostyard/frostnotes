@@ -663,8 +663,9 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
 
 **Before sync stops (about 10 minutes; nothing changes yet)**
 
-0. **[Brian]** Merge the script's fix ([#92](https://github.com/frostyard/frostnotes/pull/92)) and say go. Name the
-   iPhone's browser for evidence 1 (Safari is likely).
+0. **[Brian]** Merge the script's fix
+   ([#92](https://github.com/frostyard/frostnotes/pull/92)) and say go.
+   Name the iPhone's browser for evidence 1 (Safari is likely).
 1. **[agent]** Copy `scripts/move-hub-behind-lodge.sh` from `main` to
    `/root/` on the hub's VM.
 2. **[agent]** Checks, each must pass:
