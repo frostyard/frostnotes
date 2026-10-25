@@ -56,7 +56,9 @@ Status (2026-10-21):
   open in writing on 2026-10-21. Phase 6 still waits on XSS on the phone
   and Chrome's PDF viewer (Phase 7).
 - **Phase 7.** The move script is merged (#55) and has not run. Phase 7
-  starts from 2026-10-26, on the user's go-ahead.
+  starts from 2026-10-26, on the user's go-ahead. The script's dry run
+  ran on 2026-10-25 and found 2 problems (see
+  [Phase 7](#phase-7--the-users-hub-in-lodge-and-exit-evidence)).
 
 ## Decisions taken for M4
 
@@ -121,7 +123,11 @@ them without ADRs:
     test vault, and is not sure. If so, Porter wrote into the trial's vault,
     and the phone looked at notes before Phase 7, both against the rule
     above. The user reports that sync is working well, and the M2 trial
-    ([plan 0004](0004-m2-sync.md)) is not restarted.
+    ([plan 0004](0004-m2-sync.md)) is not restarted. *Observed
+    2026-10-25:* lodge's notesd on the hub's VM was paired with the trial
+    hub as a third device on 2026-10-19 and syncs the trial's vault, so
+    Porter's, Read's and the web app's writes went into it
+    ([plan 0004, Phase 7](0004-m2-sync.md#phase-7--review-and-exit-evidence)).
   - M4's docs name no address, host, tailnet, device, share or vault of
     the user's.
 - **The API grows within protocol 1, additively** (Phase 2):
@@ -557,6 +563,57 @@ tailnet.
     (the built app under Xvfb on a device notesd, the `watch` spike):
     median 1.016 s, p95 1.021 s, max 1.028 s, within the 2 s budget.
     The editor's 1 s save timer is nearly all of it.
+- **Dry run (2026-10-25):** `scripts/move-hub-behind-lodge.sh` ran on the
+  hub's VM as root, without `--apply`. It changed nothing and found 2
+  problems:
+  1. It said "lodge is not up", but `lodge.service` is active and
+     `lodgectl status` shows both nodes and both apps up. `lodgectl` is
+     in `/opt/lodge/bin`, not on root's PATH. Workaround: run the script
+     with `LODGECTL=/opt/lodge/bin/lodgectl`.
+  2. It said `/var/lib/frostnotes` holds vaults other than the overnight
+     test (the trial's vault and the test vault), and to move it aside by
+     hand. The cause: lodge's notesd is a device of the trial hub and
+     keeps a copy of the trial's vault there. Its pushes are all on the
+     hub (pending 0, `verify` ok), so setting it aside loses nothing.
+     Workaround: the user sets the copy aside by hand, or the script
+     learns the case.
+  - Other checks passed: notes' manifest and web build in
+    `/usr/share/lodge/apps/notes`; the user `frostnotes` exists;
+    `frostnotes.service` and `frostnotes-lodge.socket` are installed
+    (binary `/opt/lodge/bin/notesd`, with the overnight drop-ins); the
+    hub's data directory was found (14 MB, user `notes`); the trial notesd
+    is the expected hub; the vault's CIFS mount was found (still
+    `uid=notes`).
+  - *Observed 2026-10-25:* the trial's devices run notesd builds from
+    before Phase 2 (#45, 2026-10-19), which added `log.hub` and
+    `notesctl hub relocate`. The laptop runs 8db47da (2026-10-18) and the
+    device VM 40a3c56 (2026-10-17). Neither can move to lodge until it
+    runs a current notesd and `notesctl`. Upgrading before the move is
+    safe: a device asks `log.hub`, and the trial's hub answers
+    `methodNotFound`, which the device takes as no move
+    (`internal/syncer/relocate.go`). Read from the script and
+    `cmd/notesd`, not yet run: the move stops the trial's unit before it
+    records the URL, and `notesd --lodge` listens on no network address,
+    so nothing answers at the old URL once the URL is recorded, and a
+    device cannot learn it there. Each device then runs
+    `notesctl hub relocate OLD-URL NEW-URL`
+    ([design/hub.md](../design/hub.md#moving-devices-to-lodge)).
+  - *Observed 2026-10-25:* lodge's agent tokens for notes name the vault
+    by lodge's notesd's local vault ID. Today that notesd holds the test
+    vault as vault 1 and the trial's vault as vault 2. Two live tokens
+    use `vault=2`: `porter-notes`
+    (`vault=2;write=Porter/;except=Porter/Routines/;daily`) and
+    `frostread-notes` (`vault=2;write=Reading/`). The move copies the
+    hub's data directory in whole, and in the hub's database the trial's
+    vault is vault 1, its only vault. After the move, `vault=2` names no
+    vault. The user issues both tokens again with `vault=1` and the same
+    rest of the scope (`lodgectl token issue`), and revokes the old ones.
+    Porter and Read then take the new tokens.
+  - After the move, lodge's own former device (device 3 on the hub) stays
+    paired and is never seen again. Revoke it after the move, or
+    `notesctl hub devices` never shows "all seen".
+  - The hub's VM and the device VM do not synchronize their clocks;
+    revision times come from the hub's clock.
 
 ## Later / ideas
 
@@ -576,7 +633,8 @@ tailnet.
 
 - **The phone and its browser:** Firefox for Android, Chrome or Safari
   on iOS changes how lodge's page installs, and the size the evidence
-  drives. By Phase 7.
+  drives. By Phase 7. Lodge's log shows the phone is an iPhone
+  (2026-10-25); the browser is still the user's to say.
 - **Chrome's PDF viewer under lodge-content's sandbox** (the platform
   review's L12): does Chrome show a PDF that lodge-content serves with
   `sandbox`? The docs say the download URL serves where a browser will
