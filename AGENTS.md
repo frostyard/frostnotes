@@ -19,8 +19,9 @@ M0 (foundations) is done ([plan 0001](docs/plans/0001-m0-foundations.md)),
 and so is M1, the headless vault ([plan 0003](docs/plans/0003-m1-headless-vault.md)).
 M2, sync ([plan 0004](docs/plans/0004-m2-sync.md)), and M3, the desktop
 app ([plan 0005](docs/plans/0005-m3-desktop-app.md); the app's design is
-[docs/design/app.md](docs/design/app.md)), are built and in their 7-day
-trials, M2's through 2026-10-24 and M3's through 2026-10-25. M4, notes
+[docs/design/app.md](docs/design/app.md)), are done: their 7-day trials
+ended on 2026-10-24 and 2026-10-25, and the user accepted both on
+2026-10-25. M4, notes
 inside lodge (frostyard's tailnet web shell), is in progress
 ([plan 0006](docs/plans/0006-m4-notes-inside-lodge.md); notesd's side
 of lodge's app contract is

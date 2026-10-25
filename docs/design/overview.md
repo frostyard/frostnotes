@@ -8,10 +8,10 @@ Living document. Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-
 Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md),
 [specs/lodge-app.md](../specs/lodge-app.md).
 
-**Status (2026-10-19):**
+**Status (2026-10-25):**
 - **M0 and M1 are done:** the headless vault, the index and MCP.
-- **M2 and M3 are built and in their 7-day trials:** sync through a hub,
-  and the desktop app.
+- **M2 and M3 are done** (2026-10-25, after their 7-day trials): sync
+  through a hub, and the desktop app.
 - **M4 is built in part:** notesd as lodge's notes app, `/mcp` through
   lodge, and the web app.
 
