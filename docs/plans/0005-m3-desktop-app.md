@@ -14,7 +14,10 @@ the live-preview framework, the reading view, the merge view, the command
 registry and the containers; the executor owns cards T-0038 onward: the
 panes, the quick switcher, the command palette, the widgets, settings,
 history, daily notes and templates, and the keymap.
-Status (2026-10-18): **Phases 1 to 5 done**, and the user accepted
+Status (2026-10-25): **done.** Evidence 4, the user's 7-day trial, ended
+on 2026-10-25, and the user accepted it that day
+([Phase 7](#phase-7--review-and-exit-evidence)). The history up to the
+trial (2026-10-18): **Phases 1 to 5 done**, and the user accepted
 ADRs 0021 to 0023 as written: this plan, the ADRs (accepted),
 [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md), the
 spec's tokens in the app's styles, and the batch-1 cards T-0038 to
@@ -964,7 +967,8 @@ against the built app.
      time); type with an input method, if you use one; and Open folder as
      vault, which opens the system's folder picker (Phase 8).
 
-  **Result (2026-10-25): the trial ended; evidence 4 waits on the user.**
+  **Result (2026-10-25): done.** The trial ended, and the user accepted it
+  on 2026-10-25 (below the table).
   Read-only checks on 2026-10-25. The sync record is in
   [plan 0004's Phase 7](0004-m2-sync.md#phase-7--review-and-exit-evidence).
 
@@ -988,7 +992,12 @@ against the built app.
   The record shows the desktop app's writes only on 2026-10-19 and
   2026-10-20 (UTC), and most writes came through the web app. Whether the
   user used Frostnotes instead of Obsidian is the user's to say. Evidence 4
-  and M3 are not done until the user confirms.
+  and M3 waited on the user's confirmation.
+
+  *The user's answer, 2026-10-25:* "M3 passes". The user accepted
+  evidence 4 on the record above; the rows marked UNKNOWN stay unrecorded,
+  and the user's acceptance covers them. Evidence 4 and M3 are done. The
+  record's PR is [#90](https://github.com/frostyard/frostnotes/pull/90).
 
 ## Phase 8 — Vaults from the app
 

@@ -20,9 +20,9 @@ markdown files with YAML frontmatter, in a folder you own
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties.
 
-Pre-release. M0 (foundations) and M1 (the headless vault) are done. Sync
-(M2) and the desktop app (M3) are built and in their 7-day trials, through
-2026-10-24 and 2026-10-25. M4, notes inside lodge, is in progress: notesd
+Pre-release. M0 (foundations), M1 (the headless vault), sync (M2) and the
+desktop app (M3) are done; M2's and M3's 7-day trials ended on 2026-10-24
+and 2026-10-25. M4, notes inside lodge, is in progress: notesd
 runs as lodge's `notes` app, and the hub moves behind lodge from
 2026-10-26. See the [roadmap](docs/plans/0002-roadmap.md).
 
