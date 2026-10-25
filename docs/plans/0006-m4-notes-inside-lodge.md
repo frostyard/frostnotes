@@ -58,7 +58,7 @@ Status (2026-10-21):
 - **Phase 7.** The move script is merged (#55) and has not run. Phase 7
   starts on 2026-10-26 in the morning, with the user's go-ahead
   (2026-10-25). The script's dry run on 2026-10-25 found 2 problems; the
-  script now handles both, and the dry run passes (see
+  script now handles both (#92), and the dry run passes (see
   [Phase 7](#phase-7--the-users-hub-in-lodge-and-exit-evidence)). The
   [run sheet](#run-sheet-for-the-move-2026-10-26) gives the morning's
   order.
@@ -663,7 +663,7 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
 
 **Before sync stops (about 10 minutes; nothing changes yet)**
 
-0. **[Brian]** Merge the script's fix (this PR) and say go. Name the
+0. **[Brian]** Merge the script's fix ([#92](https://github.com/frostyard/frostnotes/pull/92)) and say go. Name the
    iPhone's browser for evidence 1 (Safari is likely).
 1. **[agent]** Copy `scripts/move-hub-behind-lodge.sh` from `main` to
    `/root/` on the hub's VM.
