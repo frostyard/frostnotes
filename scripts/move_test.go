@@ -622,6 +622,7 @@ func TestALodgedCopyOfTheHubsVaultGoesAsideWithTheTest(t *testing.T) {
 	// the URL is recorded.
 	inOrder(t, changes(t, root),
 		"systemctl stop lodge.service",
+		"systemctl restart frostnotes.service",
 		"systemctl stop frostnotes-lodge.socket frostnotes.service",
 		"systemctl disable --now notesd.service",
 		"notesctl hub url "+url+" (as frostnotes.service)",
@@ -685,6 +686,24 @@ func TestRefusesWithoutLodgectl(t *testing.T) {
 	}
 }
 
+func TestTheDrainWaitsForACycleAfterTheRestart(t *testing.T) {
+	root := stage(t)
+	stageHubCopy(t, root)
+	// After notesd restarted, its status shows zero counts until its loop
+	// has counted from the database: a state that is not idle is not yet a
+	// count, however level it looks.
+	writeFile(t, root, "var/lib/frostnotes/syncstatus-2-drain",
+		"2\tMy Notes\thttp://127.0.0.1:7880\tsyncing\t8702/8702\t0 pending\t0 conflicted\n")
+	before := snapshot(t, root)
+	out, code := move(t, root, "--apply", "--url", url)
+	if code == 0 || !strings.Contains(out, "lodge's copy of My Notes did not drain into the hub (2\tMy Notes\thttp://127.0.0.1:7880\tsyncing\t8702/8702") {
+		t.Fatalf("exit %d, the move took a status before a cycle as drained:\n%s", code, out)
+	}
+	if d := same(before, snapshot(t, root)); d != "" {
+		t.Errorf("the failed move changed %s", d)
+	}
+}
+
 func TestRefusesACopyThatDoesNotDrain(t *testing.T) {
 	root := stage(t)
 	stageHubCopy(t, root)
@@ -698,7 +717,7 @@ func TestRefusesACopyThatDoesNotDrain(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("dry run exited %d:\n%s", code, out)
 	}
-	if want := "then wait for lodge's copy of My Notes to reach the hub (notesctl sync status --vault 2), and verify it there"; !strings.Contains(out, want) {
+	if want := "then wait for lodge's copy of My Notes to be idle and in step with the hub (notesctl sync status --vault 2), and verify it there"; !strings.Contains(out, want) {
 		t.Errorf("the dry run does not say what it would wait for (%q):\n%s", want, out)
 	}
 	out, code = move(t, root, "--apply", "--url", url)
@@ -713,7 +732,7 @@ func TestRefusesACopyThatDoesNotDrain(t *testing.T) {
 		t.Errorf("the failed move changed %s", d)
 	}
 	for _, c := range changes(t, root) {
-		if !strings.HasPrefix(c, "mkdir ") && c != "systemctl stop lodge.service" {
+		if !strings.HasPrefix(c, "mkdir ") && c != "systemctl stop lodge.service" && c != "systemctl restart frostnotes.service" {
 			t.Errorf("the failed move ran %q", c)
 		}
 	}

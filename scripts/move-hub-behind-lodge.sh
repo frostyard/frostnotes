@@ -138,20 +138,23 @@ step_no=0
 step_n() { step_no=$((step_no + 1)); step "$step_no. $*"; }
 # drain polls until lodge's copy $1 of the hub's vault $2 is in the hub,
 # then checks it there. It runs with lodge stopped, so the copy has the hub
-# alone to push to.
+# alone to push to, and after notesd restarted: sync status shows the
+# counts its loop last computed, so only an idle state after the restart
+# says that a full cycle has counted, and pushed, everything the database
+# holds, a conflict version without a push included.
 drain() {
-	local id=$1 name=$2 i seq status first side cur pending conflicted detail
+	local id=$1 name=$2 i seq status first side state cur pending conflicted detail
 	for i in $(seq 60); do
 		seq=$(as "$trial_user" env FROSTNOTES_SOCKET="$trial_socket" "$notesctl" hub vaults 2>/dev/null |
 			awk -F'\t' -v n="$name" '$1 == n {print $3; exit}' || true)
 		status=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" sync status --vault "$id" 2>/dev/null || true)
 		first=$(printf '%s\n' "$status" | awk -F'\t' -v id="$id" '$1 == id {print; exit}')
 		side=$(printf '%s\n' "$status" | awk '/^\t/ {print; exit}')
-		cur='' pending='' conflicted=''
-		[ -z "$first" ] || IFS=$'\t' read -r _ _ _ _ cur pending conflicted <<<"$first"
+		state='' cur='' pending='' conflicted=''
+		[ -z "$first" ] || IFS=$'\t' read -r _ _ _ state cur pending conflicted <<<"$first"
 		detail=${first:-no sync status}
 		[ -z "$side" ] || detail+=" $side"
-		if [ -n "$seq" ] && [ "$cur" = "$seq/$seq" ] && [ "${pending%% *}" = 0 ] &&
+		if [ -n "$seq" ] && [ "$state" = idle ] && [ "$cur" = "$seq/$seq" ] && [ "${pending%% *}" = 0 ] &&
 			[ "${conflicted%% *}" = 0 ] && [ -z "$side" ]; then
 			as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" sync verify --vault "$id" >/dev/null 2>&1 ||
 				fail "lodge's copy of $name did not drain into the hub ($detail): nothing is replaced; roll back to restart lodge"
@@ -480,12 +483,15 @@ if [ -n "$aside_copies" ]; then
 	lodge_stopped=1
 	record lodge_stopped 1
 	run "$SYSTEMCTL" stop "$LODGE_UNIT"
+	# A fresh notesd counts what is pending from its database, not from
+	# what its loop saw last.
+	run "$SYSTEMCTL" restart "$UNIT"
 	for c in "${copies[@]}"; do
 		IFS=$'\t' read -r cid cname <<<"$c"
 		if [ "$mode" = apply ]; then
 			drain "$cid" "$cname"
 		else
-			say "  then wait for lodge's copy of $cname to reach the hub (notesctl sync status --vault $cid), and verify it there"
+			say "  then wait for lodge's copy of $cname to be idle and in step with the hub (notesctl sync status --vault $cid), and verify it there"
 		fi
 	done
 fi

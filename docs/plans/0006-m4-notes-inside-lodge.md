@@ -590,9 +590,12 @@ tailnet.
      verified (`notesctl sync verify`), and syncs with the trial hub on
      this machine (the loopback address of the address the hub listens
      on). Otherwise it still refuses. Since lodge's notesd takes writes
-     until nothing reaches it, the move then stops `lodge.service`, waits
-     up to 60 s until each copy is in step with the hub again and
-     verifies it, and only then stops lodge's notesd and the trial hub.
+     until nothing reaches it, the move then stops `lodge.service`,
+     restarts lodge's notesd (`sync status` shows the counts of the loop's
+     last cycle, so a fresh process counts from its database, conflict
+     versions included), waits up to 60 s until each copy is idle and in
+     step with the hub again and verifies it, and only then stops lodge's
+     notesd and the trial hub.
      A copy that does not drain stops the move before anything moves
      (cross-review of #92). The move starts lodge again at its end.
   - *The dry run again (2026-10-25, the fixed script, on the hub's VM as
@@ -699,7 +702,8 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
    `bash /root/move-hub-behind-lodge.sh --apply --url "$NEW"`. Keep the
    backup path it prints (`/var/backups/frostnotes-move-STAMP`). It stops
    lodge (mail, Porter and Read in lodge are down with it, for a few
-   minutes), waits until lodge's copy is in the hub and verified ("✓
+   minutes), restarts lodge's notesd, waits until its copy is in the hub
+   and verified ("✓
    lodge's copy of Obsidian Vault is in the hub at seq …"), stops notes
    in lodge and the M2 hub, moves the hub, and starts lodge again. It
    must print "✓ frostnotes wrote to …", "✓ frostnotes.service
