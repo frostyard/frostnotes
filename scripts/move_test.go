@@ -17,9 +17,11 @@ import (
 // The tests of move-hub-behind-lodge.sh (plan 0006, Phase 7) run it
 // against a staged root: the trial hub's notesd.service as user m2hub, the
 // overnight deployment's frostnotes.service with its test vault and
-// drop-in, and the vault on a CIFS mount in fstab. Stub commands on PATH
-// play systemd, runuser, getent, mount, lodgectl and notesctl, keep the
-// units' state in the root, and log what the script runs.
+// drop-in, the vault on a CIFS mount in fstab, and, where a test stages
+// it, lodge's former device with a synced copy of the hub's vault. Stub
+// commands on PATH play systemd, runuser, getent, mount, lodgectl and
+// notesctl, keep the units' state in the root, and log what the script
+// runs.
 
 const (
 	trialHub = "0123456789abcdef0123456789abcdef"
@@ -77,8 +79,8 @@ notesctl)
 	[ "$(cat "$(u "$unit")/active" 2>/dev/null)" = active ] || { echo "cannot reach notesd" >&2; exit 1; }
 	case "$1 $2" in
 	"hub status") echo "hub $(cat "$data/hubid")"; echo "listening on 127.0.0.1:7880" ;;
-	"hub vaults") cat "$data/hubvaults" ;;
-	"vault list") cat "$data/vaults" ;;
+	"hub vaults") cat "$data/hubvaultlist" ;;
+	"vault list") cat "$data/vaultlist" ;;
 	"hub url") log "notesctl hub url $3 (as $unit)" ;;
 	"sync status") if [ -e "$data/syncstatus-$4" ]; then cat "$data/syncstatus-$4"; else echo "no synced vaults"; fi ;;
 	"sync verify") if [ -e "$data/verify-fail-$4" ]; then echo "differs from the hub" >&2; exit 1; fi
@@ -116,12 +118,12 @@ func stage(t *testing.T) string {
 	write("home/m2hub/.local/share/frostnotes/notesd.db", "the hub's database")
 	write("home/m2hub/.local/share/frostnotes/blobs/ab/abcdef", "a version")
 	write("home/m2hub/.local/share/frostnotes/hubid", trialHub)
-	write("home/m2hub/.local/share/frostnotes/vaults", "1\tMy Notes\t/srv/share/Notes/My Notes\n")
-	write("home/m2hub/.local/share/frostnotes/hubvaults", "My Notes\tmy-notes\t8702\n")
+	write("home/m2hub/.local/share/frostnotes/vaultlist", "1\tMy Notes\t/srv/share/Notes/My Notes\n")
+	write("home/m2hub/.local/share/frostnotes/hubvaultlist", "My Notes\tmy-notes\t8702\n")
 	write("var/lib/frostnotes/notesd.db", "the overnight test's database")
 	write("var/lib/frostnotes/hubid", testHub)
-	write("var/lib/frostnotes/vaults", "1\tTest\t/var/lib/frostnotes-test/Test\n")
-	write("var/lib/frostnotes/hubvaults", "Test\ttest\t12\n")
+	write("var/lib/frostnotes/vaultlist", "1\tTest\t/var/lib/frostnotes-test/Test\n")
+	write("var/lib/frostnotes/hubvaultlist", "Test\ttest\t12\n")
 	// The vault, on the share.
 	write("srv/share/Notes/My Notes/Plan.md", "# Plan\n")
 	// The stubs: one script, many names; notesctl beside notesd.
@@ -176,12 +178,17 @@ func stageHubCopy(t *testing.T, root string) {
 }
 
 // stageHubCopies stages the copy with status as `notesctl sync status
-// --vault 2` prints it.
+// --vault 2` prints it, and the copy's contents: the hub's note, the
+// device's own .frostnotes at the copy's root, and .obsidian, which only
+// the hub has and the device ignores.
 func stageHubCopies(t *testing.T, root, status string) {
 	t.Helper()
-	writeFile(t, root, "var/lib/frostnotes/vaults",
+	writeFile(t, root, "var/lib/frostnotes/vaultlist",
 		"2\tMy Notes\t/var/lib/frostnotes/vaults/My Notes\n1\tTest\t/var/lib/frostnotes-test/Test\n")
 	writeFile(t, root, "var/lib/frostnotes/syncstatus-2", status)
+	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/Plan.md", "# Plan\n")
+	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/.frostnotes/x", "the device's own")
+	writeFile(t, root, "srv/share/Notes/My Notes/.obsidian/app.json", "{}\n")
 }
 
 // stageLodgectlBesideLodge takes lodgectl off the stubs' PATH and puts it in
@@ -347,7 +354,7 @@ func TestRefusesWhatItCannotReadUnambiguously(t *testing.T) {
 		want  string
 	}{
 		"other vaults where the test should be": {func(t *testing.T, root string) {
-			writeFile(t, root, "var/lib/frostnotes/vaults", "1\tTest\t/x\n2\tWork\t/y\n")
+			writeFile(t, root, "var/lib/frostnotes/vaultlist", "1\tTest\t/x\n2\tWork\t/y\n")
 		}, nil, "holds vaults other than the overnight test (Test Work )"},
 		"a copy of the hub's vault that is behind": {func(t *testing.T, root string) {
 			stageHubCopies(t, root, "2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8700/8702\t0 pending\t0 conflicted\n")
@@ -368,6 +375,12 @@ func TestRefusesWhatItCannotReadUnambiguously(t *testing.T) {
 		"a vault that is not synced": {func(t *testing.T, root string) {
 			stageHubCopies(t, root, "no synced vaults\n")
 		}, nil, "vault My Notes in /var/lib/frostnotes is not a copy of the hub's vaults: move /var/lib/frostnotes aside yourself"},
+		"a copy that syncs with another hub": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "2\tMy Notes\thttps://hub.example.ts.net\tidle\t8702/8702\t0 pending\t0 conflicted\n")
+		}, nil, "syncs with https://hub.example.ts.net, not with this machine's trial hub (port 7880)"},
+		"a copy that syncs on another port": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "2\tMy Notes\thttp://127.0.0.1:7999\tidle\t8702/8702\t0 pending\t0 conflicted\n")
+		}, nil, "syncs with http://127.0.0.1:7999, not with this machine's trial hub (port 7880)"},
 		"a copy of a vault the hub does not serve": {func(t *testing.T, root string) {
 			stageHubCopies(t, root, "2\tOther\thttp://127.0.0.1:7880\tidle\t8702/8702\t0 pending\t0 conflicted\n")
 		}, nil, "vault My Notes in /var/lib/frostnotes is not a copy of the hub's vaults"},
@@ -457,11 +470,11 @@ func TestApplyMovesTheHubAndRollbackPutsItBack(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(root, "srv/share/.frostnotes-write-check-*")); len(left) != 0 {
 		t.Errorf("the write check left %v", left)
 	}
-	// In order: the trial stops, the test's notesd stops, the mount, notes starts, devices move, lodge reloads.
+	// In order: notes in lodge stops, the trial stops, the mount, notes starts, devices move, lodge reloads.
 	c := changes(t, root)
 	inOrder(t, c,
-		"systemctl disable --now notesd.service",
 		"systemctl stop frostnotes-lodge.socket frostnotes.service",
+		"systemctl disable --now notesd.service",
 		"chown -R frostnotes:frostnotes "+filepath.Join(root, "var/lib/frostnotes.new"),
 		"systemctl daemon-reload",
 		"systemctl stop srv-share.automount srv-share.mount",
@@ -470,7 +483,8 @@ func TestApplyMovesTheHubAndRollbackPutsItBack(t *testing.T) {
 		"notesctl hub url "+url+" (as frostnotes.service)",
 		"lodgectl reload",
 	)
-	for _, want := range []string{"✓ frostnotes wrote to /srv/share", "✓ frostnotes.service serves hub " + trialHub, "✓ its vaults are the hub's: /srv/share/Notes/My Notes"} {
+	for _, want := range []string{"✓ frostnotes wrote to /srv/share", "✓ frostnotes.service serves hub " + trialHub, "✓ its vaults are the hub's: /srv/share/Notes/My Notes",
+		"lodge's notesd keeps no copy of the hub's vaults: nothing to compare"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the output lacks %q:\n%s", want, out)
 		}
@@ -535,7 +549,7 @@ func TestRollbackRefusesOnceDevicesSyncedThroughLodge(t *testing.T) {
 		t.Fatalf("--apply exited %d:\n%s", code, out)
 	}
 	// A device pushed through lodge: the moved hub's log is ahead.
-	writeFile(t, root, "var/lib/frostnotes/hubvaults", "My Notes\tmy-notes\t8710\n")
+	writeFile(t, root, "var/lib/frostnotes/hubvaultlist", "My Notes\tmy-notes\t8710\n")
 	moved := snapshot(t, root)
 	n := len(changes(t, root))
 	out, code := move(t, root, "--rollback", filepath.Join(root, backup), "--apply")
@@ -657,5 +671,80 @@ func TestRefusesWithoutLodgectl(t *testing.T) {
 	}
 	if c := changes(t, root); len(c) != 0 {
 		t.Errorf("a refusal ran %q", c)
+	}
+}
+
+func TestRefusesACopyThatChangedAfterTheCheck(t *testing.T) {
+	root := stage(t)
+	stageHubCopy(t, root)
+	copyDir := filepath.Join(root, "var/lib/frostnotes/vaults/My Notes")
+	hubDir := filepath.Join(root, "srv/share/Notes/My Notes")
+	// The dry run reads the copies, and prints the comparison only.
+	out, code := move(t, root)
+	if code != 0 {
+		t.Fatalf("dry run exited %d:\n%s", code, out)
+	}
+	if want := "  $ diff -rq " + copyDir + " " + hubDir; !strings.Contains(out, want) {
+		t.Errorf("the dry run does not print %q:\n%s", want, out)
+	}
+	// A write reaches the copy after the checks: the copy holds a note the
+	// hub does not have, so setting it aside would lose it.
+	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/Plan.md", "# Plan\n\nwritten after the check\n")
+	atFailure := snapshot(t, root)
+	out, code = move(t, root, "--apply", "--url", url)
+	want := "the copy of My Notes in /var/lib/frostnotes changed after the check (above): nothing is replaced; roll back to restart both, so the copy pushes it"
+	if code == 0 || !strings.Contains(out, want) ||
+		!strings.Contains(out, "Files "+filepath.Join(copyDir, "Plan.md")+" and "+filepath.Join(hubDir, "Plan.md")+" differ") ||
+		!strings.Contains(out, "roll back with: move-hub-behind-lodge.sh --rollback "+filepath.Join(root, backup)+" --apply") {
+		t.Fatalf("exit %d, without the changed copy or the rollback:\n%s", code, out)
+	}
+	// Nothing moved: the data directory, the trial's data and fstab are as
+	// they were, and only the backup's directory and the two stops ran.
+	if d := same(atFailure, snapshot(t, root)); d != "" {
+		t.Errorf("the failed move changed %s", d)
+	}
+	for _, c := range changes(t, root) {
+		if !strings.HasPrefix(c, "mkdir ") && !strings.HasPrefix(c, "systemctl stop ") && !strings.HasPrefix(c, "systemctl disable ") {
+			t.Errorf("the failed move ran %q", c)
+		}
+	}
+	// The rollback restarts both, and leaves everything where it was.
+	out, code = move(t, root, "--rollback", filepath.Join(root, backup), "--apply")
+	if code != 0 {
+		t.Fatalf("--rollback exited %d:\n%s", code, out)
+	}
+	if d := same(atFailure, snapshot(t, root)); d != "" {
+		t.Errorf("after the rollback, the machine differs: %s", d)
+	}
+	for unit, want := range map[string]string{"notesd.service": "active\n", "frostnotes.service": "active\n", "frostnotes-lodge.socket": "active\n"} {
+		if got := readFile(t, root, "stub/units/"+unit+"/active"); got != want {
+			t.Errorf("%s after the rollback is %q, want %q", unit, got, want)
+		}
+	}
+	if c := changes(t, root); !slices.Contains(c, "systemctl enable --now notesd.service") {
+		t.Errorf("the rollback does not start the trial hub again: %q", c)
+	}
+	// A note only the copy has counts the same way.
+	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/New.md", "# New\n")
+	out, code = move(t, root, "--apply", "--url", url)
+	if code == 0 || !strings.Contains(out, "Only in "+copyDir+": New.md") || !strings.Contains(out, want) {
+		t.Fatalf("a new note in the copy: exit %d:\n%s", code, out)
+	}
+}
+
+func TestALoopbackURLOnTheHubsPortIsThisHub(t *testing.T) {
+	for name, u := range map[string]string{
+		"127.0.0.1":                       "http://127.0.0.1:7880",
+		"localhost with a trailing slash": "http://localhost:7880/",
+		"IPv6 loopback":                   "http://[::1]:7880",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := stage(t)
+			stageHubCopies(t, root, "2\tMy Notes\t"+u+"\tidle\t8702/8702\t0 pending\t0 conflicted\n")
+			out, code := move(t, root)
+			if code != 0 || !strings.Contains(out, "is a copy of the hub's vault My Notes ("+u+")") {
+				t.Fatalf("exit %d:\n%s", code, out)
+			}
+		})
 	}
 }

@@ -587,7 +587,14 @@ tailnet.
      directory aside whole when every vault in it but `Test` is a copy
      of one of the hub's vaults, in step with it (cursor and the hub's
      seq equal, 0 pending, 0 conflicted, nothing refused or skipped) and
-     verified (`notesctl sync verify`). Otherwise it still refuses.
+     verified (`notesctl sync verify`), and syncs with the trial hub on
+     this machine (a loopback URL at the port the hub listens on).
+     Otherwise it still refuses. Since lodge's notesd takes writes until
+     it stops, the move now stops it before the trial hub, and compares
+     each copy with the hub's vault on disk (`diff -rq`) before anything
+     moves: a copy that holds content the hub lacks stops the move, and
+     its rollback restarts both, so the copy pushes it (cross-review of
+     #92).
   - *The dry run again (2026-10-25, the fixed script, on the hub's VM as
     root):* 0 problems. It found lodge, its `lodgectl` in `/opt/lodge/bin`,
     and lodge's copy of the trial's vault, pushed in full and verified at
@@ -690,10 +697,12 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
    Then run step 2's checks on lodge's notesd again.
 6. **[agent]** The move, on the hub's VM as root:
    `bash /root/move-hub-behind-lodge.sh --apply --url "$NEW"`. Keep the
-   backup path it prints (`/var/backups/frostnotes-move-STAMP`). It
-   must print "✓ frostnotes wrote to …", "✓ frostnotes.service serves
-   hub …" with the trial hub's ID, and "✓ its vaults are the hub's". From
-   here, devices cannot sync until step 9.
+   backup path it prints (`/var/backups/frostnotes-move-STAMP`). It stops
+   notes in lodge, then the M2 hub, compares lodge's copy with the share
+   and stops if the copy changed after the checks; then it moves the
+   hub. It must print "✓ frostnotes wrote to …", "✓ frostnotes.service
+   serves hub …" with the trial hub's ID, and "✓ its vaults are the
+   hub's". From here, devices cannot sync until step 9.
 7. **[agent]** The hub behind lodge:
    - `$HUBCTL hub status`: the trial hub's ID, "devices use $NEW",
      1 vault, 3 devices;
@@ -746,8 +755,9 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
 
 10. **[agent]** Revoke lodge's former device, whose copy went aside:
     check that device 3 is "lodge" in `$HUBCTL hub devices`, then
-    `$HUBCTL hub revoke 3`. Do it only now: a rollback before this step
-    gives that copy back its sync.
+    `$HUBCTL hub revoke 3`. It never connects again, and until it is
+    revoked, `hub devices` never shows all devices seen. The M2 hub's own
+    data, which a rollback restores, keeps device 3.
 11. **[Brian]** Claude Code's tokens, for evidence 3. Run them in your
     own terminal: each token prints once, and only you see it.
 
@@ -775,17 +785,50 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
 
 **Rollback**
 
-- *Before step 9* (no device has synced through lodge): on the hub's VM,
-  `bash /root/move-hub-behind-lodge.sh --rollback /var/backups/frostnotes-move-STAMP`
-  (a dry run), then again with `--apply`. It restores the M2 hub, fstab,
-  lodge's data directory (the test and its copy of the vault) and
-  reloads lodge. Devices still at `$OLD` resume by themselves. If step 8
-  ran, issue `porter-notes` and `frostread-notes` again with `vault=2`,
-  as in step 8, and revoke the `vault=1` ones.
-- *After step 9:* the script refuses (the hub's log moved), and devices
-  that relocated cannot relocate back (the M2 hub records no URL). Fix
-  forward. Use `--force` only if the user decides to; relocated devices
-  then stay offline, their notes safe on them, until the move runs again.
+The script's rollback compares the hub's log with the seq it recorded
+when notes started in step 6 (`seqs=` in the backup's `manifest`), and
+refuses when the log moved, unless `--force`. Run each rollback as a dry
+run first, then with `--apply`. A rollback restores the M2 hub's data
+from before the move, fstab and lodge's data directory (the test and its
+copy of the vault), restarts both notesd and reloads lodge; devices
+still at `$OLD` resume by themselves.
+
+- *Step 6 stops on an error, or finds that the copy changed after its
+  check:* run the rollback it prints. Lodge's notesd starts again on its
+  copy and pushes what it holds to the M2 hub. Then repeat from step 2.
+- *After step 6, before the scratch note (step 7):* the plain rollback
+  works.
+- *After the scratch note, before step 8:* the note's create and delete
+  moved the hub's log by 2, so the plain rollback refuses. Use `--force`
+  only when both hold: `$HUBCTL hub vaults` shows the manifest's seq
+  plus 2, and `$HUBCTL hub devices` shows no device seen since the move.
+  The M2 hub never had the note, and the share no longer has it.
+- *After step 8:* Porter and Read can write through the moved hub, and a
+  rollback loses those writes (they stay in the backup's
+  `data-after-move`). First stop them
+  (`systemctl stop frostporter.socket frostporter.service frostread.socket frostread.service`),
+  then roll back as above, with `--force` only when the seq is the
+  manifest's plus 2. Otherwise fix forward. After a rollback, give both
+  agents back their `vault=2` tokens:
+
+  ```sh
+  $LODGECTL token revoke porter-notes
+  $LODGECTL token issue porter-notes --app notes \
+    --scope 'vault=2;write=Porter/;except=Porter/Routines/;daily' --agent frostporter |
+    runuser -u frostporter -- /usr/local/bin/porterd token set notes
+  systemctl restart frostporter.socket frostporter.service   # porterd reads its token at start
+  systemctl start frostread.socket frostread.service         # readctl needs readd running
+  $LODGECTL token revoke frostread-notes
+  $LODGECTL token issue frostread-notes --app notes \
+    --scope 'vault=2;write=Reading/' --agent frostread |
+    runuser -u frostread -- /usr/local/bin/readctl notes-token
+  ```
+
+- *After step 9 (a device relocated):* fix forward. A relocated device
+  cannot relocate back (the M2 hub records no URL), and what it pushed
+  through lodge is only in the moved hub. Use `--force` only if the user
+  decides to; relocated devices then stay offline, their notes safe on
+  them, until the move runs again.
 - *After step 14:* also restore the old serve on the server:
   `sudo tailscale serve --bg --https=443 http://<the hub's VM>:7880`.
 
