@@ -78,16 +78,17 @@ notesctl)
 	esac
 	[ "$(cat "$(u "$unit")/active" 2>/dev/null)" = active ] || { echo "cannot reach notesd" >&2; exit 1; }
 	case "$1 $2" in
-	"hub status") echo "hub $(cat "$data/hubid")"; echo "listening on 127.0.0.1:7880" ;;
+	"hub status") echo "hub $(cat "$data/hubid")"; if [ -e "$R/stub/listen" ]; then cat "$R/stub/listen"; else echo "listening on 127.0.0.1:7880"; fi ;;
 	"hub vaults") cat "$data/hubvaultlist" ;;
 	"vault list") cat "$data/vaultlist" ;;
 	"hub url") log "notesctl hub url $3 (as $unit)" ;;
-	"sync status") if [ -e "$data/syncstatus-$4" ]; then cat "$data/syncstatus-$4"; else echo "no synced vaults"; fi ;;
+	"sync status") if [ -e "$data/syncstatus-$4-drain" ] && [ "$(cat "$(u lodge.service)/active" 2>/dev/null)" != active ]; then cat "$data/syncstatus-$4-drain"; elif [ -e "$data/syncstatus-$4" ]; then cat "$data/syncstatus-$4"; else echo "no synced vaults"; fi ;;
 	"sync verify") if [ -e "$data/verify-fail-$4" ]; then echo "differs from the hub" >&2; exit 1; fi
 		echo "ok: 687 files match the hub" ;;
 	*) exit 2 ;;
 	esac ;;
 systemd-escape) echo srv-share.mount ;;
+sleep) ;;
 *) log "$(basename "$0") $*" ;;
 esac
 `
@@ -132,7 +133,7 @@ func stage(t *testing.T) string {
 	if err := os.Chmod(filepath.Join(bin, "stub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"systemctl", "runuser", "getent", "lodgectl", "notesctl", "mount", "umount", "chown", "systemd-escape"} {
+	for _, name := range []string{"systemctl", "runuser", "getent", "lodgectl", "notesctl", "mount", "umount", "chown", "systemd-escape", "sleep"} {
 		if err := os.Symlink("stub", filepath.Join(bin, name)); err != nil {
 			t.Fatal(err)
 		}
@@ -178,9 +179,8 @@ func stageHubCopy(t *testing.T, root string) {
 }
 
 // stageHubCopies stages the copy with status as `notesctl sync status
-// --vault 2` prints it, and the copy's contents: the hub's note, the
-// device's own .frostnotes at the copy's root, and .obsidian, which only
-// the hub has and the device ignores.
+// --vault 2` prints it, and the copy's contents: the hub's note, and the
+// device's own .frostnotes at the copy's root.
 func stageHubCopies(t *testing.T, root, status string) {
 	t.Helper()
 	writeFile(t, root, "var/lib/frostnotes/vaultlist",
@@ -188,7 +188,6 @@ func stageHubCopies(t *testing.T, root, status string) {
 	writeFile(t, root, "var/lib/frostnotes/syncstatus-2", status)
 	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/Plan.md", "# Plan\n")
 	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/.frostnotes/x", "the device's own")
-	writeFile(t, root, "srv/share/Notes/My Notes/.obsidian/app.json", "{}\n")
 }
 
 // stageLodgectlBesideLodge takes lodgectl off the stubs' PATH and puts it in
@@ -483,8 +482,7 @@ func TestApplyMovesTheHubAndRollbackPutsItBack(t *testing.T) {
 		"notesctl hub url "+url+" (as frostnotes.service)",
 		"lodgectl reload",
 	)
-	for _, want := range []string{"✓ frostnotes wrote to /srv/share", "✓ frostnotes.service serves hub " + trialHub, "✓ its vaults are the hub's: /srv/share/Notes/My Notes",
-		"lodge's notesd keeps no copy of the hub's vaults: nothing to compare"} {
+	for _, want := range []string{"✓ frostnotes wrote to /srv/share", "✓ frostnotes.service serves hub " + trialHub, "✓ its vaults are the hub's: /srv/share/Notes/My Notes"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the output lacks %q:\n%s", want, out)
 		}
@@ -610,12 +608,25 @@ func TestALodgedCopyOfTheHubsVaultGoesAsideWithTheTest(t *testing.T) {
 	if got := readFile(t, root, aside+"/syncstatus-2"); got != copyInStep {
 		t.Errorf("the copy's status aside = %q", got)
 	}
-	if got := readFile(t, root, backup+"/manifest"); !strings.Contains(got, "aside_copies=1") {
-		t.Errorf("the manifest does not record the copies:\n%s", got)
+	if got := readFile(t, root, backup+"/manifest"); !strings.Contains(got, "aside_copies=1") ||
+		!strings.Contains(got, "lodge_stopped=1") {
+		t.Errorf("the manifest does not record the copies and the stop of lodge:\n%s", got)
 	}
 	if !strings.Contains(out, "notesctl hub revoke ID") {
 		t.Errorf("the move does not say to revoke lodge's former device:\n%s", out)
 	}
+	if !strings.Contains(out, "✓ lodge's copy of My Notes is in the hub at seq 8702") {
+		t.Errorf("the move does not say lodge's copy drained:\n%s", out)
+	}
+	// Lodge goes down before its notesd's copies drain, and up again after
+	// the URL is recorded.
+	inOrder(t, changes(t, root),
+		"systemctl stop lodge.service",
+		"systemctl stop frostnotes-lodge.socket frostnotes.service",
+		"systemctl disable --now notesd.service",
+		"notesctl hub url "+url+" (as frostnotes.service)",
+		"systemctl start lodge.service",
+	)
 
 	// The rollback puts the test and its copies back where they were.
 	out, code = move(t, root, "--rollback", filepath.Join(root, backup), "--apply")
@@ -674,76 +685,84 @@ func TestRefusesWithoutLodgectl(t *testing.T) {
 	}
 }
 
-func TestRefusesACopyThatChangedAfterTheCheck(t *testing.T) {
+func TestRefusesACopyThatDoesNotDrain(t *testing.T) {
 	root := stage(t)
 	stageHubCopy(t, root)
-	copyDir := filepath.Join(root, "var/lib/frostnotes/vaults/My Notes")
-	hubDir := filepath.Join(root, "srv/share/Notes/My Notes")
-	// The dry run reads the copies, and prints the comparison only.
+	// The copy falls behind once lodge has stopped: it never reaches the
+	// hub, and setting it aside would lose what it holds.
+	writeFile(t, root, "var/lib/frostnotes/syncstatus-2-drain",
+		"2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8700/8702\t0 pending\t0 conflicted\n")
+	before := snapshot(t, root)
+	// The dry run reads the copies, and prints what it would wait for.
 	out, code := move(t, root)
 	if code != 0 {
 		t.Fatalf("dry run exited %d:\n%s", code, out)
 	}
-	if want := "  $ diff -rq " + copyDir + " " + hubDir; !strings.Contains(out, want) {
-		t.Errorf("the dry run does not print %q:\n%s", want, out)
+	if want := "then wait for lodge's copy of My Notes to reach the hub (notesctl sync status --vault 2), and verify it there"; !strings.Contains(out, want) {
+		t.Errorf("the dry run does not say what it would wait for (%q):\n%s", want, out)
 	}
-	// A write reaches the copy after the checks: the copy holds a note the
-	// hub does not have, so setting it aside would lose it.
-	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/Plan.md", "# Plan\n\nwritten after the check\n")
-	atFailure := snapshot(t, root)
 	out, code = move(t, root, "--apply", "--url", url)
-	want := "the copy of My Notes in /var/lib/frostnotes changed after the check (above): nothing is replaced; roll back to restart both, so the copy pushes it"
+	want := "lodge's copy of My Notes did not drain into the hub (2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8700/8702\t0 pending\t0 conflicted): nothing is replaced; roll back to restart lodge"
 	if code == 0 || !strings.Contains(out, want) ||
-		!strings.Contains(out, "Files "+filepath.Join(copyDir, "Plan.md")+" and "+filepath.Join(hubDir, "Plan.md")+" differ") ||
 		!strings.Contains(out, "roll back with: move-hub-behind-lodge.sh --rollback "+filepath.Join(root, backup)+" --apply") {
-		t.Fatalf("exit %d, without the changed copy or the rollback:\n%s", code, out)
+		t.Fatalf("exit %d, without the drain's failure or the rollback:\n%s", code, out)
 	}
 	// Nothing moved: the data directory, the trial's data and fstab are as
-	// they were, and only the backup's directory and the two stops ran.
-	if d := same(atFailure, snapshot(t, root)); d != "" {
+	// they were, and only the backup's directory and the stop of lodge ran.
+	if d := same(before, snapshot(t, root)); d != "" {
 		t.Errorf("the failed move changed %s", d)
 	}
 	for _, c := range changes(t, root) {
-		if !strings.HasPrefix(c, "mkdir ") && !strings.HasPrefix(c, "systemctl stop ") && !strings.HasPrefix(c, "systemctl disable ") {
+		if !strings.HasPrefix(c, "mkdir ") && c != "systemctl stop lodge.service" {
 			t.Errorf("the failed move ran %q", c)
 		}
 	}
-	// The rollback restarts both, and leaves everything where it was.
+	// The rollback puts lodge back, and leaves everything where it was.
 	out, code = move(t, root, "--rollback", filepath.Join(root, backup), "--apply")
 	if code != 0 {
 		t.Fatalf("--rollback exited %d:\n%s", code, out)
 	}
-	if d := same(atFailure, snapshot(t, root)); d != "" {
+	if d := same(before, snapshot(t, root)); d != "" {
 		t.Errorf("after the rollback, the machine differs: %s", d)
 	}
-	for unit, want := range map[string]string{"notesd.service": "active\n", "frostnotes.service": "active\n", "frostnotes-lodge.socket": "active\n"} {
+	for unit, want := range map[string]string{"lodge.service": "active\n", "notesd.service": "active\n", "frostnotes.service": "active\n", "frostnotes-lodge.socket": "active\n"} {
 		if got := readFile(t, root, "stub/units/"+unit+"/active"); got != want {
 			t.Errorf("%s after the rollback is %q, want %q", unit, got, want)
 		}
 	}
-	if c := changes(t, root); !slices.Contains(c, "systemctl enable --now notesd.service") {
-		t.Errorf("the rollback does not start the trial hub again: %q", c)
-	}
-	// A note only the copy has counts the same way.
-	writeFile(t, root, "var/lib/frostnotes/vaults/My Notes/New.md", "# New\n")
-	out, code = move(t, root, "--apply", "--url", url)
-	if code == 0 || !strings.Contains(out, "Only in "+copyDir+": New.md") || !strings.Contains(out, want) {
-		t.Fatalf("a new note in the copy: exit %d:\n%s", code, out)
+	if c := changes(t, root); !slices.Contains(c, "systemctl start lodge.service") {
+		t.Errorf("the rollback does not start lodge again: %q", c)
 	}
 }
 
-func TestALoopbackURLOnTheHubsPortIsThisHub(t *testing.T) {
-	for name, u := range map[string]string{
-		"127.0.0.1":                       "http://127.0.0.1:7880",
-		"localhost with a trailing slash": "http://localhost:7880/",
-		"IPv6 loopback":                   "http://[::1]:7880",
+func TestACopysURLNamesTheAddressTheHubListensOn(t *testing.T) {
+	for name, tc := range map[string]struct {
+		listen string
+		url    string
+		ok     bool
+	}{
+		"IPv4":                       {"listening on 127.0.0.1:7880", "http://127.0.0.1:7880", true},
+		"IPv4 with a trailing slash": {"listening on 127.0.0.1:7880", "http://127.0.0.1:7880/", true},
+		"IPv4 wildcard":              {"listening on 0.0.0.0:7880", "http://127.0.0.1:7880", true},
+		"localhost":                  {"listening on 127.0.0.1:7880", "http://localhost:7880", false},
+		"IPv6 on an IPv4 listener":   {"listening on 127.0.0.1:7880", "http://[::1]:7880", false},
+		"IPv6":                       {"listening on [::1]:7880", "http://[::1]:7880", true},
+		"IPv6 wildcard":              {"listening on [::]:7880", "http://[::1]:7880", true},
+		"IPv4 on an IPv6 listener":   {"listening on [::]:7880", "http://127.0.0.1:7880", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := stage(t)
-			stageHubCopies(t, root, "2\tMy Notes\t"+u+"\tidle\t8702/8702\t0 pending\t0 conflicted\n")
+			writeFile(t, root, "stub/listen", tc.listen+"\n")
+			stageHubCopies(t, root, "2\tMy Notes\t"+tc.url+"\tidle\t8702/8702\t0 pending\t0 conflicted\n")
 			out, code := move(t, root)
-			if code != 0 || !strings.Contains(out, "is a copy of the hub's vault My Notes ("+u+")") {
-				t.Fatalf("exit %d:\n%s", code, out)
+			if tc.ok {
+				if code != 0 || !strings.Contains(out, "is a copy of the hub's vault My Notes ("+tc.url+")") {
+					t.Fatalf("exit %d:\n%s", code, out)
+				}
+				return
+			}
+			if want := "syncs with " + tc.url + ", not with this machine's trial hub (port 7880)"; code == 0 || !strings.Contains(out, want) {
+				t.Fatalf("exit %d, output lacks %q:\n%s", code, want, out)
 			}
 		})
 	}

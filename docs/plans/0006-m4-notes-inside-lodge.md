@@ -588,13 +588,13 @@ tailnet.
      of one of the hub's vaults, in step with it (cursor and the hub's
      seq equal, 0 pending, 0 conflicted, nothing refused or skipped) and
      verified (`notesctl sync verify`), and syncs with the trial hub on
-     this machine (a loopback URL at the port the hub listens on).
-     Otherwise it still refuses. Since lodge's notesd takes writes until
-     it stops, the move now stops it before the trial hub, and compares
-     each copy with the hub's vault on disk (`diff -rq`) before anything
-     moves: a copy that holds content the hub lacks stops the move, and
-     its rollback restarts both, so the copy pushes it (cross-review of
-     #92).
+     this machine (the loopback address of the address the hub listens
+     on). Otherwise it still refuses. Since lodge's notesd takes writes
+     until nothing reaches it, the move then stops `lodge.service`, waits
+     up to 60 s until each copy is in step with the hub again and
+     verifies it, and only then stops lodge's notesd and the trial hub.
+     A copy that does not drain stops the move before anything moves
+     (cross-review of #92). The move starts lodge again at its end.
   - *The dry run again (2026-10-25, the fixed script, on the hub's VM as
     root):* 0 problems. It found lodge, its `lodgectl` in `/opt/lodge/bin`,
     and lodge's copy of the trial's vault, pushed in full and verified at
@@ -698,9 +698,11 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
 6. **[agent]** The move, on the hub's VM as root:
    `bash /root/move-hub-behind-lodge.sh --apply --url "$NEW"`. Keep the
    backup path it prints (`/var/backups/frostnotes-move-STAMP`). It stops
-   notes in lodge, then the M2 hub, compares lodge's copy with the share
-   and stops if the copy changed after the checks; then it moves the
-   hub. It must print "✓ frostnotes wrote to …", "✓ frostnotes.service
+   lodge (mail, Porter and Read in lodge are down with it, for a few
+   minutes), waits until lodge's copy is in the hub and verified ("✓
+   lodge's copy of Obsidian Vault is in the hub at seq …"), stops notes
+   in lodge and the M2 hub, moves the hub, and starts lodge again. It
+   must print "✓ frostnotes wrote to …", "✓ frostnotes.service
    serves hub …" with the trial hub's ID, and "✓ its vaults are the
    hub's". From here, devices cannot sync until step 9.
 7. **[agent]** The hub behind lodge:
@@ -793,9 +795,10 @@ from before the move, fstab and lodge's data directory (the test and its
 copy of the vault), restarts both notesd and reloads lodge; devices
 still at `$OLD` resume by themselves.
 
-- *Step 6 stops on an error, or finds that the copy changed after its
-  check:* run the rollback it prints. Lodge's notesd starts again on its
-  copy and pushes what it holds to the M2 hub. Then repeat from step 2.
+- *Step 6 stops on an error, or lodge's copy does not drain:* run the
+  rollback it prints. It starts lodge, the M2 hub and lodge's notesd on
+  its copy again, which pushes what it holds. Then find the cause and
+  repeat from step 2.
 - *After step 6, before the scratch note (step 7):* the plain rollback
   works.
 - *After the scratch note, before step 8:* the note's create and delete
