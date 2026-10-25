@@ -964,6 +964,32 @@ against the built app.
      time); type with an input method, if you use one; and Open folder as
      vault, which opens the system's folder picker (Phase 8).
 
+  **Result (2026-10-25): the trial ended; evidence 4 waits on the user.**
+  Read-only checks on 2026-10-25. The sync record is in
+  [plan 0004's Phase 7](0004-m2-sync.md#phase-7--review-and-exit-evidence).
+
+  | Part | Status | Evidence |
+  |---|---|---|
+  | The app installed on the laptop | OBSERVED | The binary dates from 2026-10-18. |
+  | The desktop app's writes | OBSERVED | 5 revisions, all between 2026-10-19 00:22Z and 2026-10-20 02:01Z (2 delete, 2 create, 1 put); none after. |
+  | The app open on later days | OBSERVED | The app's local storage was last written on 2026-10-23, so the app was open that day. Reading leaves no other record. |
+  | Other clients | OBSERVED | Lodge's log shows notes sessions from a second computer on 2026-10-20 to 2026-10-23 (no writes from it), and from the phone on 2026-10-19 to 2026-10-21. |
+  | Obsidian edits | OBSERVED | None visible. The laptop's copy has no outside edit in the trial; the share had 2 outside creates on 2026-10-24. Obsidian used only for reading would leave no record. |
+  | `notesctl sync verify` each day | UNKNOWN (the user's) | See plan 0004's result. |
+  | Frostnotes used instead of Obsidian for 7 days | UNKNOWN (the user's) | |
+  | Any edit missing | UNKNOWN (the user's) | The record shows none; see plan 0004's result. |
+  | What the user went back to Obsidian for | UNKNOWN (the user's) | |
+  | Step 5: code block copy | UNKNOWN (the user's) | |
+  | Step 5: web link, and Open in default app on a PDF and an image | UNKNOWN (the user's) | |
+  | Step 5: video over 8 MiB | UNKNOWN (the user's) | |
+  | Step 5: input method | UNKNOWN (the user's) | |
+  | Step 5: the system folder picker in Open folder as vault | UNKNOWN (the user's) | |
+
+  The record shows the desktop app's writes only on 2026-10-19 and
+  2026-10-20 (UTC), and most writes came through the web app. Whether the
+  user used Frostnotes instead of Obsidian is the user's to say. Evidence 4
+  and M3 are not done until the user confirms.
+
 ## Phase 8 — Vaults from the app
 
 The app opens, creates and forgets vaults, so the user can begin with it
