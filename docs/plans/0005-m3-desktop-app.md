@@ -994,7 +994,7 @@ against the built app.
   user used Frostnotes instead of Obsidian is the user's to say. Evidence 4
   and M3 waited on the user's confirmation.
 
-  *The user's answer, 2026-10-25:* "M3 passes." The user accepted
+  *The user's answer, 2026-10-25:* "M3 passes". The user accepted
   evidence 4 on the record above; the rows marked UNKNOWN stay unrecorded,
   and the user's acceptance covers them. Evidence 4 and M3 are done. The
   record's PR is [#90](https://github.com/frostyard/frostnotes/pull/90).
