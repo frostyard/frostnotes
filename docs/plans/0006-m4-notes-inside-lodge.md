@@ -56,9 +56,12 @@ Status (2026-10-21):
   open in writing on 2026-10-21. Phase 6 still waits on XSS on the phone
   and Chrome's PDF viewer (Phase 7).
 - **Phase 7.** The move script is merged (#55) and has not run. Phase 7
-  starts from 2026-10-26, on the user's go-ahead. The script's dry run
-  ran on 2026-10-25 and found 2 problems (see
-  [Phase 7](#phase-7--the-users-hub-in-lodge-and-exit-evidence)).
+  starts on 2026-10-26 in the morning, with the user's go-ahead
+  (2026-10-25). The script's dry run on 2026-10-25 found 2 problems; the
+  script now handles both, and the dry run passes (see
+  [Phase 7](#phase-7--the-users-hub-in-lodge-and-exit-evidence)). The
+  [run sheet](#run-sheet-for-the-move-2026-10-26) gives the morning's
+  order.
 
 ## Decisions taken for M4
 
@@ -508,9 +511,11 @@ tailnet.
     M2 hub's own unit is stopped and disabled first: both use
     `/run/frostnotes` for the private socket, and only one notesd owns
     the hub's data directory;
-  - the trial's devices move on their own, and the old `tailscale
-    serve` for the hub goes once `notesctl hub devices` shows all of
-    them seen;
+  - the trial's devices move with `notesctl hub relocate OLD-URL
+    NEW-URL` (the script stops the M2 hub before it records the URL, so
+    no device can learn it from `log.hub`; dry run, 2026-10-25), and the
+    old `tailscale serve` for the hub goes once `notesctl hub devices`
+    shows all of them seen;
   - the steps from stopping the M2 unit to `notesctl hub url` are one command,
     [`scripts/move-hub-behind-lodge.sh`](../../scripts/move-hub-behind-lodge.sh),
     run as root on the hub's machine
@@ -569,14 +574,24 @@ tailnet.
   1. It said "lodge is not up", but `lodge.service` is active and
      `lodgectl status` shows both nodes and both apps up. `lodgectl` is
      in `/opt/lodge/bin`, not on root's PATH. Workaround: run the script
-     with `LODGECTL=/opt/lodge/bin/lodgectl`.
+     with `LODGECTL=/opt/lodge/bin/lodgectl`. *Fixed 2026-10-25:* the
+     script takes `LODGECTL`, then `lodgectl` on PATH, then the
+     `lodgectl` beside `lodge.service`'s binary.
   2. It said `/var/lib/frostnotes` holds vaults other than the overnight
      test (the trial's vault and the test vault), and to move it aside by
      hand. The cause: lodge's notesd is a device of the trial hub and
      keeps a copy of the trial's vault there. Its pushes are all on the
      hub (pending 0, `verify` ok), so setting it aside loses nothing.
      Workaround: the user sets the copy aside by hand, or the script
-     learns the case.
+     learns the case. *Fixed 2026-10-25:* the script sets the data
+     directory aside whole when every vault in it but `Test` is a copy
+     of one of the hub's vaults, in step with it (cursor and the hub's
+     seq equal, 0 pending, 0 conflicted, nothing refused or skipped) and
+     verified (`notesctl sync verify`). Otherwise it still refuses.
+  - *The dry run again (2026-10-25, the fixed script, on the hub's VM as
+    root):* 0 problems. It found lodge, its `lodgectl` in `/opt/lodge/bin`,
+    and lodge's copy of the trial's vault, pushed in full and verified at
+    seq 763, so the whole data directory goes aside.
   - Other checks passed: notes' manifest and web build in
     `/usr/share/lodge/apps/notes`; the user `frostnotes` exists;
     `frostnotes.service` and `frostnotes-lodge.socket` are installed
@@ -613,8 +628,165 @@ tailnet.
   - After the move, lodge's own former device (device 3 on the hub) stays
     paired and is never seen again. Revoke it after the move, or
     `notesctl hub devices` never shows "all seen".
-  - The hub's VM and the device VM do not synchronize their clocks;
-    revision times come from the hub's clock.
+  - The hub's VM and the device VM did not synchronize their clocks;
+    revision times come from the hub's clock. *Fixed 2026-10-25:* both
+    run `systemd-timesyncd` now, synchronized, within 0.04 s of the
+    laptop.
+  - *Upgraded 2026-10-25, with the user's go-ahead:* the laptop and the
+    device VM run notesd and `notesctl` at 9a51913, which have `log.hub`
+    and `notesctl hub relocate`. Each kept its data directory and old
+    binaries in a backup. After the upgrade, `notesctl sync verify` was
+    ok on all 3 devices (687 files, cursor 763 = the hub's seq 763,
+    0 pending, 0 conflicted), and the hub saw both devices connected.
+    lodge's notesd stays at 8c096df, which has the move's commands.
+
+### Run sheet for the move (2026-10-26)
+
+The morning's order. About 30 minutes pass from the moment sync stops
+(step 1) to both devices synced through lodge (step 9). Tokens appear by
+name only, and are piped from `lodgectl` into their consumer, never
+written down. Who does what:
+
+- **[Brian]**: on the user's own devices, or a step only the user may
+  take (a token shown on screen, a sudo password, a judgement).
+- **[agent]**: the planner, through `incus exec` into the VMs and on the
+  laptop, after the user's go-ahead that morning.
+
+Names used below (the real ones stay out of the repository):
+
+```sh
+OLD=https://HUB.<tailnet>.ts.net                 # the M2 hub's URL now
+NEW=https://lodge.<tailnet>.ts.net/device/notes  # its URL behind lodge
+LODGECTL=/opt/lodge/bin/lodgectl                 # on the hub's VM
+HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/notesd.sock /opt/lodge/bin/notesctl"
+```
+
+**Before sync stops (about 10 minutes; nothing changes yet)**
+
+0. **[Brian]** Merge the script's fix (this PR) and say go. Name the
+   iPhone's browser for evidence 1 (Safari is likely).
+1. **[agent]** Copy `scripts/move-hub-behind-lodge.sh` from `main` to
+   `/root/` on the hub's VM.
+2. **[agent]** Checks, each must pass:
+   - on the laptop, the device VM (as `notes`) and lodge's notesd
+     (`$HUBCTL sync status`, `$HUBCTL sync verify --vault 2`):
+     `notesctl sync status` idle with cursor = the hub's seq, 0 pending,
+     0 conflicted; `notesctl sync verify` ok;
+   - on the hub's VM: `notesctl hub devices` (as `notes`) shows devices
+     1, 2 and 3 connected; `timedatectl` on both VMs says synchronized;
+   - a backup of the laptop's copy of the vault:
+     `tar -C ~/Notes -czf ~/obsidian-vault-before-move-$(date -u +%Y%m%dT%H%M%SZ).tar.gz "Obsidian Vault"`.
+3. **[agent]** The dry run on the hub's VM, as root:
+   `bash /root/move-hub-behind-lodge.sh --url "$NEW"`. It must end with
+   "Dry run: nothing changed." and list 0 problems.
+
+**Sync stops (about 30 minutes)**
+
+4. **[Brian]** Edit no note anywhere until step 9 says done: not in the
+   desktop app, the web app or Obsidian.
+5. **[agent]** Stop the agents' writers on the hub's VM:
+   `systemctl stop frostporter.socket frostporter.service frostread.socket frostread.service`.
+   Then run step 2's checks on lodge's notesd again.
+6. **[agent]** The move, on the hub's VM as root:
+   `bash /root/move-hub-behind-lodge.sh --apply --url "$NEW"`. Keep the
+   backup path it prints (`/var/backups/frostnotes-move-STAMP`). It
+   must print "✓ frostnotes wrote to …", "✓ frostnotes.service serves
+   hub …" with the trial hub's ID, and "✓ its vaults are the hub's". From
+   here, devices cannot sync until step 9.
+7. **[agent]** The hub behind lodge:
+   - `$HUBCTL hub status`: the trial hub's ID, "devices use $NEW",
+     1 vault, 3 devices;
+   - `$HUBCTL hub vaults`: "Obsidian Vault" at seq 763 or more;
+   - `$HUBCTL vault list`: vault 1 is "Obsidian Vault" at the share's
+     path.
+   - **The SMB scratch note check,** before any device moves: write a
+     scratch note as notesd, see it on the share from another of the
+     share's clients (the laptop's CIFS mount of the share), then delete
+     it.
+
+     ```sh
+     printf '# Phase 7 scratch check\n' | $HUBCTL write --create "Phase 7 scratch check.md"   # prints its hash
+     ls -l "<the laptop's mount of the share>/<the vault's path>/Phase 7 scratch check.md"      # on the laptop
+     $HUBCTL rm --base HASH "Phase 7 scratch check.md"
+     ```
+
+     **[Brian]**, if wanted: see it in Obsidian on another machine
+     before the delete.
+8. **[agent]** Agents' tokens, on the hub's VM. The old ones name
+   `vault=2`, which after the move names no vault. Revoke each, then
+   issue it again under the same name with `vault=1`, piped straight
+   into its consumer:
+
+   ```sh
+   $LODGECTL token revoke porter-notes
+   $LODGECTL token issue porter-notes --app notes \
+     --scope 'vault=1;write=Porter/;except=Porter/Routines/;daily' --agent frostporter |
+     runuser -u frostporter -- /usr/local/bin/porterd token set notes
+   systemctl start frostporter.socket frostporter.service      # porterd reads its token at start
+   systemctl start frostread.socket frostread.service
+   $LODGECTL token revoke frostread-notes
+   $LODGECTL token issue frostread-notes --app notes \
+     --scope 'vault=1;write=Reading/' --agent frostread |
+     runuser -u frostread -- /usr/local/bin/readctl notes-token   # "the notes token is set"
+   $LODGECTL tokens   # porter-notes and frostread-notes live with vault=1; the old ones revoked
+   ```
+
+9. **The devices move.**
+   - **[agent, on Brian's laptop]** `notesctl hub relocate "$OLD" "$NEW"`:
+     "hub ID is at $NEW now".
+   - **[agent]** On the device VM:
+     `runuser -u notes -- env FROSTNOTES_SOCKET=/run/frostnotes/notesd.sock notesctl hub relocate "$OLD" "$NEW"`.
+   - **[agent]** On each: `notesctl sync status` shows `$NEW`, idle,
+     cursor = the hub's seq, 0 pending, 0 conflicted; `notesctl sync
+     verify` is ok. `$HUBCTL hub devices` shows devices 1 and 2 seen
+     after the move. Sync is back: the stop ends here.
+
+**After sync is back**
+
+10. **[agent]** Revoke lodge's former device, whose copy went aside:
+    check that device 3 is "lodge" in `$HUBCTL hub devices`, then
+    `$HUBCTL hub revoke 3`. Do it only now: a rollback before this step
+    gives that copy back its sync.
+11. **[Brian]** Claude Code's tokens, for evidence 3. Run them in your
+    own terminal: each token prints once, and only you see it.
+
+    ```sh
+    incus exec <the hub's VM> -- /opt/lodge/bin/lodgectl token issue claude-code-notes --app notes --scope 'vault=1;write'
+    incus exec <the hub's VM> -- /opt/lodge/bin/lodgectl token issue claude-code-notes-read --app notes --scope 'vault=1'
+    ```
+
+    On the machine with no local copy of the vault:
+    `claude mcp add --transport http notes https://lodge.<tailnet>.ts.net/mcp/notes --header "Authorization: Bearer …"`
+    (never `--scope project`); the read token likewise under another
+    name.
+12. **[Brian]** Look: the desktop app on the laptop shows the notes;
+    the web app in lodge on the laptop and on the iPhone opens "Obsidian
+    Vault" (reload it; the vault's ID changed from 2 to 1, so its open
+    tabs may reset); an edit on the phone shows on the laptop.
+13. **[agent]** Porter and Read work: `journalctl -u frostporter -u
+    frostread --since -10min` shows no token warning, and `$LODGECTL
+    tokens` shows the new tokens' last use once each acts.
+14. **[Brian]** On the server, once `$HUBCTL hub devices` shows devices
+    1 and 2 seen at the new address: `tailscale serve status` shows only
+    the hub's proxy; then `sudo tailscale serve --https=443 off`.
+15. **[agent]** Record the run here, and start the 7 days of sync through
+    lodge.
+
+**Rollback**
+
+- *Before step 9* (no device has synced through lodge): on the hub's VM,
+  `bash /root/move-hub-behind-lodge.sh --rollback /var/backups/frostnotes-move-STAMP`
+  (a dry run), then again with `--apply`. It restores the M2 hub, fstab,
+  lodge's data directory (the test and its copy of the vault) and
+  reloads lodge. Devices still at `$OLD` resume by themselves. If step 8
+  ran, issue `porter-notes` and `frostread-notes` again with `vault=2`,
+  as in step 8, and revoke the `vault=1` ones.
+- *After step 9:* the script refuses (the hub's log moved), and devices
+  that relocated cannot relocate back (the M2 hub records no URL). Fix
+  forward. Use `--force` only if the user decides to; relocated devices
+  then stay offline, their notes safe on them, until the move runs again.
+- *After step 14:* also restore the old serve on the server:
+  `sudo tailscale serve --bg --https=443 http://<the hub's VM>:7880`.
 
 ## Later / ideas
 

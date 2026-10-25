@@ -80,6 +80,9 @@ notesctl)
 	"hub vaults") cat "$data/hubvaults" ;;
 	"vault list") cat "$data/vaults" ;;
 	"hub url") log "notesctl hub url $3 (as $unit)" ;;
+	"sync status") if [ -e "$data/syncstatus-$4" ]; then cat "$data/syncstatus-$4"; else echo "no synced vaults"; fi ;;
+	"sync verify") if [ -e "$data/verify-fail-$4" ]; then echo "differs from the hub" >&2; exit 1; fi
+		echo "ok: 687 files match the hub" ;;
 	*) exit 2 ;;
 	esac ;;
 systemd-escape) echo srv-share.mount ;;
@@ -161,12 +164,54 @@ func readFile(t *testing.T, root, p string) string {
 	return string(data)
 }
 
+// copyInStep is `notesctl sync status --vault 2` for lodge's copy of the
+// hub's My Notes while it is level with the hub, at the hub's seq 8702.
+const copyInStep = "2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8702/8702\t0 pending\t0 conflicted\n"
+
+// stageHubCopy stages lodge's former device: its notesd joined the trial
+// hub and keeps a synced copy of My Notes beside the test.
+func stageHubCopy(t *testing.T, root string) {
+	t.Helper()
+	stageHubCopies(t, root, copyInStep)
+}
+
+// stageHubCopies stages the copy with status as `notesctl sync status
+// --vault 2` prints it.
+func stageHubCopies(t *testing.T, root, status string) {
+	t.Helper()
+	writeFile(t, root, "var/lib/frostnotes/vaults",
+		"2\tMy Notes\t/var/lib/frostnotes/vaults/My Notes\n1\tTest\t/var/lib/frostnotes-test/Test\n")
+	writeFile(t, root, "var/lib/frostnotes/syncstatus-2", status)
+}
+
+// stageLodgectlBesideLodge takes lodgectl off the stubs' PATH and puts it in
+// /opt/lodge/bin, beside the binary lodge.service names, as it is on the
+// hub's machine.
+func stageLodgectlBesideLodge(t *testing.T, root string) {
+	t.Helper()
+	if err := os.Remove(filepath.Join(root, "stub", "bin", "lodgectl")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "stub/units/lodge.service/ExecStart", "{ path=/opt/lodge/bin/lodge ; argv[]=/opt/lodge/bin/lodge ; ignore_errors=no }\n")
+	if err := os.Symlink(filepath.Join(root, "stub", "bin", "stub"), filepath.Join(root, "opt", "lodge", "bin", "lodgectl")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // move runs the script against root and returns its output and exit code.
 func move(t *testing.T, root string, args ...string) (string, int) {
 	t.Helper()
+	return moveWithPath(t, root, os.Getenv("PATH"), args...)
+}
+
+// moveWithPath is move with path in place of the host's PATH after the
+// stubs, so that a command the host has cannot stand in for one the test
+// stages.
+func moveWithPath(t *testing.T, root, path string, args ...string) (string, int) {
+	t.Helper()
 	cmd := exec.Command("bash", append([]string{"move-hub-behind-lodge.sh"}, args...)...)
 	cmd.Env = append(os.Environ(), "MOVE_ROOT="+root, "MOVE_STAMP="+stamp,
-		"PATH="+filepath.Join(root, "stub", "bin")+":"+os.Getenv("PATH"))
+		"PATH="+filepath.Join(root, "stub", "bin")+":"+path)
 	out, err := cmd.CombinedOutput()
 	var ee *exec.ExitError
 	switch {
@@ -304,6 +349,28 @@ func TestRefusesWhatItCannotReadUnambiguously(t *testing.T) {
 		"other vaults where the test should be": {func(t *testing.T, root string) {
 			writeFile(t, root, "var/lib/frostnotes/vaults", "1\tTest\t/x\n2\tWork\t/y\n")
 		}, nil, "holds vaults other than the overnight test (Test Work )"},
+		"a copy of the hub's vault that is behind": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8700/8702\t0 pending\t0 conflicted\n")
+		}, nil, "is not in step with the hub (8700/8702 cursor/hubSeq)"},
+		"a copy with a file the hub has not seen": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8702/8702\t1 pending\t0 conflicted\n")
+		}, nil, "is not in step with the hub (1 pending)"},
+		"a copy in conflict": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "2\tMy Notes\thttp://127.0.0.1:7880\tidle\t8702/8702\t0 pending\t1 conflicted\n")
+		}, nil, "is not in step with the hub (1 conflicted)"},
+		"a copy with a refused file": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, copyInStep+"\trefused Plan.md: the hub's is newer\n")
+		}, nil, "is not in step with the hub (refused/skipped/error line)"},
+		"a copy that does not verify": {func(t *testing.T, root string) {
+			stageHubCopy(t, root)
+			writeFile(t, root, "var/lib/frostnotes/verify-fail-2", "")
+		}, nil, "vault My Notes in /var/lib/frostnotes does not verify against the hub"},
+		"a vault that is not synced": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "no synced vaults\n")
+		}, nil, "vault My Notes in /var/lib/frostnotes is not a copy of the hub's vaults: move /var/lib/frostnotes aside yourself"},
+		"a copy of a vault the hub does not serve": {func(t *testing.T, root string) {
+			stageHubCopies(t, root, "2\tOther\thttp://127.0.0.1:7880\tidle\t8702/8702\t0 pending\t0 conflicted\n")
+		}, nil, "vault My Notes in /var/lib/frostnotes is not a copy of the hub's vaults"},
 		"the move already done": {func(t *testing.T, root string) {
 			writeFile(t, root, "var/lib/frostnotes/hubid", trialHub)
 		}, nil, "already serves hub " + trialHub},
@@ -487,5 +554,108 @@ func TestRollbackRefusesOnceDevicesSyncedThroughLodge(t *testing.T) {
 	}
 	if !strings.Contains(out, "Devices that followed the hub to "+url+" stay offline") {
 		t.Errorf("the rollback does not say what becomes of moved devices:\n%s", out)
+	}
+}
+
+func TestALodgedCopyOfTheHubsVaultGoesAsideWithTheTest(t *testing.T) {
+	root := stage(t)
+	stageHubCopy(t, root)
+	before := snapshot(t, root)
+	out, code := move(t, root)
+	if code != 0 {
+		t.Fatalf("dry run exited %d:\n%s", code, out)
+	}
+	for _, want := range []string{
+		"✓ vault My Notes in /var/lib/frostnotes is a copy of the hub's vault My Notes (http://127.0.0.1:7880), pushed in full and verified at seq 8702",
+		"✓ /var/lib/frostnotes holds the overnight deployment's test and its copies of the hub's vaults: it goes aside to /var/lib/frostnotes.overnight-" + stamp + ", never merged",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the dry run's output lacks %q:\n%s", want, out)
+		}
+	}
+	if d := same(before, snapshot(t, root)); d != "" {
+		t.Errorf("the dry run changed %s", d)
+	}
+	if c := changes(t, root); len(c) != 0 {
+		t.Errorf("the dry run ran %q", c)
+	}
+
+	// --apply sets the whole directory aside, the copy with the test, and
+	// records the copies, so the operator revokes lodge's former device.
+	out, code = move(t, root, "--apply", "--url", url)
+	if code != 0 {
+		t.Fatalf("--apply exited %d:\n%s", code, out)
+	}
+	if got := readFile(t, root, "var/lib/frostnotes/hubid"); got != trialHub {
+		t.Errorf("/var/lib/frostnotes is hub %s, want the trial's", got)
+	}
+	aside := "var/lib/frostnotes.overnight-" + stamp
+	if got := readFile(t, root, aside+"/notesd.db"); got != "the overnight test's database" {
+		t.Errorf("the test's data aside = %q", got)
+	}
+	if got := readFile(t, root, aside+"/syncstatus-2"); got != copyInStep {
+		t.Errorf("the copy's status aside = %q", got)
+	}
+	if got := readFile(t, root, backup+"/manifest"); !strings.Contains(got, "aside_copies=1") {
+		t.Errorf("the manifest does not record the copies:\n%s", got)
+	}
+	if !strings.Contains(out, "notesctl hub revoke ID") {
+		t.Errorf("the move does not say to revoke lodge's former device:\n%s", out)
+	}
+
+	// The rollback puts the test and its copies back where they were.
+	out, code = move(t, root, "--rollback", filepath.Join(root, backup), "--apply")
+	if code != 0 {
+		t.Fatalf("--rollback exited %d:\n%s", code, out)
+	}
+	if d := same(before, snapshot(t, root)); d != "" {
+		t.Errorf("after the rollback, the machine differs: %s", d)
+	}
+}
+
+func TestFindsLodgectlBesideLodgesBinary(t *testing.T) {
+	root := stage(t)
+	stageLodgectlBesideLodge(t, root)
+	lodgectl := filepath.Join(root, "opt", "lodge", "bin", "lodgectl")
+	// A host lodgectl must not stand in for lodge's: PATH is the stubs' and
+	// the system's own only.
+	path := "/usr/bin:/bin"
+	before := snapshot(t, root)
+	out, code := moveWithPath(t, root, path)
+	if code != 0 {
+		t.Fatalf("dry run exited %d:\n%s", code, out)
+	}
+	if want := "✓ lodge is installed and up (" + lodgectl + ")"; !strings.Contains(out, want) {
+		t.Errorf("the dry run's output lacks %q:\n%s", want, out)
+	}
+	if d := same(before, snapshot(t, root)); d != "" {
+		t.Errorf("the dry run changed %s", d)
+	}
+	out, code = moveWithPath(t, root, path, "--apply", "--url", url)
+	if code != 0 {
+		t.Fatalf("--apply exited %d:\n%s", code, out)
+	}
+	if c := changes(t, root); !slices.Contains(c, "lodgectl reload") {
+		t.Errorf("--apply does not reload lodge through %s: %q", lodgectl, c)
+	}
+}
+
+func TestRefusesWithoutLodgectl(t *testing.T) {
+	root := stage(t)
+	if err := os.Remove(filepath.Join(root, "stub", "bin", "lodgectl")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "stub/units/lodge.service/ExecStart", "{ path=/opt/lodge/bin/lodge ; argv[]=/opt/lodge/bin/lodge ; ignore_errors=no }\n")
+	before := snapshot(t, root)
+	out, code := moveWithPath(t, root, "/usr/bin:/bin")
+	want := "no lodgectl on PATH or beside lodge.service's binary (/opt/lodge/bin/lodge): set LODGECTL=/path/to/lodgectl"
+	if code == 0 || !strings.Contains(out, want) || !strings.Contains(out, "nothing changed") {
+		t.Fatalf("exit %d, output lacks %q or \"nothing changed\":\n%s", code, want, out)
+	}
+	if d := same(before, snapshot(t, root)); d != "" {
+		t.Errorf("a refusal changed %s", d)
+	}
+	if c := changes(t, root); len(c) != 0 {
+		t.Errorf("a refusal ran %q", c)
 	}
 }

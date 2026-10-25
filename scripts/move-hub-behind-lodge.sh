@@ -10,8 +10,10 @@
 # What --apply does, in order, printing each command first:
 #   1. stops and disables the trial's notesd.service;
 #   2. sets aside what frostnotes.service's data directory holds (the
-#      overnight test, never merged), then copies the hub's data directory
-#      whole into it, owned by frostnotes, and renames the original;
+#      overnight test, and the copies of the hub's vaults that lodge's
+#      notesd synced as the hub's device, each pushed in full and verified;
+#      never merged), then copies the hub's data directory whole into it,
+#      owned by frostnotes, and renames the original;
 #   3. sets uid= and gid= of the vaults' CIFS mounts in /etc/fstab to
 #      frostnotes, and remounts them;
 #   4. checks that frostnotes can write to each share (one hidden file at
@@ -25,6 +27,13 @@
 # /var/backups/frostnotes-move-<stamp>, with a manifest --rollback reads,
 # and never touches the vaults' contents. It refuses any state it cannot
 # read unambiguously, before changing anything.
+#
+# The hub cannot tell devices where it went: step 1 stops it before step 6
+# records the URL. So on each device, run `notesctl hub relocate OLD-URL
+# NEW-URL`, NEW-URL being the one step 6 records; once `notesctl hub
+# devices` shows each device seen, the trial hub's old `tailscale serve`
+# can go. When the move set copies of the hub's vaults aside, also revoke
+# lodge's former device on the hub with `notesctl hub revoke ID`.
 #
 # --rollback puts the trial's hub back as it was. Once step 6 has run,
 # devices may have followed the hub to lodge and synced there, and the
@@ -42,7 +51,6 @@ GETENT=${GETENT:-getent}
 MOUNT=${MOUNT:-mount}
 UMOUNT=${UMOUNT:-umount}
 CHOWN=${CHOWN:-chown}
-LODGECTL=${LODGECTL:-lodgectl}
 SYSTEMD_ESCAPE=${SYSTEMD_ESCAPE:-systemd-escape}
 STAMP=${MOVE_STAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
 
@@ -58,7 +66,7 @@ rollback=
 force=
 
 usage() {
-	sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'
 	exit "${1:-0}"
 }
 
@@ -108,9 +116,32 @@ envof() {
 		case $kv in "$2"=*) printf '%s' "${kv#*=}"; return ;; esac
 	done
 }
+# reload_lodge tells lodge to read its apps again. lodge's own control
+# program is not on root's PATH on the hub's machine, so say so when it is
+# nowhere to be found rather than run an empty command.
+reload_lodge() {
+	if [ -n "$LODGECTL" ]; then
+		run "$LODGECTL" reload
+	else
+		say "  ! no lodgectl found: run lodgectl reload yourself"
+	fi
+}
 
 if [ -z "$ROOT" ] && [ "$(id -u)" -ne 0 ]; then
 	fail "run me as root on the hub's machine (sudo $0 …)"
+fi
+
+# Where lodge's control program is. lodge.service runs /opt/lodge/bin/lodge
+# on the hub's machine, and lodgectl sits beside it there, off root's PATH:
+# take the environment's LODGECTL when it is set, then PATH, then that.
+lodge_bin=$(show "$LODGE_UNIT" ExecStart | sed -n 's/.*path=\([^ ;]*\).*/\1/p')
+LODGECTL=${LODGECTL:-}
+if [ -z "$LODGECTL" ]; then
+	if lodgectl_found=$(command -v lodgectl); then
+		LODGECTL=$lodgectl_found
+	elif [ -n "$lodge_bin" ] && [ -x "$(p "$(dirname "$lodge_bin")/lodgectl")" ]; then
+		LODGECTL=$(p "$(dirname "$lodge_bin")/lodgectl")
+	fi
 fi
 
 # ---- rollback -------------------------------------------------------------
@@ -151,7 +182,7 @@ if [ -n "$rollback" ]; then
 	run "$SYSTEMCTL" enable --now "$TRIAL_UNIT"
 	if [ "${m[unit_was]:-}" = active ]; then run "$SYSTEMCTL" start "$SOCKET_UNIT" "$UNIT"; fi
 	if [ "${m[unit_enabled]:-}" = enabled ]; then run "$SYSTEMCTL" enable "$SOCKET_UNIT" "$UNIT"; fi
-	run "$LODGECTL" reload
+	reload_lodge
 	if [ "$mode" = apply ]; then printf 'rolled_back=%s\n' "$STAMP" >>"$manifest"; fi
 	[ -z "${m[url_set]:-}" ] || say "Devices that followed the hub to ${m[url_set]} stay offline, their notes safe on them, until the move is done again."
 	[ "$mode" = apply ] || say $'\nDry run: nothing changed. Run again with --apply to roll back.'
@@ -165,10 +196,14 @@ problems=()
 problem() { problems+=("$*"); say "  ✗ $*"; }
 ok() { say "  ✓ $*"; }
 
-if "$LODGECTL" status >/dev/null 2>&1 && [ "$("$SYSTEMCTL" is-active "$LODGE_UNIT" 2>/dev/null)" = active ]; then
-	ok "lodge is installed and up"
+if [ -z "$LODGECTL" ]; then
+	problem "no lodgectl on PATH or beside $LODGE_UNIT's binary (${lodge_bin:-?}): set LODGECTL=/path/to/lodgectl"
+elif [ "$("$SYSTEMCTL" is-active "$LODGE_UNIT" 2>/dev/null)" != active ]; then
+	problem "lodge is not up: start $LODGE_UNIT first"
+elif ! "$LODGECTL" status >/dev/null 2>&1; then
+	problem "lodge is not up: $LODGECTL status fails"
 else
-	problem "lodge is not up: install lodge and start $LODGE_UNIT first"
+	ok "lodge is installed and up ($LODGECTL)"
 fi
 if [ -f "$(p /usr/share/lodge/apps/notes/app.json)" ] && [ -f "$(p /usr/share/lodge/apps/notes/web/index.html)" ]; then
 	ok "notes' manifest and web build are in /usr/share/lodge/apps/notes"
@@ -239,12 +274,17 @@ if [ -n "$trial_user" ]; then
 	fi
 fi
 
-# The hub's ID and its vaults, from the running trial notesd.
+# The hub's ID and its vaults, from the running trial notesd, and the seq
+# each of its vaults is at: a copy lodge's notesd took is in step at that.
 hub_id=
+declare -A hub_seq=()
 vaults=()
 if [ -n "$trial_user" ] && [ "${trial_state:-}" = active ]; then
 	hub_id=$(as "$trial_user" env FROSTNOTES_SOCKET="$trial_socket" "$notesctl" hub status 2>/dev/null | sed -n 's/^hub \([0-9a-f]\{32\}\)$/\1/p')
 	[ -n "$hub_id" ] && ok "the trial notesd is hub $hub_id" || problem "the trial notesd answers no hub ID: is it a hub?"
+	while IFS=$'\t' read -r name _ seq; do
+		[ -n "${name:-}" ] && [ -n "${seq:-}" ] && hub_seq[$name]=$seq
+	done <<<"$(as "$trial_user" env FROSTNOTES_SOCKET="$trial_socket" "$notesctl" hub vaults 2>/dev/null || true)"
 	while IFS=$'\t' read -r _ name path; do
 		[ -n "${path:-}" ] && vaults+=("$path") && say "    vault $name at $path"
 	done < <(as "$trial_user" env FROSTNOTES_SOCKET="$trial_socket" "$notesctl" vault list 2>/dev/null | grep -E $'^[0-9]+\t' || true)
@@ -253,19 +293,67 @@ fi
 
 # What frostnotes.service's data directory holds now.
 aside=
+aside_copies=
 if [ -e "$(p "$target")" ] && [ -n "$(ls -A "$(p "$target")" 2>/dev/null)" ]; then
 	if [ "$unit_was" != active ]; then
 		problem "$target holds data and $UNIT is not running to say what: move it aside yourself, or start $UNIT"
 	else
 		their_hub=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" hub status 2>/dev/null | sed -n 's/^hub \([0-9a-f]\{32\}\)$/\1/p')
-		names=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" vault list 2>/dev/null | grep -E $'^[0-9]+\t' | cut -f2 | sort | tr '\n' ' ' || true)
+		vault_rows=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" vault list 2>/dev/null | grep -E $'^[0-9]+\t' || true)
+		names=
+		while IFS=$'\t' read -r _ name _; do [ -z "${name:-}" ] || names+="$name "; done <<<"$vault_rows"
 		if [ -n "$hub_id" ] && [ "$their_hub" = "$hub_id" ]; then
 			problem "$UNIT already serves hub $hub_id: the move looks done (see /var/backups/frostnotes-move-*)"
 		elif [ "$names" = "Test " ]; then
 			aside=$target.overnight-$STAMP
 			ok "$target holds the overnight deployment's test (vault Test): it goes aside to $aside, never merged"
+		elif [ -z "$names" ]; then
+			problem "$target holds vaults other than the overnight test (none listed): move it aside yourself"
 		else
-			problem "$target holds vaults other than the overnight test (${names:-none listed}): move it aside yourself"
+			# lodge's notesd is a device of the trial hub: it keeps a synced
+			# copy of each of the hub's vaults in its data directory, beside
+			# the test. A copy the hub has in full, in step and verified
+			# loses nothing by going aside.
+			copies_ok=1
+			while IFS=$'\t' read -r id name _; do
+				if [ -z "${id:-}" ] || [ -z "${name:-}" ] || [ "$name" = Test ]; then continue; fi
+				status=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" sync status --vault "$id" 2>/dev/null || true)
+				first=$(printf '%s\n' "$status" | awk -F'\t' -v id="$id" '$1 == id {print; exit}')
+				side=$(printf '%s\n' "$status" | awk '/^\t/ {print; exit}')
+				hname='' cur='' huburl='' pending='' conflicted=''
+				[ -z "$first" ] || IFS=$'\t' read -r _ hname huburl _ cur pending conflicted <<<"$first"
+				want=
+				[ -z "$hname" ] || want=${hub_seq[$hname]:-}
+				if [ -z "$first" ] || [ -z "$want" ]; then
+					copies_ok=
+					problem "vault $name in $target is not a copy of the hub's vaults: move $target aside yourself"
+					continue
+				fi
+				reasons=()
+				[ "$cur" = "$want/$want" ] || reasons+=("$cur cursor/hubSeq")
+				[ "${pending%% *}" = 0 ] || reasons+=("${pending%% *} pending")
+				[ "${conflicted%% *}" = 0 ] || reasons+=("${conflicted%% *} conflicted")
+				[ -z "$side" ] || reasons+=("refused/skipped/error line")
+				if [ ${#reasons[@]} -gt 0 ]; then
+					copies_ok=
+					list=$(printf '%s, ' "${reasons[@]}")
+					problem "vault $name in $target, a copy of the hub's $hname, is not in step with the hub (${list%, }): let it sync, then run me again"
+					continue
+				fi
+				if ! as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" sync verify --vault "$id" >/dev/null 2>&1; then
+					copies_ok=
+					problem "vault $name in $target does not verify against the hub"
+					continue
+				fi
+				ok "vault $name in $target is a copy of the hub's vault $hname ($huburl), pushed in full and verified at seq $want"
+			done <<<"$vault_rows"
+			if [ -n "$copies_ok" ]; then
+				aside=$target.overnight-$STAMP
+				aside_copies=1
+				ok "$target holds the overnight deployment's test and its copies of the hub's vaults: it goes aside to $aside, never merged"
+			else
+				problem "$target holds vaults other than the overnight test ($names): move it aside yourself"
+			fi
 		fi
 	fi
 fi
@@ -330,6 +418,7 @@ run "$SYSTEMCTL" stop "$SOCKET_UNIT" "$UNIT"
 if [ -n "$aside" ]; then
 	run mv "$(p "$target")" "$(p "$aside")"
 	record aside "$(p "$aside")"
+	[ -z "$aside_copies" ] || record aside_copies 1
 fi
 run rm -rf "$(p "$target").new"
 run cp -a "$(p "$trial_data")" "$(p "$target").new"
@@ -404,11 +493,15 @@ if [ "$mode" = apply ]; then
 	as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" hub url "$url"
 	record url_set "$url"
 fi
-run "$LODGECTL" reload
+reload_lodge
 
 step "Done"
 say "Roll back with: $0 --rollback $backup --apply (before devices sync through lodge)"
 say "notesctl for the hub: sudo -u $APP_USER FROSTNOTES_SOCKET=$app_socket $notesctl hub devices"
-say "Devices move at their next connection (log.hub); once \`notesctl hub devices\` shows each one seen,"
-say "the trial's old \`tailscale serve\` for the hub can go."
+say "On each device: notesctl hub relocate OLD-URL ${url:-https://LODGE/device/notes}"
+say "(OLD-URL is the hub the device synced with; the hub cannot tell it, as step 1 stopped it.)"
+say "Once \`notesctl hub devices\` shows each device seen, the trial's old \`tailscale serve\` for the hub can go."
+if [ -n "$aside_copies" ]; then
+	say "Also revoke lodge's former device on the hub: notesctl hub revoke ID (the ID is in notesctl hub devices)."
+fi
 [ "$mode" = apply ] || say $'\nDry run: nothing changed. Run again with --apply --url … to move.'
