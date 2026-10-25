@@ -598,8 +598,9 @@ tailnet.
     device cannot learn it there. Each device then runs
     `notesctl hub relocate OLD-URL NEW-URL`
     ([design/hub.md](../design/hub.md#moving-devices-to-lodge)).
-  - *Observed 2026-10-25:* lodge's agent tokens for notes name the vault
-    by lodge's notesd's local vault ID. Today that notesd holds the test
+  - *Observed 2026-10-25* (`lodgectl tokens` on the hub's VM and the
+    hub's database, read-only): lodge's agent tokens for notes name the vault
+    by lodge's notesd's local vault ID. On 2026-10-25 that notesd holds the test
     vault as vault 1 and the trial's vault as vault 2. Two live tokens
     use `vault=2`: `porter-notes`
     (`vault=2;write=Porter/;except=Porter/Routines/;daily`) and
