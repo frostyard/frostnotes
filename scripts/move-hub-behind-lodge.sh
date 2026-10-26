@@ -561,7 +561,7 @@ run "$SYSTEMCTL" enable --now "$SOCKET_UNIT" "$UNIT"
 if [ "$mode" = apply ]; then
 	# systemd calls notesd active as soon as it starts, before its private
 	# socket answers (2026-10-26: the first query came too early, and
-	# set -e ended the move here): wait until it answers, 30 s at most.
+	# set -e ended the move here): ask again until it answers: 60 tries, 0.5 s apart.
 	now_hub=
 	for _ in $(seq 60); do
 		now_hub=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" hub status 2>/dev/null | sed -n 's/^hub \([0-9a-f]\{32\}\)$/\1/p' || true)

@@ -857,8 +857,9 @@ machines' clocks synchronized):
   the trial hub's ID with its 1 vault. The planner did the rest of the
   step by hand: checked the vault, recorded `seqs` and `url_set` in the
   backup's manifest (so its rollback stays correct), ran `notesctl hub
-  url`, and started lodge. The script now waits up to 30 s for the
-  moved notesd to answer (`TestApplyWaitsForTheMovedNotesdToAnswer`).
+  url`, and started lodge. The script now asks the moved notesd again
+  until it answers, 60 tries 0.5 s apart
+  (`TestApplyWaitsForTheMovedNotesdToAnswer`).
 - **Step 7:** the scratch note, written by notesd as `frostnotes`,
   showed on the share through the laptop's CIFS mount, and was deleted
   (seq 764 to 766).
