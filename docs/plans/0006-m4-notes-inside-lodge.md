@@ -59,8 +59,10 @@ Status (2026-10-21):
   13:08Z, by the [run sheet](#run-sheet-for-the-move-2026-10-26); the
   [record of the run](#the-move-2026-10-26) says what happened. Both
   trial devices sync through lodge, and the 7 days of sync through
-  lodge run to 2026-11-02. Evidence 2 has 1 phone edit of 20, and
-  evidence 3 (Claude Code) is still to run.
+  lodge run to 2026-11-02. The user confirmed the evidence on
+  2026-10-26 ([the evidence](#phase-7s-evidence-2026-10-26)). 1 item is
+  open: the write token's part of evidence 3. Evidence 2's latency is
+  1 sample, not a p95.
 
 ## Decisions taken for M4
 
@@ -875,8 +877,9 @@ machines' clocks synchronized):
   `verify` ok (688 files).
 - **Step 10:** device 3, lodge's former device, revoked.
 - **Step 11** (the user): `claude-code-notes` (`vault=1;write`) and
-  `claude-code-notes-read` (`vault=1`) issued at 13:13Z. Neither was
-  used by 13:25Z; evidence 3 is still to run.
+  `claude-code-notes-read` (`vault=1`) issued at 13:13Z. Claude Code on
+  the user's second machine opened an MCP session with each through
+  lodge at 13:37:55Z.
 - **Step 12** (the user): Safari on the iPhone opened notes through
   lodge at 13:17:56Z, created a note, renamed it and typed 1 line. The
   line reached the hub's log at 13:18:39.579Z and the laptop's notesd
@@ -891,6 +894,18 @@ machines' clocks synchronized):
   `/var/backups/frostnotes-move-STAMP`; the M2 hub's data stays beside
   its old place (`.moved-STAMP`), and the overnight test with lodge's
   copy under `/var/lib/frostnotes.overnight-STAMP`.
+
+### Phase 7's evidence (2026-10-26)
+
+The user's answer, 2026-10-26: "notes work and sync, notes-read token
+works".
+
+| Done when | Status | Evidence |
+|---|---|---|
+| 1. The same UI on a second machine and on the phone | Done (the user's confirmation) | The iPhone (Safari) opened notes through lodge, created and edited a note; the desktop app on the laptop and the web app showed it; the desktop app syncs through lodge. |
+| 2. A phone edit on the desktop within 2 s | 1 sample, no p95 | The phone's save reached the hub's log at 13:18:39.579Z and the laptop's notesd 0.06 s later. The time of the last keystroke is not recorded on the phone, so the whole budget (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is not measured, and 1 edit is not the 20 the p95 asks for. |
+| 3. Claude Code through `/mcp/notes` with a scoped token | Open: the write token | `claude-code-notes-read` (`vault=1`) works from Claude Code on the user's second machine (the user's confirmation). `claude-code-notes` (`vault=1;write`) opened a session but is not tested: its search, read and append to today's daily note, with the token named in the note's history, and the failed call after `lodgectl token revoke`, are still to run. |
+| 4. No open issue in the reviews | Unchanged | As [Phase 6](#phase-6--security-review-planner-an-independent-agent) records. |
 
 ## Later / ideas
 
