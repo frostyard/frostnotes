@@ -101,6 +101,37 @@ jobs:
       - name: Biome, typecheck and Vitest
         run: make ui-check IN_NSL='sh -c'
 
+  # The release's .deb as a snapshot (make deb; its deb-check runs inside).
+  deb:
+    name: Snapshot .deb (make deb)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      NODE_VERSION: "24.21.0"
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          install: true
+          install_args: nfpm
+          cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: corepack enable
+      - name: Web build
+        run: make web-build IN_NSL='sh -c'
+      - name: Build and check the snapshot .deb
+        run: make deb
+
   app:
     name: App shell (make app-build, app-test)
     runs-on: ubuntu-24.04
