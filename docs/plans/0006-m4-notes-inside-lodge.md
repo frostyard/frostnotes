@@ -60,9 +60,8 @@ Status (2026-10-21):
   [record of the run](#the-move-2026-10-26) says what happened. Both
   trial devices sync through lodge, and the 7 days of sync through
   lodge run to 2026-11-02. The user confirmed the evidence on
-  2026-10-26 ([the evidence](#phase-7s-evidence-2026-10-26)). 1 item is
-  open: the write token's part of evidence 3. Evidence 2's latency is
-  1 sample, not a p95.
+  2026-10-26 ([the evidence](#phase-7s-evidence-2026-10-26)), and no
+  item stays open. Evidence 2's latency is 1 sample, not a p95.
 
 ## Decisions taken for M4
 
@@ -897,14 +896,14 @@ machines' clocks synchronized):
 
 ### Phase 7's evidence (2026-10-26)
 
-The user's answer, 2026-10-26: "notes work and sync, notes-read token
-works".
+The user's answers, 2026-10-26: "notes work and sync, notes-read token
+works", and "write token exercised, new note created with a haiku body".
 
 | Done when | Status | Evidence |
 |---|---|---|
 | 1. The same UI on a second machine and on the phone | Done (the user's confirmation) | The iPhone (Safari) opened notes through lodge, created and edited a note; the desktop app on the laptop and the web app showed it; the desktop app syncs through lodge. |
 | 2. A phone edit on the desktop within 2 s | 1 sample, no p95 | The phone's save reached the hub's log at 13:18:39.579Z and the laptop's notesd 0.06 s later. The time of the last keystroke is not recorded on the phone, so the whole budget (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is not measured, and 1 edit is not the 20 the p95 asks for. |
-| 3. Claude Code through `/mcp/notes` with a scoped token | Open: the write token | `claude-code-notes-read` (`vault=1`) works from Claude Code on the user's second machine (the user's confirmation). `claude-code-notes` (`vault=1;write`) opened a session but is not tested: its search, read and append to today's daily note, with the token named in the note's history, and the failed call after `lodgectl token revoke`, are still to run. |
+| 3. Claude Code through `/mcp/notes` with a scoped token | Done (the user's check) | `claude-code-notes-read` (`vault=1`) works from Claude Code on the user's second machine (the user's confirmation). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`; the user counts evidence 3 as done. |
 | 4. No open issue in the reviews | Unchanged | As [Phase 6](#phase-6--security-review-planner-an-independent-agent) records. |
 
 ## Later / ideas
