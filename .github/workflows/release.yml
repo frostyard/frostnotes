@@ -1,0 +1,82 @@
+# Release: a v* tag (made by make bump) builds frostyard-notesd's .deb,
+# attests it and attaches it to a GitHub release (frostyard/core ADR-0011,
+# ADR-0012, ADR-0053). The build job runs third-party npm code, so it holds
+# no write token and no id-token; only the release job does, and it runs none
+# of the repository's code. Actions are pinned to full commit SHAs
+# (ADR-0021, checked by internal/workflowcheck).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the .deb (make deb)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      NODE_VERSION: "24.21.0"
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - name: The tag is vMAJOR.MINOR.PATCH
+        run: |
+          printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH" >&2; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # The locked nfpm, checksum-verified, as `mise install` does.
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          install: true
+          install_args: nfpm
+          cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # pnpm comes from corepack, pinned with its hash by app/package.json.
+      - run: corepack enable
+      - name: Web build
+        run: make web-build IN_NSL='sh -c'
+      - name: Build and check the .deb
+        run: make deb DEB_VERSION="${GITHUB_REF_NAME#v}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deb
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Attest and release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: deb
+          path: dist
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.deb
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.deb --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
