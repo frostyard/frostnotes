@@ -559,11 +559,15 @@ step_n "Start notes behind lodge"
 run "$SYSTEMCTL" enable --now "$SOCKET_UNIT" "$UNIT"
 [ "$mode" = apply ] || say "  then check that $UNIT serves hub $hub_id with the vaults above"
 if [ "$mode" = apply ]; then
+	# systemd calls notesd active as soon as it starts, before its private
+	# socket answers (2026-10-26: the first query came too early, and
+	# set -e ended the move here): wait until it answers, 30 s at most.
+	now_hub=
 	for _ in $(seq 60); do
-		[ "$("$SYSTEMCTL" is-active "$UNIT" 2>/dev/null)" = active ] && break
-		sleep 0.5
+		now_hub=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" hub status 2>/dev/null | sed -n 's/^hub \([0-9a-f]\{32\}\)$/\1/p' || true)
+		[ -z "$now_hub" ] || break
+		"$SLEEP" 0.5
 	done
-	now_hub=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" hub status 2>/dev/null | sed -n 's/^hub \([0-9a-f]\{32\}\)$/\1/p')
 	[ "$now_hub" = "$hub_id" ] || fail "$UNIT serves hub '${now_hub}', not $hub_id"
 	say "  ✓ $UNIT serves hub $hub_id"
 	listed=$(as "$APP_USER" env FROSTNOTES_SOCKET="$app_socket" "$notesctl" vault list | cut -f3)

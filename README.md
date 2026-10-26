@@ -23,7 +23,7 @@ markdown files with YAML frontmatter, in a folder you own
 Pre-release. M0 (foundations), M1 (the headless vault), sync (M2) and the
 desktop app (M3) are done; M2's and M3's 7-day trials ended on 2026-10-24
 and 2026-10-25. M4, notes inside lodge, is in progress: notesd
-runs as lodge's `notes` app, and the hub moves behind lodge from
+runs as lodge's `notes` app, and the hub moved behind lodge on
 2026-10-26. See the [roadmap](docs/plans/0002-roadmap.md).
 
 ## Try it
