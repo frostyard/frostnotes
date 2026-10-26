@@ -167,8 +167,12 @@ func (s *Syncer) keep(ctx context.Context, base *url.URL, hubURL string, got col
 }
 
 // restore puts prev back under key, or deletes the key when the store held
-// nothing, after a pairing could not keep the token it collected.
+// nothing, after a pairing could not keep the token it collected. It does
+// not use the pairing's context: that context may be why the pairing
+// failed, and the token it replaced must still come back.
 func (s *Syncer) restore(ctx context.Context, key, prev string, had bool, hubID string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), withdrawTimeout)
+	defer cancel()
 	var err error
 	if had {
 		err = s.cfg.Secrets.Set(ctx, key, prev)

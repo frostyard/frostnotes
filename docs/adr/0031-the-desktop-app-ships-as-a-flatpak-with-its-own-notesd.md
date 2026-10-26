@@ -79,11 +79,15 @@ answered:
   database and holds it until it exits; a second notesd on the same data
   directory exits at once with "another notesd uses <dir>", whatever its
   socket. The launcher `frostnotes` (POSIX sh) works so:
-  - `frostnotes --background` runs `exec notesd`, with the output appended
-    to `$XDG_STATE_HOME/frostnotes/notesd.log`, also when the Background
-    portal's autostart runs it at login. A log over 1 MiB moves to
-    `notesd.log.1` first, but only when no notesd answers: a duplicate
-    must not move the log of the notesd that runs.
+  - `frostnotes --background` runs `exec notesd -log
+    $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell also appending
+    notesd's output to that file, also when the Background portal's
+    autostart runs it at login. notesd rotates the log itself, with `-log`,
+    once it holds the data directory's lock: a log over 1 MiB moves to
+    `notesd.log.1`, then notesd appends its output there. A shell check
+    cannot do this: 2 launchers can both pass it, and a duplicate would
+    move the log of the notesd that runs. The shell's redirect keeps what
+    notesd says before the lock, such as "another notesd uses <dir>".
   - `frostnotes [ARGS]`: when `notesctl hello` fails, it runs
     `flatpak-spawn frostnotes --background` (without `--watch-bus`). The
     Flatpak portal
@@ -231,7 +235,7 @@ the fixes:
 - The window's sandbox stayed alive after the window closed, because
   `flatpak-spawn` waited for notesd. Fixed: the launcher ends it.
 - notesd from autostart logged to the journal. Fixed: `--background`
-  writes `notesd.log`.
+  writes `notesd.log`, and notesd rotates it with `-log`.
 - A vault path under `/home` failed on Snow. Fixed: notesd reads it under
   `/var/home`.
 

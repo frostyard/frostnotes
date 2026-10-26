@@ -8,9 +8,9 @@
 #                             locks it), so this is safe to run twice. The
 #                             Background portal starts this at login. notesd
 #                             appends its output to notesd.log in the state
-#                             directory; when no notesd runs already and that
-#                             log is over 1 MiB, it moves to notesd.log.1
-#                             first, so the log stays bounded.
+#                             directory, and moves a log over 1 MiB to
+#                             notesd.log.1 itself, once it holds the data
+#                             directory's lock, so no live log ever moves.
 #   frostnotes [ARGS]         Make sure a notesd runs, ask the Background
 #                             portal for autostart, and run the app.
 #
@@ -40,16 +40,13 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes"
 
 if [ "${1:-}" = "--background" ]; then
     mkdir -p "$state"
-    # Rotate only when no notesd answers on this socket: a second
-    # `frostnotes --background` must not move the log a running notesd
-    # writes. A notesd that starts at the same time has just rotated its own
-    # log, so the log is small then.
-    if ! notesctl hello >/dev/null 2>&1 &&
-        [ -f "$state/notesd.log" ] &&
-        [ "$(wc -c <"$state/notesd.log")" -gt 1048576 ]; then
-        mv -f "$state/notesd.log" "$state/notesd.log.1"
-    fi
-    exec notesd >>"$state/notesd.log" 2>&1
+    # notesd rotates the log itself, with -log, once it holds the data
+    # directory's lock: a shell check cannot tell 2 launchers apart, and a
+    # duplicate must not move the log of the notesd that runs. The redirect
+    # keeps what notesd says before the lock, such as "another notesd uses".
+    # Both the shell and notesd open the file for appending.
+    # shellcheck disable=SC2094
+    exec notesd -log "$state/notesd.log" >>"$state/notesd.log" 2>&1
 fi
 
 mkdir -p "$state"

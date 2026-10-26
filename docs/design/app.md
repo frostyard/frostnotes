@@ -716,9 +716,14 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
   second notesd on that directory exits at once.
   **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
-  notesd and nothing else, with its output in
-  `$XDG_STATE_HOME/frostnotes/notesd.log` (over 1 MiB, and with no notesd
-  that answers, the old log moves to `notesd.log.1`), also when the Background portal starts it at login.
+  `exec notesd -log $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell
+  also appending notesd's output to that file, also when the Background
+  portal starts it at login. notesd rotates the log itself, once it holds
+  the data directory's lock: a log over 1 MiB moves to `notesd.log.1`, then
+  notesd appends its output there. A shell check cannot do this, since 2
+  launchers can both pass it, and a duplicate would move the log of the
+  notesd that runs. The shell's redirect keeps what notesd says before the
+  lock, such as "another notesd uses".
   `frostnotes [ARGS]`, when `notesctl hello`
   fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout),
