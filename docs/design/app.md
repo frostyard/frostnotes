@@ -576,7 +576,9 @@ desktop's, with a different transport and frame:
     ([lodge ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md)),
     with notes' manifest, `packaging/lodge/app.json`, beside it.
     `make lodge-app` lays that tree out in `build/lodge/apps/notes/`,
-    the manifest at the build's version.
+    the manifest at the build's version. `make lodge-package` stages
+    the same tree with the binaries and units under `usr/`
+    ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs)).
   - In that mode `main.tsx` connects through lodge, and the mock, the
     spikes and the shell's commands stay out of the bundle.
   - The build carries `icon.svg`, from the icon's master, for lodge's
