@@ -31,6 +31,11 @@ type Store interface {
 // HubToken is the key of the device token for the hub with ID hubID.
 func HubToken(hubID string) string { return "hub/" + hubID + "/token" }
 
+// ProbeKey is the key a pairing writes and deletes first: a store that
+// cannot keep it cannot keep a device token either, and the store's prompt
+// then comes before the hub knows the device.
+const ProbeKey = "probe"
+
 // File is a Store kept in one JSON object ({"key": "value", ...}) in a file
 // with mode 0600: plain text on disk, guarded only by file permissions, for
 // development, CI and machines without a Secret Service.

@@ -92,6 +92,22 @@ func (t *Tx) RevokeDevice(ctx context.Context, id int64) error {
 	return hubReadError("revoke device", err)
 }
 
+// DeleteUnseenDevice deletes device id when no request has touched it and
+// it is not revoked, and reports whether it deleted it: a pairing the
+// device could not keep its token for. A device that made a request stays,
+// since the hub's revisions may name it.
+func (t *Tx) DeleteUnseenDevice(ctx context.Context, id int64) (bool, error) {
+	res, err := t.ExecContext(ctx, `DELETE FROM hub_devices WHERE id = ? AND seen_at IS NULL AND revoked_at IS NULL`, id)
+	if err != nil {
+		return false, fmt.Errorf("delete an unseen device: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete an unseen device: %w", err)
+	}
+	return n > 0, nil
+}
+
 // TouchDevice sets device id's seen_at to at, unless seen_at is less than
 // a minute before at, and reports whether it changed it. Task card T-0026.
 func (t *Tx) TouchDevice(ctx context.Context, id int64, at time.Time) (bool, error) {

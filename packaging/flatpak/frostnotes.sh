@@ -1,40 +1,62 @@
 #!/bin/sh
 # Frostnotes' launcher in the Flatpak (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md).
 # The manifest installs it as /app/bin/frostnotes, and the Tauri app as
-# /app/libexec/frostnotes-app. The app talks to notesd and does not start it.
+# /app/libexec/frostnotes-app.
 #
 #   frostnotes --background   Run notesd and nothing else. A second notesd on
 #                             the same data directory exits at once (notesd
 #                             locks it), so this is safe to run twice. The
-#                             Background portal starts this at login.
+#                             Background portal starts this at login. notesd
+#                             appends its output to notesd.log in the state
+#                             directory, and moves a log over 1 MiB to
+#                             notesd.log.1 itself, once it holds the data
+#                             directory's lock, so no live log ever moves.
 #   frostnotes [ARGS]         Make sure a notesd runs, ask the Background
 #                             portal for autostart, and run the app.
+#
+# FROSTNOTES_LIBEXEC_DIR, when set, is the directory of frostnotes-app and
+# frostnotes-request-background: /app/libexec in the Flatpak, and a test's
+# own directory in its tests.
 #
 # A notesd that the window's sandbox started would die with the sandbox, and
 # with a duplicate window that tauri-plugin-single-instance closes at once.
 # So the launcher has the Flatpak portal start `frostnotes --background` in a
-# new sandbox of this app. That notesd lives on when the window closes, until
-# logout. There is no fallback in this sandbox: a notesd here would die with
-# a duplicate window while the primary window still needs it. Without the
-# portal the launcher says so, and the app shows that notesd is not running.
+# new sandbox of this app, and then ends the flatpak-spawn process it made
+# once that notesd answers: flatpak-spawn forwards catchable signals to the
+# command it spawned, but only SIGKILL ends flatpak-spawn alone, and the
+# portal keeps the spawned notesd without --watch-bus. That notesd lives on
+# when the window closes, until logout. There is no fallback in this sandbox:
+# a notesd here would die with a duplicate window while the primary window
+# still needs it. Without the portal the launcher says so, and the app shows
+# that notesd is not running.
 
 set -u
 
-app=/app/libexec/frostnotes-app
-request_background=/app/libexec/frostnotes-request-background
-
-if [ "${1:-}" = "--background" ]; then
-    exec notesd
-fi
+libexec="${FROSTNOTES_LIBEXEC_DIR:-/app/libexec}"
+app="$libexec/frostnotes-app"
+request_background="$libexec/frostnotes-request-background"
 
 state="${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes"
+
+if [ "${1:-}" = "--background" ]; then
+    mkdir -p "$state"
+    # notesd rotates the log itself, with -log, once it holds the data
+    # directory's lock: a shell check cannot tell 2 launchers apart, and a
+    # duplicate must not move the log of the notesd that runs. The redirect
+    # keeps what notesd says before the lock, such as "another notesd uses".
+    # Both the shell and notesd open the file for appending.
+    # shellcheck disable=SC2094
+    exec notesd -log "$state/notesd.log" >>"$state/notesd.log" 2>&1
+fi
+
 mkdir -p "$state"
 
 if ! notesctl hello >/dev/null 2>&1; then
     spawned=
     if command -v flatpak-spawn >/dev/null 2>&1; then
-        # No --watch-bus: the spawned notesd must outlive this sandbox.
-        flatpak-spawn frostnotes --background >>"$state/notesd.log" 2>&1 &
+        # No --watch-bus: the spawned notesd must outlive this sandbox. It
+        # holds its own stdout and stderr, so flatpak-spawn may end.
+        flatpak-spawn frostnotes --background </dev/null >>"$state/notesd.log" 2>&1 &
         spawned=$!
     fi
     # Wait, for about 10 s, until that notesd answers.
@@ -49,6 +71,14 @@ if ! notesctl hello >/dev/null 2>&1; then
         tries=$((tries + 1))
         sleep 0.5
     done
+    # flatpak-spawn forwards catchable signals (TERM, INT, HUP) to the
+    # command it spawned, so only SIGKILL ends flatpak-spawn alone; without
+    # --watch-bus the portal keeps the spawned notesd, and notesd already
+    # holds its own stdout and stderr.
+    if [ -n "$spawned" ] && kill -0 "$spawned" 2>/dev/null; then
+        kill -KILL "$spawned" 2>/dev/null
+        wait "$spawned" 2>/dev/null
+    fi
     if ! notesctl hello >/dev/null 2>&1; then
         msg="frostnotes: notesd did not start through the Flatpak portal (flatpak-spawn); see $state/notesd.log"
         echo "$msg" >&2

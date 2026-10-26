@@ -179,7 +179,14 @@ machine, over its local socket (`notesctl hub approve <code>`; the web
 app's Hub settings list pending pairings and revoke devices, but never
 approve), and the device collects its token: 32 random
 bytes, of which the hub keeps only the SHA-256. The device keeps the token
-in the Secret Service. Every sync request carries it: the `/sync`
+in the Secret Service's default collection, which it makes, as libsecret
+does, when the session has none (a fresh autologin session has only
+GNOME Keyring's `session` collection). Before it asks the hub, the
+device writes and deletes a probe secret, so a keyring that cannot keep
+the token fails the join before the hub knows the device. When the device
+cannot keep a token it has collected, it withdraws the pairing
+(`DELETE /sync/device`), and the hub forgets the device, which has never
+made a request. Every sync request carries the token: the `/sync`
 WebSocket, which serves JSON-RPC as caller `device`, and each blob
 request. `notesctl hub revoke <device>` closes the device's connections
 and ends its sync. Devices refuse a hub URL that is not `https://`, except
@@ -278,7 +285,7 @@ revocations and rejoins from an older copy (`profile.go`)
 
 ## References
 
-- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)
+- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the default keyring, a withdrawn pairing)
 - Related: [overview.md](overview.md), [vault.md](vault.md), [app.md](app.md#history-and-merges) (conflicts in the merge view), [hub.md](hub.md) (the hub behind lodge, moving devices)
 - Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Built in: [plan 0004](../plans/0004-m2-sync.md) ([roadmap — M2](../plans/0002-roadmap.md))

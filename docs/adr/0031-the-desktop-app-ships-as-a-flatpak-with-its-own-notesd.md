@@ -79,13 +79,26 @@ answered:
   database and holds it until it exits; a second notesd on the same data
   directory exits at once with "another notesd uses <dir>", whatever its
   socket. The launcher `frostnotes` (POSIX sh) works so:
-  - `frostnotes --background` runs `exec notesd`.
+  - `frostnotes --background` runs `exec notesd -log
+    $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell also appending
+    notesd's output to that file, also when the Background portal's
+    autostart runs it at login. notesd rotates the log itself, with `-log`,
+    once it holds the data directory's lock: a log over 1 MiB moves to
+    `notesd.log.1`, then notesd appends its output there. A shell check
+    cannot do this: 2 launchers can both pass it, and a duplicate would
+    move the log of the notesd that runs. The shell's redirect keeps what
+    notesd says before the lock, such as "another notesd uses <dir>".
   - `frostnotes [ARGS]`: when `notesctl hello` fails, it runs
-    `flatpak-spawn frostnotes --background` (without `--watch-bus`), with
-    the output in `$XDG_STATE_HOME/frostnotes/notesd.log`. The Flatpak portal
+    `flatpak-spawn frostnotes --background` (without `--watch-bus`). The
+    Flatpak portal
     starts that in a new sandbox of the same app, so notesd lives on when the
     window closes, until logout. The launcher waits for about 10 s for
-    `notesctl hello`; when none answers (no portal), it logs an error and
+    `notesctl hello`, then ends `flatpak-spawn` with `SIGKILL`.
+    `flatpak-spawn` waits for its command, so it would keep the window's
+    sandbox alive as long as notesd runs. It forwards each signal it can
+    catch to the command, so only `SIGKILL` ends it alone; without
+    `--watch-bus` the portal keeps the command, which already holds its
+    own output. When no `notesctl hello` answers (no portal), it logs an error and
     starts no notesd of its own: one in the window's sandbox would die with
     a duplicate window while the primary window still needs it. The app
     then shows that notesd is not running, and the next launch tries again.
@@ -102,6 +115,21 @@ answered:
   bus in a GLib main loop until the `Response` or 10 minutes. It exits 0
   whatever happens: a missing portal or a refusal changes nothing for the
   app.
+- **Device tokens go to the Secret Service's default collection**, which
+  notesd makes when the session has none. notesd reads the `default` alias
+  (`ReadAlias`); when there is none, or the collection it names does not
+  exist, it calls `CreateCollection` with the alias `default` and the
+  label "Default keyring", as libsecret does, and the keyring asks the
+  user for a password. A session that GNOME Keyring did not unlock at
+  login, as after an autologin, has only the `session` collection, which
+  is lost at logout. Before a device asks a hub to pair, it writes and
+  deletes a probe secret, so a keyring that cannot keep a token fails
+  the join first. A device that cannot keep the token it collected
+  withdraws the pairing (`DELETE /sync/device`), and the hub forgets the
+  device, which has made no request
+  ([sync-protocol.md](../specs/sync-protocol.md#pairing)).
+  `FROSTNOTES_SECRETS=file` (`flatpak override --env=…`) still keeps
+  tokens in a 0600 file.
 - **Permissions** (`finish-args`): `--socket=wayland`,
   `--socket=fallback-x11`, `--share=ipc`, `--device=dri`, `--share=network`
   (sync with the hub), `--talk-name=org.freedesktop.secrets` (device
@@ -113,7 +141,10 @@ answered:
   stable path, so notesd could not watch a vault there, and a path chosen
   in one run would be stale in the next. Users can narrow the permission
   with `flatpak override --user --nofilesystem=home --filesystem=~/Notes
-  org.frostyard.Frostnotes`.
+  org.frostyard.Frostnotes`. Where `HOME` is `/var/home/<user>` (Snow,
+  Fedora's atomic desktops), the host's `/home` does not exist in the
+  sandbox; notesd reads a vault path under `/home` as the same path under
+  `/var/home` when `/home` is missing and `/var/home` exists.
 - **CI.** `.github/workflows/flatpak.yml` runs on pull requests and on
   pushes to main. One job runs `make flatpak-sources` and fails on a diff.
   The other builds in the pinned `flatpak-github-actions` image and runs
@@ -122,8 +153,10 @@ answered:
   check of the Python helper, and a smoke test. The smoke test runs
   `frostnotes --background` at the Flatpak's socket path, checks that a
   second notesd on the same data directory exits, and writes and reads a note
-  through `notesctl`, without a Secret Service. It does not test the portal
-  paths: the build sandbox has no portal.
+  through `notesctl`, without a Secret Service. It starts notesd through
+  the launcher with a stand-in `flatpak-spawn` and checks that the
+  launcher ends it, that notesd lives on, and that the log turns over.
+  It does not test the real portals: the build sandbox has none.
 
 ## Consequences
 
@@ -144,7 +177,25 @@ answered:
   evidence that start several notesd processes need one data directory each
   (`internal/evidence` already gives each its own).
 - The portal paths of the launcher (`flatpak-spawn`, the Background
-  request) have no automated test; the smoke test cannot reach a portal.
+  request) have no automated test against a real portal; the smoke test
+  cannot reach one. A change to them needs a test on a real desktop, as
+  below.
+- The Background request's helper stays in the window's sandbox until
+  the portal answers, at most 10 minutes. The portal asks the user only
+  once; after that it answers at once.
+- A first hub join in a session without a default keyring shows the
+  keyring's prompt for a new password, and makes a "Default keyring"
+  with its own password. PAM unlocks only the `login` keyring at a
+  password login, and an autologin unlocks none, so that keyring is
+  locked at each login: notesd shows its unlock prompt when it first
+  reads the token, and sync waits until the user answers. GNOME's prompt
+  can come without keyboard focus at the start of a session. The user
+  can tick "Automatically unlock this keyring whenever I'm logged in" in
+  the prompt, or give the keyring the login password.
+- A Secret Service that leaves the bus while it shows a prompt (a crash)
+  never completes it. notesd ends the wait with "no Secret Service" when
+  the service's name loses its owner or the bus connection closes, and
+  the sync loop tries again later; it does not wait for ever.
 - `--filesystem=home` gives the app and its notesd the whole home
   directory. That is wider than a vault, and it is the price of a watched,
   stable vault path.
@@ -155,6 +206,71 @@ answered:
   format; a pnpm release that changes the format needs a newer generator.
 - Publishing the OCI image to GHCR, with the attestation the Frostyard
   remote requires, is a later step; this change builds and tests only.
+
+### Evidence: a real Snow install, 2026-10-26
+
+The bundle from CI run 40389390295 (PR #97, head `7f1f23b`) was tested on
+Snow (`ghcr.io/frostyard/snow:latest`, from the installer ISO of
+2026-10-26) in a disposable incus VM: GNOME 48.7 on Wayland,
+xdg-desktop-portal 1.20.3, xdg-desktop-portal-gnome 48.0, Flatpak
+1.16.6, `org.gnome.Platform//51` from Flathub, a user install. The hub
+was a scratch notesd in the same VM. All 6 items passed:
+
+1. A vault opens: `notesctl vault add` added it, and the window showed
+   its notes.
+2. notesd starts through `flatpak-spawn`: the window and notesd ran in 2
+   sandbox instances (`flatpak ps`), with notesd under `flatpak-portal`,
+   and the socket in the shared directory.
+3. notesd outlives the window: after the window closed, a write on the hub
+   and a plain file write on the device synced both ways in less than 8 s.
+4. Autostart at login: the portal granted `background` and `autostart`
+   with no dialog and wrote `~/.config/autostart/org.frostyard.Frostnotes.desktop`;
+   logout stopped notesd, and at the next login gnome-session started
+   it, and sync went on with the token from the keyring. A new window
+   used that notesd and started no `flatpak-spawn`.
+5. The lock: a second notesd, through `flatpak run --command=notesd` or
+   `frostnotes --background`, exited at once with "another notesd uses
+   …".
+6. `--filesystem=home`: vaults in `~` and in `~/Documents` opened and
+   were watched; a path outside the home directory failed, as expected.
+
+The test found 2 defects and 2 smaller points; the decisions above hold
+the fixes:
+
+- A hub join failed in a session with no `login` keyring (`Object does
+  not exist at path "/org/freedesktop/secrets/collection/login"`), and
+  the hub kept the failed pairing as a device never seen. Fixed by the
+  default collection, the probe and the withdrawal.
+- The window's sandbox stayed alive after the window closed, because
+  `flatpak-spawn` waited for notesd. Fixed: the launcher ends it.
+- notesd from autostart logged to the journal. Fixed: `--background`
+  writes `notesd.log`, and notesd rotates it with `-log`.
+- A vault path under `/home` failed on Snow. Fixed: notesd reads it under
+  `/var/home`.
+
+The same VM ran the fixes again on 2026-10-26, with the bundle from CI run
+40403340356 (PR #98, head `961ae97`). All passed:
+
+- A: in a session with only the `session` collection (`ReadAlias
+  default` gave `/`), `hub join` asked for a new "Default keyring".
+  Cancelled, the join failed before the hub had a pending pairing.
+  With the keyring then locked and its unlock prompt cancelled after the
+  approval, the join failed and the hub deleted the device. Then a join
+  passed; the keyring held only the token, not the probe, and sync was
+  idle.
+- B: after the window closed, `flatpak ps` showed only notesd's instance
+  (and the test hub's); notesd ran on under `flatpak-portal`, with no
+  `flatpak-spawn` left.
+- Item 3: a write on the hub and a plain file write on the device synced
+  both ways in less than 8 s, with the window closed.
+- Item 4: logout stopped notesd; at a password login gnome-session started
+  it, and it wrote to `notesd.log` (C). The new Default keyring was locked,
+  so sync waited for its unlock prompt (above, Consequences). After the
+  unlock, sync went on both ways.
+
+The run also found that notesd panicked when the Secret Service crashed
+during a prompt: godbus closes the signal channel with the connection,
+and the wait read a nil signal. The wait now ends as Consequences says.
 
 ## Alternatives considered
 
@@ -184,7 +300,7 @@ answered:
 
 ## References
 
-- Shapes: [design/app.md](../design/app.md#the-flatpak), [design/overview.md](../design/overview.md), [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports)
-- Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (the other way notesd runs)
+- Shapes: [design/app.md](../design/app.md#the-flatpak), [design/overview.md](../design/overview.md), [design/sync.md](../design/sync.md#pairing-and-sessions), [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports), [specs/sync-protocol.md](../specs/sync-protocol.md#pairing)
+- Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0016](0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens in the Secret Service), [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (the other way notesd runs)
 - Core: [ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md), [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)
 - Built in: [roadmap, M6](../plans/0002-roadmap.md)

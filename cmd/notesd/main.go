@@ -58,6 +58,8 @@ func run(ctx context.Context, args []string) error {
 	lodge := fs.Bool("lodge", false, "serve lodge's app socket as app \"notes\": the web app's API, lodge-content's files "+
 		"and the hub's device routes (docs/specs/lodge-app.md); LODGE_ROOT and LODGE_UID move it for development")
 	maxBlob := fs.Int64("hub-max-blob", blobxfer.DefaultMaxSize, "with -hub, the largest file a device may upload, in bytes")
+	logPath := fs.String("log", "", "after notesd takes the data directory's lock, move FILE to FILE.1 when it is larger "+
+		"than 1 MiB, and append notesd's output (stdout and stderr) to FILE")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -92,6 +94,13 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
+	// -log keeps notesd's output in a file. It runs here, after the lock:
+	// only the notesd that holds the data directory rotates that log.
+	if *logPath != "" {
+		if err := logTo(*logPath); err != nil {
+			return fmt.Errorf("-log %s: %w", *logPath, err)
+		}
+	}
 	db, err := store.Open(ctx, paths.DB)
 	if err != nil {
 		return err

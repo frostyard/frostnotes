@@ -120,6 +120,10 @@ type Syncer struct {
 	loops    map[int64]*loop
 	pairings map[string]*devicePairing
 	wg       sync.WaitGroup
+	// keepMu makes keeping a token one unit: the secret store's value, the
+	// hub's row and the cleanup of a pairing that failed run together, so
+	// that two pairings for one hub cannot undo each other.
+	keepMu sync.Mutex
 }
 
 // New returns a syncer over cfg; Start runs its loops.

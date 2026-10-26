@@ -41,6 +41,7 @@ ADR-0016). Every other path answers 404.
 | `/sync` | `GET` (WebSocket upgrade) | `Bearer` device token | JSON-RPC as caller `device` |
 | `/sync/blobs/{hash}` | `HEAD`, `GET`, `PUT` | `Bearer` device token | contents |
 | `/sync/hub` | `POST` | none | the hub's ID, the URL it records and a relocation proof (M4, [lodge-app.md](lodge-app.md#device)) |
+| `/sync/device` | `DELETE` | `Bearer` device token | a device that cannot keep its token has the hub forget its pairing |
 
 - A request whose `Origin` header is present and is not exactly
   `notesd://device` is refused with 403: a device sends that origin, or
@@ -91,9 +92,23 @@ to 30 s for the pairing to change:
 
 The hub creates the device token when it is collected: `fnd_` followed by
 32 bytes from `crypto/rand` in unpadded base64url. It stores the
-SHA-256 (hex) of the whole token, never the token. A device that loses the
-approved answer pairs again; the unused device shows in `hub.devices` as
-never seen and can be revoked.
+SHA-256 (hex) of the whole token, never the token.
+
+- **Before it asks to pair,** a device writes and deletes a probe key in its
+  secret store. A store that cannot keep the probe cannot keep a token
+  either, and the pairing fails as `unavailable` without a request to the
+  hub: the store's prompt comes before the hub knows the device.
+- **A device that cannot keep the token** after the hub handed it out (it
+  refuses the hub's ID, the token does not store, or the hub does not
+  record) withdraws the pairing: `DELETE /sync/device` with the token. Best
+  effort, with a 10 s deadline.
+- **A withdrawn pairing** is a device that never made a request: the hub
+  deletes it and answers 204. A device that made a request is never
+  deleted, since the hub's revisions may name it: the hub answers 409, and
+  its owner revokes it with `hub.revoke`. A missing, unknown or revoked
+  token is 401, as at every other device endpoint.
+- A device that loses the approved answer pairs again; the unused device
+  shows in `hub.devices` as never seen and can be revoked.
 
 ### The sync connection
 
@@ -469,7 +484,7 @@ joins again with a new replica.
 
 ## References
 
-- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (from M4, the hub behind lodge and relocation)
+- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (from M4, the hub behind lodge and relocation), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the probe and a withdrawn pairing, from the Flatpak's test on Snow)
 - Context: [design/sync.md](../design/sync.md), [design/vault.md](../design/vault.md#writes), [design/hub.md](../design/hub.md) (the hub behind lodge, moving devices)
 - Related: [rpc-protocol.md](rpc-protocol.md), [merge.md](merge.md), [lodge-app.md](lodge-app.md) (from M4, these routes under `/device/` on lodge's app socket, and relocation)
 - Built in: [plan 0004](../plans/0004-m2-sync.md)

@@ -130,6 +130,7 @@ path admits one caller kind, and any other is 403:
 | `GET /device/sync`, WebSocket | `device` | JSON-RPC as caller `device` |
 | `HEAD`, `GET`, `PUT` `/device/sync/blobs/{hash}` | `device` | contents |
 | `POST /device/sync/hub` | `device` | the hub's ID, URL and relocation proof |
+| `DELETE /device/sync/device` | `device` | a device that cannot keep its token has the hub forget its pairing |
 
 - A path outside this table is 403, since it admits no caller, as is a
   caller kind its row does not admit
@@ -297,6 +298,9 @@ lodge-content adds its own sandbox policy and cross-origin headers
   - so are pairing's limits and the blob rules.
 
   lodge adds no identity check here.
+- **Methods:** lodge checks no method on a device route, so
+  `DELETE /device/sync/device` reaches notesd as the hub's own endpoint
+  does.
 - **A pending pairing's address** behind lodge is the node lodge names
   (`Lodge-Node-Name`, and `Lodge-Login` when sent: `phone
   (ana@example.com)`), or empty when it names none. It is shown beside the device's own name and the time in

@@ -716,10 +716,22 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
   second notesd on that directory exits at once.
   **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
-  notesd and nothing else. `frostnotes [ARGS]`, when `notesctl hello`
+  `exec notesd -log $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell
+  also appending notesd's output to that file, also when the Background
+  portal starts it at login. notesd rotates the log itself, once it holds
+  the data directory's lock: a log over 1 MiB moves to `notesd.log.1`, then
+  notesd appends its output there. A shell check cannot do this, since 2
+  launchers can both pass it, and a duplicate would move the log of the
+  notesd that runs. The shell's redirect keeps what notesd says before the
+  lock, such as "another notesd uses".
+  `frostnotes [ARGS]`, when `notesctl hello`
   fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout),
-  and waits for about 10 s for it; with no portal it logs an error and
+  and waits for about 10 s for it. Then it ends `flatpak-spawn` with
+  `SIGKILL`: `flatpak-spawn` waits for its command and would keep the
+  window's sandbox alive, it forwards every signal it can catch to notesd,
+  and without `--watch-bus` the portal keeps notesd when it goes. With no
+  portal the launcher logs an error and
   starts no notesd of its own (one in the window's sandbox would die with a
   duplicate window), so the app shows that notesd is not running. It then starts the
   Background request in the background and `exec`s the app.
@@ -735,13 +747,18 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   shared by the shell and notesd, so `notesblob://` reads `blobs/` as usual.
 - **Permissions:** Wayland or X11, the GPU, the network, the Secret Service
   and the home directory (vaults are watched and written in place; the
-  document portal cannot do that).
+  document portal cannot do that). Where `HOME` is `/var/home/<user>`
+  (Snow, Fedora's atomic desktops), the host's `/home` does not exist in
+  the sandbox, so notesd reads a vault path under `/home` as the same
+  path under `/var/home` when only that exists.
 - **The build** is offline: `make flatpak-sources` writes `cargo-sources.json`,
   `node-sources.json` and `go-sources.json` from the lockfiles (with a
   patched node generator and hash-pinned Python dependencies), and the
   `Flatpak` workflow (`.github/workflows/flatpak.yml`) checks they are
   current, then builds and tests the manifest (the smoke test starts notesd
-  through `--background`, and checks the data directory's lock). Run `make flatpak-sources`
+  through the launcher with a stand-in `flatpak-spawn`, checks that the
+  launcher ends it, that notesd lives on and that the log turns over, and
+  checks the data directory's lock). Run `make flatpak-sources`
   after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
 
 ## Dev and test

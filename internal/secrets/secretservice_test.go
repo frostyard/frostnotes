@@ -19,6 +19,13 @@ func privateBus(t *testing.T) string { return dbustest.Bus(t) }
 
 func connect(t *testing.T, addr string) *dbus.Conn { return dbustest.Connect(t, addr) }
 
+// fakeCollectionPath is where the fake keeps the collection its default
+// alias names, as GNOME Keyring keeps one under collection/.
+const fakeCollectionPath = dbus.ObjectPath("/org/freedesktop/secrets/collection/fake")
+
+// fakeCreatedPath is the collection a fake CreateCollection makes.
+const fakeCreatedPath = dbus.ObjectPath("/org/freedesktop/secrets/collection/default")
+
 // fakeSecrets is a Secret Service with one collection, enough for notesd.
 type fakeSecrets struct {
 	conn *dbus.Conn
@@ -29,6 +36,20 @@ type fakeSecrets struct {
 	locked  bool
 	dismiss bool
 	prompts int
+	// alias is ReadAlias's answer: the default collection, or noPrompt for
+	// a service that has none.
+	alias dbus.ObjectPath
+	// noAlias makes ReadAlias answer UnknownMethod.
+	noAlias bool
+	// refuseCreate makes CreateCollection fail, as a service that cannot
+	// make a keyring does.
+	refuseCreate bool
+	// collections counts the collections CreateCollection made.
+	collections int
+	// silent makes a prompt never complete, as a service that crashes while
+	// it shows one; prompted then gets a value for each prompt shown.
+	silent   bool
+	prompted chan struct{}
 }
 
 type fakeItem struct {
@@ -41,11 +62,11 @@ type fakeItem struct {
 func startFake(t *testing.T, addr string) *fakeSecrets {
 	t.Helper()
 	conn := connect(t, addr)
-	f := &fakeSecrets{conn: conn, items: map[dbus.ObjectPath]*fakeItem{}}
+	f := &fakeSecrets{conn: conn, items: map[dbus.ObjectPath]*fakeItem{}, alias: fakeCollectionPath}
 	if err := conn.Export(fakeService{f}, ssPath, ssService); err != nil {
 		t.Fatal(err)
 	}
-	if err := conn.Export(fakeCollection{f}, defaultCollection, ssCollection); err != nil {
+	if err := f.exportCollection(fakeCollectionPath); err != nil {
 		t.Fatal(err)
 	}
 	reply, err := conn.RequestName(ssName, dbus.NameFlagDoNotQueue)
@@ -53,6 +74,25 @@ func startFake(t *testing.T, addr string) *fakeSecrets {
 		t.Fatalf("own %s: %v %v", ssName, reply, err)
 	}
 	return f
+}
+
+// exportCollection publishes the fake's collection at p.
+func (f *fakeSecrets) exportCollection(p dbus.ObjectPath) error {
+	return f.conn.Export(fakeCollection{f}, p, ssCollection)
+}
+
+// addPrompt exports a prompt that completes with result, or that the fake's
+// dismiss setting dismisses. A non-empty create is the collection the
+// prompt makes.
+func (f *fakeSecrets) addPrompt(result any, create dbus.ObjectPath) dbus.ObjectPath {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.prompts++
+	path := dbus.ObjectPath(fmt.Sprintf("/org/freedesktop/secrets/prompt/%d", f.prompts))
+	if err := f.conn.Export(fakePrompt{f, path, result, create}, path, ssPrompt); err != nil {
+		return noPrompt
+	}
+	return path
 }
 
 // lockAll locks the collection and every item.
@@ -106,35 +146,73 @@ func (s fakeService) SearchItems(attrs map[string]string) ([]dbus.ObjectPath, []
 	return unlocked, locked, nil
 }
 
-func (s fakeService) Unlock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+func (s fakeService) ReadAlias(name string) (dbus.ObjectPath, *dbus.Error) {
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
+	if s.f.noAlias {
+		return "", &dbus.Error{Name: "org.freedesktop.DBus.Error.UnknownMethod"}
+	}
+	if name != "default" {
+		return noPrompt, nil
+	}
+	return s.f.alias, nil
+}
+
+func (s fakeService) CreateCollection(props map[string]dbus.Variant, alias string) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	label, _ := props[ssCollection+".Label"].Value().(string)
+	if alias != "default" || label != "Default keyring" {
+		return "", "", dbus.MakeFailedError(errors.New("a collection needs the default alias and its label"))
+	}
+	s.f.mu.Lock()
+	refuse := s.f.refuseCreate
+	s.f.mu.Unlock()
+	if refuse {
+		return "", "", dbus.MakeFailedError(errors.New("no keyring for this session"))
+	}
+	return noPrompt, s.f.addPrompt(fakeCreatedPath, fakeCreatedPath), nil
+}
+
+func (s fakeService) Unlock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	s.f.mu.Lock()
 	needs := s.f.locked
 	for _, o := range objects {
 		if it := s.f.items[o]; it != nil && it.locked {
 			needs = true
 		}
 	}
+	s.f.mu.Unlock()
 	if !needs {
 		return objects, noPrompt, nil
 	}
-	s.f.prompts++
-	path := dbus.ObjectPath(fmt.Sprintf("/org/freedesktop/secrets/prompt/%d", s.f.prompts))
-	if err := s.f.conn.Export(fakePrompt{s.f, path}, path, ssPrompt); err != nil {
-		return nil, "", dbus.MakeFailedError(err)
-	}
-	return []dbus.ObjectPath{}, path, nil
+	return []dbus.ObjectPath{}, s.f.addPrompt("", ""), nil
 }
 
 type fakePrompt struct {
-	f    *fakeSecrets
-	path dbus.ObjectPath
+	f      *fakeSecrets
+	path   dbus.ObjectPath
+	result any
+	create dbus.ObjectPath // the collection this prompt makes; "" for an unlock
 }
 
 func (p fakePrompt) Prompt(string) *dbus.Error {
 	p.f.mu.Lock()
+	if p.f.silent {
+		p.f.mu.Unlock()
+		p.f.prompted <- struct{}{}
+		return nil
+	}
 	dismiss := p.f.dismiss
-	if !dismiss {
+	switch {
+	case p.create != "":
+		if !dismiss {
+			p.f.alias = p.create
+			p.f.collections++
+			if err := p.f.exportCollection(p.create); err != nil {
+				p.f.mu.Unlock()
+				return dbus.MakeFailedError(err)
+			}
+		}
+	case !dismiss:
 		p.f.locked = false
 		for _, it := range p.f.items {
 			it.locked = false
@@ -142,7 +220,7 @@ func (p fakePrompt) Prompt(string) *dbus.Error {
 	}
 	p.f.mu.Unlock()
 	go func() {
-		_ = p.f.conn.Emit(p.path, ssPrompt+".Completed", dismiss, dbus.MakeVariant(""))
+		_ = p.f.conn.Emit(p.path, ssPrompt+".Completed", dismiss, dbus.MakeVariant(p.result))
 	}()
 	return nil
 }
@@ -166,7 +244,7 @@ func (c fakeCollection) CreateItem(props map[string]dbus.Variant, secret secretS
 		}
 	}
 	c.f.next++
-	path := dbus.ObjectPath(fmt.Sprintf("/org/freedesktop/secrets/collection/login/%d", c.f.next))
+	path := dbus.ObjectPath(fmt.Sprintf("/org/freedesktop/secrets/collection/fake/%d", c.f.next))
 	c.f.items[path] = &fakeItem{attrs: attrs, label: label, value: secret.Value}
 	if err := c.f.conn.Export(fakeItemObject{c.f, path}, path, ssItem); err != nil {
 		return "", "", dbus.MakeFailedError(err)
@@ -314,5 +392,120 @@ func TestOpenPicksAndMigrates(t *testing.T) {
 	st, err = Open(t.Context(), file, log)
 	if _, ok := st.(*File); err != nil || !ok {
 		t.Errorf("FROSTNOTES_SECRETS=file gave %T, %v", st, err)
+	}
+}
+
+// A session with no login keyring names no default collection: the store
+// makes one through the service's prompt, keeps the item in it, and makes
+// no second collection the next time.
+func TestSecretServiceMakesADefaultCollection(t *testing.T) {
+	ss, f := openFake(t)
+	ctx := t.Context()
+	f.mu.Lock()
+	f.alias = noPrompt
+	f.mu.Unlock()
+	if err := ss.Set(ctx, HubToken("one"), "first"); err != nil {
+		t.Fatalf("set with no default collection: %v", err)
+	}
+	if got, err := ss.Get(ctx, HubToken("one")); err != nil || got != "first" {
+		t.Fatalf("get after making the collection = %q, %v", got, err)
+	}
+	if err := ss.Set(ctx, HubToken("two"), "second"); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	collections := f.collections
+	f.mu.Unlock()
+	if collections != 1 {
+		t.Fatalf("CreateCollection ran %d times; want once", collections)
+	}
+}
+
+// The prompt that makes the default collection can be dismissed.
+func TestSecretServiceCreateDismissed(t *testing.T) {
+	ss, f := openFake(t)
+	f.mu.Lock()
+	f.alias = noPrompt
+	f.dismiss = true
+	f.mu.Unlock()
+	if err := ss.Set(t.Context(), HubToken("one"), "first"); !errors.Is(err, ErrDismissed) {
+		t.Fatalf("set with the create prompt dismissed = %v", err)
+	}
+}
+
+// A default alias that names a collection the service does not have, as a
+// session with no login keyring does, ends in the collection the store
+// makes.
+func TestSecretServiceReplacesACollectionThatIsGone(t *testing.T) {
+	ss, f := openFake(t)
+	ctx := t.Context()
+	f.mu.Lock()
+	f.alias = "/org/freedesktop/secrets/collection/login"
+	f.mu.Unlock()
+	if err := ss.Set(ctx, HubToken("one"), "first"); err != nil {
+		t.Fatalf("set through a collection that is gone: %v", err)
+	}
+	if got, err := ss.Get(ctx, HubToken("one")); err != nil || got != "first" {
+		t.Fatalf("get = %q, %v", got, err)
+	}
+}
+
+// A service that cannot make a collection says how to keep tokens instead.
+func TestSecretServiceNoKeyring(t *testing.T) {
+	ss, f := openFake(t)
+	f.mu.Lock()
+	f.alias = noPrompt
+	f.refuseCreate = true
+	f.mu.Unlock()
+	err := ss.Set(t.Context(), HubToken("one"), "first")
+	if !errors.Is(err, ErrNoKeyring) {
+		t.Fatalf("set on a service that cannot make a keyring = %v", err)
+	}
+	if !strings.Contains(err.Error(), "FROSTNOTES_SECRETS=file") {
+		t.Fatalf("the error does not say how to keep tokens in a file: %v", err)
+	}
+}
+
+// A service that leaves the bus while it shows a prompt never completes it:
+// Set ends with ErrUnavailable and does not wait for ever (T269).
+func TestSecretServicePromptEndsWhenTheServiceLeaves(t *testing.T) {
+	ss, f := openFake(t)
+	f.lockAll()
+	f.mu.Lock()
+	f.silent, f.prompted = true, make(chan struct{}, 1)
+	f.mu.Unlock()
+	done := make(chan error, 1)
+	go func() { done <- ss.Set(t.Context(), "k", "v") }()
+	<-f.prompted
+	if _, err := f.conn.ReleaseName(ssName); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Set = %v; want ErrUnavailable", err)
+	}
+}
+
+// The wait for a prompt ends without a panic when godbus closes the signal
+// channel (the connection closed) or the service leaves the bus, and returns
+// the result of the prompt's own Completed signal (T269).
+func TestAwaitCompleted(t *testing.T) {
+	const path = dbus.ObjectPath("/org/freedesktop/secrets/prompt/1")
+	closed := make(chan *dbus.Signal)
+	close(closed)
+	if _, err := awaitCompleted(t.Context(), path, closed); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("a closed channel: %v; want ErrUnavailable", err)
+	}
+	signals := make(chan *dbus.Signal, 4)
+	signals <- &dbus.Signal{Name: busName + ".NameOwnerChanged", Body: []any{"org.example.other", ":1.4", ""}}
+	signals <- &dbus.Signal{Name: busName + ".NameOwnerChanged", Body: []any{ssName, ":1.3", ""}}
+	if _, err := awaitCompleted(t.Context(), path, signals); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("the service left: %v; want ErrUnavailable", err)
+	}
+	made := dbus.ObjectPath("/org/freedesktop/secrets/collection/made")
+	signals <- &dbus.Signal{Path: "/org/freedesktop/secrets/prompt/2", Name: ssPrompt + ".Completed", Body: []any{true, dbus.MakeVariant("")}}
+	signals <- &dbus.Signal{Path: path, Name: ssPrompt + ".Completed", Body: []any{false, dbus.MakeVariant(made)}}
+	got, err := awaitCompleted(t.Context(), path, signals)
+	if err != nil || got.Value() != made {
+		t.Fatalf("Completed: %v, %v; want %s", got, err, made)
 	}
 }
