@@ -55,13 +55,14 @@ Status (2026-10-21):
   fixed, and its record is below. The user accepted the two findings left
   open in writing on 2026-10-21. Phase 6 still waits on XSS on the phone
   and Chrome's PDF viewer (Phase 7).
-- **Phase 7.** The move script is merged (#55) and has not run. Phase 7
-  starts on 2026-10-26 in the morning, with the user's go-ahead
-  (2026-10-25). The script's dry run on 2026-10-25 found 2 problems; the
-  script now handles both (#92), and the dry run passes (see
-  [Phase 7](#phase-7--the-users-hub-in-lodge-and-exit-evidence)). The
-  [run sheet](#run-sheet-for-the-move-2026-10-26) gives the morning's
-  order.
+- **Phase 7.** The hub moved behind lodge on 2026-10-26, 13:07Z to
+  13:08Z, by the [run sheet](#run-sheet-for-the-move-2026-10-26); the
+  [record of the run](#the-move-2026-10-26) says what happened. Both
+  trial devices sync through lodge, and the 7 days of sync through
+  lodge run to 2026-11-02. The user confirmed the evidence on
+  2026-10-26, and on the user's answers no item stays open; [the
+  evidence](#phase-7s-evidence-2026-10-26) also lists what the record
+  does not show. Evidence 2's latency is 1 sample, not a p95.
 
 ## Decisions taken for M4
 
@@ -737,7 +738,7 @@ HUBCTL="runuser -u frostnotes -- env FROSTNOTES_SOCKET=/run/frostnotes-lodge/not
    $LODGECTL token revoke porter-notes
    $LODGECTL token issue porter-notes --app notes \
      --scope 'vault=1;write=Porter/;except=Porter/Routines/;daily' --agent frostporter |
-     runuser -u frostporter -- /usr/local/bin/porterd token set notes
+     runuser -u frostporter -- /opt/lodge/bin/porterd token set notes
    systemctl start frostporter.socket frostporter.service      # porterd reads its token at start
    systemctl start frostread.socket frostread.service
    $LODGECTL token revoke frostread-notes
@@ -822,7 +823,7 @@ still at `$OLD` resume by themselves.
   $LODGECTL token revoke porter-notes
   $LODGECTL token issue porter-notes --app notes \
     --scope 'vault=2;write=Porter/;except=Porter/Routines/;daily' --agent frostporter |
-    runuser -u frostporter -- /usr/local/bin/porterd token set notes
+    runuser -u frostporter -- /opt/lodge/bin/porterd token set notes
   systemctl restart frostporter.socket frostporter.service   # porterd reads its token at start
   systemctl start frostread.socket frostread.service         # readctl needs readd running
   $LODGECTL token revoke frostread-notes
@@ -838,6 +839,72 @@ still at `$OLD` resume by themselves.
   them, until the move runs again.
 - *After step 14:* also restore the old serve on the server:
   `sudo tailscale serve --bg --https=443 http://<the hub's VM>:7880`.
+
+### The move (2026-10-26)
+
+The run sheet ran on 2026-10-26 with the user present (times UTC; all 3
+machines' clocks synchronized):
+
+- **Steps 1 to 3** (13:07Z): the 3 devices at seq 764, `verify` ok
+  (688 files), the dry run with 0 problems; a backup of the laptop's
+  copy of the vault in a tar file.
+- **Step 5:** Porter and Read stopped; lodge's copy at seq 764,
+  0 pending, `verify` ok.
+- **Step 6** (`--apply`): lodge stopped; lodge's copy drained ("in the
+  hub at seq 764"); notes in lodge and the M2 hub stopped; the hub's
+  data moved and the test with lodge's copy set aside; fstab set to
+  `frostnotes`, and its write check passed. The script then stopped
+  without a message: it asked the moved notesd for `hub status` before
+  its private socket answered, and `set -e` ended it. The notesd served
+  the trial hub's ID with its 1 vault. The planner did the rest of the
+  step by hand: checked the vault, recorded `seqs` and `url_set` in the
+  backup's manifest (so its rollback stays correct), ran `notesctl hub
+  url`, and started lodge. The script now asks the moved notesd again
+  until it answers, 60 tries 0.5 s apart
+  (`TestApplyWaitsForTheMovedNotesdToAnswer`).
+- **Step 7:** the scratch note, written by notesd as `frostnotes`,
+  showed on the share through the laptop's CIFS mount, and was deleted
+  (seq 764 to 766).
+- **Step 8:** `porter-notes` and `frostread-notes` were issued again
+  with `vault=1`, and the `vault=2` ones revoked. The run sheet named
+  `/usr/local/bin/porterd`; `porterd` is in `/opt/lodge/bin` (fixed
+  above). The first new `porter-notes` was lost unseen in the failed
+  pipe, so it was revoked and issued again. Porter used the new token
+  from 13:08:25Z.
+- **Step 9:** `notesctl hub relocate` moved the laptop and the device
+  VM. Sync was stopped from 13:07:33Z to 13:08:32Z, about 1 minute. Both
+  then showed lodge's URL, idle at 766/766, 0 pending, 0 conflicted, and
+  `verify` ok (688 files).
+- **Step 10:** device 3, lodge's former device, revoked.
+- **Step 11** (the user): `claude-code-notes` (`vault=1;write`) and
+  `claude-code-notes-read` (`vault=1`) issued at 13:13Z. A Claude Code
+  client opened an MCP session with each through lodge at 13:37:55Z.
+- **Step 12** (the user): Safari on the iPhone opened notes through
+  lodge at 13:17:56Z, created a note, renamed it and typed 1 line. The
+  line reached the hub's log at 13:18:39.579Z and the laptop's notesd
+  at 13:18:39.641Z: 0.06 s from the hub to the desktop. The time of the
+  last keystroke is not recorded on the phone, so the whole budget
+  (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is
+  not measured; this is 1 edit of evidence 2's 20. The user saw the note
+  in the desktop app and in the web app.
+- **Step 14** (the user): the old `tailscale serve` is gone ("No serve
+  config").
+- No rollback was needed. The backup is on the hub's VM under
+  `/var/backups/frostnotes-move-STAMP`; the M2 hub's data stays beside
+  its old place (`.moved-STAMP`), and the overnight test with lodge's
+  copy under `/var/lib/frostnotes.overnight-STAMP`.
+
+### Phase 7's evidence (2026-10-26)
+
+The user's answers, 2026-10-26: "notes work and sync, notes-read token
+works", and "write token exercised, new note created with a haiku body".
+
+| Done when | Status | Evidence |
+|---|---|---|
+| 1. The same UI on a second machine and on the phone | Confirmed by the user ("notes work and sync"), in part recorded | Recorded: the iPhone (Safari) opened notes through lodge, and created and edited a note; the user saw it in the desktop app on the laptop and in the web app; the laptop syncs through lodge. Not recorded: Firefox on a second machine, a search in both browsers, and opening lodge from the phone's home screen. |
+| 2. A phone edit on the desktop within 2 s | 1 sample, no p95 | The phone's save reached the hub's log at 13:18:39.579Z and the laptop's notesd 0.06 s later. The time of the last keystroke is not recorded on the phone, so the whole budget (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is not measured, and 1 edit is not the 20 the p95 asks for. |
+| 3. Claude Code through `/mcp/notes` with a scoped token | Confirmed by the user's checks, in part recorded | `claude-code-notes-read` (`vault=1`) works from Claude Code (the user's confirmation; its tool list is not recorded). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`. On the user's answers, no item of evidence 3 stays open. |
+| 4. No open issue in the reviews | Unchanged | As [Phase 6](#phase-6--security-review-planner-an-independent-agent) records. |
 
 ## Later / ideas
 

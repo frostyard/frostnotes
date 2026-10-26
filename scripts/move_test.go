@@ -53,6 +53,12 @@ systemctl)
 			start) echo active >"$(u "$unit")/active" ;;
 			stop) echo inactive >"$(u "$unit")/active" ;;
 			esac
+			# A unit just started may not answer yet (stub/not-ready-on-start-UNIT).
+			case $cmd in enable | start | restart)
+				if [ -e "$R/stub/not-ready-on-start-$unit" ] && [ "$(cat "$(u "$unit")/active")" = active ]; then
+					cp "$R/stub/not-ready-on-start-$unit" "$R/stub/not-ready-$unit"
+				fi ;;
+			esac
 		done ;;
 	esac ;;
 runuser)
@@ -77,6 +83,10 @@ notesctl)
 	*) unit=notesd.service; data=$R/home/m2hub/.local/share/frostnotes ;;
 	esac
 	[ "$(cat "$(u "$unit")/active" 2>/dev/null)" = active ] || { echo "cannot reach notesd" >&2; exit 1; }
+	# stub/not-ready-UNIT holds how many more calls find the socket not yet
+	# answering, as a notesd just started.
+	nr=$R/stub/not-ready-$unit
+	if [ -s "$nr" ] && [ "$(cat "$nr")" -gt 0 ]; then echo $(($(cat "$nr") - 1)) >"$nr"; echo "dial unix: no such file" >&2; exit 1; fi
 	case "$1 $2" in
 	"hub status") echo "hub $(cat "$data/hubid")"; if [ -e "$R/stub/listen" ]; then cat "$R/stub/listen"; else echo "listening on 127.0.0.1:7880"; fi ;;
 	"hub vaults") cat "$data/hubvaultlist" ;;
@@ -428,6 +438,27 @@ func TestRefusesWhatItCannotReadUnambiguously(t *testing.T) {
 				t.Errorf("a refusal ran %q", c)
 			}
 		})
+	}
+}
+
+func TestApplyWaitsForTheMovedNotesdToAnswer(t *testing.T) {
+	root := stage(t)
+	// Notes behind lodge, once the move starts it, does not answer its
+	// first 3 queries, as on 2026-10-26, when set -e ended the move on the
+	// first one.
+	writeFile(t, root, "stub/not-ready-on-start-frostnotes.service", "3\n")
+	out, code := move(t, root, "--apply", "--url", url)
+	if code != 0 {
+		t.Fatalf("--apply exited %d:\n%s", code, out)
+	}
+	if want := "✓ frostnotes.service serves hub " + trialHub; !strings.Contains(out, want) {
+		t.Errorf("the move lacks %q:\n%s", want, out)
+	}
+	if got := readFile(t, root, "stub/not-ready-frostnotes.service"); got != "0\n" {
+		t.Errorf("the move asked before notes answered, and stopped asking: %q left", got)
+	}
+	if !slices.Contains(changes(t, root), "notesctl hub url "+url+" (as frostnotes.service)") {
+		t.Errorf("the move did not record the URL:\n%s", out)
 	}
 }
 

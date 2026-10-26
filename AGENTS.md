@@ -34,7 +34,10 @@ of lodge's app contract is
   append to today's daily note, for Porter, frostyard's assistant
   ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
   Its evidence through lodge (Phase 4) is still to come.
-- **Phase 7** moves the user's hub behind lodge from 2026-10-26. The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
+- **Phase 7** moved the user's hub behind lodge on 2026-10-26; the 7
+  days of sync through lodge run to 2026-11-02.
+
+The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
 file a step names before writing its frostnotes counterpart.
