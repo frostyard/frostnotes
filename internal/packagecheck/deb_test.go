@@ -2,8 +2,6 @@ package packagecheck
 
 import (
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,22 +29,5 @@ func TestNfpmConfig(t *testing.T) {
 		if strings.Contains(cfg, bad) {
 			t.Errorf("packaging/nfpm.yaml names %q; a sysext payload is /usr only", bad)
 		}
-	}
-}
-
-// deb-check.sh refuses a .deb that is missing and a version argument that
-// is absent; the full check runs on a real package in make deb and CI.
-func TestDebCheckRefusesMissingInput(t *testing.T) {
-	script, err := filepath.Abs("../../packaging/deb-check.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out, err := exec.Command("sh", script).CombinedOutput(); err == nil {
-		t.Errorf("deb-check.sh without arguments passed:\n%s", out)
-	}
-	missing := filepath.Join(t.TempDir(), "x.deb")
-	out, err := exec.Command("sh", script, missing, "frostyard-notesd", "1.2.3").CombinedOutput()
-	if err == nil || !strings.Contains(string(out), "is missing") {
-		t.Errorf("deb-check.sh on a missing file: err=%v\n%s", err, out)
 	}
 }

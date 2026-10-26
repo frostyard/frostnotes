@@ -179,8 +179,14 @@ deb: ## Build dist/frostyard-notesd_<DEB_VERSION>_amd64.deb with nFPM, after the
 	DEB_VERSION='$(DEB_VERSION)' nfpm package -p deb -f packaging/nfpm.yaml -t dist/
 	$(MAKE) --no-print-directory deb-check DEB_VERSION='$(DEB_VERSION)'
 
-deb-check: ## Check the .deb's control fields, paths, owners, modes and payload
-	packaging/deb-check.sh '$(DEB_FILE)' '$(DEB_PKG)' '$(DEB_VERSION)'
+deb-check: ## Check the .deb: exact member names, /usr only, root ownership, no writable entries, the payload
+	packaging/deb-check.py '$(DEB_FILE)' '$(DEB_PKG)' '$(DEB_VERSION)' \
+		--exec /usr/bin/notesd --exec /usr/bin/notesctl \
+		--file /usr/lib/systemd/system/frostnotes.service \
+		--file /usr/lib/systemd/system/frostnotes-lodge.socket \
+		--file /usr/lib/sysusers.d/frostnotes.conf \
+		--file /usr/share/lodge/apps/notes/web/index.html \
+		--manifest /usr/share/lodge/apps/notes/app.json
 
 svu-version-check:
 	@test -n "$(SVU_VERSION)" || { echo "mise.toml pins no svu"; exit 1; }
@@ -204,10 +210,12 @@ bump: ## Tag the next version with svu from a clean main equal to origin/main, t
 	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "HEAD is not origin/main: pull or push first"; exit 1; }
 	$(MAKE) check
 	@test -z "$$(git status --porcelain)" || { echo "make check changed the tree: commit that first"; exit 1; }
-	@version=$$($(SVU) next); \
-		git tag -a "$$version" -m "Version $$version"; \
-		echo "Tagged $$version; pushing it to origin..."; \
-		git push origin "$$version"
+	@set -eu; \
+	version=$$($(SVU) next); \
+	printf '%s\n' "$$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "svu next gave '$$version', not vX.Y.Z"; exit 1; }; \
+	git tag -a "$$version" -m "Version $$version"; \
+	echo "Tagged $$version; pushing it to origin..."; \
+	git push origin "refs/tags/$$version"
 
 app-build: ## Build the release app binary into build/frostnotes-app (nsl)
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm tauri build && mkdir -p ../build && cp "$$CARGO_TARGET_DIR/release/frostnotes" ../build/frostnotes-app'
