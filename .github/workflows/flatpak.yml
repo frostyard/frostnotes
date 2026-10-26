@@ -1,0 +1,64 @@
+# Builds the Flatpak, with its tests, on every pull request and push to main
+# (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
+# as igloo's workflow does. The sources job checks that the offline sources
+# match the lockfiles. Publishing the image to GHCR comes later.
+#
+# Every action is pinned to a commit SHA (core ADR-0021); Dependabot bumps the
+# SHA and the version comment together.
+name: Flatpak
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sources:
+    name: Flatpak sources (make flatpak-sources)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Regenerate the offline sources
+        run: make flatpak-sources
+      - name: The committed sources match the lockfiles
+        run: git diff --exit-code -- packaging/flatpak
+
+  flatpak:
+    name: Flatpak (build and test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # flatpak-builder sandboxes builds with bubblewrap, which needs a
+    # privileged container. The image is pinned by digest.
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
+        with:
+          manifest-path: packaging/flatpak/org.frostyard.Frostnotes.json
+          bundle: frostnotes.flatpak
+          artifact-name: frostnotes-flatpak
+          run-tests: true
+          # The runtime and the SDK extensions come from the cache; the app
+          # always rebuilds, and a change of the manifest or of a sources
+          # file starts the cache afresh.
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/org.frostyard.Frostnotes.json', 'packaging/flatpak/cargo-sources.json', 'packaging/flatpak/node-sources.json', 'packaging/flatpak/go-sources.json') }}
