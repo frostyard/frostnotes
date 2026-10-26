@@ -39,6 +39,9 @@ func (s *Syncer) pair(ctx context.Context, rawURL, name string) (*api.Pairing, e
 	if err != nil {
 		return nil, err
 	}
+	if err := s.probeSecrets(ctx); err != nil {
+		return nil, api.Unavailable("this device cannot keep a hub token: %v", err)
+	}
 	if name == "" {
 		name = s.cfg.Device
 	}
@@ -120,10 +123,10 @@ func (s *Syncer) paired(ctx context.Context, id string) (*api.PairResult, error)
 	}
 	s.dropPairing(id)
 	if err := s.sameHub(ctx, got.Hub, p.url); err != nil {
-		return nil, err
+		return nil, s.withdrawn(ctx, u, got.Token, err)
 	}
 	if err := s.cfg.Secrets.Set(ctx, secrets.HubToken(got.Hub), got.Token); err != nil {
-		return nil, fmt.Errorf("keep the device token: %w", err)
+		return nil, s.withdrawn(ctx, u, got.Token, fmt.Errorf("keep the device token: %w", err))
 	}
 	var row store.SyncHub
 	if err := s.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
@@ -131,11 +134,62 @@ func (s *Syncer) paired(ctx context.Context, id string) (*api.PairResult, error)
 		row, err = tx.PutSyncHub(ctx, store.SyncHub{HubID: got.Hub, URL: p.url, DeviceID: got.Device})
 		return err
 	}); err != nil {
-		return nil, err
+		if derr := s.cfg.Secrets.Delete(ctx, secrets.HubToken(got.Hub)); derr != nil {
+			s.cfg.Log.Warn("delete a hub token a pairing cannot keep", "hub", got.Hub, "err", derr)
+		}
+		return nil, s.withdrawn(ctx, u, got.Token, err)
 	}
 	s.kickHub(row.ID)
 	return &api.PairResult{State: api.PairingStateApproved, Hub: got.Hub}, nil
 }
+
+// probeSecrets checks that the secret store can keep a token before the hub
+// hears of this device: the store's prompt comes first, and a device that
+// cannot keep a token never asks to pair.
+func (s *Syncer) probeSecrets(ctx context.Context) error {
+	if err := s.cfg.Secrets.Set(ctx, secrets.ProbeKey, "probe"); err != nil {
+		return err
+	}
+	return s.cfg.Secrets.Delete(ctx, secrets.ProbeKey)
+}
+
+// withdrawn has the hub forget the device it just handed a token to, and
+// returns err saying what became of the device: the hub's list of devices no
+// longer holds it, or the hub still lists it and its owner must revoke it.
+func (s *Syncer) withdrawn(ctx context.Context, base *url.URL, token string, err error) error {
+	if werr := s.withdraw(ctx, base, token); werr != nil {
+		s.cfg.Log.Warn("withdraw a pairing the device cannot keep", "hub", base, "err", werr)
+		return fmt.Errorf("%w; the hub may still list this device: revoke it on the hub (hub.revoke)", err)
+	}
+	return fmt.Errorf("%w; the hub forgot the device's pairing", err)
+}
+
+// withdraw asks the hub to forget the device its token names. It is best
+// effort, and keeps its own deadline, so that a hub that does not answer
+// does not hold the call.
+func (s *Syncer) withdraw(ctx context.Context, base *url.URL, token string) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), withdrawTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, base.JoinPath("sync", "device").String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Origin", hub.DeviceOrigin)
+	resp, err := s.cfg.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		return hubError(resp)
+	}
+	return nil
+}
+
+// withdrawTimeout bounds a withdrawal: the pairing's answer is dropped
+// anyway when it fails.
+const withdrawTimeout = 10 * time.Second
 
 // sameHub refuses a pairing whose hub claims the ID of a hub this device
 // syncs vaults with at another URL: anyone can learn a hub's ID, so the

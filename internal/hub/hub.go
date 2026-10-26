@@ -119,6 +119,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("POST /sync/pair", h.limited(h.startPairing))
 	mux.HandleFunc("GET /sync/pair/{pairing}", h.collectPairing)
 	mux.HandleFunc("POST /sync/hub", h.limited(h.relocation))
+	mux.HandleFunc("DELETE /sync/device", h.withdrawDevice)
 	mux.Handle("GET /sync", h.authenticated(h.syncSocket()))
 	mux.Handle("/sync/blobs/{hash}", h.authenticated(blobxfer.Handler(h.cfg.Blobs, h.cfg.MaxBlob, h.cfg.DB.HasContent, h.uploaded)))
 	return refuseOrigins(mux)

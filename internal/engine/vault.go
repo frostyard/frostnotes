@@ -115,6 +115,7 @@ func (v vaults) Reindex(ctx context.Context, p *api.VaultReindexParams) (*api.Sc
 // own, or for one to create, its parent's, which must be a directory,
 // while the directory itself must not exist yet.
 func vaultPath(p string, create bool) (string, error) {
+	p = sandboxHome(p, os.Lstat)
 	if !create {
 		path, err := filepath.EvalSymlinks(p)
 		if err != nil {
@@ -142,6 +143,22 @@ func vaultPath(p string, create bool) (string, error) {
 		return "", api.Conflict("%s already exists", path)
 	}
 	return path, nil
+}
+
+// sandboxHome maps a path under /home to /var/home when the sandbox has
+// no /home but does have /var/home: an immutable system such as Snow keeps
+// the home directories there, and a Flatpak's sandbox has no /home.
+func sandboxHome(p string, lstat func(string) (fs.FileInfo, error)) string {
+	if p != "/home" && !strings.HasPrefix(p, "/home/") {
+		return p
+	}
+	if _, err := lstat("/home"); !errors.Is(err, fs.ErrNotExist) {
+		return p
+	}
+	if fi, err := lstat("/var/home"); err != nil || !fi.IsDir() {
+		return p
+	}
+	return "/var" + p
 }
 
 // within reports whether path is dir or lies inside it.
