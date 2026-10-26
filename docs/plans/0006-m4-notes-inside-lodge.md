@@ -60,8 +60,9 @@ Status (2026-10-21):
   [record of the run](#the-move-2026-10-26) says what happened. Both
   trial devices sync through lodge, and the 7 days of sync through
   lodge run to 2026-11-02. The user confirmed the evidence on
-  2026-10-26 ([the evidence](#phase-7s-evidence-2026-10-26)), and no
-  item stays open. Evidence 2's latency is 1 sample, not a p95.
+  2026-10-26, and on the user's answers no item stays open; [the
+  evidence](#phase-7s-evidence-2026-10-26) also lists what the record
+  does not show. Evidence 2's latency is 1 sample, not a p95.
 
 ## Decisions taken for M4
 
@@ -876,9 +877,8 @@ machines' clocks synchronized):
   `verify` ok (688 files).
 - **Step 10:** device 3, lodge's former device, revoked.
 - **Step 11** (the user): `claude-code-notes` (`vault=1;write`) and
-  `claude-code-notes-read` (`vault=1`) issued at 13:13Z. Claude Code on
-  the user's second machine opened an MCP session with each through
-  lodge at 13:37:55Z.
+  `claude-code-notes-read` (`vault=1`) issued at 13:13Z. A Claude Code
+  client opened an MCP session with each through lodge at 13:37:55Z.
 - **Step 12** (the user): Safari on the iPhone opened notes through
   lodge at 13:17:56Z, created a note, renamed it and typed 1 line. The
   line reached the hub's log at 13:18:39.579Z and the laptop's notesd
@@ -901,9 +901,9 @@ works", and "write token exercised, new note created with a haiku body".
 
 | Done when | Status | Evidence |
 |---|---|---|
-| 1. The same UI on a second machine and on the phone | Done (the user's confirmation) | The iPhone (Safari) opened notes through lodge, created and edited a note; the desktop app on the laptop and the web app showed it; the desktop app syncs through lodge. |
+| 1. The same UI on a second machine and on the phone | Confirmed by the user ("notes work and sync"), in part recorded | Recorded: the iPhone (Safari) opened notes through lodge, and created and edited a note; the user saw it in the desktop app on the laptop and in the web app; the laptop syncs through lodge. Not recorded: Firefox on a second machine, a search in both browsers, and opening lodge from the phone's home screen. |
 | 2. A phone edit on the desktop within 2 s | 1 sample, no p95 | The phone's save reached the hub's log at 13:18:39.579Z and the laptop's notesd 0.06 s later. The time of the last keystroke is not recorded on the phone, so the whole budget (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is not measured, and 1 edit is not the 20 the p95 asks for. |
-| 3. Claude Code through `/mcp/notes` with a scoped token | Done (the user's check) | `claude-code-notes-read` (`vault=1`) works from Claude Code on the user's second machine (the user's confirmation). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`; the user counts evidence 3 as done. |
+| 3. Claude Code through `/mcp/notes` with a scoped token | Confirmed by the user's checks, in part recorded | `claude-code-notes-read` (`vault=1`) works from Claude Code (the user's confirmation; its tool list is not recorded). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`. On the user's answers, no item of evidence 3 stays open. |
 | 4. No open issue in the reviews | Unchanged | As [Phase 6](#phase-6--security-review-planner-an-independent-agent) records. |
 
 ## Later / ideas
