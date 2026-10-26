@@ -63,8 +63,9 @@ notesd and notesctl are in `/opt/lodge/bin`, which the unit's
    staged sysusers.d file adds only `g lodge -`, which the host's group
    `lodge` already satisfies.
 4. Run `sudo systemctl restart frostnotes.service` and
-   `sudo lodgectl reload`, then check that `lodgectl apps` shows notes
-   up at the new version.
+   `sudo /opt/lodge/bin/lodgectl reload`, then check that
+   `sudo /opt/lodge/bin/lodgectl apps` shows notes up at the new version.
+   On that host `lodgectl` is in `/opt/lodge/bin`, not on root's `PATH`.
 
 ```json
 { "contract": 1, "id": "notes", "name": "Notes", "icon": "icon.svg",
