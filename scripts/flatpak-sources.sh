@@ -9,15 +9,18 @@
 # Run it after any change to those 3 lockfiles; CI regenerates the files and
 # fails when they differ. It needs the network, git, Go and Python 3 on the
 # host, and no Node, pnpm or Rust. The generators are flatpak-builder-tools at
-# the commit below, run with a virtual environment in build/ that holds their
-# dependencies.
+# the commit below plus a patch (packaging/flatpak/patches), run with a
+# virtual environment in build/ that holds their hashed dependencies
+# (packaging/flatpak/generator-requirements.txt).
 set -eu
 
 # flatpak-builder-tools, pinned to a commit (frostyard/core ADR-0023).
 TOOLS_COMMIT=9d86d336a39b9af38b86f114b6ce5820fe260f91
 TOOLS_URL=https://github.com/flatpak/flatpak-builder-tools.git
-# The generators' dependencies, pinned.
-PIP_PACKAGES="aiohttp==3.14.5 PyYAML==6.0.3 tomlkit==0.15.2"
+# A patch to the node generator: the `#path:` fix of git-hosted packages.
+PATCH=packaging/flatpak/patches/pnpm-git-path.patch
+# The generators' dependencies: exact versions with hashes.
+REQUIREMENTS=packaging/flatpak/generator-requirements.txt
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -37,11 +40,15 @@ if [ "$(git -C "$work/tools" rev-parse HEAD)" != "$TOOLS_COMMIT" ]; then
     exit 1
 fi
 
+# The generator writes a pnpm store of the files of a whole git-hosted
+# tarball, where pnpm adds only the subdirectory a `#path:` names
+# (the lodge packages). The patch fixes that; the checkout above is clean.
+git -C "$work/tools" apply "$root/$PATCH"
+
 if [ ! -x "$work/venv/bin/python" ]; then
     python3 -m venv "$work/venv"
 fi
-# shellcheck disable=SC2086 # PIP_PACKAGES is a list
-"$work/venv/bin/python" -m pip install --quiet --disable-pip-version-check $PIP_PACKAGES
+"$work/venv/bin/python" -m pip install --quiet --disable-pip-version-check --require-hashes -r "$REQUIREMENTS"
 
 # The generators cache what they fetch; keep that out of the user's home.
 export XDG_CACHE_HOME="$root/$work/cache"

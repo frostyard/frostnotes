@@ -1,0 +1,50 @@
+diff --git a/node/flatpak_node_generator/populate_pnpm_store.py b/node/flatpak_node_generator/populate_pnpm_store.py
+index df408d2..dbb4727 100644
+--- a/node/flatpak_node_generator/populate_pnpm_store.py
++++ b/node/flatpak_node_generator/populate_pnpm_store.py
+@@ -271,16 +271,34 @@ def _process_tarball(
+     pkg_manifest: dict[str, object] = {}
+     rel_names: set[str] = set()
+ 
++    # A git-hosted dependency can name a subdirectory of its repository
++    # (`...#path:client`). pnpm adds only that subdirectory to the store, so
++    # the index holds its files at the package root.
++    subdir_prefix = ''
++    if tarball_url and '#path:' in tarball_url:
++        subdir = tarball_url.split('#path:', 1)[1].strip('/')
++        if subdir:
++            subdir_prefix = subdir + '/'
++
+     with tarfile.open(tarball_path, 'r:gz') as tf:
+         for member in tf.getmembers():
+             if not member.isfile():
+                 continue
++
++            rel_name = member.name
++            if '/' in rel_name:
++                rel_name = rel_name.split('/', 1)[1]
++            if subdir_prefix:
++                if not rel_name.startswith(subdir_prefix):
++                    continue
++                rel_name = rel_name[len(subdir_prefix) :]
++
+             fobj = tf.extractfile(member)
+             if fobj is None:
+                 continue
+             data = fobj.read()
+ 
+-            if member.name.endswith('package.json') and member.name.count('/') <= 1:
++            if rel_name == 'package.json':
+                 with contextlib.suppress(ValueError, TypeError, UnicodeDecodeError):
+                     pkg_data = json.loads(data.decode('utf-8'))
+                     if isinstance(pkg_data, dict):
+@@ -322,9 +340,6 @@ def _process_tarball(
+                 if is_exec:
+                     os.chmod(cas_path, 0o755)
+ 
+-            rel_name = member.name
+-            if '/' in rel_name:
+-                rel_name = rel_name.split('/', 1)[1]
+             rel_names.add(rel_name)
+ 
+             b64 = base64.b64encode(digest).decode()
