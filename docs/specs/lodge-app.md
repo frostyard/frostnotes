@@ -48,6 +48,33 @@ under `DESTDIR` in that layout, and `make lodge-package` runs it into
 `internal/packagecheck` tests the staged tree. `make lodge-app` still lays
 out the manifest and the web build alone in `build/lodge/apps/notes`.
 
+### Release
+
+`make bump` is the only way to tag a release: on a clean `main` equal to
+`origin/main`, it runs `make check`, then tags the version that `svu`
+computes from the conventional commits and pushes the tag. The tag's
+[release workflow](https://github.com/frostyard/frostnotes/blob/main/.github/workflows/release.yml)
+builds `frostyard-notesd_X.Y.Z_amd64.deb` (`make deb`, which stages the
+`/usr` tree with `packaging/lodge/stage.sh`, packs it with nFPM from
+`packaging/nfpm.yaml` and runs `packaging/deb-check.py`), attests it and
+attaches it to the GitHub release.
+
+`deb-check.py` (`make deb-check`) reads the archive's exact member names. It
+fails unless the control fields are right (`Depends: systemd`, no maintainer
+scripts), and the package holds only root-owned, non-writable directories and regular
+files (no links) under `/usr`, with the binaries (mode 0755), the units, the
+sysusers.d entry, the web build's `index.html`, and an `app.json` whose
+`version` is the package's. `internal/packagecheck` feeds it bad packages,
+and each must fail. Verify a download with:
+
+```sh
+gh attestation verify frostyard-notesd_X.Y.Z_amd64.deb --repo frostyard/frostnotes
+```
+
+A pull request's CI builds a snapshot, `frostyard-notesd_0.0.0-<commit>-snapshot_amd64.deb`,
+with the same target. Snosi picks the release's .deb up later
+([core plan 0010](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md), Phase 3).
+
 A hand-installed host copies from the staged root. On lodge's host,
 notesd and notesctl are in `/opt/lodge/bin`, which the unit's
 `ExecStart=` names:

@@ -1,4 +1,4 @@
-.PHONY: help build fmt gen gen-check lint lint-version-check test verify check ci vulncheck clean
+.PHONY: help build fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -6,6 +6,9 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
 # golangci-lint's release, read from mise.toml (frostyard/core ADR-0043).
 GOLANGCI_LINT_VERSION := $(strip $(shell sed -n 's/^golangci-lint = "\(.*\)"/\1/p' mise.toml))
+# svu's release, read from the same file; make bump tags releases with it.
+SVU_VERSION := $(strip $(shell sed -n 's/^svu = "\(.*\)"/\1/p' mise.toml))
+SVU ?= svu
 # govulncheck's release; the Go checksum database verifies the module.
 GOVULNCHECK_VERSION := v1.9.0
 # Tracked or new Go files outside docs/tasks (given files are checked when
@@ -154,6 +157,65 @@ lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version
 LODGE_DESTDIR ?= build/lodge-root
 lodge-package: ## Stage notes' /usr tree into LODGE_DESTDIR (default build/lodge-root); run build and web-build first
 	packaging/lodge/stage.sh '$(LODGE_DESTDIR)' '$(VERSION)' build
+
+# The release .deb (frostyard/core ADR-0011, ADR-0012, ADR-0058). Snapshot
+# builds are versioned 0.0.0-COMMIT-snapshot; the release workflow passes
+# DEB_VERSION=X.Y.Z, the tag without its v. The tree is staged from scratch
+# by packaging/lodge/stage.sh, so app.json carries DEB_VERSION. Needs
+# make web-build first (nsl).
+DEB_VERSION ?= 0.0.0-$(COMMIT)-snapshot
+DEB_PKG := frostyard-notesd
+DEB_FILE := dist/$(DEB_PKG)_$(DEB_VERSION)_amd64.deb
+DEB_LDFLAGS := -s -w -X main.version=$(DEB_VERSION) -X main.commit=$(COMMIT)
+
+deb: ## Build dist/frostyard-notesd_<DEB_VERSION>_amd64.deb with nFPM, after the web build
+	@test -f build/web/index.html -a -f build/web/icon.svg || { echo "build/web is missing: run make web-build first (nsl)"; exit 1; }
+	rm -rf build/deb
+	mkdir -p build/deb/bin dist
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '$(DEB_LDFLAGS)' -o build/deb/bin/ ./cmd/notesd ./cmd/notesctl
+	cp -R build/web build/deb/bin/web
+	packaging/lodge/stage.sh build/deb/root '$(DEB_VERSION)' build/deb/bin
+	chmod -R u=rwX,go=rX build/deb/root
+	DEB_VERSION='$(DEB_VERSION)' nfpm package -p deb -f packaging/nfpm.yaml -t dist/
+	$(MAKE) --no-print-directory deb-check DEB_VERSION='$(DEB_VERSION)'
+
+deb-check: ## Check the .deb: exact member names, /usr only, root ownership, no writable entries, the payload
+	packaging/deb-check.py '$(DEB_FILE)' '$(DEB_PKG)' '$(DEB_VERSION)' \
+		--exec /usr/bin/notesd --exec /usr/bin/notesctl \
+		--file /usr/lib/systemd/system/frostnotes.service \
+		--file /usr/lib/systemd/system/frostnotes-lodge.socket \
+		--file /usr/lib/sysusers.d/frostnotes.conf \
+		--file /usr/share/lodge/apps/notes/web/index.html \
+		--manifest /usr/share/lodge/apps/notes/app.json
+
+svu-version-check:
+	@test -n "$(SVU_VERSION)" || { echo "mise.toml pins no svu"; exit 1; }
+	@if ! command -v "$(SVU)" >/dev/null 2>&1; then \
+		echo "svu $(SVU_VERSION) is required for make bump (not installed; run: mise install)"; \
+		exit 1; \
+	fi; \
+	installed="$$($(SVU) --version 2>&1 | sed -n 's/^GitVersion:[[:space:]]*//p' | head -1)"; \
+	if [ "$$installed" != "$(SVU_VERSION)" ]; then \
+		echo "expected svu $(SVU_VERSION), found $${installed:-unknown} (run: mise install)"; \
+		exit 1; \
+	fi
+
+# The only sanctioned tagging path (frostyard/core ADR-0012): the tag starts
+# the release workflow.
+bump: ## Tag the next version with svu from a clean main equal to origin/main, then push the tag
+	@$(MAKE) --no-print-directory svu-version-check
+	@test "$$(git rev-parse --abbrev-ref HEAD)" = main || { echo "make bump runs on main"; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "Working directory is not clean: commit or stash first"; exit 1; }
+	git fetch origin main
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "HEAD is not origin/main: pull or push first"; exit 1; }
+	$(MAKE) check
+	@test -z "$$(git status --porcelain)" || { echo "make check changed the tree: commit that first"; exit 1; }
+	@set -eu; \
+	version=$$($(SVU) next); \
+	printf '%s\n' "$$version" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "svu next gave '$$version', not vX.Y.Z"; exit 1; }; \
+	git tag -a "$$version" -m "Version $$version"; \
+	echo "Tagged $$version; pushing it to origin..."; \
+	git push origin "refs/tags/$$version"
 
 app-build: ## Build the release app binary into build/frostnotes-app (nsl)
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm tauri build && mkdir -p ../build && cp "$$CARGO_TARGET_DIR/release/frostnotes" ../build/frostnotes-app'

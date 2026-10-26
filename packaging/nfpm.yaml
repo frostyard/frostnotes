@@ -1,0 +1,24 @@
+# nFPM config for frostyard-notesd (frostyard/core ADR-0011, ADR-0058). make
+# deb stages the tree and runs nfpm; the Version comes from DEB_VERSION.
+name: frostyard-notesd
+arch: amd64
+platform: linux
+version: ${DEB_VERSION}
+version_schema: none
+section: net
+priority: optional
+maintainer: Brian Ketelsen <bketelsen@gmail.com>
+description: |-
+  Frostnotes' notes daemon, notesd, and its CLI, notesctl, as a lodge app.
+  notesd owns the vaults and runs behind lodge on a Unix socket; the package
+  carries the app's manifest and web build, its units and its sysusers.d entry.
+  Built for Snosi's sysext notesd (ADR-0058).
+vendor: frostyard
+homepage: https://github.com/frostyard/frostnotes
+license: MIT
+depends:
+  - systemd
+contents:
+  - src: ./build/deb/root/usr
+    dst: /usr
+    type: tree

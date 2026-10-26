@@ -94,7 +94,10 @@ file a step names before writing its frostnotes counterpart.
   `packaging/lodge/stage.sh` (`make lodge-package`), which stages them with
   `notesd` and `notesctl` in the `/usr` layout
   ([core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md));
-  `internal/packagecheck` tests that tree.
+  `internal/packagecheck` tests that tree. `make deb` packs it into
+  `frostyard-notesd`'s .deb with nFPM (`packaging/nfpm.yaml`, checked by
+  `packaging/deb-check.py`, which reads the archive's exact member names); `make bump` tags a release, and
+  `.github/workflows/release.yml` builds, attests and publishes it.
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).
   `internal/evidence`: real notesd processes for the milestones' exit
