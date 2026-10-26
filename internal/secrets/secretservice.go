@@ -25,13 +25,16 @@ const (
 	ssPrompt          = "org.freedesktop.Secret.Prompt"
 	defaultCollection = dbus.ObjectPath("/org/freedesktop/secrets/aliases/default")
 	noPrompt          = dbus.ObjectPath("/")
+	busName           = "org.freedesktop.DBus"
+	busPath           = dbus.ObjectPath("/org/freedesktop/DBus")
 )
 
 // ErrUnavailable means no Secret Service answered on the bus.
 var ErrUnavailable = errors.New("secrets: no Secret Service")
 
-// ErrDismissed means the user dismissed the service's unlock prompt.
-var ErrDismissed = errors.New("secrets: the unlock prompt was dismissed")
+// ErrDismissed means the user dismissed one of the service's prompts: to
+// unlock a collection, or to make the default one.
+var ErrDismissed = errors.New("secrets: the Secret Service's prompt was dismissed")
 
 // ErrNoKeyring means the Secret Service has no default collection and
 // cannot make one, so no token can be kept in it.
@@ -255,22 +258,49 @@ func (s *SecretService) unlock(ctx context.Context, objects []dbus.ObjectPath) e
 func (s *SecretService) prompt(ctx context.Context, path dbus.ObjectPath) (dbus.Variant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The prompt's Completed signal, and the service leaving the bus: a
+	// service that crashes while it shows a prompt never completes it.
 	match := []dbus.MatchOption{dbus.WithMatchObjectPath(path), dbus.WithMatchInterface(ssPrompt), dbus.WithMatchMember("Completed")}
-	if err := s.conn.AddMatchSignalContext(ctx, match...); err != nil {
-		return dbus.Variant{}, fmt.Errorf("prompt: %w", err)
+	gone := []dbus.MatchOption{dbus.WithMatchSender(busName), dbus.WithMatchObjectPath(busPath),
+		dbus.WithMatchInterface(busName), dbus.WithMatchMember("NameOwnerChanged"), dbus.WithMatchArg(0, ssName)}
+	for _, m := range [][]dbus.MatchOption{match, gone} {
+		if err := s.conn.AddMatchSignalContext(ctx, m...); err != nil {
+			return dbus.Variant{}, fmt.Errorf("prompt: %w", err)
+		}
+		defer func() { _ = s.conn.RemoveMatchSignalContext(context.WithoutCancel(ctx), m...) }()
 	}
-	defer func() { _ = s.conn.RemoveMatchSignalContext(context.WithoutCancel(ctx), match...) }()
 	signals := make(chan *dbus.Signal, 4)
 	s.conn.Signal(signals)
 	defer s.conn.RemoveSignal(signals)
+	// A service that left before the match took effect sends no signal.
+	var owned bool
+	if err := s.conn.BusObject().CallWithContext(ctx, busName+".NameHasOwner", 0, ssName).Store(&owned); err == nil && !owned {
+		return dbus.Variant{}, fmt.Errorf("prompt: %w: the service left the bus", ErrUnavailable)
+	}
 	if err := s.conn.Object(ssName, path).CallWithContext(ctx, ssPrompt+".Prompt", 0, "").Err; err != nil {
 		return dbus.Variant{}, fmt.Errorf("prompt: %w", err)
 	}
+	return awaitCompleted(ctx, path, signals)
+}
+
+// awaitCompleted waits for prompt path's Completed signal on signals and
+// returns its result. The service leaving the bus, or the channel closing
+// (godbus closes it with the connection), ends the wait with ErrUnavailable.
+func awaitCompleted(ctx context.Context, path dbus.ObjectPath, signals <-chan *dbus.Signal) (dbus.Variant, error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return dbus.Variant{}, ctx.Err()
-		case sig := <-signals:
+		case sig, ok := <-signals:
+			if !ok {
+				return dbus.Variant{}, fmt.Errorf("prompt: %w: the session bus closed", ErrUnavailable)
+			}
+			if sig.Name == busName+".NameOwnerChanged" {
+				if left(sig) {
+					return dbus.Variant{}, fmt.Errorf("prompt: %w: the service left the bus", ErrUnavailable)
+				}
+				continue
+			}
 			if sig.Path != path || sig.Name != ssPrompt+".Completed" || len(sig.Body) < 1 {
 				continue
 			}
@@ -284,4 +314,15 @@ func (s *SecretService) prompt(ctx context.Context, path dbus.ObjectPath) (dbus.
 			return result, nil
 		}
 	}
+}
+
+// left reports whether sig, a NameOwnerChanged signal, says that the Secret
+// Service's name lost its owner.
+func left(sig *dbus.Signal) bool {
+	if len(sig.Body) != 3 {
+		return false
+	}
+	name, _ := sig.Body[0].(string)
+	owner, _ := sig.Body[2].(string)
+	return name == ssName && owner == ""
 }

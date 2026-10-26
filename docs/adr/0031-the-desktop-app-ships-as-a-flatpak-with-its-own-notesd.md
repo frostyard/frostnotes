@@ -184,9 +184,18 @@ answered:
   the portal answers, at most 10 minutes. The portal asks the user only
   once; after that it answers at once.
 - A first hub join in a session without a default keyring shows the
-  keyring's prompt for a new password. A keyring made so is not unlocked
-  by an autologin, so its unlock prompt comes again at each login, when
-  notesd first reads the token.
+  keyring's prompt for a new password, and makes a "Default keyring"
+  with its own password. PAM unlocks only the `login` keyring at a
+  password login, and an autologin unlocks none, so that keyring is
+  locked at each login: notesd shows its unlock prompt when it first
+  reads the token, and sync waits until the user answers. GNOME's prompt
+  can come without keyboard focus at the start of a session. The user
+  can tick "Automatically unlock this keyring whenever I'm logged in" in
+  the prompt, or give the keyring the login password.
+- A Secret Service that leaves the bus while it shows a prompt (a crash)
+  never completes it. notesd ends the wait with "no Secret Service" when
+  the service's name loses its owner or the bus connection closes, and
+  the sync loop tries again later; it does not wait for ever.
 - `--filesystem=home` gives the app and its notesd the whole home
   directory. That is wider than a vault, and it is the price of a watched,
   stable vault path.
@@ -239,7 +248,29 @@ the fixes:
 - A vault path under `/home` failed on Snow. Fixed: notesd reads it under
   `/var/home`.
 
-Items 3 and 4 are to be run again on the same VM with the fixes.
+The same VM ran the fixes again on 2026-10-26, with the bundle from CI run
+40403340356 (PR #98, head `961ae97`). All passed:
+
+- A: in a session with only the `session` collection (`ReadAlias
+  default` gave `/`), `hub join` asked for a new "Default keyring".
+  Cancelled, the join failed before the hub had a pending pairing.
+  With the keyring then locked and its unlock prompt cancelled after the
+  approval, the join failed and the hub deleted the device. Then a join
+  passed; the keyring held only the token, not the probe, and sync was
+  idle.
+- B: after the window closed, `flatpak ps` showed only notesd's instance
+  (and the test hub's); notesd ran on under `flatpak-portal`, with no
+  `flatpak-spawn` left.
+- Item 3: a write on the hub and a plain file write on the device synced
+  both ways in less than 8 s, with the window closed.
+- Item 4: logout stopped notesd; at a password login gnome-session started
+  it, and it wrote to `notesd.log` (C). The new Default keyring was locked,
+  so sync waited for its unlock prompt (above, Consequences). After the
+  unlock, sync went on both ways.
+
+The run also found that notesd panicked when the Secret Service crashed
+during a prompt: godbus closes the signal channel with the connection,
+and the wait read a nil signal. The wait now ends as Consequences says.
 
 ## Alternatives considered
 

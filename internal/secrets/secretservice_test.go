@@ -46,6 +46,10 @@ type fakeSecrets struct {
 	refuseCreate bool
 	// collections counts the collections CreateCollection made.
 	collections int
+	// silent makes a prompt never complete, as a service that crashes while
+	// it shows one; prompted then gets a value for each prompt shown.
+	silent   bool
+	prompted chan struct{}
 }
 
 type fakeItem struct {
@@ -192,6 +196,11 @@ type fakePrompt struct {
 
 func (p fakePrompt) Prompt(string) *dbus.Error {
 	p.f.mu.Lock()
+	if p.f.silent {
+		p.f.mu.Unlock()
+		p.f.prompted <- struct{}{}
+		return nil
+	}
 	dismiss := p.f.dismiss
 	switch {
 	case p.create != "":
@@ -454,5 +463,49 @@ func TestSecretServiceNoKeyring(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "FROSTNOTES_SECRETS=file") {
 		t.Fatalf("the error does not say how to keep tokens in a file: %v", err)
+	}
+}
+
+// A service that leaves the bus while it shows a prompt never completes it:
+// Set ends with ErrUnavailable and does not wait for ever (T269).
+func TestSecretServicePromptEndsWhenTheServiceLeaves(t *testing.T) {
+	ss, f := openFake(t)
+	f.lockAll()
+	f.mu.Lock()
+	f.silent, f.prompted = true, make(chan struct{}, 1)
+	f.mu.Unlock()
+	done := make(chan error, 1)
+	go func() { done <- ss.Set(t.Context(), "k", "v") }()
+	<-f.prompted
+	if _, err := f.conn.ReleaseName(ssName); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Set = %v; want ErrUnavailable", err)
+	}
+}
+
+// The wait for a prompt ends without a panic when godbus closes the signal
+// channel (the connection closed) or the service leaves the bus, and returns
+// the result of the prompt's own Completed signal (T269).
+func TestAwaitCompleted(t *testing.T) {
+	const path = dbus.ObjectPath("/org/freedesktop/secrets/prompt/1")
+	closed := make(chan *dbus.Signal)
+	close(closed)
+	if _, err := awaitCompleted(t.Context(), path, closed); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("a closed channel: %v; want ErrUnavailable", err)
+	}
+	signals := make(chan *dbus.Signal, 4)
+	signals <- &dbus.Signal{Name: busName + ".NameOwnerChanged", Body: []any{"org.example.other", ":1.4", ""}}
+	signals <- &dbus.Signal{Name: busName + ".NameOwnerChanged", Body: []any{ssName, ":1.3", ""}}
+	if _, err := awaitCompleted(t.Context(), path, signals); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("the service left: %v; want ErrUnavailable", err)
+	}
+	made := dbus.ObjectPath("/org/freedesktop/secrets/collection/made")
+	signals <- &dbus.Signal{Path: "/org/freedesktop/secrets/prompt/2", Name: ssPrompt + ".Completed", Body: []any{true, dbus.MakeVariant("")}}
+	signals <- &dbus.Signal{Path: path, Name: ssPrompt + ".Completed", Body: []any{false, dbus.MakeVariant(made)}}
+	got, err := awaitCompleted(t.Context(), path, signals)
+	if err != nil || got.Value() != made {
+		t.Fatalf("Completed: %v, %v; want %s", got, err, made)
 	}
 }
