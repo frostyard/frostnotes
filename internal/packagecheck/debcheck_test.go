@@ -102,12 +102,8 @@ func tgz(t *testing.T, entries []debEntry) []byte {
 
 // writeDeb writes an ar archive in the .deb layout: debian-binary, then the
 // control and data tarballs.
-func writeDeb(t *testing.T, control map[string]string, data []debEntry) string {
+func writeDeb(t *testing.T, ctrl, data []debEntry) string {
 	t.Helper()
-	var ctrl []debEntry
-	for name, body := range control {
-		ctrl = append(ctrl, debEntry{name: "./" + name, typ: tar.TypeReg, mode: 0o644, body: body})
-	}
 	var ar bytes.Buffer
 	ar.WriteString("!<arch>\n")
 	for _, m := range []struct {
@@ -131,8 +127,10 @@ func writeDeb(t *testing.T, control map[string]string, data []debEntry) string {
 	return path
 }
 
-func controlFile(version string) string {
-	return fmt.Sprintf("Package: %s\nVersion: %s\nArchitecture: amd64\nMaintainer: x <x@example.com>\nDepends: systemd\nDescription: test\n", debPkg, version)
+// control is a control archive: the control file at version, and extra.
+func control(version string, extra ...debEntry) []debEntry {
+	c := fmt.Sprintf("Package: %s\nVersion: %s\nArchitecture: amd64\nMaintainer: x <x@example.com>\nDepends: systemd\nDescription: test\n", debPkg, version)
+	return append([]debEntry{file("./control", c)}, extra...)
 }
 
 func runDebCheck(t *testing.T, deb string) (string, error) {
@@ -151,7 +149,7 @@ func runDebCheck(t *testing.T, deb string) (string, error) {
 }
 
 func TestDebCheckPassesAGoodPackage(t *testing.T) {
-	deb := writeDeb(t, map[string]string{"control": controlFile(debVersion)}, goodDeb())
+	deb := writeDeb(t, control(debVersion), goodDeb())
 	if out, err := runDebCheck(t, deb); err != nil {
 		t.Fatalf("deb-check failed a good package: %v\n%s", err, out)
 	}
@@ -160,7 +158,7 @@ func TestDebCheckPassesAGoodPackage(t *testing.T) {
 // A debCase is a bad package and the error deb-check must give for it.
 type debCase struct {
 	name    string
-	control map[string]string
+	control []debEntry
 	data    []debEntry
 	want    string
 }
@@ -176,15 +174,22 @@ func TestDebCheckFailsABadPackage(t *testing.T) {
 		return out
 	}
 	with := func(extra ...debEntry) []debEntry { return append(goodDeb(), extra...) }
-	good := map[string]string{"control": controlFile(debVersion)}
+	good := control(debVersion)
 	bin, req := firstArg("--exec"), firstArg("--file")
 	cases := []debCase{
-		{"wrong version", map[string]string{"control": controlFile("9.9.9")}, goodDeb(), "Version is"},
-		{"a maintainer script", map[string]string{"control": controlFile(debVersion), "postinst": "#!/bin/sh\n"}, goodDeb(), "maintainer scripts"},
-		{"a path under /etc", good, with(file("./etc/lodge/x", "x")), "not under /usr"},
+		{"wrong version", control("9.9.9"), goodDeb(), "Version is"},
+		{"a maintainer script", control(debVersion, exe("./postinst")), goodDeb(), "maintainer scripts"},
+		{"a maintainer script that is a link", control(debVersion, debEntry{name: "./postinst", typ: tar.TypeSymlink, mode: 0o777, link: "control"}), goodDeb(), "maintainer scripts"},
+		{"a maintainer script that is a hard link", control(debVersion, debEntry{name: "./preinst", typ: tar.TypeLink, mode: 0o755, link: "./control"}), goodDeb(), "maintainer scripts"},
+		{"a conffiles list", control(debVersion, file("./conffiles", "/etc/x\n")), goodDeb(), "not allowed"},
+		{"a path under /etc", good, with(file("./etc/x", "x")), "not under /usr"},
 		{"a path that climbs out of /usr", good, with(file("./usr/../etc/x", "x")), "not under /usr"},
 		{"an absolute path", good, with(file("/usr/share/x", "x")), "not under /usr"},
-		{"a link out of /usr", good, with(debEntry{name: "./usr/share/x", typ: tar.TypeSymlink, mode: 0o777, link: "../../etc/shadow"}), "outside /usr"},
+		{"a link out of /usr", good, with(debEntry{name: "./usr/share/x", typ: tar.TypeSymlink, mode: 0o777, link: "../../etc/shadow"}), "no links"},
+		{"links that climb out of /usr together", good, with(
+			debEntry{name: "./usr/a", typ: tar.TypeSymlink, mode: 0o777, link: "/usr"},
+			debEntry{name: "./usr/b", typ: tar.TypeSymlink, mode: 0o777, link: "a/../etc"}), "no links"},
+		{"a hard link", good, with(debEntry{name: "./usr/share/x", typ: tar.TypeLink, mode: 0o644, link: "." + bin}), "no links"},
 		{"a group-writable file", good, with(debEntry{name: "./usr/share/x", typ: tar.TypeReg, mode: 0o664, body: "x"}), "writable"},
 		{"a file not owned by root", good, with(debEntry{name: "./usr/share/x", typ: tar.TypeReg, mode: 0o644, uid: 1000, body: "x"}), "owned by"},
 		{"a missing binary named with a space", good, append(without("."+bin), exe("."+bin+" backup")), bin + " is missing"},

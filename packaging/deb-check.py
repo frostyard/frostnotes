@@ -6,11 +6,13 @@
 
 It fails unless:
   - the control fields are Package PACKAGE, Version VERSION, Architecture
-    amd64 and Depends systemd, and the package has no maintainer scripts;
-  - every archive member, read by its exact name, is a directory, a regular
-    file or a symbolic link whose normalized path is /usr or under /usr
-    (no absolute name, no ".." component), and every link's target stays
-    under /usr;
+    amd64 and Depends systemd, and the control archive holds only the
+    regular files control and md5sums (so no maintainer scripts, of any
+    member type);
+  - every data member, read by its exact name, is a directory or a regular
+    file whose path is /usr or under /usr (no absolute name, no "." or ".."
+    component). No package needs a link, a hard link or a device, so none
+    is allowed, and no link can lead out of /usr;
   - every member is owned by uid 0 and gid 0, and none is group- or
     world-writable;
   - each --exec PATH is a regular file with mode 0755 and a nonzero size;
@@ -24,15 +26,15 @@ library and dpkg-deb are all it needs.
 import argparse
 import io
 import json
-import posixpath
 import stat
 import subprocess
 import sys
 import tarfile
 
-# The control members nFPM writes; anything else (a preinst, a postinst, a
-# trigger) is a maintainer script, and a sysext runs none.
-CONTROL_MEMBERS = {"control", "md5sums", "conffiles"}
+# The control members nFPM writes for a package with no /etc files and no
+# scripts; anything else (a preinst, a postinst, a trigger, a conffiles list)
+# is refused, whatever its member type, because a sysext runs no script.
+CONTROL_MEMBERS = {"control", "md5sums"}
 
 
 def dpkg_deb(*args: str) -> bytes:
@@ -70,10 +72,18 @@ def check(deb: str, package: str, version: str, execs: list[str], files: list[st
             errors.append(f"{field} is {fields[field]!r}, want {value!r}")
 
     with tarfile.open(fileobj=io.BytesIO(dpkg_deb("--ctrl-tarfile", deb))) as ctrl:
+        seen = set()
         for m in ctrl.getmembers():
-            base = posixpath.basename(m.name.rstrip("/"))
-            if m.isfile() and base not in CONTROL_MEMBERS:
-                errors.append(f"control member {m.name!r} is not allowed (no maintainer scripts)")
+            path = member_path(m.name)
+            if path == "/" and m.isdir():
+                continue  # the archive's own "./"
+            name = path[1:] if path else None
+            if name not in CONTROL_MEMBERS or not m.isreg():
+                errors.append(f"control member {m.name!r} is not allowed (only the files control and md5sums; no maintainer scripts)")
+            else:
+                seen.add(name)
+        if "control" not in seen:
+            errors.append("the control archive has no control file")
 
     entries = {}
     with tarfile.open(fileobj=io.BytesIO(dpkg_deb("--fsys-tarfile", deb))) as data:
@@ -84,16 +94,12 @@ def check(deb: str, package: str, version: str, execs: list[str], files: list[st
             if path is None or not under_usr(path):
                 errors.append(f"member {m.name!r} is not under /usr")
                 continue
-            if not (m.isdir() or m.isreg() or m.issym()):
-                errors.append(f"{path} is not a directory, a regular file or a symbolic link")
+            if not (m.isdir() or m.isreg()):
+                errors.append(f"{path} is not a directory or a regular file (no links)")
             if m.uid != 0 or m.gid != 0:
                 errors.append(f"{path} is owned by {m.uid}/{m.gid}, want 0/0")
-            if not m.issym() and m.mode & 0o022:
+            if m.mode & 0o022:
                 errors.append(f"{path} is group- or world-writable ({oct(m.mode)})")
-            if m.issym():
-                target = posixpath.normpath(posixpath.join(posixpath.dirname(path), m.linkname))
-                if not under_usr(target):
-                    errors.append(f"{path} links to {m.linkname!r}, outside /usr")
             if path in entries:
                 errors.append(f"{path} is in the archive twice")
             entries[path] = m
