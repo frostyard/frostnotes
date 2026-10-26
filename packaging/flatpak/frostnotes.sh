@@ -14,7 +14,9 @@
 # with a duplicate window that tauri-plugin-single-instance closes at once.
 # So the launcher has the Flatpak portal start `frostnotes --background` in a
 # new sandbox of this app. That notesd lives on when the window closes, until
-# logout. Without the portal, notesd runs in this sandbox as a fallback.
+# logout. There is no fallback in this sandbox: a notesd here would die with
+# a duplicate window while the primary window still needs it. Without the
+# portal the launcher says so, and the app shows that notesd is not running.
 
 set -u
 
@@ -48,9 +50,9 @@ if ! notesctl hello >/dev/null 2>&1; then
         sleep 0.5
     done
     if ! notesctl hello >/dev/null 2>&1; then
-        # No portal, or it failed: run notesd here, for as long as this
-        # sandbox lives. If one started meanwhile, notesd's lock stops this.
-        notesd >>"$state/notesd.log" 2>&1 &
+        msg="frostnotes: notesd did not start through the Flatpak portal (flatpak-spawn); see $state/notesd.log"
+        echo "$msg" >&2
+        echo "$msg" >>"$state/notesd.log"
     fi
 fi
 

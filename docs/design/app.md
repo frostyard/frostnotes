@@ -719,8 +719,9 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   notesd and nothing else. `frostnotes [ARGS]`, when `notesctl hello`
   fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout),
-  and waits for about 10 s for it; with no portal it starts notesd in the
-  window's sandbox, where it ends with the window. It then starts the
+  and waits for about 10 s for it; with no portal it logs an error and
+  starts no notesd of its own (one in the window's sandbox would die with a
+  duplicate window), so the app shows that notesd is not running. It then starts the
   Background request in the background and `exec`s the app.
   The request is `frostnotes-request-background`, a PyGObject helper that
   keeps its bus connection open until the portal's `Response`: the

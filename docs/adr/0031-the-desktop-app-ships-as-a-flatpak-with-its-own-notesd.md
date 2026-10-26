@@ -85,8 +85,10 @@ answered:
     the output in `$XDG_STATE_HOME/frostnotes/notesd.log`. The Flatpak portal
     starts that in a new sandbox of the same app, so notesd lives on when the
     window closes, until logout. The launcher waits for about 10 s for
-    `notesctl hello`; when none answers (no portal), it starts notesd in the
-    window's sandbox as a fallback, where it ends with the window.
+    `notesctl hello`; when none answers (no portal), it logs an error and
+    starts no notesd of its own: one in the window's sandbox would die with
+    a duplicate window while the primary window still needs it. The app
+    then shows that notesd is not running, and the next launch tries again.
     It then asks the Background portal to run `frostnotes --background` at
     login, and `exec`s the app, so the app gets the signals and the exit
     status.
@@ -134,8 +136,10 @@ answered:
 - notesd lives on after the last window closes, until logout; the user
   has no switch for it in the app yet (`flatpak kill
   org.frostyard.Frostnotes` stops it). It runs again at login only when
-  the user allows the Background portal's request; with a refusal, or with
-  no portal, sync runs only while a window is open (the fallback notesd).
+  the user allows the Background portal's request. A refusal stops only
+  the autostart at login: the notesd that runs keeps running. Without the
+  Flatpak portal (`flatpak-spawn`), no notesd starts, and the app shows
+  that it is not connected.
 - A data directory has one notesd, whatever the socket. Tests and
   evidence that start several notesd processes need one data directory each
   (`internal/evidence` already gives each its own).
