@@ -158,6 +158,14 @@ LODGE_DESTDIR ?= build/lodge-root
 lodge-package: ## Stage notes' /usr tree into LODGE_DESTDIR (default build/lodge-root); run build and web-build first
 	packaging/lodge/stage.sh '$(LODGE_DESTDIR)' '$(VERSION)' build
 
+# The Flatpak's offline sources (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md):
+# the crates, the pnpm store and the Go modules as flatpak-builder sources.
+# Run it after any change to Cargo.lock, pnpm-lock.yaml, go.mod or go.sum;
+# CI's Flatpak sources job fails on a stale file. Needs the network, Go and Python 3.
+.PHONY: flatpak-sources
+flatpak-sources: ## Regenerate packaging/flatpak/{cargo,node,go}-sources.json (network, Go, Python 3)
+	scripts/flatpak-sources.sh
+
 # The release .deb (frostyard/core ADR-0011, ADR-0012, ADR-0058). Snapshot
 # builds are versioned 0.0.0-COMMIT-snapshot; the release workflow passes
 # DEB_VERSION=X.Y.Z, the tag without its v. The tree is staged from scratch

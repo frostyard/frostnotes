@@ -16,7 +16,9 @@ shared look comes from lodge's UI package),
 [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md),
 [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) and
 [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)
-(the web app inside lodge).
+(the web app inside lodge),
+[ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)
+(the Flatpak).
 Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
 [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 (the syntax both parsers read).
@@ -698,6 +700,50 @@ desktop's, with a different transport and frame:
     and at 390 × 844
     ([plan 0006](../plans/0006-m4-notes-inside-lodge.md#phase-7--the-users-hub-in-lodge-and-exit-evidence)).
 
+## The Flatpak
+
+Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)
+and [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md);
+built in [M6](../plans/0002-roadmap.md) (core's
+[Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)).
+The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/`:
+
+- **What is inside.** `/app/bin/frostnotes` is the launcher, `/app/bin/notesd`
+  and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`
+  is the Tauri shell. `flatpak run --command=notesctl org.frostyard.Frostnotes`
+  is the CLI on a desktop.
+- **notesd** runs in its own sandbox of the same app, once per data
+  directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
+  second notesd on that directory exits at once.
+  **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
+  notesd and nothing else. `frostnotes [ARGS]`, when `notesctl hello`
+  fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
+  starts notesd in a new sandbox that outlives the window (until logout),
+  and waits for about 10 s for it; with no portal it logs an error and
+  starts no notesd of its own (one in the window's sandbox would die with a
+  duplicate window), so the app shows that notesd is not running. It then starts the
+  Background request in the background and `exec`s the app.
+  The request is `frostnotes-request-background`, a PyGObject helper that
+  keeps its bus connection open until the portal's `Response`: the
+  portal closes a request when its caller leaves the bus, so a one-shot
+  `gdbus call` cannot ask the user. Allowed once, the portal runs
+  `frostnotes --background` at login, so sync goes on with no window.
+- **The socket** is `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`
+  when `FLATPAK_ID` is the app ID, the one runtime directory Flatpak shares
+  between the app's sandboxes. `internal/config` and `src-tauri/src/paths.rs`
+  compute it the same way. The data directory is the app's `XDG_DATA_HOME`,
+  shared by the shell and notesd, so `notesblob://` reads `blobs/` as usual.
+- **Permissions:** Wayland or X11, the GPU, the network, the Secret Service
+  and the home directory (vaults are watched and written in place; the
+  document portal cannot do that).
+- **The build** is offline: `make flatpak-sources` writes `cargo-sources.json`,
+  `node-sources.json` and `go-sources.json` from the lockfiles (with a
+  patched node generator and hash-pinned Python dependencies), and the
+  `Flatpak` workflow (`.github/workflows/flatpak.yml`) checks they are
+  current, then builds and tests the manifest (the smoke test starts notesd
+  through `--background`, and checks the data directory's lock). Run `make flatpak-sources`
+  after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
+
 ## Dev and test
 
 - `VITE_MOCK=1` runs the UI against `MockTransport` and its made-up
@@ -735,7 +781,7 @@ desktop's, with a different transport and frame:
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
+- Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the Flatpak), [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md) ([roadmap](../plans/0002-roadmap.md))

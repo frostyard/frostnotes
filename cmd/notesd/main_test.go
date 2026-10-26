@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestHubListensOnLoopbackOnly(t *testing.T) {
 	for _, ok := range []string{"127.0.0.1:7880", "[::1]:7880", "localhost:0", "127.0.0.2:1"} {
@@ -13,4 +16,28 @@ func TestHubListensOnLoopbackOnly(t *testing.T) {
 			t.Errorf("checkLoopback(%q) accepted a non-loopback address", bad)
 		}
 	}
+}
+
+func TestDataDirIsLockedPerNotesd(t *testing.T) {
+	dir := t.TempDir()
+	first, err := lockDataDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockDataDir(dir); err == nil || !strings.Contains(err.Error(), "another notesd uses "+dir) {
+		t.Fatalf("a second lock on %s = %v, want \"another notesd uses\"", dir, err)
+	}
+	other, err := lockDataDir(t.TempDir())
+	if err != nil {
+		t.Fatalf("a lock on another directory: %v", err)
+	}
+	_ = other.Close()
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := lockDataDir(dir)
+	if err != nil {
+		t.Fatalf("a lock after the first was released: %v", err)
+	}
+	_ = again.Close()
 }

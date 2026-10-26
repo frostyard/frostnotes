@@ -8,10 +8,16 @@ it fits: [design/overview.md](../design/overview.md).
 ## Transports
 
 - **The Unix socket** at `$FROSTNOTES_SOCKET`, default
-  `$XDG_RUNTIME_DIR/frostnotes/notesd.sock`. notesd creates the parent
+  `$XDG_RUNTIME_DIR/frostnotes/notesd.sock`; in the desktop Flatpak
+  (`$FLATPAK_ID` is `org.frostyard.Frostnotes`),
+  `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`, the
+  directory Flatpak shares between the app's sandboxes
+  ([ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)).
+  notesd creates the parent
   directory 0700 and refuses one that is not 0700 and owned by the user. The
   socket is 0600 and removed on shutdown. A stale socket is replaced; a live
-  one makes a second notesd exit. notesd closes connections whose peer UID
+  one makes a second notesd exit. So does a live lock: notesd holds an exclusive
+  `flock` on `notesd.lock` in its data directory, whatever its socket. notesd closes connections whose peer UID
   (`SO_PEERCRED`) is not its own. Socket connections are caller `local`.
 - **WebSockets.** Each WebSocket text frame carries one message followed by
   `\n`, and the server reads the frames as one stream of lines. A WebSocket
@@ -177,7 +183,7 @@ Clients ignore unknown fields and unknown events.
 
 ## References
 
-- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (the lodge app socket, the session and agent callers, method-level callers), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope)
+- Rationale: [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (the lodge app socket, the session and agent callers, method-level callers), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the socket in the Flatpak)
 - Design: [design/overview.md](../design/overview.md), [design/hub.md](../design/hub.md)
 - Related: [lodge-app.md](lodge-app.md) (what notesd serves to lodge); lodge's [app contract](https://github.com/frostyard/lodge/blob/main/docs/specs/app-contract.md)
 - Generated reference: [rpc-api.md](rpc-api.md)

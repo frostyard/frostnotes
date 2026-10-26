@@ -85,6 +85,13 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	// One notesd per data directory, whatever its socket: the database,
+	// the blobs and the sync state have one owner.
+	lock, err := lockDataDir(paths.DataDir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Close() }()
 	db, err := store.Open(ctx, paths.DB)
 	if err != nil {
 		return err

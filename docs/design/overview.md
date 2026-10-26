@@ -147,7 +147,7 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub` |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
 | `internal/blobhttp` | vault files by hash for browsers: the development gateway's `/blobs/` and the lodge socket's `/content/blobs/`, with their headers and limits |
-| `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes`; `lodge/stage.sh` stages them with the binaries under `usr/` ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs), [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)) |
+| `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes`; `lodge/stage.sh` stages them with the binaries under `usr/` ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs), [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)); `flatpak/` is the desktop app's Flatpak with its own notesd ([design/app.md](app.md#the-flatpak), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)) |
 | `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
 | `app/` | Tauri v2 + React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
@@ -173,10 +173,10 @@ Planned configuration:
 | Variable | Default | Used by |
 | --- | --- | --- |
 | `FROSTNOTES_DATA_DIR` | `$XDG_DATA_HOME/frostnotes` | notesd: `notesd.db`, `blobs/` |
-| `FROSTNOTES_SOCKET` | `$XDG_RUNTIME_DIR/frostnotes/notesd.sock` | notesd, notesctl, the app |
+| `FROSTNOTES_SOCKET` | `$XDG_RUNTIME_DIR/frostnotes/notesd.sock`; in the Flatpak, `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock` | notesd, notesctl, the app |
 | `FROSTNOTES_SECRETS=file` | unset | notesd: keep device tokens in a private file, not the Secret Service (development) |
 
-The socket directory is 0700 and the socket 0600, owned by the user. The
+The socket directory is 0700 and the socket 0600, owned by the user. One notesd runs per data directory: it holds an exclusive lock on `notesd.lock` there, and a second notesd on the directory exits at once ([ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)). The
 database must be on a local file system; vaults may be anywhere. A hub
 behind lodge (`notesd --lodge`, run as `frostnotes`; `--hub` on loopback
 for tests) is in [hub.md](hub.md#operational-notes).

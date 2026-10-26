@@ -41,3 +41,29 @@ func TestResolveNeedsRuntimeDir(t *testing.T) {
 		t.Fatal("want an error without XDG_RUNTIME_DIR or FROSTNOTES_SOCKET")
 	}
 }
+
+func TestDefaultSocketInTheFlatpak(t *testing.T) {
+	run := "/run/user/1000"
+	for _, c := range []struct {
+		name, flatpakID, want string
+	}{
+		{"flatpak", AppID, "/run/user/1000/app/org.frostyard.Frostnotes/frostnotes/notesd.sock"},
+		{"another flatpak", "org.example.Other", "/run/user/1000/frostnotes/notesd.sock"},
+		{"no flatpak", "", "/run/user/1000/frostnotes/notesd.sock"},
+	} {
+		got, err := DefaultSocket(env(map[string]string{"XDG_RUNTIME_DIR": run, "FLATPAK_ID": c.flatpakID}))
+		if err != nil || got != c.want {
+			t.Errorf("%s: DefaultSocket = %q, %v; want %q", c.name, got, err, c.want)
+		}
+	}
+}
+
+func TestResolveSocketOverrideBeatsTheFlatpak(t *testing.T) {
+	p, err := Resolve(env(map[string]string{
+		"HOME": "/home/u", "XDG_RUNTIME_DIR": "/run/user/1000", "FLATPAK_ID": AppID,
+		"FROSTNOTES_SOCKET": "/s/notesd.sock",
+	}))
+	if err != nil || p.Socket != "/s/notesd.sock" {
+		t.Fatalf("Resolve = %+v, %v", p, err)
+	}
+}
