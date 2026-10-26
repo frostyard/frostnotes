@@ -712,12 +712,21 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`
   is the Tauri shell. `flatpak run --command=notesctl org.frostyard.Frostnotes`
   is the CLI on a desktop.
-- **The launcher** (`frostnotes.sh`) makes sure a notesd runs while a
-  window is open: it starts one when `notesctl hello` fails, asks the
-  Background portal to run `frostnotes --background` at login, runs the
-  app, and stops the notesd it started when the app exits.
-  `frostnotes --background` runs notesd alone (or does nothing when one
-  runs), so sync goes on with no window.
+- **notesd** runs in its own sandbox of the same app, once per data
+  directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
+  second notesd on that directory exits at once.
+  **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
+  notesd and nothing else. `frostnotes [ARGS]`, when `notesctl hello`
+  fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
+  starts notesd in a new sandbox that outlives the window (until logout),
+  and waits for about 10 s for it; with no portal it starts notesd in the
+  window's sandbox, where it ends with the window. It then starts the
+  Background request in the background and `exec`s the app.
+  The request is `frostnotes-request-background`, a PyGObject helper that
+  keeps its bus connection open until the portal's `Response`: the
+  portal closes a request when its caller leaves the bus, so a one-shot
+  `gdbus call` cannot ask the user. Allowed once, the portal runs
+  `frostnotes --background` at login, so sync goes on with no window.
 - **The socket** is `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`
   when `FLATPAK_ID` is the app ID, the one runtime directory Flatpak shares
   between the app's sandboxes. `internal/config` and `src-tauri/src/paths.rs`
@@ -727,9 +736,11 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   and the home directory (vaults are watched and written in place; the
   document portal cannot do that).
 - **The build** is offline: `make flatpak-sources` writes `cargo-sources.json`,
-  `node-sources.json` and `go-sources.json` from the lockfiles, and the
+  `node-sources.json` and `go-sources.json` from the lockfiles (with a
+  patched node generator and hash-pinned Python dependencies), and the
   `Flatpak` workflow (`.github/workflows/flatpak.yml`) checks they are
-  current, then builds and tests the manifest. Run `make flatpak-sources`
+  current, then builds and tests the manifest (the smoke test starts notesd
+  through `--background`, and checks the data directory's lock). Run `make flatpak-sources`
   after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
 
 ## Dev and test

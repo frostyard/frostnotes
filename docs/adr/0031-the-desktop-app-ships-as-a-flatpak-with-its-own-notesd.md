@@ -29,7 +29,9 @@ answered:
   ([ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md)).
 - **Lifetime.** Sync must go on without a window
   ([ADR-0004](0004-a-notes-daemon-with-thin-clients.md)), and a Flatpak has
-  no systemd user unit.
+  no systemd user unit. A process in the window's sandbox dies with that
+  sandbox, and so does one in a duplicate window that
+  `tauri-plugin-single-instance` closes at once.
 - **The data.** The app reads notesd's blob store directly
   ([ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)).
 - **Secrets and network.** notesd keeps device tokens in the Secret
@@ -52,7 +54,15 @@ answered:
   `make flatpak-sources` runs `scripts/flatpak-sources.sh`, which runs
   `flatpak-builder-tools` at a pinned commit (cargo and node) and
   `tools/flatpakgo` (Go). Every step runs without Node, pnpm or Rust on
-  the host.
+  the host. The generators' Python dependencies come from
+  `generator-requirements.txt`, installed with `pip install
+  --require-hashes`, as [core ADR-0023](https://github.com/frostyard/core/blob/main/docs/adr/0023-verified-pinned-downloads.md)
+  asks of a download. One patch,
+  `packaging/flatpak/patches/pnpm-git-path.patch`, goes on the node
+  generator: for a git-hosted package with `#path:<dir>` (lodge's
+  `client` and `ui`), pnpm adds only that subdirectory to its store, so the
+  generator's store index must hold the files of `<dir>` at the package
+  root, not those of the whole tarball.
 - **Install layout.** `/app/bin/frostnotes` is a launcher (the manifest's
   `command`); `/app/bin/notesd` and `/app/bin/notesctl` are the Go binaries,
   so `flatpak run --command=notesctl org.frostyard.Frostnotes` works;
@@ -64,14 +74,32 @@ answered:
   same. `FROSTNOTES_SOCKET` still wins, and outside a Flatpak nothing
   changes. The data directory needs no change: Flatpak gives the app one
   `XDG_DATA_HOME`, so the app and notesd share `blobs/`.
-- **The launcher keeps a notesd alive.** `frostnotes` (POSIX sh) starts
-  notesd when `notesctl hello` fails, writing its log to
-  `$XDG_STATE_HOME/frostnotes/notesd.log`, and asks the Background portal
-  to run `frostnotes --background` at login. It runs the app as a child
-  and, when the app exits, stops the notesd it started. `frostnotes
-  --background` runs notesd alone, or exits at once when one runs; it is
-  the autostart. So notesd lives as long as a window, or as long as the
-  background instance the user allowed.
+- **notesd runs in its own sandbox, once per data directory.** notesd
+  takes an exclusive `flock` on `<data dir>/notesd.lock` before it opens the
+  database and holds it until it exits; a second notesd on the same data
+  directory exits at once with "another notesd uses <dir>", whatever its
+  socket. The launcher `frostnotes` (POSIX sh) works so:
+  - `frostnotes --background` runs `exec notesd`.
+  - `frostnotes [ARGS]`: when `notesctl hello` fails, it runs
+    `flatpak-spawn frostnotes --background` (without `--watch-bus`), with
+    the output in `$XDG_STATE_HOME/frostnotes/notesd.log`. The Flatpak portal
+    starts that in a new sandbox of the same app, so notesd lives on when the
+    window closes, until logout. The launcher waits for about 10 s for
+    `notesctl hello`; when none answers (no portal), it starts notesd in the
+    window's sandbox as a fallback, where it ends with the window.
+    It then asks the Background portal to run `frostnotes --background` at
+    login, and `exec`s the app, so the app gets the signals and the exit
+    status.
+- **The portal request is a Python helper.** `gdbus call` exits as soon as
+  the portal returns the request handle, and the portal closes a request when
+  its caller leaves the bus, before the user has answered. The helper
+  `frostnotes-request-background` (PyGObject, which the GNOME platform ships)
+  subscribes to the request's `Response` signal, calls
+  `org.freedesktop.portal.Background.RequestBackground` (`reason`,
+  `autostart`, and `commandline` `frostnotes --background`), and stays on the
+  bus in a GLib main loop until the `Response` or 10 minutes. It exits 0
+  whatever happens: a missing portal or a refusal changes nothing for the
+  app.
 - **Permissions** (`finish-args`): `--socket=wayland`,
   `--socket=fallback-x11`, `--share=ipc`, `--device=dri`, `--share=network`
   (sync with the hub), `--talk-name=org.freedesktop.secrets` (device
@@ -88,9 +116,12 @@ answered:
   pushes to main. One job runs `make flatpak-sources` and fails on a diff.
   The other builds in the pinned `flatpak-github-actions` image and runs
   the manifest's `test-commands`: the shell's Rust tests,
-  `desktop-file-validate`, `appstreamcli validate`, and a smoke test that
-  starts the launcher's notesd at the Flatpak's socket and writes and reads
-  a note through `notesctl` without a Secret Service.
+  `desktop-file-validate`, `appstreamcli validate`, a compile and import
+  check of the Python helper, and a smoke test. The smoke test runs
+  `frostnotes --background` at the Flatpak's socket path, checks that a
+  second notesd on the same data directory exits, and writes and reads a note
+  through `notesctl`, without a Secret Service. It does not test the portal
+  paths: the build sandbox has no portal.
 
 ## Consequences
 
@@ -100,8 +131,16 @@ answered:
 - The socket path has 2 sources of truth, as the data directory has:
   `internal/config` and `app/src-tauri/src/paths.rs` must stay in step, and
   both have unit tests.
-- notesd stops with the window unless the background instance runs. A user
-  who refuses the Background portal syncs only while the window is open.
+- notesd lives on after the last window closes, until logout; the user
+  has no switch for it in the app yet (`flatpak kill
+  org.frostyard.Frostnotes` stops it). It runs again at login only when
+  the user allows the Background portal's request; with a refusal, or with
+  no portal, sync runs only while a window is open (the fallback notesd).
+- A data directory has one notesd, whatever the socket. Tests and
+  evidence that start several notesd processes need one data directory each
+  (`internal/evidence` already gives each its own).
+- The portal paths of the launcher (`flatpak-spawn`, the Background
+  request) have no automated test; the smoke test cannot reach a portal.
 - `--filesystem=home` gives the app and its notesd the whole home
   directory. That is wider than a vault, and it is the price of a watched,
   stable vault path.
@@ -124,10 +163,15 @@ answered:
 - **A systemd user unit for notesd:** rejected. A Flatpak cannot install
   one, and the host's systemd cannot start a process in the app's sandbox.
   The Background portal is the supported way to run at login.
+- **notesd started and owned by the window's launcher** (the first
+  design): rejected. It ran in the window's sandbox and died with it, also
+  for a duplicate window that closes at once.
 - **A wrapper that sets `FROSTNOTES_SOCKET`:** rejected. It does not reach
   `flatpak run --command=notesctl`, nor the Background portal's autostart,
   and every caller would have to repeat the path. `FLATPAK_ID` is set in
   every sandbox of the app.
+- **`gdbus call` for the Background request:** rejected. The caller leaves
+  the bus before the user answers, and the portal closes the request.
 - **Vendoring Go modules with `go mod vendor`:** rejected. It adds
   thousands of files to the repository; a `file` source per module has
   the checksums in one generated file.
