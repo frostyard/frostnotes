@@ -122,7 +122,8 @@ file a step names before writing its frostnotes counterpart.
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
   the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
 - `packaging/flatpak/`: the desktop app's Flatpak (manifest, launcher,
-  AppStream, smoke test, and the generated `cargo-`, `node-` and
+  Background-portal helper, AppStream, smoke test, a patch for the node
+  generator, hashed Python requirements, and the generated `cargo-`, `node-` and
   `go-sources.json`); `scripts/flatpak-sources.sh` (`make flatpak-sources`)
   regenerates them and `tools/flatpakgo` writes the Go part; CI's
   `flatpak.yml` builds it

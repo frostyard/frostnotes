@@ -1,7 +1,9 @@
 #!/bin/sh
 # The Flatpak's smoke test, run by flatpak-builder's test-commands: the
-# launcher starts notesd at the Flatpak's socket path, and a note written
-# through notesctl reads back. It needs no display and no Secret Service
+# launcher's `--background` mode starts notesd at the Flatpak's socket path, a
+# second notesd on the same data directory exits, and a note written through
+# notesctl reads back. The portal paths of the launcher are not tested: the
+# build sandbox has no portal. It needs no display and no Secret Service
 # (notesd keeps its secrets in a file without one).
 #
 # FROSTNOTES_BIN_DIR is where frostnotes, notesd and notesctl are; the
@@ -60,6 +62,18 @@ if [ ! -S "$socket" ]; then
     find "$XDG_RUNTIME_DIR" >&2
     exit 1
 fi
+
+# A second notesd on the same data directory must exit at once: notesd locks
+# the directory, so the launcher can start `frostnotes --background` freely.
+# Another socket shows that the lock, and not the socket check, stops it.
+rc=0
+FROSTNOTES_SOCKET="$work/second.sock" timeout 10 notesd >"$work/second.log" 2>&1 || rc=$?
+if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ] || ! grep -q "another notesd uses" "$work/second.log"; then
+    echo "smoke test: a second notesd exited with $rc, not an 'another notesd uses' error; its log:" >&2
+    cat "$work/second.log" >&2
+    exit 1
+fi
+notesctl hello >/dev/null
 
 notesctl vault add "$work/vault" --name smoke
 printf 'hello from the smoke test\n' | notesctl write --create smoke.md

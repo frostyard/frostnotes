@@ -75,6 +75,7 @@
         "export PATH=\"$PWD/pnpm-bin:$PATH\" && pnpm tauri build",
         "install -Dm755 src-tauri/target/release/frostnotes /app/libexec/frostnotes-app",
         "install -Dm755 flatpak/frostnotes.sh /app/bin/frostnotes",
+        "install -Dm755 flatpak/request-background.py /app/libexec/frostnotes-request-background",
         "install -Dm644 flatpak/org.frostyard.Frostnotes.desktop -t /app/share/applications",
         "install -Dm644 flatpak/org.frostyard.Frostnotes.metainfo.xml -t /app/share/metainfo",
         "install -Dm644 src-tauri/icons/icon.svg /app/share/icons/hicolor/scalable/apps/org.frostyard.Frostnotes.svg",
@@ -83,6 +84,8 @@
       ],
       "test-commands": [
         "cd src-tauri && cargo test --release --offline",
+        "python3 -m py_compile flatpak/request-background.py",
+        "python3 -c \"from gi.repository import Gio, GLib\"",
         "desktop-file-validate /app/share/applications/org.frostyard.Frostnotes.desktop",
         "appstreamcli validate --no-net /app/share/metainfo/org.frostyard.Frostnotes.metainfo.xml",
         "sh flatpak/smoke-test.sh"
@@ -105,6 +108,11 @@
         {
           "type": "file",
           "path": "smoke-test.sh",
+          "dest": "flatpak"
+        },
+        {
+          "type": "file",
+          "path": "request-background.py",
           "dest": "flatpak"
         },
         {
