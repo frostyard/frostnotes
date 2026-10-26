@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Frostnotes
+GenericName=Notes
+Comment=Plain markdown notes that sync through your own hub
+Exec=frostnotes
+Icon=org.frostyard.Frostnotes
+Terminal=false
+Categories=Office;TextEditor;
+Keywords=notes;markdown;obsidian;wiki;vault;
+StartupNotify=true

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.frostyard.Frostnotes</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Frostnotes</name>
+  <summary>Plain markdown notes that sync through your own hub</summary>
+  <developer id="org.frostyard">
+    <name>Frostyard</name>
+  </developer>
+  <description>
+    <p>
+      Frostnotes is a notes app in the spirit of Obsidian. Notes are plain
+      markdown files with YAML frontmatter, in a folder you own.
+    </p>
+    <p>
+      A background service, notesd, watches your vaults, keeps a search index
+      with links, backlinks, tags and properties, and never writes over an
+      edit it has not seen. Sync is built in: each device syncs with a hub
+      that you host yourself, and concurrent edits merge without conflict
+      copies.
+    </p>
+    <p>
+      The editor shows markdown as you type. Obsidian vaults open as they are,
+      with wikilinks, embeds, tags, callouts and properties. The
+      notesctl command and an MCP server give scripts and agents the same
+      access.
+    </p>
+  </description>
+  <launchable type="desktop-id">org.frostyard.Frostnotes.desktop</launchable>
+  <url type="homepage">https://github.com/frostyard/frostnotes</url>
+  <url type="bugtracker">https://github.com/frostyard/frostnotes/issues</url>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>notesctl</binary>
+  </provides>
+  <categories>
+    <category>Office</category>
+    <category>TextEditor</category>
+  </categories>
+  <releases>
+    <release version="0.0.0" date="2026-10-26"/>
+  </releases>
+</component>

@@ -1,0 +1,140 @@
+{
+  "app-id": "org.frostyard.Frostnotes",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "51",
+  "sdk": "org.gnome.Sdk",
+  "sdk-extensions": [
+    "org.freedesktop.Sdk.Extension.golang",
+    "org.freedesktop.Sdk.Extension.node24",
+    "org.freedesktop.Sdk.Extension.rust-stable"
+  ],
+  "command": "frostnotes",
+  "finish-args": [
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--share=ipc",
+    "--device=dri",
+    "--share=network",
+    "--talk-name=org.freedesktop.secrets",
+    "--filesystem=home"
+  ],
+  "modules": [
+    {
+      "name": "notesd",
+      "buildsystem": "simple",
+      "build-options": {
+        "append-path": "/usr/lib/sdk/golang/bin",
+        "env": {
+          "GOPROXY": "file:///run/build/notesd/goproxy",
+          "GOSUMDB": "off",
+          "GOTOOLCHAIN": "local",
+          "GOFLAGS": "-trimpath -buildvcs=false -modcacherw",
+          "GOMODCACHE": "/run/build/notesd/.gomodcache",
+          "GOCACHE": "/run/build/notesd/.gocache",
+          "CGO_ENABLED": "0"
+        }
+      },
+      "build-commands": [
+        "go build -ldflags '-s -w -X main.version=flatpak' -o build/ ./cmd/...",
+        "install -Dm755 -t /app/bin build/notesd build/notesctl"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "../..",
+          "skip": [
+            ".git",
+            ".github",
+            ".flatpak-builder",
+            ".worktrees",
+            "app",
+            "build",
+            "dev",
+            "docs",
+            "flatpak_app",
+            "repo"
+          ]
+        },
+        "go-sources.json"
+      ]
+    },
+    {
+      "name": "frostnotes",
+      "buildsystem": "simple",
+      "build-options": {
+        "append-path": "/usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin",
+        "env": {
+          "CARGO_HOME": "/run/build/frostnotes/cargo",
+          "CARGO_NET_OFFLINE": "true",
+          "XDG_CACHE_HOME": "/run/build/frostnotes/flatpak-node/cache",
+          "CI": "true"
+        }
+      },
+      "build-commands": [
+        "export PATH=\"$PWD/pnpm-bin:$PATH\" && pnpm install --offline --frozen-lockfile --trust-lockfile",
+        "export PATH=\"$PWD/pnpm-bin:$PATH\" && pnpm tauri build",
+        "install -Dm755 src-tauri/target/release/frostnotes /app/libexec/frostnotes-app",
+        "install -Dm755 flatpak/frostnotes.sh /app/bin/frostnotes",
+        "install -Dm644 flatpak/org.frostyard.Frostnotes.desktop -t /app/share/applications",
+        "install -Dm644 flatpak/org.frostyard.Frostnotes.metainfo.xml -t /app/share/metainfo",
+        "install -Dm644 src-tauri/icons/icon.svg /app/share/icons/hicolor/scalable/apps/org.frostyard.Frostnotes.svg",
+        "install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/org.frostyard.Frostnotes.png",
+        "install -Dm644 src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/org.frostyard.Frostnotes.png"
+      ],
+      "test-commands": [
+        "cd src-tauri && cargo test --release --offline",
+        "desktop-file-validate /app/share/applications/org.frostyard.Frostnotes.desktop",
+        "appstreamcli validate --no-net /app/share/metainfo/org.frostyard.Frostnotes.metainfo.xml",
+        "sh flatpak/smoke-test.sh"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "../../app",
+          "skip": [
+            "node_modules",
+            "dist",
+            "src-tauri/target"
+          ]
+        },
+        {
+          "type": "file",
+          "path": "frostnotes.sh",
+          "dest": "flatpak"
+        },
+        {
+          "type": "file",
+          "path": "smoke-test.sh",
+          "dest": "flatpak"
+        },
+        {
+          "type": "file",
+          "path": "org.frostyard.Frostnotes.desktop",
+          "dest": "flatpak"
+        },
+        {
+          "type": "file",
+          "path": "org.frostyard.Frostnotes.metainfo.xml",
+          "dest": "flatpak"
+        },
+        {
+          "type": "archive",
+          "url": "https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.10.1.tgz",
+          "sha512": "641c95d034605b319a0d28d3e5d75104049dc33fabfea3cc621ee8e911a63d08ed4463456d297de316360dc00cf26a82399254503b405d0fb0a415dc7692a592",
+          "dest": "pnpm-bin",
+          "only-arches": [
+            "x86_64"
+          ]
+        },
+        {
+          "type": "shell",
+          "commands": [
+            "sed -i '/^storeDir:/d' pnpm-workspace.yaml"
+          ]
+        },
+        "node-sources.json",
+        "cargo-sources.json"
+      ]
+    }
+  ]
+}
