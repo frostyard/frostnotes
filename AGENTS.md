@@ -121,6 +121,13 @@ file a step names before writing its frostnotes counterpart.
   (`scripts/render-icons.py`, ADR-0013).
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
   the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
+- `packaging/flatpak/`: the desktop app's Flatpak (manifest, launcher,
+  AppStream, smoke test, and the generated `cargo-`, `node-` and
+  `go-sources.json`); `scripts/flatpak-sources.sh` (`make flatpak-sources`)
+  regenerates them and `tools/flatpakgo` writes the Go part; CI's
+  `flatpak.yml` builds it
+  ([ADR-0031](docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)).
+  Run `make flatpak-sources` after a change to a lockfile or `go.mod`.
 - `dev/nsl/provision.sh`: the nsl machine for the app toolchain;
   `scripts/dev-app.sh` runs notesd beside the app or Vite there;
   `scripts/move-hub-behind-lodge.sh` moves the M2 hub behind lodge
