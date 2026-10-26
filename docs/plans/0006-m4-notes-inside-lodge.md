@@ -59,10 +59,12 @@ Status (2026-10-21):
   13:08Z, by the [run sheet](#run-sheet-for-the-move-2026-10-26); the
   [record of the run](#the-move-2026-10-26) says what happened. Both
   trial devices sync through lodge, and the 7 days of sync through
-  lodge run to 2026-11-02. The user confirmed the evidence on
-  2026-10-26, and on the user's answers no item stays open; [the
-  evidence](#phase-7s-evidence-2026-10-26) also lists what the record
-  does not show. Evidence 2's latency is 1 sample, not a p95.
+  lodge run to 2026-11-02. The user accepted Phase 7's evidence on
+  2026-10-26 ([the evidence](#phase-7s-evidence-2026-10-26), which also
+  lists what the record does not show): evidence 2's latency stands on
+  1 sample (0.06 s from the hub to the desktop), and evidence 3 on the
+  user's checks of the read and the write token. The user skipped the
+  test after `lodgectl token revoke` and the p95 over 20 phone edits.
 
 ## Decisions taken for M4
 
@@ -899,11 +901,17 @@ machines' clocks synchronized):
 The user's answers, 2026-10-26: "notes work and sync, notes-read token
 works", and "write token exercised, new note created with a haiku body".
 
+*The user's decision, 2026-10-26:* Phase 7's evidence is accepted as
+the table records it. The user skipped 2 checks: the call after
+`lodgectl token revoke` (evidence 3), and the p95 over 20 phone edits
+(evidence 2), which stands on 1 sample. The daily `notesctl sync verify`
+on both devices continues to 2026-11-02.
+
 | Done when | Status | Evidence |
 |---|---|---|
 | 1. The same UI on a second machine and on the phone | Confirmed by the user ("notes work and sync"), in part recorded | Recorded: the iPhone (Safari) opened notes through lodge, and created and edited a note; the user saw it in the desktop app on the laptop and in the web app; the laptop syncs through lodge. Not recorded: Firefox on a second machine, a search in both browsers, and opening lodge from the phone's home screen. |
-| 2. A phone edit on the desktop within 2 s | 1 sample, no p95 | The phone's save reached the hub's log at 13:18:39.579Z and the laptop's notesd 0.06 s later. The time of the last keystroke is not recorded on the phone, so the whole budget (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is not measured, and 1 edit is not the 20 the p95 asks for. |
-| 3. Claude Code through `/mcp/notes` with a scoped token | Confirmed by the user's checks, in part recorded | `claude-code-notes-read` (`vault=1`) works from Claude Code (the user's confirmation; its tool list is not recorded). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`. On the user's answers, no item of evidence 3 stays open. |
+| 2. A phone edit on the desktop within 2 s | Accepted on 1 sample, no p95 (the user's decision) | The phone's save reached the hub's log at 13:18:39.579Z and the laptop's notesd 0.06 s later. The time of the last keystroke is not recorded on the phone, so the whole budget (the editor's 1 s save timer, the transfer to lodge and the 0.06 s) is not measured, and 1 edit is not the 20 the p95 asks for. |
+| 3. Claude Code through `/mcp/notes` with a scoped token | Accepted on the user's checks of both tokens; the revoke test skipped (the user's decision) | `claude-code-notes-read` (`vault=1`) works from Claude Code (the user's confirmation; its tool list is not recorded). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`. On the user's answers, no item of evidence 3 stays open. |
 | 4. No open issue in the reviews | Unchanged | As [Phase 6](#phase-6--security-review-planner-an-independent-agent) records. |
 
 ## Later / ideas
