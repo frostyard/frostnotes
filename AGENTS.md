@@ -90,7 +90,11 @@ file a step names before writing its frostnotes counterpart.
   `lodge/kit` (`/health`, `/api` as caller `session`, `/content/blobs/`,
   `/mcp` for agents, `/device/`; [docs/specs/lodge-app.md](docs/specs/lodge-app.md));
   `internal/blobhttp`: files by hash for
-  browsers. `packaging/`: the manifest, systemd units and `sysusers.d`.
+  browsers. `packaging/`: the manifest, systemd units and `sysusers.d`, and
+  `packaging/lodge/stage.sh` (`make lodge-package`), which stages them with
+  `notesd` and `notesctl` in the `/usr` layout
+  ([core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md));
+  `internal/packagecheck` tests that tree.
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).
   `internal/evidence`: real notesd processes for the milestones' exit

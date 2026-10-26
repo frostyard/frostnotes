@@ -115,7 +115,7 @@ clean: ## Remove build output
 # The app (M0 Phase 4). Its toolchain runs in the nsl machine
 # (docs/adr/0009-development-environment-and-gates.md); CI, whose runner has
 # the toolchain, runs the same targets with IN_NSL='sh -c'.
-.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl web-build lodge-app
+.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl web-build lodge-app lodge-package
 
 NSL_MACHINE ?= frostnotes
 IN_NSL := nsl run -m $(NSL_MACHINE) sh -lc
@@ -146,6 +146,14 @@ lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version
 	rm -rf build/lodge/apps/notes && mkdir -p build/lodge/apps/notes
 	cp -R build/web build/lodge/apps/notes/web
 	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/lodge/apps/notes/app.json
+
+# The /usr layout (frostyard/core ADR-0058): notesd, notesctl, the manifest,
+# the web build, the units and the sysusers.d entry, staged under
+# LODGE_DESTDIR by packaging/lodge/stage.sh. Needs make build and make
+# web-build first.
+LODGE_DESTDIR ?= build/lodge-root
+lodge-package: ## Stage notes' /usr tree into LODGE_DESTDIR (default build/lodge-root); run build and web-build first
+	packaging/lodge/stage.sh '$(LODGE_DESTDIR)' '$(VERSION)' build
 
 app-build: ## Build the release app binary into build/frostnotes-app (nsl)
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm tauri build && mkdir -p ../build && cp "$$CARGO_TARGET_DIR/release/frostnotes" ../build/frostnotes-app'

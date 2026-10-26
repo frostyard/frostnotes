@@ -35,7 +35,37 @@ Phase 7 moves it behind lodge.
 | --- | --- | --- |
 | manifest | `/usr/share/lodge/apps/notes/app.json` | the JSON below; `version` is notesd's |
 | web build | `/usr/share/lodge/apps/notes/web/` | `make web-build`'s output, built for the base `/app/notes/`, with `icon.svg` |
-| system user | `sysusers.d` | `frostnotes`, which notesd runs as |
+| daemon and CLI | `/usr/bin/notesd`, `/usr/bin/notesctl` | `make build`'s binaries, mode 0755 |
+| units | `/usr/lib/systemd/system/frostnotes.service`, `frostnotes-lodge.socket` | `packaging/systemd/`; the service's `ExecStart=` is `/usr/bin/notesd -lodge` |
+| system user | `/usr/lib/sysusers.d/frostnotes.conf` | `u frostnotes`, in group `lodge-apps` and never in group `lodge`; `g lodge -` too, because group `lodge` owns the app socket (`SocketGroup=lodge`) and the socket must start without lodge's own sysext |
+
+`packaging/lodge/stage.sh DESTDIR VERSION [BUILD]` stages all of this
+under `DESTDIR` in that layout, and `make lodge-package` runs it into
+`LODGE_DESTDIR` (default `build/lodge-root`) after `make build` and
+`make web-build`. It writes only under `usr/`: no `/etc`, no `/var`, no
+`/opt`, no `/usr/local`, as a sysext's payload is `/usr` only
+([core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)).
+`internal/packagecheck` tests the staged tree. `make lodge-app` still lays
+out the manifest and the web build alone in `build/lodge/apps/notes`.
+
+A hand-installed host copies from the staged root. On lodge's host,
+notesd and notesctl are in `/opt/lodge/bin`, which the unit's
+`ExecStart=` names:
+
+1. Copy the staged `usr/bin/notesd` and `usr/bin/notesctl` to
+   `/opt/lodge/bin`. Replace each file (install to a new name, then
+   `mv` it over); never write into the running binary. Run that
+   `notesctl` by its absolute path, `/opt/lodge/bin/notesctl`, as
+   [plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s run sheet does.
+2. Replace `/usr/share/lodge/apps/notes/` with the staged one, owned by
+   root (directories 0755, files 0644).
+3. Keep the host's units, drop-ins and sysusers.d entry in `/etc`. The
+   staged sysusers.d file adds only `g lodge -`, which the host's group
+   `lodge` already satisfies.
+4. Run `sudo systemctl restart frostnotes.service` and
+   `sudo /opt/lodge/bin/lodgectl reload`, then check that
+   `sudo /opt/lodge/bin/lodgectl apps` shows notes up at the new version.
+   On that host `lodgectl` is in `/opt/lodge/bin`, not on root's `PATH`.
 
 ```json
 { "contract": 1, "id": "notes", "name": "Notes", "icon": "icon.svg",
