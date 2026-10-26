@@ -82,7 +82,8 @@ answered:
   - `frostnotes --background` runs `exec notesd`, with the output appended
     to `$XDG_STATE_HOME/frostnotes/notesd.log`, also when the Background
     portal's autostart runs it at login. A log over 1 MiB moves to
-    `notesd.log.1` first.
+    `notesd.log.1` first, but only when no notesd answers: a duplicate
+    must not move the log of the notesd that runs.
   - `frostnotes [ARGS]`: when `notesctl hello` fails, it runs
     `flatpak-spawn frostnotes --background` (without `--watch-bus`). The
     Flatpak portal

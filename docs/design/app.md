@@ -717,8 +717,8 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   second notesd on that directory exits at once.
   **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
   notesd and nothing else, with its output in
-  `$XDG_STATE_HOME/frostnotes/notesd.log` (over 1 MiB, the old log moves
-  to `notesd.log.1`), also when the Background portal starts it at login.
+  `$XDG_STATE_HOME/frostnotes/notesd.log` (over 1 MiB, and with no notesd
+  that answers, the old log moves to `notesd.log.1`), also when the Background portal starts it at login.
   `frostnotes [ARGS]`, when `notesctl hello`
   fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout),

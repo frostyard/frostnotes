@@ -8,8 +8,9 @@
 #                             locks it), so this is safe to run twice. The
 #                             Background portal starts this at login. notesd
 #                             appends its output to notesd.log in the state
-#                             directory; a log over 1 MiB moves to
-#                             notesd.log.1 first, so the log stays bounded.
+#                             directory; when no notesd runs already and that
+#                             log is over 1 MiB, it moves to notesd.log.1
+#                             first, so the log stays bounded.
 #   frostnotes [ARGS]         Make sure a notesd runs, ask the Background
 #                             portal for autostart, and run the app.
 #
@@ -39,9 +40,13 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes"
 
 if [ "${1:-}" = "--background" ]; then
     mkdir -p "$state"
-    # One old log, so that a notesd started at login does not fill the disk
-    # and the state directory keeps its size.
-    if [ -f "$state/notesd.log" ] && [ "$(wc -c <"$state/notesd.log")" -gt 1048576 ]; then
+    # Rotate only when no notesd answers on this socket: a second
+    # `frostnotes --background` must not move the log a running notesd
+    # writes. A notesd that starts at the same time has just rotated its own
+    # log, so the log is small then.
+    if ! notesctl hello >/dev/null 2>&1 &&
+        [ -f "$state/notesd.log" ] &&
+        [ "$(wc -c <"$state/notesd.log")" -gt 1048576 ]; then
         mv -f "$state/notesd.log" "$state/notesd.log.1"
     fi
     exec notesd >>"$state/notesd.log" 2>&1

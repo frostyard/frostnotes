@@ -134,6 +134,34 @@ if [ ! -S "$socket" ]; then
     exit 1
 fi
 
+# A second `frostnotes --background` while notesd runs must not move the log
+# that notesd writes: it rotates only when no notesd answers. It exits
+# non-zero, and notesd's lock line lands at the end of notesd.log.
+dd if=/dev/zero bs=1024 count=1025 2>/dev/null >>"$state/notesd.log"
+rc=0
+"$bin/frostnotes" --background >/dev/null 2>>"$work/background.log" || rc=$?
+if [ "$rc" -eq 0 ]; then
+    echo "smoke test: a second 'frostnotes --background' exited 0; want the lock's error" >&2
+    print_logs
+    exit 1
+fi
+if [ ! -f "$state/notesd.log" ]; then
+    echo "smoke test: the running notesd's log was moved" >&2
+    print_logs
+    exit 1
+fi
+size="$(wc -c <"$state/notesd.log")"
+if [ "$size" -le 1048576 ]; then
+    echo "smoke test: notesd.log holds $size bytes; want the running notesd's log, over 1 MiB" >&2
+    print_logs
+    exit 1
+fi
+if ! tail -n 5 "$state/notesd.log" | grep -q "another notesd uses"; then
+    echo "smoke test: notesd.log does not end with the lock's line" >&2
+    print_logs
+    exit 1
+fi
+
 # A second notesd on the same data directory must exit at once: notesd locks
 # the directory, so the launcher can start `frostnotes --background` freely.
 # Another socket shows that the lock, and not the socket check, stops it.

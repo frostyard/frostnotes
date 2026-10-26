@@ -33,6 +33,15 @@ type devicePairing struct {
 // (ADR-0016), and returns it without a trailing '/'.
 func checkURL(raw string) (*url.URL, error) { return hub.CheckURL(raw) }
 
+// collected is an approved pairing's answer: the token, the device it makes
+// and the hub it belongs to.
+type collected struct {
+	State  string `json:"state"`
+	Token  string `json:"token"`
+	Device int64  `json:"device"`
+	Hub    string `json:"hub"`
+}
+
 // pair starts a pairing with the hub at rawURL (sync.pair).
 func (s *Syncer) pair(ctx context.Context, rawURL, name string) (*api.Pairing, error) {
 	u, err := checkURL(rawURL)
@@ -109,12 +118,7 @@ func (s *Syncer) paired(ctx context.Context, id string) (*api.PairResult, error)
 	default:
 		return nil, hubError(resp)
 	}
-	var got struct {
-		State  string `json:"state"`
-		Token  string `json:"token"`
-		Device int64  `json:"device"`
-		Hub    string `json:"hub"`
-	}
+	var got collected
 	if err := json.UnmarshalRead(io.LimitReader(resp.Body, 1<<16), &got); err != nil {
 		return nil, api.Unavailable("the hub at %s answered a pairing oddly: %v", u, err)
 	}
@@ -122,25 +126,58 @@ func (s *Syncer) paired(ctx context.Context, id string) (*api.PairResult, error)
 		return &api.PairResult{State: api.PairingStatePending, Hub: p.hub}, nil
 	}
 	s.dropPairing(id)
+	// Keeping the token is one unit, from the hub check to the end of a
+	// failure's cleanup: two pairings for one hub at the same time must not
+	// undo each other's token or row.
+	s.keepMu.Lock()
+	defer s.keepMu.Unlock()
 	if err := s.sameHub(ctx, got.Hub, p.url); err != nil {
 		return nil, s.withdrawn(ctx, u, got.Token, err)
 	}
-	if err := s.cfg.Secrets.Set(ctx, secrets.HubToken(got.Hub), got.Token); err != nil {
-		return nil, s.withdrawn(ctx, u, got.Token, fmt.Errorf("keep the device token: %w", err))
+	return s.keep(ctx, u, p.url, got)
+}
+
+// keep stores an approved pairing's token and the hub's row, and puts back
+// what the store held when the row cannot be written: a pairing again with a
+// hub this device already syncs with, or a second pairing at the same time,
+// must never lose a token that works.
+func (s *Syncer) keep(ctx context.Context, base *url.URL, hubURL string, got collected) (*api.PairResult, error) {
+	key := secrets.HubToken(got.Hub)
+	prev, err := s.cfg.Secrets.Get(ctx, key)
+	had := err == nil
+	if err != nil && !errors.Is(err, secrets.ErrNotFound) {
+		// The old token is unknown, and a failure must not delete a token
+		// that may work.
+		return nil, s.withdrawn(ctx, base, got.Token, fmt.Errorf("read the hub token: %w", err))
+	}
+	if err := s.cfg.Secrets.Set(ctx, key, got.Token); err != nil {
+		return nil, s.withdrawn(ctx, base, got.Token, fmt.Errorf("keep the device token: %w", err))
 	}
 	var row store.SyncHub
 	if err := s.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
 		var err error
-		row, err = tx.PutSyncHub(ctx, store.SyncHub{HubID: got.Hub, URL: p.url, DeviceID: got.Device})
+		row, err = tx.PutSyncHub(ctx, store.SyncHub{HubID: got.Hub, URL: hubURL, DeviceID: got.Device})
 		return err
 	}); err != nil {
-		if derr := s.cfg.Secrets.Delete(ctx, secrets.HubToken(got.Hub)); derr != nil {
-			s.cfg.Log.Warn("delete a hub token a pairing cannot keep", "hub", got.Hub, "err", derr)
-		}
-		return nil, s.withdrawn(ctx, u, got.Token, err)
+		s.restore(ctx, key, prev, had, got.Hub)
+		return nil, s.withdrawn(ctx, base, got.Token, err)
 	}
 	s.kickHub(row.ID)
 	return &api.PairResult{State: api.PairingStateApproved, Hub: got.Hub}, nil
+}
+
+// restore puts prev back under key, or deletes the key when the store held
+// nothing, after a pairing could not keep the token it collected.
+func (s *Syncer) restore(ctx context.Context, key, prev string, had bool, hubID string) {
+	var err error
+	if had {
+		err = s.cfg.Secrets.Set(ctx, key, prev)
+	} else {
+		err = s.cfg.Secrets.Delete(ctx, key)
+	}
+	if err != nil {
+		s.cfg.Log.Warn("put back a hub token a failed pairing replaced", "hub", hubID, "err", err)
+	}
 }
 
 // probeSecrets checks that the secret store can keep a token before the hub
