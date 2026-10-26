@@ -16,7 +16,8 @@ it fits: [design/overview.md](../design/overview.md).
   notesd creates the parent
   directory 0700 and refuses one that is not 0700 and owned by the user. The
   socket is 0600 and removed on shutdown. A stale socket is replaced; a live
-  one makes a second notesd exit. notesd closes connections whose peer UID
+  one makes a second notesd exit. So does a live lock: notesd holds an exclusive
+  `flock` on `notesd.lock` in its data directory, whatever its socket. notesd closes connections whose peer UID
   (`SO_PEERCRED`) is not its own. Socket connections are caller `local`.
 - **WebSockets.** Each WebSocket text frame carries one message followed by
   `\n`, and the server reads the frames as one stream of lines. A WebSocket
