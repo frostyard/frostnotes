@@ -284,3 +284,32 @@ func TestStagingRefusesAnEmptyRootOrSlash(t *testing.T) {
 		t.Errorf("stage.sh with a version a manifest cannot carry succeeded:\n%s", out)
 	}
 }
+
+// TestStagingFailsWithoutItsInputsAndChangesNothing: a build lacking a
+// binary or the web build fails before it touches the destination, as lodge
+// disables an app without web/index.html.
+func TestStagingFailsWithoutItsInputsAndChangesNothing(t *testing.T) {
+	for _, missing := range []string{"notesd", "notesctl", "web/index.html", "web/icon.svg", "web"} {
+		root, build := t.TempDir(), standIns(t)
+		if err := os.RemoveAll(filepath.Join(build, missing)); err != nil {
+			t.Fatal(err)
+		}
+		kept := filepath.Join(root, "usr/share/lodge/apps/notes/web/index.html")
+		write(t, kept, "old")
+		write(t, filepath.Join(root, "usr/share/lodge/apps/notes/app.json"), `{"version": "old"}`)
+		out, err := stage(t, root, "v1", build)
+		if err == nil {
+			t.Errorf("stage.sh without %s succeeded:\n%s", missing, out)
+			continue
+		}
+		if !strings.Contains(out, "run make") {
+			t.Errorf("without %s the message %q does not say what to run", missing, out)
+		}
+		if got, err := os.ReadFile(kept); err != nil || string(got) != "old" {
+			t.Errorf("without %s: %s = %q, %v after the failed run; want kept", missing, kept, got, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "usr/bin")); !os.IsNotExist(err) {
+			t.Errorf("without %s: the failed run staged usr/bin: %v", missing, err)
+		}
+	}
+}

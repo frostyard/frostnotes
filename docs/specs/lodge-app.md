@@ -49,14 +49,22 @@ under `DESTDIR` in that layout, and `make lodge-package` runs it into
 out the manifest and the web build alone in `build/lodge/apps/notes`.
 
 A hand-installed host copies from the staged root. On lodge's host,
-whose notesd runs from `/opt/lodge/bin` with its units in `/etc`: copy
-the staged `usr/bin/notesd` and `usr/bin/notesctl` to the directory that
-the unit's `ExecStart=` names, replace `/usr/share/lodge/apps/notes/`
-with the staged one, and keep the host's units, drop-ins and sysusers.d
-entry in `/etc`. The staged sysusers.d file adds only `g lodge -`,
-which the host's group `lodge` already satisfies. A
-`notesctl` left in `/usr/local/bin` comes first on `PATH` and shadows one
-in `/usr/bin`: remove it once.
+notesd and notesctl are in `/opt/lodge/bin`, which the unit's
+`ExecStart=` names:
+
+1. Copy the staged `usr/bin/notesd` and `usr/bin/notesctl` to
+   `/opt/lodge/bin`. Replace each file (install to a new name, then
+   `mv` it over); never write into the running binary. Run that
+   `notesctl` by its absolute path, `/opt/lodge/bin/notesctl`, as
+   [plan 0006](../plans/0006-m4-notes-inside-lodge.md)'s run sheet does.
+2. Replace `/usr/share/lodge/apps/notes/` with the staged one, owned by
+   root (directories 0755, files 0644).
+3. Keep the host's units, drop-ins and sysusers.d entry in `/etc`. The
+   staged sysusers.d file adds only `g lodge -`, which the host's group
+   `lodge` already satisfies.
+4. Run `sudo systemctl restart frostnotes.service` and
+   `sudo lodgectl reload`, then check that `lodgectl apps` shows notes
+   up at the new version.
 
 ```json
 { "contract": 1, "id": "notes", "name": "Notes", "icon": "icon.svg",
