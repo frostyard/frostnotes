@@ -4,7 +4,7 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Frostnotes</name>
-  <summary>Plain markdown notes that sync through your own hub</summary>
+  <summary>Plain markdown notes on your own computer</summary>
   <developer id="org.frostyard">
     <name>Frostyard</name>
   </developer>
@@ -14,11 +14,15 @@
       markdown files with YAML frontmatter, in a folder you own.
     </p>
     <p>
-      A background service, notesd, watches your vaults, keeps a search index
-      with links, backlinks, tags and properties, and never writes over an
-      edit it has not seen. Sync is built in: each device syncs with a hub
-      that you host yourself, and concurrent edits merge without conflict
-      copies.
+      A background service inside the app, notesd, watches your vaults, keeps
+      a search index with links, backlinks, tags and properties, and never
+      writes over an edit it has not seen. Frostnotes works on its own: it
+      needs no account, server or other app.
+    </p>
+    <p>
+      Sync is optional and built in. When you join a vault to a hub that you
+      host yourself, such as one in lodge, each device keeps its own copy and
+      concurrent edits merge without conflict copies.
     </p>
     <p>
       The editor shows markdown as you type. Obsidian vaults open as they are,

@@ -2,7 +2,7 @@
 Type=Application
 Name=Frostnotes
 GenericName=Notes
-Comment=Plain markdown notes that sync through your own hub
+Comment=Plain markdown notes on your own computer
 Exec=frostnotes
 Icon=org.frostyard.Frostnotes
 Terminal=false
