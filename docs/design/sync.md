@@ -209,7 +209,11 @@ the loops of every vault synced with that hub, which leave state
 `revoked` without a restart. The hub knows the device as a new device
 (the protocol's [URLs and tokens](../specs/sync-protocol.md#urls-and-tokens)).
 A vault that stays joined keeps its sync state; one that left
-(`notesctl sync leave`) joins again.
+(`notesctl sync leave`) joins again. The flow needs a vault that is not
+joined: `hub join` for a vault still joined answers `conflict` before it
+checks the token. To renew the token of a hub whose vaults all stay
+joined, leave one of them and join it again, or join another vault on
+that hub; either new pairing serves every vault on the hub.
 
 A device that joins with files already in its folder matches them by
 history: a file whose hash is a revision of the hub's file at the same

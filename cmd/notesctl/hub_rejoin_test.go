@@ -185,17 +185,20 @@ func (s *rejoinSetup) hubSeq(t *testing.T, name string) int64 {
 // reaches the hub's log.
 func (s *rejoinSetup) syncsAgain(t *testing.T, vault int64, hubVault string) {
 	t.Helper()
+	// A bounded context: a sync that never goes idle fails the test.
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
 	before := s.hubSeq(t, hubVault)
-	if _, err := s.devC.Note().Create(t.Context(), &api.NoteCreateParams{VaultID: vault, Path: "after.md", Content: "back\n"}); err != nil {
+	if _, err := s.devC.Note().Create(ctx, &api.NoteCreateParams{VaultID: vault, Path: "after.md", Content: "back\n"}); err != nil {
 		t.Fatal(err)
 	}
 	// The loop learns of the note from an event: wait for cycles until it
 	// has pushed it.
 	for range 50 {
-		if err := s.dev.Syncer.WaitIdle(t.Context(), vault); err != nil {
+		if err := s.dev.Syncer.WaitIdle(ctx, vault); err != nil {
 			t.Fatal(err)
 		}
-		st, err := s.devC.Sync().Status(t.Context(), &api.SyncStatusParams{VaultID: &vault})
+		st, err := s.devC.Sync().Status(ctx, &api.SyncStatusParams{VaultID: &vault})
 		if err != nil || len(st) != 1 || st[0].State == api.SyncStateRevoked {
 			t.Fatalf("Status = %+v, %v; want a vault that syncs", st, err)
 		}
