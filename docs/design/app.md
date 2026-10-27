@@ -743,8 +743,8 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   `frostnotes --background` at login, so sync goes on with no window.
   When the user turns the permission off (GNOME Settings, Apps, Run in
   Background), the desktop ends a notesd that runs with no window: on
-  GNOME 48, about 45 s after the last window closes, and soon after a
-  login that started it. The launcher's next request is then refused,
+  GNOME 48, about 45 s after the last window closes, and within seconds
+  of a login that started it, with no clean stop in `notesd.log`. The launcher's next request is then refused,
   and the portal deletes the autostart entry; turned on again, the
   permission brings the entry back only at the next launch of the app
   ([plan 0008, Phase 3](../plans/0008-m6-the-standalone-desktop-app.md#record)).

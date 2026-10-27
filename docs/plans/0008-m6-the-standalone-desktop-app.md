@@ -29,8 +29,11 @@ Status (2026-10-27):
   on 2026-10-27, and the package is public; the remote's entry
   (frostyard/flatpak-index#4) waits for Phase 3's first run.
 - **Phase 3,** the clean-install check: the first run, on `v0.2.0` on
-  2026-10-27, passed items 1 to 4, 6 and 7 ("Record" below). Item 5
-  waits for the second release.
+  2026-10-27, passed items 1, 3, 4 and 7, and item 2 from a staged
+  catalogue ("Record" below). Item 6 passed in part, with a loopback hub
+  and no lodge. Still to run: item 2 from the public remote (after the
+  listing), item 6 with a hub over HTTPS and lodge's web app, and item 5
+  on the second release.
 - **Phase 4** lists what the review found; none of it is built.
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
@@ -45,7 +48,7 @@ real Snow install on 2026-10-26), reviewed against the program's list:
 | Clean updates and IPC paths | Paths met; updates in part | the socket is in `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/`, the one directory all of the app's sandboxes share, and it does not change between versions. After `flatpak update`, the notesd that runs stays at the old version until logout (gap G3) |
 | Background and login start through portals | Met | the Flatpak portal (`flatpak-spawn`) and the Background portal (`frostnotes-request-background`), tested on Snow on 2026-10-26 |
 | Clear settings for background activity and lodge | Not met | no switch for background activity in the app (G2); joining a hub is `notesctl hub join` only, and the vault manager names a command that a Flatpak user cannot type as written (G1) |
-| Predictable behaviour when permissions are refused | Met, with weak messages | Background refused: notesd does not start at login. (Phase 3's first run corrected this row: on GNOME 48, the desktop also stops the notesd that runs, about 45 s after the last window closes; it does not run until logout.) No Flatpak portal: no notesd, and the window says it is reconnecting. No Secret Service: tokens go to a 0600 file, with a warning. No network: local work goes on, and sync waits. A narrowed `--filesystem`: a vault outside it fails to open. The window does not say why in the last 2 cases (G5) |
+| Predictable behaviour when permissions are refused | Met, with weak messages | Background refused: (corrected by Phase 3's first run, on GNOME 48) the desktop stops a notesd that runs with no window, about 45 s after the last window closes; it does not run until logout. While the autostart entry exists, a login still starts notesd, and the desktop stops it within seconds; after the launcher's next request is refused, the portal deletes the entry, and a login starts no notesd. No Flatpak portal: no notesd, and the window says it is reconnecting. No Secret Service: tokens go to a 0600 file, with a warning. No network: local work goes on, and sync waits. A narrowed `--filesystem`: a vault outside it fails to open. The window does not say why in the last 2 cases (G5) |
 
 The review also found:
 - The metainfo and the desktop file said that notes "sync through your
@@ -188,7 +191,7 @@ Item 6's URL is that hub's.
 
 ### Record
 
-#### Run 1: `v0.2.0` on Snow, 2026-10-27 (items 1 to 4, 6 and 7 pass)
+#### Run 1: `v0.2.0` on Snow, 2026-10-27 (items 1, 3, 4 and 7 pass; 2 from a staged catalogue; 6 in part)
 
 **The release.** `v0.2.0`, commit `0573fab7eeeabf7b76a8e94916ca2b429f5b65e3`,
 Flatpak run 40533395511. The tested image is
@@ -224,11 +227,11 @@ verified the attestation, and served on `127.0.0.1:8765` in the VM.
 | Item | Result | What happened |
 | --- | --- | --- |
 | 1. Nothing else | Pass | No frostyard Flatpak (remote `flathub` only); no `notesd`, `notesctl`, `lodge` or `tailscale` on `PATH`; no `frostnotes*`, `lodge*` or `tailscale*` units; no OS extensions; no `~/.local/share/frostnotes`, `~/.var/app/org.frostyard.Frostnotes` or autostart entry |
-| 2. Install | Pass | `flatpak install --user frostyard-staged org.frostyard.Frostnotes` installed it; `flatpak info` showed 0.2.0 and the commit above. The app grid showed Frostnotes with its icon (on its second page); GNOME 48's grid shows no summaries, and the desktop file's `Comment` is "Plain markdown notes on your own computer" |
+| 2. Install | Pass from the staged catalogue; the public remote not run | `flatpak install --user frostyard-staged org.frostyard.Frostnotes` installed it; `flatpak info` showed 0.2.0 and the commit above. The install from the public remote, which the item names, can run only after flatpak-index lists the app, so it is still to run. The app grid showed Frostnotes with its icon (on its second page); GNOME 48's grid shows no summaries, and the desktop file's `Comment` is "Plain markdown notes on your own computer" |
 | 3. Local, no terminal | Pass | From the grid: the vault manager, and 2 instances (`flatpak ps`), notesd's under `flatpak-portal`. Create new vault, Browse (the portal's chooser): Location `/var/home/tester/Documents`, a real path. Two notes with a wikilink each way, tags, and a pasted screenshot (`Pasted image ….png`, embedded and shown); search found both notes, backlinks and the tag pane counted the link and the tags. 2 edits in vim to the open note showed in the window within 1 s, with no conflict copy. Open folder as vault opened `~/Journal`, a folder of Markdown with a subfolder. `notesctl vault list` listed both. Nothing asked for a hub, an account, lodge or the network; notesd and the window held no TCP socket |
 | 4. Restart, login, background | Pass | The first launch got `background` and `autostart` with no dialog, and wrote the autostart entry. Closed: only notesd's instance stayed; reopened, the window used that notesd, with no `flatpak-spawn`. Logout stopped notesd ("notesd stopped"); at login gnome-session started it with no window, and `notesd.log` shows the start. Run in Background off: see below. Opening the app with it off started a notesd and showed both vaults. On again, and after one launch of the app, a login started notesd |
 | 5. Update | Not run | Needs the second release. The VM is kept stopped with the snapshot `after-item-4` |
-| 6. Sync, opt-in | Pass, with a scratch hub | The hub was the Flatpak's own notesd with its own data directory, on `127.0.0.1:7788` in the VM, as in ADR-0031's record; there was no lodge, so its web app was not part of the run. `notesctl hub join http://127.0.0.1:7788 shared --vault "Field Notes"` and `hub approve` (the terminal, until G1): no keyring prompt, since the password login unlocked the `login` keyring. With the window closed, a new note reached the hub in 2.2 s and one from the hub arrived in 0.1 s; with the window open, a note typed in the app reached the hub in 2.6 s, and a hub edit showed in the open note in 0.2 s |
+| 6. Sync, opt-in | In part: sync passed with a loopback hub; HTTPS and lodge's web app not run | The hub was the Flatpak's own notesd with its own data directory, on `http://127.0.0.1:7788` in the VM, as in ADR-0031's record: plain HTTP on loopback, not a hub over HTTPS as the item asks, and with no lodge, so its web app was not part of the run. `notesctl hub join http://127.0.0.1:7788 shared --vault "Field Notes"` and `hub approve` (the terminal, until G1): no keyring prompt, since the password login unlocked the `login` keyring. With the window closed, a new note reached the hub in 2.2 s and one from the hub arrived in 0.1 s; with the window open, a note typed in the app reached the hub in 2.6 s, and a hub edit showed in the open note in 0.2 s |
 | 7. Disconnects | Pass | Hub stopped ("connection refused"; the status bar's sync icon showed offline). On both sides, edits to different lines of Harbor, one line of Lighthouse changed 2 ways, and a new note each. The hub back, the device reconnected within 40 s (its backoff): Harbor held both edits, the new notes crossed, and Lighthouse was a conflict, shown as "1 conflict" in the status bar and both lines in the merge view; taking the device's line and Done resolved it on both sides. `sync leave`: the files stayed and edited locally in the app, and the hub's copy stayed. The never-joined Journal kept its hashes and times from before item 6 |
 
 **Run in Background off** (GNOME Settings, Apps, Frostnotes). This is the
@@ -239,9 +242,10 @@ logout:
   and the desktop ended it within 18 s.
 - With the window open, notesd ran. About 45 s after the last window
   closed, the desktop ended it.
-- Both ends left no "notesd stopped" line, so they were a kill, not
-  `SIGTERM`. notesd's atomic writes and SQLite's journal are built for a
-  kill (`make vault-it`).
+- Neither end logged a clean stop ("notesd stopped", which notesd writes
+  at logout), so neither was a graceful shutdown; the run did not
+  establish the signal. notesd's atomic writes and SQLite's journal are
+  built for an abrupt end (`make vault-it`).
 - Opening the app with the permission off makes the launcher ask again;
   the portal refuses and deletes the autostart entry. Turning the
   permission on again does not bring the entry back: the next launch of
