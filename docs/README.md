@@ -83,6 +83,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0005 — M3 desktop app](plans/0005-m3-desktop-app.md)
 - [0006 — M4 notes inside lodge](plans/0006-m4-notes-inside-lodge.md)
 - [0007 — Folder scopes for agents](plans/0007-folder-scopes-for-agents.md)
+- [0008 — M6, the standalone desktop app](plans/0008-m6-the-standalone-desktop-app.md)
 
 ## Conventions
 
