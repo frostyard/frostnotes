@@ -42,7 +42,10 @@ metainfo=$dir/org.frostyard.Frostnotes.metainfo.xml
 [ -f "$manifest" ] || die "no manifest at $manifest"
 [ -f "$metainfo" ] || die "no metainfo at $metainfo"
 
-# Every check comes before the first edit, so a failed run changes nothing.
+# Every check comes before the first edit, so a run refused by a check changes
+# nothing. A failure during the edits (an I/O error) can leave the manifest
+# stamped and the metainfo not: start again from fresh copies. In CI the
+# failed step stops the job, so nothing is built or published.
 old='-X main.version=flatpak'
 new="-X main.version=$version -X main.commit=$commit"
 found=$(grep -oF -- "$old" "$manifest" | wc -l)
