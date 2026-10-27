@@ -1,6 +1,6 @@
 # 0031 — The desktop app ships as a Flatpak with its own notesd
 
-- **Status:** Proposed
+- **Status:** Accepted (Brian, 2026-10-26)
 - **Date:** 2026-10-26
 
 ## Context
