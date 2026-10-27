@@ -98,8 +98,9 @@ a fail for each item.
 ADR-0031's record), with GNOME on Wayland, Flathub's
 `org.gnome.Platform//51`, and a user install. A second run on a Debian
 GNOME desktop answers the roadmap's "clean installs on snow and Debian".
-Items 1 to 5 run with no tailnet and no hub. Item 6 needs a hub the VM
-can reach over HTTPS, set up only after item 5: lodge's
+Items 1 to 4 run with no tailnet and no hub; take a VM snapshot after
+item 4, for item 5 on the next release. Item 6 needs a hub the VM can
+reach over HTTPS, set up only after item 4: lodge's
 `https://lodge.<tailnet>.ts.net/device/notes`, with the VM joined to the
 tailnet at that point (Tailscale on the VM is test setup, not part of the
 app), or a scratch notesd hub with its own TLS, as in ADR-0031's record.
@@ -147,8 +148,9 @@ Item 6's URL is that hub's.
      notesd starts at login and whether the desktop stops it; that part
      is the desktop's, not the app's. Opening the app must still start a
      notesd and show the vaults. Turn the permission on again.
-5. **Update without loss.** This item needs 2 published releases: run
-   items 1 to 4 on the older one, then publish the newer one. With the
+5. **Update without loss.** This item needs 2 published releases: go
+   back to the snapshot taken after item 4 on the older one, once the
+   newer one is published, so the update runs with no hub. With the
    window open and notesd running, `flatpak update
    org.frostyard.Frostnotes`; close the window, and open it again.
    - Every vault and note, the workspace and the version history are
