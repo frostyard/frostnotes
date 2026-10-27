@@ -98,8 +98,12 @@ a fail for each item.
 ADR-0031's record), with GNOME on Wayland, Flathub's
 `org.gnome.Platform//51`, and a user install. A second run on a Debian
 GNOME desktop answers the roadmap's "clean installs on snow and Debian".
-For item 6, a hub in lodge that the tester may pair a device with, or a
-scratch hub.
+Items 1 to 5 run with no tailnet and no hub. Item 6 needs a hub the VM
+can reach over HTTPS, set up only after item 5: lodge's
+`https://lodge.<tailnet>.ts.net/device/notes`, with the VM joined to the
+tailnet at that point (Tailscale on the VM is test setup, not part of the
+app), or a scratch notesd hub with its own TLS, as in ADR-0031's record.
+Item 6's URL is that hub's.
 
 1. **Nothing else is there.** `flatpak list` shows no frostyard app;
    `command -v notesd notesctl lodge tailscale` finds nothing;
@@ -124,7 +128,7 @@ scratch hub.
    - Edit a note in another editor (`gedit` or `vim`). The window shows
      the edit within 2 s, and no conflict copy appears.
    - Open an existing folder of Markdown files with Open folder as vault.
-   - `flatpak run --command=notesctl org.frostyard.Frostnotes vaults`
+   - `flatpak run --command=notesctl org.frostyard.Frostnotes vault list`
      lists both vaults.
    - Never during this item does the app ask for a hub, an account,
      lodge or the network.
@@ -167,7 +171,8 @@ scratch hub.
    - Stop the hub, or take the VM off the network. Edit notes on both
      sides. Bring the hub back: both edits are kept, merged or as a
      conflict the app shows, never lost.
-   - `notesctl sync leave --vault <vault>` on the device: its files stay
+   - `flatpak run --command=notesctl org.frostyard.Frostnotes sync leave
+     --vault <vault>` on the device: its files stay
      and still open and edit locally; the hub's copy stays.
    - Vaults that were never joined did not change at any time during
      items 6 and 7.
