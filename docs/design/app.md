@@ -726,7 +726,8 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   lock, such as "another notesd uses".
   `frostnotes [ARGS]`, when `notesctl hello`
   fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
-  starts notesd in a new sandbox that outlives the window (until logout),
+  starts notesd in a new sandbox that outlives the window (until logout,
+  while the app may run in the background),
   and waits for about 10 s for it. Then it ends `flatpak-spawn` with
   `SIGKILL`: `flatpak-spawn` waits for its command and would keep the
   window's sandbox alive, it forwards every signal it can catch to notesd,
@@ -740,6 +741,13 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   portal closes a request when its caller leaves the bus, so a one-shot
   `gdbus call` cannot ask the user. Allowed once, the portal runs
   `frostnotes --background` at login, so sync goes on with no window.
+  When the user turns the permission off (GNOME Settings, Apps, Run in
+  Background), the desktop ends a notesd that runs with no window: on
+  GNOME 48, about 45 s after the last window closes, and within seconds
+  of a login that started it, with no clean stop in `notesd.log`. The launcher's next request is then refused,
+  and the portal deletes the autostart entry; turned on again, the
+  permission brings the entry back only at the next launch of the app
+  ([plan 0008, Phase 3](../plans/0008-m6-the-standalone-desktop-app.md#record)).
 - **The socket** is `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`
   when `FLATPAK_ID` is the app ID, the one runtime directory Flatpak shares
   between the app's sandboxes. `internal/config` and `src-tauri/src/paths.rs`
