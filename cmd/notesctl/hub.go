@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -302,10 +304,29 @@ func newHubJoinCmd(opts *rootOptions) *cobra.Command {
 				if cmd.Flags().Changed("device") {
 					params.Name = &device
 				}
-				if err := pairHub(cmd.Context(), cmd.OutOrStdout(), c.Sync(), params); err != nil {
+				out := cmd.OutOrStdout()
+				paired, err := hasHub(cmd.Context(), c.Sync(), url)
+				if err != nil {
 					return err
 				}
-				status, err := c.Sync().Join(cmd.Context(), &api.SyncJoinParams{VaultID: vault, URL: url, Name: args[1]})
+				if !paired {
+					if err := pairNew(cmd.Context(), out, c.Sync(), params); err != nil {
+						return err
+					}
+				}
+				join := &api.SyncJoinParams{VaultID: vault, URL: url, Name: args[1]}
+				status, err := c.Sync().Join(cmd.Context(), join)
+				if paired && errors.Is(err, api.ErrRevoked) {
+					// The hub refused the token the device kept, or the device
+					// lost it: pair again, once.
+					if _, err := fmt.Fprintf(out, "the hub at %s refused this device's token; pairing again\n", url); err != nil {
+						return err
+					}
+					if err := pairNew(cmd.Context(), out, c.Sync(), params); err != nil {
+						return err
+					}
+					status, err = c.Sync().Join(cmd.Context(), join)
+				}
 				if err != nil {
 					return err
 				}
@@ -318,17 +339,19 @@ func newHubJoinCmd(opts *rootOptions) *cobra.Command {
 	return cmd
 }
 
-// pairHub reuses a paired hub, or waits for approval of a new pairing.
-func pairHub(ctx context.Context, out io.Writer, client api.SyncClient, params *api.SyncPairParams) error {
+// hasHub reports whether this device paired with the hub at url. A
+// pairing it holds may still be dead: the hub may have revoked the token.
+func hasHub(ctx context.Context, client api.SyncClient, url string) (bool, error) {
 	hubs, err := client.Hubs(ctx, &api.SyncHubsParams{})
 	if err != nil {
-		return err
+		return false, err
 	}
-	for _, hub := range hubs {
-		if hub.URL == params.URL {
-			return nil
-		}
-	}
+	return slices.ContainsFunc(hubs, func(h api.SyncHub) bool { return h.URL == url }), nil
+}
+
+// pairNew pairs with a hub and waits for the approval of the pairing.
+// A pairing with a hub paired already replaces its token.
+func pairNew(ctx context.Context, out io.Writer, client api.SyncClient, params *api.SyncPairParams) error {
 	pairing, err := client.Pair(ctx, params)
 	if err != nil {
 		return err

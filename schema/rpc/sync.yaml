@@ -120,7 +120,7 @@ methods:
       - {name: url, type: string, doc: "A paired hub's URL."}
       - {name: name, type: string, doc: "The hub vault's name."}
     result: SyncStatus
-    errors: [notFound, conflict, unavailable]
+    errors: [notFound, conflict, unavailable, revoked]
   - name: leave
     doc: Stop syncing a vault and drop its sync state; its files stay.
     params:
@@ -137,25 +137,25 @@ methods:
     params:
       - {name: vaultId, type: int}
     result: "[]SyncConflict"
-    errors: [notFound, unavailable]
+    errors: [notFound, unavailable, revoked]
   - name: resolve
     doc: Clear a file's conflict flag on the hub, once the user has merged it by hand or kept it as it is.
     params:
       - {name: vaultId, type: int}
       - {name: path, type: string}
-    errors: [notFound, conflict, unavailable]
+    errors: [notFound, conflict, unavailable, revoked]
   - name: reset
     doc: Leave and join again, with a new replica; files match by hash.
     params:
       - {name: vaultId, type: int}
     result: SyncStatus
-    errors: [notFound, unavailable]
+    errors: [notFound, unavailable, revoked]
   - name: verify
     doc: Compare a synced vault with its hub.
     params:
       - {name: vaultId, type: int}
     result: VerifyReport
-    errors: [notFound, unavailable]
+    errors: [notFound, unavailable, revoked]
   - name: history
     doc: The hub's revisions of a file, newest first.
     params:
@@ -163,7 +163,7 @@ methods:
       - {name: path, type: string}
       - {name: limit, type: int, optional: true, doc: "At most this many; default 50, at most 200."}
     result: "[]Revision"
-    errors: [notFound, unavailable]
+    errors: [notFound, unavailable, revoked]
   - name: readRevision
     doc: >-
       A hub revision's content, for the merge view: from this device's blob
@@ -174,7 +174,7 @@ methods:
       - {name: vaultId, type: int}
       - {name: seq, type: int, doc: "The revision's sequence number, from sync.history or sync.conflicts."}
     result: RevisionContent
-    errors: [notFound, invalidParams, unavailable]
+    errors: [notFound, invalidParams, unavailable, revoked]
 events:
   - name: changed
     doc: A synced vault's state changed.

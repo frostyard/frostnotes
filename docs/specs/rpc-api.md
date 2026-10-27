@@ -18,6 +18,7 @@ Generated from [schema/rpc](../../schema/rpc). Framing, connection setup and eve
 | `protocolMismatch` | 1003 | The server does not speak the client's protocol major version. |
 | `notReady` | 1004 | The connection has not completed rpc.hello. |
 | `unavailable` | 1005 | The operation cannot run now, for example while the hub is unreachable; retrying later can succeed. |
+| `revoked` | 1006 | The hub refused this device's token, or the device holds none: pair again. |
 
 ## events
 
@@ -1242,7 +1243,7 @@ Sync a local vault with a hub vault: files the hub has had at the same path matc
 | `name` | `string` | The hub vault's name. |
 
 Result: `SyncStatus`.
-Errors: `notFound`, `conflict`, `unavailable`.
+Errors: `notFound`, `conflict`, `unavailable`, `revoked`.
 
 ### `sync.leave`
 
@@ -1275,7 +1276,7 @@ A synced vault's flagged files.
 | `vaultId` | `int` |  |
 
 Result: `[]SyncConflict`.
-Errors: `notFound`, `unavailable`.
+Errors: `notFound`, `unavailable`, `revoked`.
 
 ### `sync.resolve`
 
@@ -1287,7 +1288,7 @@ Clear a file's conflict flag on the hub, once the user has merged it by hand or 
 | `path` | `string` |  |
 
 Result: none (`null`).
-Errors: `notFound`, `conflict`, `unavailable`.
+Errors: `notFound`, `conflict`, `unavailable`, `revoked`.
 
 ### `sync.reset`
 
@@ -1298,7 +1299,7 @@ Leave and join again, with a new replica; files match by hash.
 | `vaultId` | `int` |  |
 
 Result: `SyncStatus`.
-Errors: `notFound`, `unavailable`.
+Errors: `notFound`, `unavailable`, `revoked`.
 
 ### `sync.verify`
 
@@ -1309,7 +1310,7 @@ Compare a synced vault with its hub.
 | `vaultId` | `int` |  |
 
 Result: `VerifyReport`.
-Errors: `notFound`, `unavailable`.
+Errors: `notFound`, `unavailable`, `revoked`.
 
 ### `sync.history`
 
@@ -1322,7 +1323,7 @@ The hub's revisions of a file, newest first.
 | `limit` | `int` (optional) | At most this many; default 50, at most 200. |
 
 Result: `[]Revision`.
-Errors: `notFound`, `unavailable`.
+Errors: `notFound`, `unavailable`, `revoked`.
 
 ### `sync.readRevision`
 
@@ -1334,7 +1335,7 @@ A hub revision's content, for the merge view: from this device's blob store when
 | `seq` | `int` | The revision's sequence number, from sync.history or sync.conflicts. |
 
 Result: `RevisionContent`.
-Errors: `notFound`, `invalidParams`, `unavailable`.
+Errors: `notFound`, `invalidParams`, `unavailable`, `revoked`.
 
 ### Event `sync.changed` (transient)
 

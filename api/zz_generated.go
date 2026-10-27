@@ -44,6 +44,8 @@ const (
 	// The operation cannot run now, for example while the hub is unreachable;
 	// retrying later can succeed.
 	CodeUnavailable ErrorCode = 1005
+	// The hub refused this device's token, or the device holds none: pair again.
+	CodeRevoked ErrorCode = 1006
 )
 
 // Sentinels for errors.Is: an *Error matches the sentinel with its code.
@@ -58,6 +60,7 @@ var (
 	ErrProtocolMismatch = &Error{Code: CodeProtocolMismatch}
 	ErrNotReady         = &Error{Code: CodeNotReady}
 	ErrUnavailable      = &Error{Code: CodeUnavailable}
+	ErrRevoked          = &Error{Code: CodeRevoked}
 )
 
 // String is the code's schema name.
@@ -83,6 +86,8 @@ func (c ErrorCode) String() string {
 		return "notReady"
 	case CodeUnavailable:
 		return "unavailable"
+	case CodeRevoked:
+		return "revoked"
 	}
 	return fmt.Sprintf("ErrorCode(%d)", int(c))
 }
@@ -124,6 +129,9 @@ func NotReady(format string, args ...any) *Error { return Errorf(CodeNotReady, f
 
 // Unavailable returns an error with CodeUnavailable.
 func Unavailable(format string, args ...any) *Error { return Errorf(CodeUnavailable, format, args...) }
+
+// Revoked returns an error with CodeRevoked.
+func Revoked(format string, args ...any) *Error { return Errorf(CodeRevoked, format, args...) }
 
 // ---- events ----
 
