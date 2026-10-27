@@ -128,8 +128,10 @@ file a step names before writing its frostnotes counterpart.
   Background-portal helper, AppStream, smoke test, a patch for the node
   generator, hashed Python requirements, and the generated `cargo-`, `node-` and
   `go-sources.json`); `scripts/flatpak-sources.sh` (`make flatpak-sources`)
-  regenerates them and `tools/flatpakgo` writes the Go part; CI's
-  `flatpak.yml` builds it
+  regenerates them and `tools/flatpakgo` writes the Go part;
+  `stamp-version.sh` stamps a tag's version into the manifest and the
+  metainfo; CI's `flatpak.yml` builds it and publishes the image to GHCR on a
+  `v*` tag
   ([ADR-0031](docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)).
   Run `make flatpak-sources` after a change to a lockfile or `go.mod`.
 - `dev/nsl/provision.sh`: the nsl machine for the app toolchain;

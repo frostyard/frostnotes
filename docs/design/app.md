@@ -760,6 +760,13 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   launcher ends it, that notesd lives on and that the log turns over, and
   checks the data directory's lock). Run `make flatpak-sources`
   after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
+  A `vX.Y.Z` tag builds a release: `packaging/flatpak/stamp-version.sh`
+  stamps the version and the commit into the manifest and the version, with
+  its date, into the metainfo, and the workflow then publishes the OCI image
+  to `ghcr.io/frostyard/frostnotes` as `vX.Y.Z` and `sha-<commit>`, moving
+  `latest` only after it attested the digest. The Frostyard remote
+  (`frostyard/flatpak-index`) lists only attested digests
+  ([core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)).
 
 ## Dev and test
 

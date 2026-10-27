@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -155,6 +156,103 @@ func TestReleaseWorkflowSplitsBuildFromRelease(t *testing.T) {
 	if n := get(get(root, "on"), "push"); n == nil || get(n, "tags") == nil {
 		t.Error("release.yml must run on pushed tags")
 	}
+}
+
+// values returns the scalar values of a sequence node, or nil.
+func values(n *yaml.Node) []string {
+	if n == nil || n.Kind != yaml.SequenceNode {
+		return nil
+	}
+	out := make([]string, 0, len(n.Content))
+	for _, c := range n.Content {
+		out = append(out, c.Value)
+	}
+	return out
+}
+
+// permMap returns the permissions a mapping node declares as key/value pairs.
+func permMap(p *yaml.Node) map[string]string {
+	out := map[string]string{}
+	if p == nil || p.Kind != yaml.MappingNode {
+		return out
+	}
+	for i := 0; i+1 < len(p.Content); i += 2 {
+		out[p.Content[i].Value] = p.Content[i+1].Value
+	}
+	return out
+}
+
+// samePermissions reports whether got holds exactly the keys and values of
+// want.
+func samePermissions(got, want map[string]string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for k, v := range want {
+		if gotV, ok := got[k]; !ok || gotV != v {
+			return false
+		}
+	}
+	return true
+}
+
+// The Flatpak workflow publishes an OCI image on a v* tag from GitHub-hosted
+// runners only. The build holds no write token; the publish job, which does,
+// checks out nothing and so runs none of the repository's code.
+func TestFlatpakWorkflowSplitsBuildFromPublish(t *testing.T) {
+	root := workflows(t)["flatpak.yml"]
+	if root == nil {
+		t.Fatal("no flatpak.yml")
+	}
+	read := map[string]string{"contents": "read"}
+	if got := permMap(get(root, "permissions")); !samePermissions(got, read) {
+		t.Errorf("top-level permissions = %v, want only contents: read", got)
+	}
+	if tags := values(get(get(get(root, "on"), "push"), "tags")); len(tags) != 1 || tags[0] != "v*" {
+		t.Errorf("on.push.tags = %v, want [v*]", tags)
+	}
+
+	jobs := get(root, "jobs")
+	for _, name := range []string{"sources", "flatpak"} {
+		job := get(jobs, name)
+		if job == nil {
+			t.Fatalf("flatpak.yml has no %s job (a ruleset matches its name)", name)
+		}
+		if p := get(job, "permissions"); p != nil && !samePermissions(permMap(p), read) {
+			t.Errorf("%s job permissions = %v, want none or only contents: read", name, permMap(p))
+		}
+	}
+
+	publish := get(jobs, "publish")
+	if publish == nil {
+		t.Fatal("flatpak.yml has no publish job")
+	}
+	want := map[string]string{
+		"contents":     "read",
+		"packages":     "write",
+		"id-token":     "write",
+		"attestations": "write",
+	}
+	if got := permMap(get(publish, "permissions")); !samePermissions(got, want) {
+		t.Errorf("publish permissions = %v, want %v", got, want)
+	}
+	needs := values(get(publish, "needs"))
+	for _, need := range []string{"sources", "flatpak"} {
+		if !slices.Contains(needs, need) {
+			t.Errorf("publish needs = %v, which holds no %s", needs, need)
+		}
+	}
+	if cond := get(publish, "if"); cond == nil || !strings.Contains(cond.Value, "refs/tags/v") {
+		t.Errorf("publish if = %v, want a check for refs/tags/v", cond)
+	}
+	if r := get(publish, "runs-on"); r == nil || !strings.HasPrefix(r.Value, "ubuntu-") {
+		t.Errorf("publish runs-on = %v, want a GitHub-hosted ubuntu- runner", r)
+	}
+	walk(publish, func(m *yaml.Node) {
+		if u := get(m, "uses"); u != nil && strings.HasPrefix(u.Value, "actions/checkout@") {
+			t.Errorf("publish:%d checks out the repository; it must run no repository code", u.Line)
+		}
+	})
 }
 
 // CI gains the snapshot .deb job without renaming another (the

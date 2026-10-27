@@ -1,7 +1,11 @@
 # Builds the Flatpak, with its tests, on every pull request and push to main
 # (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
 # as igloo's workflow does. The sources job checks that the offline sources
-# match the lockfiles. Publishing the image to GHCR comes later.
+# match the lockfiles. A v* tag stamps the tag's version into the manifest and
+# the metainfo, then publishes an OCI image to ghcr.io/frostyard/frostnotes as
+# vX.Y.Z and sha-<commit>, and attests its digest; latest moves only after the
+# attestation. The Frostyard remote (https://github.com/frostyard/flatpak-index)
+# lists only attested digests (core ADR-0058), so main pushes publish nothing.
 #
 # Every action is pinned to a commit SHA (core ADR-0021); Dependabot bumps the
 # SHA and the version comment together.
@@ -10,6 +14,7 @@ name: Flatpak
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -17,9 +22,14 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels the older run of a pull request, never a tag run.
 concurrency:
   group: flatpak-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  APP_ID: org.frostyard.Frostnotes
+  IMAGE: ghcr.io/frostyard/frostnotes
 
 jobs:
   sources:
@@ -51,6 +61,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: The tag is vMAJOR.MINOR.PATCH
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH" >&2; exit 1; }
+      # notesd reports the version the Flatpak was built with (notesd
+      # -version, rpc.hello), and software centres show the metainfo's newest
+      # release; the committed files keep "flatpak" and 0.0.0.
+      - name: Stamp the release version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: packaging/flatpak/stamp-version.sh "${VERSION#v}" "$(printf '%.12s' "$COMMIT")"
       - name: Build and test
         uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
@@ -62,3 +85,73 @@ jobs:
           # always rebuilds, and a change of the manifest or of a sources
           # file starts the cache afresh.
           cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/org.frostyard.Frostnotes.json', 'packaging/flatpak/cargo-sources.json', 'packaging/flatpak/node-sources.json', 'packaging/flatpak/go-sources.json') }}
+
+      - name: Export the OCI image
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: flatpak build-bundle --oci --arch=x86_64 repo frostnotes.oci "$APP_ID"
+
+      - name: Keep the OCI image for publishing
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frostnotes-oci
+          path: frostnotes.oci
+          retention-days: 1
+
+  publish:
+    name: Publish
+    needs: [sources, flatpak]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # GitHub-hosted on purpose: flatpak-index rejects attestations from
+    # self-hosted runners.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      # Optional: a fine-grained token with Actions write access to
+      # frostyard/flatpak-index, so the remote refreshes right away instead of
+      # at its next hourly run.
+      DISPATCH_TOKEN: ${{ secrets.FLATPAK_INDEX_DISPATCH_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frostnotes-oci
+          path: frostnotes.oci
+
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$GITHUB_TOKEN" | skopeo login ghcr.io --username "$ACTOR" --password-stdin
+
+      # The version and commit tags go first. latest moves only after the
+      # digest is attested, so the remote never sees an unattested latest.
+      - name: Push the version to GHCR
+        id: push
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          skopeo copy --digestfile digest oci:frostnotes.oci "docker://$IMAGE:$VERSION"
+          digest="$(cat digest)"
+          skopeo copy --preserve-digests "docker://$IMAGE@$digest" "docker://$IMAGE:sha-${GITHUB_SHA::12}"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+
+      - name: Move latest to the attested digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: skopeo copy --preserve-digests "docker://$IMAGE@$DIGEST" "docker://$IMAGE:latest"
+
+      - name: Refresh the Frostyard remote
+        if: env.DISPATCH_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ env.DISPATCH_TOKEN }}
+        run: gh workflow run publish.yml --repo frostyard/flatpak-index
