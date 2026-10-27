@@ -55,6 +55,16 @@ func (sv service) remote(ctx context.Context, vaultID int64) (store.Remote, erro
 	return r, err
 }
 
+// dialError turns a failed dial into an API error: revoked when the hub
+// refused the token or the device holds none (the device pairs again),
+// else unavailable.
+func dialError(err error) error {
+	if errors.Is(err, errRevoked) {
+		return api.Revoked("the hub refused this device's token, or this device holds none: pair again (notesctl hub join pairs again)")
+	}
+	return api.Unavailable("reach the hub: %v", err)
+}
+
 // connect dials the hub vault's remote syncs with, for a one-off call.
 func (sv service) connect(ctx context.Context, vaultID int64) (store.Remote, *session, error) {
 	r, err := sv.remote(ctx, vaultID)
@@ -63,7 +73,7 @@ func (sv service) connect(ctx context.Context, vaultID int64) (store.Remote, *se
 	}
 	sess, err := sv.s.dial(ctx, r.Hub)
 	if err != nil {
-		return store.Remote{}, nil, api.Unavailable("reach the hub: %v", err)
+		return store.Remote{}, nil, dialError(err)
 	}
 	return r, sess, nil
 }
@@ -88,7 +98,18 @@ func (sv service) Join(ctx context.Context, p *api.SyncJoinParams) (*api.SyncSta
 	if err := sv.s.join(ctx, p.VaultID, h, p.Name); err != nil {
 		return nil, err
 	}
-	return sv.statusOf(p.VaultID), nil
+	st := sv.statusOf(p.VaultID)
+	// The loop's first snapshot may come before it has read its remote.
+	if st.URL == "" {
+		st.URL = h.URL
+		if row, err := sv.s.cfg.DB.SyncHub(ctx, h.ID); err == nil {
+			st.URL = row.URL // the hub may have moved while joining
+		}
+	}
+	if st.HubVault == "" {
+		st.HubVault = p.Name
+	}
+	return st, nil
 }
 
 // join records the remote and the agreed state of every local file the
@@ -96,7 +117,7 @@ func (sv service) Join(ctx context.Context, p *api.SyncJoinParams) (*api.SyncSta
 func (s *Syncer) join(ctx context.Context, vaultID int64, h store.SyncHub, name string) error {
 	sess, err := s.dial(ctx, h.ID)
 	if err != nil {
-		return api.Unavailable("reach the hub: %v", err)
+		return dialError(err)
 	}
 	defer func() { _ = sess.client.Close() }()
 	vaults, err := sess.client.Log().Vaults(ctx, &api.LogVaultsParams{})

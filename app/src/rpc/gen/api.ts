@@ -33,6 +33,11 @@ export const ErrorCode = {
    * retrying later can succeed.
    */
   unavailable: 1005,
+  /**
+   * The hub refused this device's token, or the device holds none: pair
+   * again.
+   */
+  revoked: 1006,
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 

@@ -200,6 +200,17 @@ the hub records that URL (`notesctl hub url`), or with
 ([hub.md](hub.md),
 [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md)).
 
+A device whose token the hub revoked, or that lost it, pairs again with
+the same command. `sync.join` on a paired hub whose token fails answers
+`revoked` (not `unavailable`, which says the hub cannot be reached), and
+`notesctl hub join` then says so, runs the pairing flow once and joins
+again. The new pairing replaces the hub's row and the token, and wakes
+the loops of every vault synced with that hub, which leave state
+`revoked` without a restart. The hub knows the device as a new device
+(the protocol's [URLs and tokens](../specs/sync-protocol.md#urls-and-tokens)).
+A vault that stays joined keeps its sync state; one that left
+(`notesctl sync leave`) joins again.
+
 A device that joins with files already in its folder matches them by
 history: a file whose hash is a revision of the hub's file at the same
 path takes that revision as its agreed base, so an unchanged older copy

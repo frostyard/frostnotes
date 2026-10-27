@@ -217,7 +217,7 @@ On a device, `sync` (caller `local`):
 | `sync.paired {pairing}` | waits up to 30 s; `{state: pending, approved or expired, hub}`; on approval keeps the token and records the hub |
 | `sync.hubs` | the paired hubs: `{id, hub, url, device, pairedAt}` |
 | `sync.relocate {hub, url}` | moves the hub paired at `hub` to `url` when the hub there proves itself; `conflict` otherwise (M4, [lodge-app.md](lodge-app.md#device)) |
-| `sync.join {vaultId, url, name}` | syncs the local vault with the hub vault called `name` on the paired hub at `url` |
+| `sync.join {vaultId, url, name}` | syncs the local vault with the hub vault called `name` on the paired hub at `url`; answers a `SyncStatus` that names the hub vault and the URL; `revoked` when the hub refuses the device's token or the device holds none (`unavailable` when the hub cannot be reached) |
 | `sync.leave {vaultId}` | stops syncing it and drops its sync state; the files stay |
 | `sync.status {vaultId?}` | `[]SyncStatus`: state (`idle`, `syncing`, `offline`, `revoked`, `reset`), cursor, hub sequence, pending and conflicted counts, refused files, last sync, error |
 | `sync.conflicts {vaultId}` | flagged files, each with its conflict revisions since its last resolve |
@@ -254,7 +254,13 @@ On a hub, `hub` (caller `local`; from M4 also `session`, but for
 - The device keeps its token in its secret store under
   `hub/<hub ID>/token` and nowhere else. A 401 on any request marks every
   vault synced with that hub `revoked`, and sync with it stops until the
-  device pairs again.
+  device pairs again. A call that dials the hub (`sync.join`,
+  `sync.conflicts`, `sync.resolve`, `sync.reset`, `sync.verify`,
+  `sync.history`, `sync.readRevision`) answers `revoked` when the hub
+  refuses the token or the device holds none. Pairing again with the
+  hub's URL (`sync.pair`, `sync.paired`) replaces its row and token and
+  wakes its loops; `notesctl hub join` does so by itself when `sync.join`
+  answers `revoked`, at most once.
 - A device that pairs again is a new device to the hub, and its old
   replicas are not its own. At each connection a device checks its
   replica (`log.pushes` with no pushes); answered `notFound`, it calls
