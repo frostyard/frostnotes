@@ -25,10 +25,12 @@ files (`notesctl sync leave`).
 
 Status (2026-10-27):
 - **Phase 1 is done:** the review below.
-- **Phase 2 is built** in PR #103; the remote's entry, the package's
-  visibility and the first tag are still to come.
-- **Phase 3,** the clean-install check, runs after the first tagged
-  publish.
+- **Phase 2 is built** in PR #103. `v0.2.0` was tagged and published
+  on 2026-10-27, and the package is public; the remote's entry
+  (frostyard/flatpak-index#4) waits for Phase 3's first run.
+- **Phase 3,** the clean-install check: the first run, on `v0.2.0` on
+  2026-10-27, passed items 1 to 4, 6 and 7 ("Record" below). Item 5
+  waits for the second release.
 - **Phase 4** lists what the review found; none of it is built.
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
@@ -43,7 +45,7 @@ real Snow install on 2026-10-26), reviewed against the program's list:
 | Clean updates and IPC paths | Paths met; updates in part | the socket is in `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/`, the one directory all of the app's sandboxes share, and it does not change between versions. After `flatpak update`, the notesd that runs stays at the old version until logout (gap G3) |
 | Background and login start through portals | Met | the Flatpak portal (`flatpak-spawn`) and the Background portal (`frostnotes-request-background`), tested on Snow on 2026-10-26 |
 | Clear settings for background activity and lodge | Not met | no switch for background activity in the app (G2); joining a hub is `notesctl hub join` only, and the vault manager names a command that a Flatpak user cannot type as written (G1) |
-| Predictable behaviour when permissions are refused | Met, with weak messages | Background refused: notesd runs until logout and does not start at login. No Flatpak portal: no notesd, and the window says it is reconnecting. No Secret Service: tokens go to a 0600 file, with a warning. No network: local work goes on, and sync waits. A narrowed `--filesystem`: a vault outside it fails to open. The window does not say why in the last 2 cases (G5) |
+| Predictable behaviour when permissions are refused | Met, with weak messages | Background refused: notesd does not start at login. (Phase 3's first run corrected this row: on GNOME 48, the desktop also stops the notesd that runs, about 45 s after the last window closes; it does not run until logout.) No Flatpak portal: no notesd, and the window says it is reconnecting. No Secret Service: tokens go to a 0600 file, with a warning. No network: local work goes on, and sync waits. A narrowed `--filesystem`: a vault outside it fails to open. The window does not say why in the last 2 cases (G5) |
 
 The review also found:
 - The metainfo and the desktop file said that notes "sync through your
@@ -186,7 +188,73 @@ Item 6's URL is that hub's.
 
 ### Record
 
-No run yet.
+#### Run 1: `v0.2.0` on Snow, 2026-10-27 (items 1 to 4, 6 and 7 pass)
+
+**The release.** `v0.2.0`, commit `0573fab7eeeabf7b76a8e94916ca2b429f5b65e3`,
+Flatpak run 40533395511. The tested image is
+`ghcr.io/frostyard/frostnotes@sha256:ec41ee04580380d4babbd0600d6c73191ffd09603c0341c0fab411ed08cfcf16`,
+which `v0.2.0` and `latest` named on the day. `gh attestation verify`
+passed for that digest, with `--owner frostyard`, and with `--repo
+frostyard/frostnotes --signer-workflow
+github.com/frostyard/frostnotes/.github/workflows/flatpak.yml`: SLSA
+provenance v1, signer `flatpak.yml@refs/tags/v0.2.0`, source digest
+`0573fab`. Installed, the app is version 0.2.0, subject "Built from
+0573fab7…", Alt-id the digest above.
+
+**The machine.** A disposable incus VM on minideb (4 vCPU, 8 GiB, UEFI,
+Secure Boot off), installed with the console installer from
+`snosi-installer_20261026191155_x86-64.iso`: Snow
+(`ghcr.io/frostyard/snow:latest`, image
+`sha256:ffee48489555172217b22763db4efe5f34200d5dd3137185467161c55c655243`,
+version `20261027121612`), btrfs, the image's core Flatpaks, user
+`tester` with a password login (GDM, no autologin). GNOME Shell 48.7 on
+Wayland, xdg-desktop-portal 1.20.3, xdg-desktop-portal-gnome 48.0,
+Flatpak 1.16.6, kernel 7.2.12. `org.gnome.Platform//51` came with the
+core Flatpaks (Flathub, system), so the user install needed no other
+remote. Input came from a uinput keyboard and pointer, and evidence from
+GNOME Shell's screenshot interface; checks ran over `incus exec`.
+
+**The install source.** Not the public remote: as core
+[ADR-0062](https://github.com/frostyard/core/blob/main/docs/adr/0062-make-desktop-suite-apps-standalone-flatpaks-with-opt-in-lodge.md)
+requires before the first listing, a staged catalogue with the digest as
+its only tag, built by flatpak-index's `scripts/build-index.py` at
+`760f1fd` (frostyard/flatpak-index#4, *Stage a candidate*), which
+verified the attestation, and served on `127.0.0.1:8765` in the VM.
+
+| Item | Result | What happened |
+| --- | --- | --- |
+| 1. Nothing else | Pass | No frostyard Flatpak (remote `flathub` only); no `notesd`, `notesctl`, `lodge` or `tailscale` on `PATH`; no `frostnotes*`, `lodge*` or `tailscale*` units; no OS extensions; no `~/.local/share/frostnotes`, `~/.var/app/org.frostyard.Frostnotes` or autostart entry |
+| 2. Install | Pass | `flatpak install --user frostyard-staged org.frostyard.Frostnotes` installed it; `flatpak info` showed 0.2.0 and the commit above. The app grid showed Frostnotes with its icon (on its second page); GNOME 48's grid shows no summaries, and the desktop file's `Comment` is "Plain markdown notes on your own computer" |
+| 3. Local, no terminal | Pass | From the grid: the vault manager, and 2 instances (`flatpak ps`), notesd's under `flatpak-portal`. Create new vault, Browse (the portal's chooser): Location `/var/home/tester/Documents`, a real path. Two notes with a wikilink each way, tags, and a pasted screenshot (`Pasted image ….png`, embedded and shown); search found both notes, backlinks and the tag pane counted the link and the tags. 2 edits in vim to the open note showed in the window within 1 s, with no conflict copy. Open folder as vault opened `~/Journal`, a folder of Markdown with a subfolder. `notesctl vault list` listed both. Nothing asked for a hub, an account, lodge or the network; notesd and the window held no TCP socket |
+| 4. Restart, login, background | Pass | The first launch got `background` and `autostart` with no dialog, and wrote the autostart entry. Closed: only notesd's instance stayed; reopened, the window used that notesd, with no `flatpak-spawn`. Logout stopped notesd ("notesd stopped"); at login gnome-session started it with no window, and `notesd.log` shows the start. Run in Background off: see below. Opening the app with it off started a notesd and showed both vaults. On again, and after one launch of the app, a login started notesd |
+| 5. Update | Not run | Needs the second release. The VM is kept stopped with the snapshot `after-item-4` |
+| 6. Sync, opt-in | Pass, with a scratch hub | The hub was the Flatpak's own notesd with its own data directory, on `127.0.0.1:7788` in the VM, as in ADR-0031's record; there was no lodge, so its web app was not part of the run. `notesctl hub join http://127.0.0.1:7788 shared --vault "Field Notes"` and `hub approve` (the terminal, until G1): no keyring prompt, since the password login unlocked the `login` keyring. With the window closed, a new note reached the hub in 2.2 s and one from the hub arrived in 0.1 s; with the window open, a note typed in the app reached the hub in 2.6 s, and a hub edit showed in the open note in 0.2 s |
+| 7. Disconnects | Pass | Hub stopped ("connection refused"; the status bar's sync icon showed offline). On both sides, edits to different lines of Harbor, one line of Lighthouse changed 2 ways, and a new note each. The hub back, the device reconnected within 40 s (its backoff): Harbor held both edits, the new notes crossed, and Lighthouse was a conflict, shown as "1 conflict" in the status bar and both lines in the merge view; taking the device's line and Done resolved it on both sides. `sync leave`: the files stayed and edited locally in the app, and the hub's copy stayed. The never-joined Journal kept its hashes and times from before item 6 |
+
+**Run in Background off** (GNOME Settings, Apps, Frostnotes). This is the
+desktop's part, and it differs from the Phase 1 review and
+ADR-0031's Consequences, which expected the notesd that runs to stay until
+logout:
+- At login, gnome-session still started notesd from the autostart entry,
+  and the desktop ended it within 18 s.
+- With the window open, notesd ran. About 45 s after the last window
+  closed, the desktop ended it.
+- Both ends left no "notesd stopped" line, so they were a kill, not
+  `SIGTERM`. notesd's atomic writes and SQLite's journal are built for a
+  kill (`make vault-it`).
+- Opening the app with the permission off makes the launcher ask again;
+  the portal refuses and deletes the autostart entry. Turning the
+  permission on again does not bring the entry back: the next launch of
+  the app does. Until then, a login starts no notesd.
+
+**Other findings,** none a gate failure:
+- Renaming an "Untitled" note asked "Update links?" although no link
+  led to it.
+- The search pane kept a note's old snippet after the note changed.
+- `hub join` ended with "syncing shared at …: offline", although sync
+  ran a moment later.
+- `flatpak remote-info` on the staged remote answered 401, while
+  `remote-ls` and `install` worked.
 
 ## Phase 4 — Gaps found by the review
 
@@ -205,7 +273,10 @@ blocks Phase 2.
   **Done when:** Phase 3's item 6 passes in the app, with no terminal.
 - **G2 — A setting for background activity.** notesd lives on after the
   last window closes, until logout, and only the desktop's background
-  permission controls the start at login (ADR-0031, Consequences). The
+  permission controls the start at login (ADR-0031, Consequences). With
+  that permission off, GNOME 48 also ends notesd about 45 s after the
+  last window closes, and the autostart entry comes back only at the next
+  launch after the permission is on again (Phase 3, run 1). The
   app should show both, and let the user turn off "keep syncing when no
   window is open". **Done when:** the setting exists, its off state stops
   notesd when the last window closes, and Phase 3's item 4 passes with it
