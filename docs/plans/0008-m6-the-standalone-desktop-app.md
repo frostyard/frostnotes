@@ -23,7 +23,7 @@ vault's files and its own index, and the hub reconciles them
 [design/sync.md](../design/sync.md)). A device that leaves a hub keeps its
 files (`notesctl sync leave`).
 
-Status (2026-10-27):
+Status (2026-10-28):
 - **Phase 1 is done:** the review below.
 - **Phase 2 is built** in PR #103. `v0.2.0` was tagged and published
   on 2026-10-27, and the package is public; the remote's entry
@@ -34,7 +34,8 @@ Status (2026-10-27):
   and no lodge. Still to run: item 2 from the public remote (after the
   listing), item 6 with a hub over HTTPS and lodge's web app, and item 5
   on the second release.
-- **Phase 4** lists what the review found; G5 is built and in review, the rest is not built.
+- **Phase 4** lists what the review found: G3 (PR #106) and G5 (PR #107)
+  are done, merged on 2026-10-28; G1, G2 and G4 are open.
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
 
@@ -295,9 +296,9 @@ blocks Phase 2.
   It needs an ADR. **Done when:** after `flatpak update` and a new window,
   `notesctl hello` names the new version with no logout, and no write is
   lost.
-  **Status: built, in review** (branch `feat/g3-update-replaces-notesd`),
-  by another path than the candidate:
-  [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) has the
+  **Status (2026-10-28): done,** merged in PR #106, by another path than
+  the candidate: [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)
+  (Accepted, 2026-10-28) has the
   launcher, not notesd, replace the notesd of an older build when a new
   window opens (`notesctl hello --build` against `flatpak-spawn
   --latest-version notesd -build`, then `notesctl shutdown`), after
@@ -320,7 +321,7 @@ blocks Phase 2.
   narrowed `--filesystem` fails with a plain file error. The window
   should name the cause and the fix (`notesd.log`; `flatpak override`).
   **Done when:** both cases show their cause in the window.
-  **Status (2026-10-28): built, in review.** No portal: the shell's
+  **Status (2026-10-28): done,** merged in PR #107 (`eafe7bc`). No portal: the shell's
   `notesd_log` reads the end of `notesd.log` and the window's connecting
   state shows the cause, the checks and the log's path
   ([specs/ui.md](../specs/ui.md#connecting)). A narrowed `--filesystem`:
