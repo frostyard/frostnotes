@@ -47,12 +47,14 @@ one of the latest installed build. It only goes forward.
   when it has none). These are additive within protocol 1
   ([specs/rpc-protocol.md](../specs/rpc-protocol.md)).
 - **A local caller can stop notesd.** `rpc.shutdown` (caller `local` only)
-  answers first, then stops notesd as `SIGTERM` does: the requests in
-  hand are cancelled and notesd waits for their handlers to return, sync
-  and the vault actors stop, the store closes, the lock is released, and
-  notesd exits 0. A cancelled write is whole or absent: the file write is
-  atomic and its index change is one transaction, and a file that reached
-  the disk is indexed by the next scan. `notesctl shutdown` calls it and waits,
+  answers first, then stops notesd as `SIGTERM` does: the contexts of the
+  requests in hand are cancelled and notesd waits for their handlers to
+  return, sync and the vault actors stop, the store closes, the lock is
+  released, and notesd exits 0. A request in hand can complete, return an
+  error, or lose its reply. A write is never half done: the file write is
+  atomic, a committed write stays whole and is indexed, and a file that
+  reached the disk is indexed by the next scan. A client must not take an
+  unanswered write as absent. `notesctl shutdown` calls it and waits,
   30 s in all, until the socket no longer answers and the data
   directory's lock is free.
 - **The launcher compares and replaces.** `frostnotes [ARGS]`, when a
@@ -70,9 +72,9 @@ one of the latest installed build. It only goes forward.
   again with the base it names
   ([ADR-0022](0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md),
   [ADR-0006](0006-every-write-names-the-version-it-changes.md)), so a save
-  cut by the stop is not lost: it merges or applies in the new notesd. A
-  save whose answer was lost after its file reached the disk comes again
-  on the same base and merges with no conflict.
+  cut by the stop is not lost: it applies in the new notesd. A save whose
+  reply was lost after its write committed comes again on the same base
+  and merges with no conflict.
 
 ## Consequences
 
@@ -122,6 +124,7 @@ one of the latest installed build. It only goes forward.
 
 - Shapes: [design/app.md](../design/app.md#the-flatpak),
   [specs/rpc-protocol.md](../specs/rpc-protocol.md),
+  [specs/lodge-app.md](../specs/lodge-app.md#methods-and-callers) (`rpc.shutdown`'s callers),
   [plan 0008, Phase 4, G3](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review),
   `packaging/flatpak/frostnotes.sh`
 - Builds on: [ADR-0031](0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
