@@ -1,7 +1,9 @@
 // The Desktop permission row follows the desktop's answer while the settings
 // are open (ADR-0033): the window reads the answer every 2 s, with no limit,
-// and the row says "Asking the desktop…" until the answer to its own change
-// is in. Each change has a name, so another change's answer ends no wait.
+// and the row says "Asking the desktop…" until an answer was read after the
+// change. An answer's askedMs says when its request read the setting; the
+// change's since says when the setting was written, so an answer from any
+// helper that read the setting after it ends the wait.
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -24,23 +26,25 @@ const POLL = 2000;
 const ASKING = "Asking the desktop…";
 const AT_LOGIN = "Allowed; notesd starts at login.";
 const NO_LOGIN = "Allowed; notesd does not start at login.";
+/** NOW is the change's moment, its since; the answers are clocked around it. */
+const NOW = 1_784_000_000_000;
 
 /** portal is the portal's answer, as the helper wrote it. */
-const portal = (request: string | null, autostart: boolean): PortalAnswer => ({
+const portal = (askedMs: number | null, autostart: boolean): PortalAnswer => ({
   at: "2026-10-28T09:00:00Z",
   autostartRequested: true,
   response: 0,
   background: true,
   autostart,
   error: null,
-  request,
+  askedMs,
 });
 
-/** background is the shell's answer. */
-const background = (keepRunning: boolean, p: PortalAnswer | null, request: string | null = null): Background => ({
+/** background is the shell's answer, with the change's since when it made one. */
+const background = (keepRunning: boolean, p: PortalAnswer | null, since: number | null = null): Background => ({
   keepRunning,
   portal: p,
-  request,
+  since,
 });
 
 /** tick runs the app's timers, and the promises they start, for ms. */
@@ -79,6 +83,13 @@ async function ready(before: Background) {
 const switchOf = (section: HTMLElement) =>
   within(section).getByRole("switch", { name: "Keep syncing when no window is open" });
 
+/** toggle turns the setting off, and answers the change's since. */
+async function toggle(section: HTMLElement, since: number | null) {
+  setBackground.mockResolvedValue(background(false, portal(NOW - 1000, true), since));
+  fireEvent.click(switchOf(section));
+  await act(async () => {});
+}
+
 afterEach(() => {
   vi.useRealTimers();
   useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null });
@@ -90,38 +101,55 @@ afterEach(() => {
   localStorage.clear();
 });
 
-it("stops asking when the answer to its own change is in", async () => {
-  const section = await ready(background(true, portal(null, true)));
-  expect(within(section).getByText(AT_LOGIN)).toBeTruthy();
-
-  setBackground.mockResolvedValue(background(false, portal(null, true), "req-1"));
-  fireEvent.click(switchOf(section));
-  await act(async () => {});
-  expect(setBackground).toHaveBeenCalledWith(false);
+it("ends the wait when a later helper's answer is in before the next read", async () => {
+  const section = await ready(background(true, portal(NOW - 1000, true)));
+  await toggle(section, NOW);
   expect(within(section).getByText(ASKING)).toBeTruthy();
 
-  readBackground.mockResolvedValue(background(false, portal("req-1", false)));
+  // Another helper read the setting after the change, and its answer is the
+  // one in the file: it says what the setting is now.
+  readBackground.mockResolvedValue(background(false, portal(NOW + 5, false)));
   await tick(POLL);
   expect(within(section).queryByText(ASKING)).toBeNull();
   expect(within(section).getByText(NO_LOGIN)).toBeTruthy();
 });
 
-it("keeps asking while the answer belongs to another change", async () => {
-  const section = await ready(background(true, portal(null, true)));
-  setBackground.mockResolvedValue(background(false, portal(null, true), "req-1"));
-  fireEvent.click(switchOf(section));
-  await act(async () => {});
+it("keeps asking while the answer read the setting before the change", async () => {
+  const section = await ready(background(true, portal(NOW - 1000, true)));
+  await toggle(section, NOW);
 
-  // Another change's answer arrives: it ends no wait.
-  readBackground.mockResolvedValue(background(false, portal("req-2", false)));
+  readBackground.mockResolvedValue(background(false, portal(NOW - 5, false)));
   await tick(POLL);
   expect(within(section).getByText(ASKING)).toBeTruthy();
+});
+
+it("keeps asking while the answer has no moment", async () => {
+  const section = await ready(background(true, portal(NOW - 1000, true)));
+  await toggle(section, NOW);
+
+  readBackground.mockResolvedValue(background(false, portal(null, false)));
   await tick(POLL);
   expect(within(section).getByText(ASKING)).toBeTruthy();
+});
 
-  // Its own answer ends it.
-  readBackground.mockResolvedValue(background(false, portal("req-1", false)));
+it("keeps asking until the answer comes after 60 s", async () => {
+  const before = background(true, portal(NOW - 1000, true));
+  const section = await ready(before);
+  await toggle(section, NOW);
+  let reads = 0;
+  readBackground.mockReset();
+  readBackground.mockImplementation(async () => {
+    reads += 1;
+    return reads > 30 ? background(false, portal(NOW + 7, false)) : background(false, before.portal);
+  });
+
+  // 30 reads, one per 2 s, and the old answer still shows "Asking…".
+  await tick(30 * POLL);
+  expect(reads).toBe(30);
+  expect(within(section).getByText(ASKING)).toBeTruthy();
+
   await tick(POLL);
+  expect(reads).toBe(31);
   expect(within(section).queryByText(ASKING)).toBeNull();
   expect(within(section).getByText(NO_LOGIN)).toBeTruthy();
 });
@@ -133,24 +161,4 @@ it("shows the launcher's first answer when it comes after the dialog opened", as
   readBackground.mockResolvedValue(background(true, portal(null, true)));
   await tick(POLL);
   expect(within(section).getByText(AT_LOGIN)).toBeTruthy();
-});
-
-it("shows an answer that comes after 60 s", async () => {
-  const before = background(true, portal(null, true));
-  const section = await ready(before);
-  let reads = 0;
-  readBackground.mockReset();
-  readBackground.mockImplementation(async () => {
-    reads += 1;
-    return reads > 30 ? background(true, portal(null, false)) : before;
-  });
-
-  // 30 reads, one per 2 s, and the old answer still shows.
-  await tick(30 * POLL);
-  expect(reads).toBe(30);
-  expect(within(section).getByText(AT_LOGIN)).toBeTruthy();
-
-  await tick(POLL);
-  expect(reads).toBe(31);
-  expect(within(section).getByText(NO_LOGIN)).toBeTruthy();
 });
