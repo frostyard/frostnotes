@@ -14,6 +14,15 @@
 #   frostnotes [ARGS]         Make sure the latest notesd runs, ask the
 #                             Background portal for autostart, and run the app.
 #
+# The app's setting "Keep syncing when no window is open" is a file:
+# $XDG_CONFIG_HOME/frostnotes/background-off when it is off, and no file when
+# it is on (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
+# In the Flatpak, XDG_CONFIG_HOME is the app's own config directory, which all
+# of its sandboxes share. When the file exists, the request below carries
+# --no-autostart: the portal then removes the autostart entry, and the app's
+# shell stops notesd when its last window closes (no launcher can: see
+# app/src-tauri/src/background.rs).
+#
 # FROSTNOTES_LIBEXEC_DIR, when set, is the directory of frostnotes-app and
 # frostnotes-request-background: /app/libexec in the Flatpak, and a test's
 # own directory in its tests.
@@ -152,8 +161,15 @@ if ! hello; then
     fi
 fi
 
-# Ask the Background portal to run `frostnotes --background` at login. The
-# helper stays on the bus until the portal answers (it asks the user once).
-"$request_background" >>"$state/background.log" 2>&1 &
+# Ask the Background portal to run `frostnotes --background` at login, or,
+# with the setting off, to stop doing so. The helper stays on the bus until
+# the portal answers (it asks the user once); it writes that answer to
+# $state/background.json, which the app shows.
+off="${XDG_CONFIG_HOME:-$HOME/.config}/frostnotes/background-off"
+if [ -e "$off" ]; then
+    "$request_background" --no-autostart >>"$state/background.log" 2>&1 &
+else
+    "$request_background" >>"$state/background.log" 2>&1 &
+fi
 
 exec "$app" "$@"

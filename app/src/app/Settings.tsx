@@ -1,12 +1,14 @@
 // The settings dialog's container (docs/specs/ui.md, Settings): its
 // sections from the app's preferences (data/prefs.ts, kept on this
 // device), the vault's settings (vault.settings, changed with
-// vault.configure; ADR-0021), the keyboard map, the vault's sync, and on
-// a hub its devices and pending pairings (docs/design/hub.md#hub-settings-in-the-app).
-// A row's id says where it goes: "pref:<key>", "vault:<field>" or
-// "hub:revoke:<device>".
+// vault.configure; ADR-0021), the keyboard map, the vault's sync, on
+// a hub its devices and pending pairings (docs/design/hub.md#hub-settings-in-the-app),
+// and in the Flatpak the background setting with the desktop's own
+// (data/background.ts, ADR-0033). A row's id says where it goes:
+// "pref:<key>", "vault:<field>", "hub:revoke:<device>" or "bg:<key>".
 import { useEffect, useState } from "react";
 
+import { type Background, readBackground, setBackground as saveBackground } from "../data/background";
 import { ask, closeSettings, notify, openSettings, useOverlays } from "../data/overlays";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
@@ -69,6 +71,76 @@ export async function loadHub(c: Client): Promise<HubView | null> {
 const time = (at: string) => at.replace("T", " ").replace(/:\d\d(\.\d+)?Z$/, " UTC");
 
 /**
+ * The Background section's texts (docs/specs/ui.md#settings-batch-2,
+ * ADR-0033). The long ones are arrays of shorter strings joined with a
+ * space, so that no line is longer than Biome's width.
+ */
+const KEEP_NAME = "Keep syncing when no window is open";
+const KEEP_DESCRIPTION = [
+  "On: notesd keeps your notes in sync after the last window closes, and starts when you log in.",
+  "Off: notesd stops when the last window closes and does not start at login;",
+  "notes sync only while a Frostnotes window is open.",
+].join(" ");
+const DESKTOP_DESCRIPTION = "The desktop's own switch. Off there wins over On here.";
+const ALLOWED_AT_LOGIN = "Allowed; notesd starts at login.";
+const ALLOWED_NO_LOGIN = "Allowed; notesd does not start at login.";
+const NOT_ASKED = "Not asked yet.";
+const REFUSED = [
+  "Refused. The desktop stops notesd about 45 seconds after the last window closes, and at login.",
+  "Allow it in GNOME Settings, Apps, Frostnotes, Run in Background, then open Frostnotes again.",
+].join(" ");
+const NOT_KNOWN = "Not known: the desktop did not answer.";
+
+/** notKnown says the desktop gave no usable answer, with the helper's error when it wrote one. */
+function notKnown(error: string | null): string {
+  if (error === null) {
+    return NOT_KNOWN;
+  }
+  return `Not known: the desktop did not answer (${error}).`;
+}
+
+/** portalText says what the desktop allows, as the Background portal last answered. */
+export function portalText(p: Background["portal"]): string {
+  if (p === null) {
+    return NOT_ASKED;
+  }
+  if (p.response === 0 && p.background === true) {
+    return p.autostart === true ? ALLOWED_AT_LOGIN : ALLOWED_NO_LOGIN;
+  }
+  if (p.response === 1 || (p.response === 0 && p.background === false)) {
+    return REFUSED;
+  }
+  return notKnown(p.error);
+}
+
+/**
+ * backgroundSection is the Flatpak's background setting, and the desktop's
+ * own switch as the portal last answered it (ADR-0033): the app's Off is a
+ * file that the shell and the launcher read, and the desktop's permission
+ * can stop notesd whatever the app asks.
+ */
+export function backgroundSection(b: Background): SettingsSection {
+  return {
+    id: "background",
+    name: "Background",
+    rows: [
+      {
+        id: "bg:keep",
+        name: KEEP_NAME,
+        description: KEEP_DESCRIPTION,
+        control: { kind: "toggle", value: b.keepRunning },
+      },
+      {
+        id: "bg:desktop",
+        name: "Desktop permission",
+        description: DESKTOP_DESCRIPTION,
+        control: { kind: "info", text: portalText(b.portal) },
+      },
+    ],
+  };
+}
+
+/**
  * hubSection lists the hub's devices, each with Revoke while it is not
  * revoked, and its pending pairings, each with the node lodge named and
  * the command that approves it on the hub's machine: approving is local
@@ -107,6 +179,7 @@ export function settingsSections(
   vault: VaultSettings | null,
   sync: SyncStatus | null,
   hub: HubView | null = null,
+  background: Background | null = null,
 ): SettingsSection[] {
   const v = (row: SettingRow): SettingRow => (vault === null ? { ...row, disabled: true } : row);
   const text = (field: keyof VaultSettings, name: string, description?: string, placeholder?: string): SettingRow =>
@@ -240,6 +313,7 @@ export function settingsSections(
         : [{ id: "sync:none", name: "Sync", control: { kind: "info", text: "This vault does not sync with a hub." } }],
     },
     ...(hub ? [hubSection(hub)] : []),
+    ...(background ? [backgroundSection(background)] : []),
   ];
 }
 
@@ -252,12 +326,14 @@ export function SettingsContainer() {
   const client = useClient();
   const vaultId = useNotes((s) => s.vaultId);
   const [hub, setHub] = useState<HubView | null>(null);
+  const [background, setBackground] = useState<Background | null>(null);
   const narrow = useNarrow();
   const open = section !== null;
   useEffect(() => {
     if (!open) return;
     let live = true;
     void loadHub(client).then((h) => live && setHub(h));
+    void readBackground().then((b) => live && setBackground(b));
     return () => {
       live = false;
     };
@@ -266,12 +342,20 @@ export function SettingsContainer() {
   return (
     <SettingsDialog
       narrow={narrow}
-      sections={settingsSections(prefs, vault, sync, hub)}
+      sections={settingsSections(prefs, vault, sync, hub, background)}
       section={section}
       onSection={(id) => openSettings(id)}
       onClose={closeSettings}
       onChange={(id, value) => {
         const [where, key, arg] = id.split(":") as [string, string, string | undefined];
+        if (where === "bg" && key === "keep") {
+          // The shell writes the setting and asks the desktop again; its
+          // answer replaces the section (ADR-0033).
+          void saveBackground(Boolean(value)).then((b) => {
+            if (b !== null) setBackground(b);
+          });
+          return;
+        }
         if (where === "hub" && key === "revoke" && arg !== undefined) {
           const device = hub?.devices.find((d) => d.id === Number(arg));
           void ask({

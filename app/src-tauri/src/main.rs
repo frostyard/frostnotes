@@ -2,11 +2,13 @@
 //! bridge to notesd's socket, notesblob://, notesd's blob store by
 //! content hash (ADR-0023), the two checked ways to open things outside
 //! the app (open.rs), why notesd is not running in the Flatpak
-//! (notesd_log.rs), and the system's folder picker, through which a
+//! (notesd_log.rs), the Flatpak's setting for background activity
+//! (background.rs), and the system's folder picker, through which a
 //! person names a folder to open or create a vault in (ADR-0024). All
 //! notes logic lives in notesd; see docs/design/overview.md and
 //! docs/specs/rpc-protocol.md.
 
+mod background;
 mod bridge;
 mod notesd_log;
 mod open;
@@ -36,6 +38,8 @@ fn main() {
         .manage(bridge::Bridge::default())
         .manage(spike)
         .invoke_handler(tauri::generate_handler![
+            background::background_get,
+            background::background_set,
             bridge::notesd_connect,
             bridge::notesd_send,
             notesd_log::notesd_log,
@@ -53,6 +57,11 @@ fn main() {
             }
         })
         .setup(move |app| {
+            // This process owns the windows: a second launch hands over to
+            // it and ends before this runs (background.rs).
+            if !spiking {
+                background::mark_primary();
+            }
             let main = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Frostnotes")
                 .inner_size(1200.0, 780.0)
@@ -71,8 +80,15 @@ fn main() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("frostnotes failed to start");
+        .build(tauri::generate_context!())
+        .expect("frostnotes failed to start")
+        .run(|_app, event| {
+            // With the Flatpak's setting Off, the last window stops notesd
+            // (background.rs, ADR-0033).
+            if let tauri::RunEvent::Exit = event {
+                background::stop_on_exit();
+            }
+        });
 }
 
 /// A second launch (single instance) shows the main window.

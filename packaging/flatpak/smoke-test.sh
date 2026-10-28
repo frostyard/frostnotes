@@ -18,6 +18,11 @@
 # The fake flatpak-spawn fails, and records the fault, when the launcher calls
 # it without --latest-version.
 #
+# The setting for background activity
+# (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md) is the
+# off file: the fake request-background records its arguments, and the
+# launcher's request must carry --no-autostart exactly while that file exists.
+#
 # FROSTNOTES_BIN_DIR is where frostnotes, notesd and notesctl are; the
 # default is the Flatpak's /app/bin. The test cleans up after itself.
 
@@ -57,10 +62,10 @@ print_logs() {
 }
 
 # A private runtime directory (mode 0700, as the real one is), home and data.
-mkdir -p "$work/run" "$work/home" "$work/data" "$work/vault" "$work/bin" "$work/libexec" "$state"
+mkdir -p "$work/run" "$work/home" "$work/data" "$work/vault" "$work/bin" "$work/libexec" "$work/config" "$state"
 chmod 0700 "$work/run"
 export XDG_RUNTIME_DIR="$work/run" HOME="$work/home" XDG_DATA_HOME="$work/data"
-export XDG_STATE_HOME="$work/state"
+export XDG_STATE_HOME="$work/state" XDG_CONFIG_HOME="$work/config"
 export FLATPAK_ID=org.frostyard.Frostnotes
 # No session bus: the Secret Service is absent, as in the build sandbox.
 export DBUS_SESSION_BUS_ADDRESS=unix:path="$work/no-bus"
@@ -104,13 +109,19 @@ fi
 EOF
 chmod +x "$work/bin/flatpak-spawn"
 printf '#!/bin/sh\nexit 0\n' >"$work/libexec/frostnotes-app"
-printf '#!/bin/sh\nexit 0\n' >"$work/libexec/frostnotes-request-background"
+# The Background helper records its arguments: the test checks whether the
+# launcher asked with --no-autostart.
+cat >"$work/libexec/frostnotes-request-background" <<'EOF'
+#!/bin/sh
+printf 'args:%s\n' "$*" >>"$SMOKE_REQUEST_ARGS"
+EOF
 chmod +x "$work/libexec/frostnotes-app" "$work/libexec/frostnotes-request-background"
 SMOKE_SPAWN_PID="$work/spawn.pid"
 SMOKE_CHILD_PID="$work/notesd.pid"
 SMOKE_SPAWN_FAULT="$work/spawn.fault"
 SMOKE_DETACHED_PID="$work/detached.pid"
-export SMOKE_DETACHED_PID
+SMOKE_REQUEST_ARGS="$work/request.args"
+export SMOKE_DETACHED_PID SMOKE_REQUEST_ARGS
 # info FILE COMMIT writes a minimal .flatpak-info; the build is the app-commit
 # of its [Instance] group.
 info() {
@@ -366,6 +377,47 @@ if [ -e "$SMOKE_SPAWN_FAULT" ]; then
     print_logs
     exit 1
 fi
+
+# The setting for background activity is the off file, and the request to
+# the Background portal carries --no-autostart while it exists
+# (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md). The
+# launcher starts the request in the background, so wait for the fake
+# helper's record, at most 5 s.
+off="$XDG_CONFIG_HOME/frostnotes/background-off"
+asked() {
+    # asked EXPECTED: one launch, then its request's arguments; --no-autostart
+    # must be there exactly when EXPECTED is 1.
+    rm -f "$SMOKE_REQUEST_ARGS"
+    "$bin/frostnotes" >"$work/launcher.log" 2>&1
+    for _ in $(seq 1 50); do
+        if [ -s "$SMOKE_REQUEST_ARGS" ]; then
+            break
+        fi
+        sleep 0.1
+    done
+    args="$(cat "$SMOKE_REQUEST_ARGS" 2>/dev/null || true)"
+    if [ -z "$args" ]; then
+        echo "smoke test: the launcher did not ask the Background portal" >&2
+        print_logs
+        exit 1
+    fi
+    case "$args" in
+        *--no-autostart*) got=1 ;;
+        *) got=0 ;;
+    esac
+    if [ "$got" -ne "$1" ]; then
+        echo "smoke test: the request carried '$args'; --no-autostart must be absent with the setting on and present with it off (want $1, got $got)" >&2
+        print_logs
+        exit 1
+    fi
+}
+
+mkdir -p "$XDG_CONFIG_HOME/frostnotes"
+rm -f "$off"
+asked 0
+printf 'off\n' >"$off"
+asked 1
+rm -f "$off"
 
 kill -TERM "$pid"
 # Wait until it has gone, before the cleanup removes its directories.
