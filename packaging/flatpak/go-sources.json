@@ -169,14 +169,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.3.0.mod",
-    "sha256": "6098f238d22edaef6b6d1c5a0635d95f4e73885d9f21f321db34db77283a0746",
+    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.3.1.mod",
+    "sha256": "48c6227bc6996aa9882e825e848cae99b5a75edb48f99802fc9e95cf24b2ffaf",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.3.0.zip",
-    "sha256": "b3eab85a910c96d6e05215c709323702da3c39319244237805654def3370849b",
+    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.3.1.zip",
+    "sha256": "a283451bdcd826d8fe53c59da036cb75be0dad7a67cd02a25c927f78b28da5f7",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"
   },
   {
