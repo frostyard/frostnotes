@@ -11,8 +11,8 @@
 #                             directory, and moves a log over 1 MiB to
 #                             notesd.log.1 itself, once it holds the data
 #                             directory's lock, so no live log ever moves.
-#   frostnotes [ARGS]         Make sure a notesd runs, ask the Background
-#                             portal for autostart, and run the app.
+#   frostnotes [ARGS]         Make sure the latest notesd runs, ask the
+#                             Background portal for autostart, and run the app.
 #
 # FROSTNOTES_LIBEXEC_DIR, when set, is the directory of frostnotes-app and
 # frostnotes-request-background: /app/libexec in the Flatpak, and a test's
@@ -29,6 +29,17 @@
 # a notesd here would die with a duplicate window while the primary window
 # still needs it. Without the portal the launcher says so, and the app shows
 # that notesd is not running.
+#
+# --latest-version makes the portal start the command from the newest
+# installed deployment of this app, never from the one this window runs. An
+# old window cannot bring back an old notesd. An update replaces the notesd
+# that runs, only forward: when its build (`notesctl hello --build`, the
+# app-commit of its deployment) differs from the latest deployment's
+# (`notesd -build`, run the same way), the launcher stops it with
+# `notesctl shutdown`, which returns once notesd has released the data
+# directory's lock, and starts the latest. Every call that waits on notesd or
+# on the portal is bounded, so neither can keep the window from starting
+# (docs/adr/0032-an-update-replaces-the-running-notesd.md).
 
 set -u
 
@@ -37,6 +48,30 @@ app="$libexec/frostnotes-app"
 request_background="$libexec/frostnotes-request-background"
 
 state="${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes"
+
+# bounded SECONDS COMMAND...: run the command for at most SECONDS (coreutils
+# timeout, which the GNOME runtime has). Every call that waits on notesd or
+# on the portal goes through it, so a notesd that accepts and never answers,
+# or a portal that hangs, never keeps the window from starting.
+if command -v timeout >/dev/null 2>&1; then
+    bounded() {
+        secs=$1
+        shift
+        # --kill-after: a command that catches SIGTERM, or a flatpak-spawn
+        # that forwards it to a portal call that hangs, gets SIGKILL 1 s on.
+        timeout --kill-after=1 "$secs" "$@"
+    }
+else
+    bounded() {
+        shift
+        "$@"
+    }
+fi
+
+# hello: true when a notesd answers within 2 s.
+hello() {
+    bounded 2 notesctl hello >/dev/null 2>&1
+}
 
 if [ "${1:-}" = "--background" ]; then
     mkdir -p "$state"
@@ -51,35 +86,54 @@ fi
 
 mkdir -p "$state"
 
-if ! notesctl hello >/dev/null 2>&1; then
+have_spawn=
+if command -v flatpak-spawn >/dev/null 2>&1; then
+    have_spawn=1
+fi
+
+# An update replaces the engine, only forward: when the running notesd's
+# build is not the latest installed one, stop it. Either build empty, or a
+# failed or late call, keeps the notesd that runs. The calls are bounded: 2 s
+# for a probe, 10 s for the latest build's query, 35 s for the shutdown
+# (notesctl's own limit is 30 s).
+if hello && [ -n "$have_spawn" ]; then
+    running=$(bounded 2 notesctl hello --build 2>/dev/null) || running=
+    latest=$(bounded 10 flatpak-spawn --latest-version notesd -build 2>/dev/null) || latest=
+    if [ -n "$running" ] && [ -n "$latest" ] && [ "$running" != "$latest" ]; then
+        bounded 35 notesctl shutdown >>"$state/notesd.log" 2>&1 || true
+    fi
+fi
+
+if ! hello; then
     spawned=
-    if command -v flatpak-spawn >/dev/null 2>&1; then
+    if [ -n "$have_spawn" ]; then
         # No --watch-bus: the spawned notesd must outlive this sandbox. It
         # holds its own stdout and stderr, so flatpak-spawn may end.
-        flatpak-spawn frostnotes --background </dev/null >>"$state/notesd.log" 2>&1 &
+        flatpak-spawn --latest-version frostnotes --background </dev/null >>"$state/notesd.log" 2>&1 &
         spawned=$!
     fi
-    # Wait, for about 10 s, until that notesd answers.
-    tries=0
-    while [ "$tries" -lt 20 ]; do
-        if notesctl hello >/dev/null 2>&1; then
+    # Wait, for about 10 s in all, until that notesd answers. The deadline is
+    # the clock's, since each probe may take up to 2 s.
+    deadline=$(($(date +%s) + 10))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if hello; then
             break
         fi
         if [ -z "$spawned" ] || ! kill -0 "$spawned" 2>/dev/null; then
             break
         fi
-        tries=$((tries + 1))
         sleep 0.5
     done
     # flatpak-spawn forwards catchable signals (TERM, INT, HUP) to the
     # command it spawned, so only SIGKILL ends flatpak-spawn alone; without
     # --watch-bus the portal keeps the spawned notesd, and notesd already
-    # holds its own stdout and stderr.
-    if [ -n "$spawned" ] && kill -0 "$spawned" 2>/dev/null; then
+    # holds its own stdout and stderr. This runs on every path before the
+    # app starts: no flatpak-spawn outlives the launcher.
+    if [ -n "$spawned" ]; then
         kill -KILL "$spawned" 2>/dev/null
         wait "$spawned" 2>/dev/null
     fi
-    if ! notesctl hello >/dev/null 2>&1; then
+    if ! hello; then
         msg="frostnotes: notesd did not start through the Flatpak portal (flatpak-spawn); see $state/notesd.log"
         echo "$msg" >&2
         echo "$msg" >>"$state/notesd.log"
