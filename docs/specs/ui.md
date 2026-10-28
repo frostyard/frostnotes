@@ -466,6 +466,33 @@ it acts:
 While the connection is not ready, its state shows at the left, as M0's
 status bar does.
 
+### Connecting
+
+Until notesd answers, the window is the title bar row (it keeps the window
+controls and drags the window), the status bar and, centred between them,
+12/16 `--text-secondary` text: "Connecting to notesd…", and after a
+failure "Reconnecting to notesd… (<reason>)", retried every second.
+
+In the desktop app inside the Flatpak, once a connection has failed, a
+block under that text (at most 560 wide, left-aligned, 12/16, 16 below
+it; `aria-label` "Why notesd is not running") says why, from the end of
+`notesd.log` (the shell's `notesd_log`,
+[design/app.md](../design/app.md#the-flatpak)):
+
+- **The launcher's last line is its portal failure** ("notesd did not
+  start through the Flatpak portal"): "notesd did not start, because the
+  Flatpak portal did not start it. To fix it:" and a numbered list: "Run
+  `flatpak override --user --show org.frostyard.Frostnotes`: it must not
+  list a blocked `org.freedesktop.portal.Flatpak`." "Remove the overrides
+  with `flatpak override --user --reset org.frostyard.Frostnotes`, if it
+  does." "Check that `xdg-desktop-portal` runs."
+- **Any other last line:** "The last line of notesd's log: <line>".
+- **Both:** "The log: <path>" (the path of `notesd.log` in the app's state
+  directory). A log that is empty or missing adds only this line.
+
+The commands are monospace on `--bg-code` and selectable. Outside the
+Flatpak, and in the web app, nothing is added.
+
 ### Menus
 
 Context menus and button menus: `--bg-window`, 1px `--separator`, rounded
@@ -583,7 +610,16 @@ Obsidian's vault chooser
   and closes the manager. notesd's refusals show as notices and leave
   the manager open: "<path> lies inside the vault <name>.", "<path>
   holds the vault <name>.", "<path> is not a folder.", "<path> already
-  exists.". Remove from list asks first (the confirmation dialog,
+  exists.". In the Flatpak, a folder outside its file access is refused
+  with notesd's own words: "Frostnotes cannot reach <path> because the
+  Flatpak's file access does not include it; grant it with: `flatpak
+  override --user --filesystem=<path> org.frostyard.Frostnotes`, then log
+  out and in (notesd keeps its sandbox until then)." (where the access
+  covers the folder read only: "Frostnotes cannot write to <path> because
+  the Flatpak's file access to it is read-only; grant it with: …"); the
+  notice has the action Copy command, which puts the `flatpak override`
+  command on the clipboard ("Copied the command."), and so stays 10 s.
+  Remove from list asks first (the confirmation dialog,
   Remove, danger): 'Remove "<name>" from the list?', "Its folder and
   files stay where they are. Frostnotes forgets its index and version
   history on this device." (for a synced vault also "and its place on
@@ -880,4 +916,4 @@ belongs to the field, a prompt or a menu.
 
 - Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) (rooted links inside lodge); frostmail's `docs/specs/ui.md` for the tokens and the chrome
 - Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
-- Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the vault manager's join, in the app, is G1 of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)
+- Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the vault manager's join, in the app, is G1, and the window's reasons for a refused permission (Connecting; the Flatpak's refused folder in the vault manager) are G5, of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)

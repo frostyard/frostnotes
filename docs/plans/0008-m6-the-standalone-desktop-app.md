@@ -34,7 +34,7 @@ Status (2026-10-27):
   and no lodge. Still to run: item 2 from the public remote (after the
   listing), item 6 with a hub over HTTPS and lodge's web app, and item 5
   on the second release.
-- **Phase 4** lists what the review found; none of it is built.
+- **Phase 4** lists what the review found; G5 is built and in review, the rest is not built.
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
 
@@ -309,6 +309,16 @@ blocks Phase 2.
   narrowed `--filesystem` fails with a plain file error. The window
   should name the cause and the fix (`notesd.log`; `flatpak override`).
   **Done when:** both cases show their cause in the window.
+  **Status (2026-10-28): built, in review.** No portal: the shell's
+  `notesd_log` reads the end of `notesd.log` and the window's connecting
+  state shows the cause, the checks and the log's path
+  ([specs/ui.md](../specs/ui.md#connecting)). A narrowed `--filesystem`:
+  `internal/sandbox` reads the grants, and `vault.add` answers
+  `invalidParams` with the grant to add
+  ([design/app.md](../design/app.md#the-flatpak)). Both have unit tests;
+  neither has run in a real Flatpak. A scan that fails at notesd's start
+  for a vault left outside the grants shows no error in the window and is
+  not covered.
 
 ## Open questions
 
