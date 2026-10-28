@@ -971,7 +971,9 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   [plan 0008, G4](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)):
   1. *Let the host notesd finish its sync.* `notesctl sync status` shows
      each joined vault `idle` with `0 pending`, and `notesctl sync verify
-     --vault NAME` says the files match the hub.
+     --vault NAME` says the files match the hub. Do not go on until both
+     hold, and do not edit the vault until step 4 is done: the join in
+     step 4 does not know the host's sync state.
   2. *Leave the hub on the host notesd,* for each joined vault:
      `notesctl sync leave --vault NAME`. The files stay. This comes
      before the Flatpak joins: both notesd keep the device token in the
@@ -986,12 +988,16 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
      `flatpak run --command=notesctl org.frostyard.Frostnotes vault add
      PATH`). Join again each vault that synced, from the settings' Sync
      section or with `flatpak run --command=notesctl
-     org.frostyard.Frostnotes hub join URL NAME --vault NAME`. It is a
-     new device: approve its code on the hub. The files match the hub's
-     by history ([sync.md](sync.md#pairing-and-sessions)): a file that
-     did not change since the last sync takes the hub's revision and adds
-     none. A change the host notesd did not push is pushed now: it
-     merges, or it is a conflict the app shows; it is never lost.
+     org.frostyard.Frostnotes hub join URL HUB_VAULT --vault VAULT`
+     (HUB_VAULT is the vault's name on the hub, VAULT its name in the
+     Flatpak). It is a new device: approve its code on the hub. The files
+     match the hub's by history ([sync.md](sync.md#pairing-and-sessions)):
+     a file that did not change since the last sync takes the hub's
+     revision and adds none. A file that changed after step 1 is pushed
+     as a create and merges with the hub's, or is a conflict. But a join
+     cannot see a deletion or a revert that the host did not push: a
+     deleted file comes back from the hub, and a file reverted to an
+     older revision takes the hub's head. Step 1 is what keeps those.
   5. *Revoke the old device on the hub:* `notesctl hub devices`, then
      `notesctl hub revoke ID`. On lodge's hub that is `sudo -u frostnotes
      FROSTNOTES_SOCKET=/run/frostnotes/notesd.sock notesctl hub revoke
