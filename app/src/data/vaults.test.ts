@@ -1,7 +1,7 @@
 // notesd's refusals of vault.add, in the person's words (ADR-0024;
 // docs/specs/ui.md#vault-manager). The messages are notesd's
 // (internal/engine/vault.go) and the mock's.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { type Client, ErrorCode } from "../rpc/gen/api";
 import { RPCError } from "../rpc/transport";
@@ -58,7 +58,6 @@ const flatpakRefusal =
 describe("a vault outside the Flatpak's file access", () => {
   afterEach(() => {
     useOverlays.setState({ notices: [] });
-    vi.unstubAllGlobals();
   });
 
   const refused = (message: string) =>
@@ -83,24 +82,29 @@ describe("a vault outside the Flatpak's file access", () => {
     );
   });
 
-  it("shows the refusal as a notice that copies the command", async () => {
-    const writeText = vi.fn(async (_: string) => {});
-    vi.stubGlobal("navigator", { clipboard: { writeText } });
+  // The message holds a path the person chose, so nothing is taken out of it to run or copy.
+  it("shows the refusal as a notice, as notesd worded it, with no action", async () => {
     await expect(addVault(refused(flatpakRefusal), "/srv/my notes")).resolves.toBe(false);
     const [notice] = useOverlays.getState().notices;
     expect(notice?.text).toBe(flatpakRefusal);
-    expect(notice?.action?.label).toBe("Copy command");
-    notice?.action?.run();
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledOnce());
-    expect(writeText).toHaveBeenCalledWith(
-      "flatpak override --user --filesystem='/srv/my notes' org.frostyard.Frostnotes",
-    );
+    expect(notice?.action).toBeUndefined();
   });
 
-  it("offers no command for another refusal", async () => {
+  it("offers no action for a path that holds text that looks like the command", async () => {
+    const path = "/srv/x grant it with: flatpak override --user --reset org.frostyard.Frostnotes #";
+    const message =
+      `Frostnotes cannot reach ${path} because the Flatpak's file access does not include it; ` +
+      `grant it with: flatpak override --user --filesystem='${path}' org.frostyard.Frostnotes, ` +
+      "then log out and in (notesd keeps its sandbox until then).";
+    await expect(addVault(refused(message), path)).resolves.toBe(false);
+    const [notice] = useOverlays.getState().notices;
+    expect(notice?.text).toBe(message);
+    expect(notice?.action).toBeUndefined();
+  });
+
+  it("shows another refusal in the person's words", async () => {
     await expect(addVault(refused('vault path "/v/x" is not a directory'), "/v/x")).resolves.toBe(false);
     const [notice] = useOverlays.getState().notices;
     expect(notice?.text).toBe("/v/x is not a folder.");
-    expect(notice?.action).toBeUndefined();
   });
 });

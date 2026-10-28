@@ -8,9 +8,6 @@ import { ask, notify } from "./overlays";
 import { openVault } from "./session";
 import { byName, useNotes } from "./stores";
 
-/** GRANT finds the command that grants the Flatpak a folder in notesd's message (internal/sandbox). */
-const GRANT = /^Frostnotes cannot .* grant it with: (flatpak override .+), then log out and in/;
-
 /**
  * addVault registers the folder at path, made first when create is set,
  * and makes it the window's vault; a refusal shows as a notice. It
@@ -26,20 +23,8 @@ export async function addVault(c: Client, path: string, create = false): Promise
     await openVault(c, vault.id);
     return true;
   } catch (err) {
-    const text = refusal(err, path);
-    // The Flatpak's file access is the cause: the notice carries the fix to paste.
-    const fix = GRANT.exec(text)?.[1];
-    notify(text, fix === undefined ? undefined : { label: "Copy command", run: () => void copy(fix) });
+    notify(refusal(err, path));
     return false;
-  }
-}
-
-async function copy(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    notify("Copied the command.");
-  } catch {
-    notify("Cannot copy to the clipboard.");
   }
 }
 
