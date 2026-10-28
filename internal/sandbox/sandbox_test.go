@@ -449,3 +449,75 @@ func TestExplainKeepsTheErrorOfAnExposedPath(t *testing.T) {
 		t.Errorf("Explain(/run/media/...) = %v, want an explanation", got)
 	}
 }
+
+// user-dirs.dirs holds shell-style strings; only the simple form is
+// decoded, and any other value leaves its folder unresolved.
+func TestUserDirValues(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  string // "" for not resolved
+	}{
+		{"under $HOME", `"$HOME/Papers"`, "/home/ana/Papers"},
+		{"under $HOME, deeper", `"$HOME/Work/Papers"`, "/home/ana/Work/Papers"},
+		{"$HOME and a slash", `"$HOME/"`, "/home/ana"},
+		{"absolute", `"/data/docs"`, "/data/docs"},
+		{"spaces around the value", `  "/data/docs"  `, "/data/docs"},
+		{"a space in the name", `"$HOME/My Notes"`, "/home/ana/My Notes"},
+		{"an escaped dollar", `"$HOME/My\$Notes"`, ""},
+		{"an escaped quote", `"$HOME/My\"Notes"`, ""},
+		{"an escaped backslash", `"$HOME/My\\Notes"`, ""},
+		{"a bare quote inside", `"$HOME/My"Notes"`, ""},
+		{"a backquote", "\"$HOME/`id`\"", ""},
+		{"a backquote in an absolute path", "\"/data/`id`\"", ""},
+		{"a command substitution", `"$HOME/$(id)"`, ""},
+		{"a variable", `"$HOME/$USER"`, ""},
+		{"a variable in an absolute path", `"/data/$USER"`, ""},
+		{"a variable first", `"$XDG_DATA_HOME/docs"`, ""},
+		{"$HOME alone", `"$HOME"`, ""},
+		{"$HOME without a slash", `"$HOMEBREW/v"`, ""},
+		{"no quotes", `$HOME/Papers`, ""},
+		{"no quotes, absolute", `/data/docs`, ""},
+		{"single quotes", `'/data/docs'`, ""},
+		{"text after the quote", `"/data/docs" extra`, ""},
+		{"an open quote", `"/data/docs`, ""},
+		{"a relative path", `"relative"`, ""},
+		{"empty", `""`, ""},
+		{"one quote", `"`, ""},
+		{"nothing", ``, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := userDir(tc.value, "/home/ana")
+			if got != tc.want || ok != (tc.want != "") {
+				t.Errorf("userDir(%s) = %q, %t; want %q", tc.value, got, ok, tc.want)
+			}
+		})
+	}
+	if got, ok := userDir(`"$HOME/Papers"`, ""); ok {
+		t.Errorf("with no home, userDir = %q, want it unresolved", got)
+	}
+	if got, ok := userDir(`"$HOME/Papers"`, "ana"); ok {
+		t.Errorf("with a relative home, userDir = %q, want it unresolved", got)
+	}
+}
+
+// A folder whose value is not simple is not resolved, so a grant of it is
+// uncertain and Explain says nothing.
+func TestUnresolvedUserDirMakesTheGrantsUncertain(t *testing.T) {
+	for _, value := range []string{`"$HOME/My\$Notes"`, `"$HOME/My\"Notes"`, "\"$HOME/`id`\"", `$HOME/Notes`} {
+		env := home
+		env.ConfigHome = writeUserDirs(t, "XDG_DOCUMENTS_DIR="+value+"\nXDG_MUSIC_DIR=\"$HOME/Music\"\n")
+		g := grants(t, "xdg-documents;", env)
+		if g.Certain() {
+			t.Errorf("XDG_DOCUMENTS_DIR=%s: Certain = true, want false", value)
+		}
+		err := pathError(syscall.ENOENT)
+		if got := g.Explain("/srv/elsewhere/Vault", err); got != err {
+			t.Errorf("XDG_DOCUMENTS_DIR=%s: Explain = %v, want the plain error", value, got)
+		}
+		// The other folders of the same file still resolve.
+		if m := grants(t, "xdg-music;", env); !m.Certain() || m.Access("/home/ana/Music/x") != ReadWrite {
+			t.Errorf("XDG_DOCUMENTS_DIR=%s: xdg-music did not resolve", value)
+		}
+	}
+}

@@ -393,12 +393,8 @@ func loadUserDirs(env Env) map[string]string {
 			if !ok || strings.HasPrefix(key, "#") {
 				continue
 			}
-			value = strings.Trim(strings.TrimSpace(value), `"`)
-			if rest, ok := strings.CutPrefix(value, "$HOME"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
-				value = env.Home + rest
-			}
-			if filepath.IsAbs(value) {
-				named[key] = path.Clean(value)
+			if dir, ok := userDir(value, env.Home); ok {
+				named[strings.TrimSpace(key)] = dir
 			}
 		}
 		for _, k := range userDirKeys {
@@ -409,6 +405,33 @@ func loadUserDirs(env Env) map[string]string {
 		break
 	}
 	return dirs
+}
+
+// userDir decodes one value of user-dirs.dirs, a shell-style string, in the
+// one simple form that needs no shell: double-quoted, starting with $HOME/
+// or /, and with no backslash, no other $ and no backquote after that
+// prefix. Any other value (an escape, a command, a variable, no quotes) is
+// not ok: its folder stays unresolved. No shell code ever runs.
+func userDir(value, home string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) < 2 || value[0] != '"' || value[len(value)-1] != '"' {
+		return "", false
+	}
+	inner := value[1 : len(value)-1]
+	var dir string
+	switch {
+	case strings.HasPrefix(inner, "$HOME/") && filepath.IsAbs(home):
+		inner = inner[len("$HOME/"):]
+		dir = home + "/" + inner
+	case strings.HasPrefix(inner, "/"):
+		dir = inner
+	default:
+		return "", false
+	}
+	if strings.ContainsAny(inner, "\\\"$`") || !filepath.IsAbs(dir) {
+		return "", false
+	}
+	return path.Clean(dir), true
 }
 
 // Explain returns err as it is, unless it is a file error that the grants
