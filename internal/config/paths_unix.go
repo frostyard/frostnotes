@@ -38,7 +38,7 @@ func DefaultSocket(getenv func(string) string) (string, error) {
 	if !filepath.IsAbs(run) {
 		return "", errors.New("XDG_RUNTIME_DIR is not set; set FROSTNOTES_SOCKET")
 	}
-	if getenv("FLATPAK_ID") == AppID {
+	if InFlatpak(getenv) {
 		run = filepath.Join(run, "app", AppID)
 	}
 	return filepath.Join(run, "frostnotes", "notesd.sock"), nil

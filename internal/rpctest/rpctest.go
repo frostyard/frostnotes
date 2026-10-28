@@ -58,6 +58,8 @@ type Options struct {
 	// device's name); its stores, broker, secrets, log and, when Now is
 	// set, Now are filled in.
 	Syncer syncer.Config
+	// Build is what rpc.hello reports as build (rpcserver.Options.Build).
+	Build string
 }
 
 // Server is a running test server; it stops when the test ends.
@@ -79,8 +81,13 @@ type Server struct {
 	Secrets secrets.Store
 	HubURL  string
 
-	stop func()
+	stop    func()
+	stopped chan struct{} // closed when Serve has returned
 }
+
+// Stopped is closed when the server has stopped serving, which rpc.shutdown
+// (or Stop) causes: the socket is closed and answers no more.
+func (s *Server) Stopped() <-chan struct{} { return s.stopped }
 
 // Start runs a server with default options.
 func Start(t testing.TB) *Server { return StartWith(t, Options{}) }
@@ -120,7 +127,10 @@ func StartWith(t testing.TB, o Options) *Server {
 		t.Fatal(err)
 	}
 
-	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log})
+	// rpc.shutdown ends Serve, as it does notesd's. Run.Stop waits for Serve,
+	// which waits for the request that calls this, so it runs on its own.
+	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log, Build: o.Build,
+		Shutdown: func() { go srv.Run.Stop() }})
 	srv.RPC = rpc
 	srv.Secrets = secrets.NewFile(filepath.Join(data, "secrets.json"))
 	parts := filepath.Join(data, "parts")
@@ -159,7 +169,11 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	srv.Router = router
 	srv.Hub.SetRouter(router)
-	srv.Run = kitrpctest.Serve(t, func(ctx context.Context, ln net.Listener) error { return rpc.Serve(ctx, ln, router) })
+	srv.stopped = make(chan struct{})
+	srv.Run = kitrpctest.Serve(t, func(ctx context.Context, ln net.Listener) error {
+		defer close(srv.stopped)
+		return rpc.Serve(ctx, ln, router)
+	})
 	srv.Socket = srv.Run.Socket
 	hubDone := make(chan error, 1)
 	if hubLn != nil {

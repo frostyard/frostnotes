@@ -23,6 +23,14 @@ type Options struct {
 	Name   string
 	Broker *events.Broker
 	Logger *slog.Logger
+	// Build is reported by rpc.hello as build: the Flatpak build notesd runs
+	// from. Empty means none (outside the Flatpak, or unknown).
+	Build string
+	// Shutdown stops notesd, as SIGTERM does (rpc.shutdown). It must return
+	// at once: the server calls it after the reply is on the wire, from the
+	// request's own goroutine, which Serve waits for. Nil means a call cannot
+	// stop this server, and rpc.shutdown answers unavailable.
+	Shutdown func()
 }
 
 // Server implements api.RPCService and api.EventsService, which need the
@@ -88,7 +96,8 @@ func (s *Server) Hello(ctx context.Context, p *api.RPCHelloParams) (*api.Hello, 
 		c.SetReady(p.Client)
 		s.opts.Logger.Debug("client connected", "client", p.Client, "caller", id.Caller)
 	}
-	h := &api.Hello{Protocol: api.Protocol, Server: s.opts.Name, Caller: string(id.Caller)}
+	h := &api.Hello{Protocol: api.Protocol, Server: s.opts.Name, Caller: string(id.Caller),
+		Build: optional(s.opts.Build)}
 	if id.Caller == api.CallerSession {
 		h.Login, h.DisplayName, h.Node = optional(id.Login), optional(id.DisplayName), optional(id.Node)
 		h.ContentKey = optional(id.ContentKey)
@@ -105,6 +114,18 @@ func optional(s string) *string {
 
 // Ping implements rpc.ping.
 func (s *Server) Ping(context.Context, *api.RPCPingParams) error { return nil }
+
+// Shutdown implements rpc.shutdown: the reply goes out first, then
+// Options.Shutdown runs (jsonrpc.AfterReply), so the caller has its answer
+// before notesd stops. A call that fails never stops notesd.
+func (s *Server) Shutdown(ctx context.Context, _ *api.RPCShutdownParams) error {
+	if s.opts.Shutdown == nil {
+		return api.Unavailable("this server cannot be stopped by a call")
+	}
+	s.opts.Logger.Info("rpc.shutdown: stopping", "caller", api.IdentityFrom(ctx).Caller)
+	jsonrpc.AfterReply(ctx, s.opts.Shutdown)
+	return nil
+}
 
 // Subscribe implements events.subscribe; delivery starts after the reply.
 func (s *Server) Subscribe(ctx context.Context, p *api.EventsSubscribeParams) (*api.Subscription, error) {

@@ -1317,6 +1317,12 @@ export interface Hello {
    * (docs/specs/lodge-app.md#contentblobs).
    */
   contentKey?: string;
+  /**
+   * The Flatpak build this notesd runs from: the app-commit of its instance,
+   * which differs for every build, even of one version. Absent outside the
+   * Flatpak (ADR-0032).
+   */
+  build?: string;
 }
 
 /** Params of rpc.hello. */
@@ -1329,6 +1335,9 @@ export interface RPCHelloParams {
 
 /** Params of rpc.ping. */
 export type RPCPingParams = Record<string, never>;
+
+/** Params of rpc.shutdown. */
+export type RPCShutdownParams = Record<string, never>;
 
 /**
  * Connection setup. A client calls rpc.hello first on every connection; the
@@ -1345,12 +1354,20 @@ export interface RPCClient {
    * finds a connection a sleeping phone dropped.
    */
   ping(params?: RPCPingParams): Promise<void>;
+  /**
+   * Stop notesd as SIGTERM does: it answers, finishes the requests in hand,
+   * stops the vaults and sync, closes the store, releases the data
+   * directory's lock and exits 0. The Flatpak's launcher calls it to replace
+   * an older build (ADR-0032).
+   */
+  shutdown(params?: RPCShutdownParams): Promise<void>;
 }
 
 function rpcClient(t: Transport): RPCClient {
   return {
     hello: (params) => t.call<Hello>("rpc.hello", params),
     ping: (params = {}) => t.call<null>("rpc.ping", params).then(() => undefined),
+    shutdown: (params = {}) => t.call<null>("rpc.shutdown", params).then(() => undefined),
   };
 }
 
@@ -1905,6 +1922,7 @@ export const METHODS = [
   "note.deleteFolder",
   "rpc.hello",
   "rpc.ping",
+  "rpc.shutdown",
   "sync.pair",
   "sync.paired",
   "sync.hubs",
@@ -1981,6 +1999,7 @@ export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {
   "note.deleteFolder": ["local", "session", "agent"],
   "rpc.hello": ["local", "session", "device", "agent"],
   "rpc.ping": ["local", "session", "device", "agent"],
+  "rpc.shutdown": ["local"],
   "sync.pair": ["local"],
   "sync.paired": ["local"],
   "sync.hubs": ["local"],

@@ -2145,6 +2145,10 @@ type Hello struct {
 	// URL on lodge-content names it by an HMAC under this key
 	// (docs/specs/lodge-app.md#contentblobs).
 	ContentKey *string `json:"contentKey,omitzero"`
+	// The Flatpak build this notesd runs from: the app-commit of its instance,
+	// which differs for every build, even of one version. Absent outside the
+	// Flatpak (ADR-0032).
+	Build *string `json:"build,omitzero"`
 }
 
 // RPCHelloParams holds the params of rpc.hello.
@@ -2158,6 +2162,9 @@ type RPCHelloParams struct {
 // RPCPingParams holds the params of rpc.ping.
 type RPCPingParams struct{}
 
+// RPCShutdownParams holds the params of rpc.shutdown.
+type RPCShutdownParams struct{}
+
 // RPCService: Connection setup. A client calls rpc.hello first on every
 // connection; the server answers any other method with notReady until hello
 // succeeds.
@@ -2168,6 +2175,11 @@ type RPCService interface {
 	// Ping implements rpc.ping. Nothing, answered: the web app's heartbeat while
 	// it is visible, which finds a connection a sleeping phone dropped.
 	Ping(ctx context.Context, p *RPCPingParams) error
+	// Shutdown implements rpc.shutdown. Stop notesd as SIGTERM does: it answers,
+	// finishes the requests in hand, stops the vaults and sync, closes the store,
+	// releases the data directory's lock and exits 0. The Flatpak's launcher
+	// calls it to replace an older build (ADR-0032).
+	Shutdown(ctx context.Context, p *RPCShutdownParams) error
 }
 
 func registerRPC(r *Router, s RPCService) {
@@ -2185,6 +2197,13 @@ func registerRPC(r *Router, s RPCService) {
 			return nil, err
 		}
 		return nil, s.Ping(ctx, &p)
+	})
+	r.handle("rpc.shutdown", []Caller{CallerLocal}, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p RPCShutdownParams
+		if err := decodeParams(raw, &p, nil); err != nil {
+			return nil, err
+		}
+		return nil, s.Shutdown(ctx, &p)
 	})
 }
 
@@ -2209,6 +2228,11 @@ func (x RPCClient) Hello(ctx context.Context, p *RPCHelloParams) (*Hello, error)
 // Ping calls rpc.ping.
 func (x RPCClient) Ping(ctx context.Context, p *RPCPingParams) error {
 	return x.c.Call(ctx, "rpc.ping", p, nil)
+}
+
+// Shutdown calls rpc.shutdown.
+func (x RPCClient) Shutdown(ctx context.Context, p *RPCShutdownParams) error {
+	return x.c.Call(ctx, "rpc.shutdown", p, nil)
 }
 
 // ---- sync ----
@@ -3203,6 +3227,7 @@ var Methods = []string{
 	"note.deleteFolder",
 	"rpc.hello",
 	"rpc.ping",
+	"rpc.shutdown",
 	"sync.pair",
 	"sync.paired",
 	"sync.hubs",
