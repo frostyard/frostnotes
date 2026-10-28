@@ -98,13 +98,16 @@ the launcher both act on it.
   counter's only writer, since only the primary instance calls
   `background_set`. Each request of the helper reads the counter under its
   lock, immediately before it reads the file, and writes it into its answer;
-  the answer the app reads is the last request's, and a failure records the
-  counter at the moment it fails.
+  the answer the app reads is the last request's. A failure reads the
+  counter when it writes its outcome. A helper that cannot take the lock
+  reads the counter too, and it does not replace an answer whose generation
+  is at least that counter.
   This holds because the counter is bumped after the setting is written, and
   a helper reads the counter before it reads the setting, under the lock:
   so an answer with `generation >= awaited` read the new setting, and a
   later helper's answer has a generation at least as high. A failure records
-  the generation when it fails, so it ends the wait too.
+  the generation when it fails, so it ends the wait too, unless a newer
+  answer is already in the file.
   A refusal (response 1, or response 0 with the background permission
   false) says how to allow it. A request with no answer, or with response
   2, says that the desktop did not answer, with the helper's error when it
@@ -157,8 +160,11 @@ the launcher both act on it.
   helper starts with no arguments, and that `frostnotes --background`
   starts no notesd and exits 0 while the setting is off; Rust unit tests
   cover the paths, the file and the answer's parse; and Vitest tests cover
-  the row's wait, with fake timers. The helper's own paths — the lock and
-  the second request — have no test. Plan 0008's Phase 3, item 4 in each
+  the row's wait, with fake timers. The helper's lock failure has a test in
+  `internal/packagecheck` (`TestBackgroundHelperKeepsANewerAnswer`,
+  `TestBackgroundHelperReplacesAnOlderAnswer` and
+  `TestBackgroundHelperWritesAFailureWithoutAnAnswer`); the second request
+  still has none. Plan 0008's Phase 3, item 4 in each
   state, is still to run on a real desktop.
 
 ## Alternatives considered

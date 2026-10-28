@@ -25,10 +25,12 @@ exits 0. A missing portal or a refusal changes nothing else for the app.
 
 Each request reads the shell's counter of changes as `generation`, under
 its lock and immediately before it reads the setting; the last request's is
-the one in the outcome, and so is the counter at the moment of a failure.
-The app compares that number with the one its own change left, so it can
-tell an answer about the new setting from an answer about an old one
-(docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
+the one in the outcome. A failure reads the counter when it writes. A
+failure that cannot take the lock does not replace an answer whose
+generation is at least that counter: the newer answer is the one the app
+waits for. The app compares that number with the one its own change left,
+so it can tell an answer about the new setting from an answer about an old
+one (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
 """
 
 import fcntl
@@ -97,6 +99,25 @@ def lock():
     handle = open(os.path.join(directory, LOCK_NAME), "a", encoding="utf-8")
     fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
     return handle
+
+
+def written_generation():
+    """The generation of the answer in the outcome file, or None.
+
+    None means an answer the app cannot use: no file, one that does not
+    parse, or one whose generation is no int.
+    """
+    try:
+        with open(os.path.join(state_dir(), OUTCOME_NAME), encoding="utf-8") as handle:
+            found = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(found, dict):
+        return None
+    value = found.get("generation")
+    if not isinstance(value, int) or isinstance(value, bool):
+        return None
+    return value
 
 
 def write_outcome(outcome):
@@ -244,11 +265,10 @@ def ask(outcome, autostart):
 
 def main():
     # A placeholder, for the paths that cannot ask: the setting is read
-    # only under the lock.
+    # only under the lock, and each failure reads the counter when it writes.
     outcome = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        # A failure still carries the counter, read without the lock here.
-        "generation": generation(),
+        "generation": 0,
         "autostartRequested": True,
         "response": None,
         "background": None,
@@ -259,8 +279,19 @@ def main():
         handle = lock()
     except OSError as err:
         # Without the lock the helpers could undo each other; the app still
-        # gets an answer it can show.
+        # gets an answer it can show, unless a newer answer is already there.
         fail(outcome, f"cannot lock {os.path.join(state_dir(), LOCK_NAME)}: {err}")
+        # The counter, read now and not when the helper started: a helper
+        # that did take the lock may have written its answer in between, and
+        # an older failure must not hide it from the app (ADR-0033).
+        outcome["generation"] = generation()
+        newer = written_generation()
+        if newer is not None and newer >= outcome["generation"]:
+            log(
+                f"keeps the newer answer of generation {newer} in "
+                f"{os.path.join(state_dir(), OUTCOME_NAME)}"
+            )
+            return 0
         write_outcome(outcome)
         return 0
     try:

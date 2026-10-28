@@ -780,7 +780,9 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   and answers the new number. Each request of the helper reads the counter
   under its lock, before it reads the file, so `generation >= awaited` marks
   an answer about the new setting, from this change's helper or from a later
-  one; a failure records the counter too. The shell reads that file, and the
+  one. A failure reads the counter too, at the moment it writes. A helper
+  that cannot take the lock does not replace an answer whose generation is
+  at least that counter. The shell reads that file, and the
   settings' Background section (`app/src/app/Settings.tsx`'s
   `backgroundSection`, over `app/src/data/background.ts`) shows the switch
   and, from that file, what the desktop allows, refused, or did not answer.
