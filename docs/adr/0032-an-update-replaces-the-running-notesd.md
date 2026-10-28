@@ -1,6 +1,6 @@
 # 0032 — A new window replaces a notesd of an older build
 
-- **Status:** Proposed
+- **Status:** Accepted (Brian, 2026-10-28)
 - **Date:** 2026-10-28
 
 ## Context
