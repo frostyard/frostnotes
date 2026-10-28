@@ -233,8 +233,14 @@ describe("vaults from the app", () => {
   it("keeps a new flow's hold when a cancelled flow ends late", async () => {
     // Flow A waits for its approval when the person cancels it, and its reply
     // comes after flow B takes its own hold: A ending must not release B's,
-    // or B's first vault would open and take B's panel away.
-    const mock = new MockTransport([], { folders: ["/home/demo/Documents"], paired: [HUB], latency: 20 });
+    // or B's first vault would open and take B's panel away. Each flow makes
+    // its vault in a folder of its own: a removed vault keeps its folder.
+    const mock = new MockTransport([], {
+      folders: ["/home/demo/Documents", "/home/demo/Notes"],
+      paired: [HUB],
+      addEventFirst: true,
+      latency: 20,
+    });
     mock.refuseJoins(1);
     mock.holdPairings();
     render(<App connect={async () => mock} />);
@@ -242,24 +248,30 @@ describe("vaults from the app", () => {
     await screen.findByRole("dialog", { name: "Manage vaults" });
     await user.click(await joinButton());
     await fillJoin(user, "/home/demo/Documents");
+
+    // A's join is refused once, so A pairs again and waits on its code.
     await screen.findByText("notesctl hub approve ABCD-EFGH");
+    // Only now, so that the gate holds B's join and not A's refused one.
+    mock.holdJoins();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    // Flow B starts while A still waits for its held reply.
+    // Flow B starts in another folder while A still waits for its reply.
     await user.click(await joinButton());
-    await fillJoin(user, "/home/demo/Documents");
+    await fillJoin(user, "/home/demo/Notes");
     mock.releasePairings();
 
-    // A releases its own hold; B's stands. B's first vault then opens
-    // nothing, so B's panel stays.
+    // A ends and releases its own hold; B's stands, so B's first vault opens
+    // nothing and B's panel stays.
     await waitFor(() => expect(useNotes.getState().joinHolds).toBe(1));
     await waitFor(() => expect(useNotes.getState().vaults.map((v) => v.id)).toEqual([2]));
     expect(useNotes.getState().vaultId).toBeNull();
     expect(screen.getByRole("region", { name: "Join a vault on a hub" })).toBeTruthy();
 
-    await waitFor(() => expect(mock.calls.filter((c) => c.method === "sync.join")).toHaveLength(2));
+    // B's join goes through, and B's vault opens.
+    mock.releaseJoins();
+    await waitFor(() => expect(useNotes.getState().vaultId).toBe(2));
     await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
-    expect(useNotes.getState().vaultId).toBe(2);
+    expect(mock.calls.filter((c) => c.method === "sync.join")).toHaveLength(2);
     expect(mock.calls.filter((c) => c.method === "vault.remove")).toHaveLength(1);
     expect(useNotes.getState().joinHolds).toBe(0);
   });

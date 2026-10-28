@@ -103,6 +103,8 @@ export class MockTransport implements Transport {
   private pendingPairings: number;
   private pairingGate: Promise<void> | null = null;
   private openPairingGate: (() => void) | null = null;
+  private joinGate: Promise<void> | null = null;
+  private openJoinGate: (() => void) | null = null;
   private seq = 0;
   private readonly log: Event[] = [];
   private hello = false;
@@ -212,6 +214,20 @@ export class MockTransport implements Transport {
     this.openPairingGate = null;
   }
 
+  /** holdJoins makes sync.join wait until releaseJoins, as a slow hub does. */
+  holdJoins(): void {
+    this.joinGate = new Promise<void>((resolve) => {
+      this.openJoinGate = () => resolve();
+    });
+  }
+
+  /** releaseJoins lets the sync.join calls that waited answer. */
+  releaseJoins(): void {
+    this.openJoinGate?.();
+    this.joinGate = null;
+    this.openJoinGate = null;
+  }
+
   /** syncStatus is a synced vault's state as notesd reports it. */
   private syncStatus(vaultId: number, url: string, hubVault: string, state: SyncState): SyncStatus {
     return {
@@ -227,6 +243,23 @@ export class MockTransport implements Transport {
       skipped: [],
       syncedAt: this.now().toISOString(),
     };
+  }
+
+  /** joinVault syncs the vault with the hub, as sync.join does. */
+  private joinVault(p: Params): unknown {
+    const v = this.target(p.vaultId);
+    const url = String(p.url ?? "");
+    if (this.joinRefusals > 0) {
+      this.joinRefusals -= 1;
+      throw new RPCError(ErrorCode.revoked, `the hub at ${url} refused this device's token`);
+    }
+    if (!this.hubs.some((h) => h.url === url)) {
+      throw new RPCError(ErrorCode.unavailable, `the hub at ${url} cannot be reached`);
+    }
+    const status = this.syncStatus(v.id, url, String(p.name ?? ""), "idle");
+    this.synced.set(v.id, status);
+    this.emit({ event: "sync.changed", data: { status: { ...status } } });
+    return { ...status };
   }
 
   /** addHub records a pairing with the hub at url, once. */
@@ -520,19 +553,8 @@ export class MockTransport implements Transport {
       case "sync.hubs":
         return this.hubs.map((h) => ({ ...h }));
       case "sync.join": {
-        const v = this.target(p.vaultId);
-        const url = String(p.url ?? "");
-        if (this.joinRefusals > 0) {
-          this.joinRefusals -= 1;
-          throw new RPCError(ErrorCode.revoked, `the hub at ${url} refused this device's token`);
-        }
-        if (!this.hubs.some((h) => h.url === url)) {
-          throw new RPCError(ErrorCode.unavailable, `the hub at ${url} cannot be reached`);
-        }
-        const status = this.syncStatus(v.id, url, String(p.name ?? ""), "idle");
-        this.synced.set(v.id, status);
-        this.emit({ event: "sync.changed", data: { status: { ...status } } });
-        return { ...status };
+        if (this.joinGate !== null) return this.joinGate.then(() => this.joinVault(p));
+        return this.joinVault(p);
       }
       case "sync.leave": {
         const v = this.target(p.vaultId);
