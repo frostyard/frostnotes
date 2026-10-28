@@ -37,7 +37,7 @@ Phase 7 moves it behind lodge.
 | web build | `/usr/share/lodge/apps/notes/web/` | `make web-build`'s output, built for the base `/app/notes/`, with `icon.svg` |
 | daemon and CLI | `/usr/bin/notesd`, `/usr/bin/notesctl` | `make build`'s binaries, mode 0755 |
 | units | `/usr/lib/systemd/system/frostnotes.service`, `frostnotes-lodge.socket` | `packaging/systemd/`; the service's `ExecStart=` is `/usr/bin/notesd -lodge` |
-| system user | `/usr/lib/sysusers.d/frostnotes.conf` | `u frostnotes`, in group `lodge-apps` and never in group `lodge`; `g lodge -` too, because group `lodge` owns the app socket (`SocketGroup=lodge`) and the socket must start without lodge's own sysext |
+| system user | `/usr/lib/sysusers.d/frostnotes.conf` | `u frostnotes`, in group `lodge-apps` and never in group `lodge`; `g lodge -` too, because group `lodge` owns the app socket (`SocketGroup=lodge`) and the socket must start without lodge's own sysext; and `u lodge`, with [lodge's own line](https://github.com/frostyard/lodge/blob/main/packaging/sysusers.d/lodge.conf) byte for byte, because `lodgeapp.LoadEnv` looks user `lodge` up |
 
 `packaging/lodge/stage.sh DESTDIR VERSION [BUILD]` stages all of this
 under `DESTDIR` in that layout, and `make lodge-package` runs it into
@@ -87,8 +87,11 @@ notesd and notesctl are in `/opt/lodge/bin`, which the unit's
 2. Replace `/usr/share/lodge/apps/notes/` with the staged one, owned by
    root (directories 0755, files 0644).
 3. Keep the host's units, drop-ins and sysusers.d entry in `/etc`. The
-   staged sysusers.d file adds only `g lodge -`, which the host's group
-   `lodge` already satisfies.
+   staged sysusers.d file adds only `g lodge -` and `u lodge`, which the
+   host's group and user `lodge` already satisfy. `u lodge` repeats
+   lodge's own line byte for byte, because `lodgeapp.LoadEnv` looks user
+   `lodge` up; the two lines must stay identical, or `systemd-sysusers`
+   warns and keeps only the first.
 4. Run `sudo systemctl restart frostnotes.service` and
    `sudo /opt/lodge/bin/lodgectl reload`, then check that
    `sudo /opt/lodge/bin/lodgectl apps` shows notes up at the new version.

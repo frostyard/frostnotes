@@ -14,6 +14,15 @@ import (
 
 const (
 	appUser = "frostnotes"
+
+	// lodgeUserLine is user lodge's line in lodge's own
+	// packaging/sysusers.d/lodge.conf
+	// (https://github.com/frostyard/lodge/blob/main/packaging/sysusers.d/lodge.conf),
+	// byte for byte: notesd's lodgeapp.LoadEnv looks user lodge up, so the
+	// staged entry must declare it without lodge's sysext. The two lines
+	// must stay identical, or systemd-sysusers warns and keeps only the
+	// first.
+	lodgeUserLine = `u lodge - "lodge, the tailnet web shell for frostyard's apps" /var/lib/lodge`
 )
 
 var binaries = []string{"notesd", "notesctl"}
@@ -180,6 +189,9 @@ func TestSysusers(t *testing.T) {
 	root := staged(t)
 	have := map[string]bool{}
 	for _, l := range readLines(t, filepath.Join(root, "usr/lib/sysusers.d/frostnotes.conf")) {
+		if l == lodgeUserLine {
+			have["lodge"] = true
+		}
 		l = strings.TrimSpace(l)
 		if l == "" || strings.HasPrefix(l, "#") {
 			continue
@@ -200,6 +212,9 @@ func TestSysusers(t *testing.T) {
 		if !have[k] {
 			t.Errorf("sysusers.d entry lacks its %q line", k)
 		}
+	}
+	if !have["lodge"] {
+		t.Errorf("sysusers.d entry lacks user lodge's line, byte for byte: %q", lodgeUserLine)
 	}
 }
 
