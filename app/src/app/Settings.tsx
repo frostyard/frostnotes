@@ -1,18 +1,22 @@
 // The settings dialog's container (docs/specs/ui.md, Settings): its
 // sections from the app's preferences (data/prefs.ts, kept on this
 // device), the vault's settings (vault.settings, changed with
-// vault.configure; ADR-0021), the keyboard map, the vault's sync, and on
-// a hub its devices and pending pairings (docs/design/hub.md#hub-settings-in-the-app).
-// A row's id says where it goes: "pref:<key>", "vault:<field>" or
+// vault.configure; ADR-0021), the keyboard map, the vault's sync (joining a
+// hub, leaving one, pairing again), and on a hub its devices and pending
+// pairings (docs/design/hub.md#hub-settings-in-the-app). A row's id says
+// where it goes: "pref:<key>", "vault:<field>", "sync:<action>" or
 // "hub:revoke:<device>".
+import { Sheet } from "@frostyard/lodge-ui/react";
 import { useEffect, useState } from "react";
 
 import { ask, closeSettings, notify, openSettings, useOverlays } from "../data/overlays";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
-import { useVaultState } from "../data/vaultState";
+import { leaveHub, syncError } from "../data/sync";
+import { loadSync, useVaultState } from "../data/vaultState";
 import { type SettingRow, SettingsDialog, type SettingsSection } from "../features/settings/SettingsDialog";
+import type { JoinMode } from "../features/sync/JoinHubForm";
 import { boundCommands, formatHotkey, HOTKEY_NAMES, hotkeysFor } from "../lib/keymap";
 import type {
   Client,
@@ -23,6 +27,7 @@ import type {
   VaultConfigureParams,
   VaultSettings,
 } from "../rpc/gen/api";
+import { JoinHub } from "./JoinHub";
 import { useNarrow } from "./narrow";
 import { statusSync } from "./status";
 
@@ -101,12 +106,13 @@ export function hubSection(hub: HubView): SettingsSection {
   return { id: "hub", name: "Hub", rows };
 }
 
-/** settingsSections builds the dialog's sections; vault is null while the vault's settings cannot be read. */
+/** settingsSections builds the dialog's sections; vault is null while the vault's settings cannot be read. canJoin says the caller may join a hub with this vault: notesd syncs, and the caller is not a browser inside lodge. */
 export function settingsSections(
   p: Prefs,
   vault: VaultSettings | null,
   sync: SyncStatus | null,
   hub: HubView | null = null,
+  canJoin = true,
 ): SettingsSection[] {
   const v = (row: SettingRow): SettingRow => (vault === null ? { ...row, disabled: true } : row);
   const text = (field: keyof VaultSettings, name: string, description?: string, placeholder?: string): SettingRow =>
@@ -118,6 +124,48 @@ export function settingsSections(
     });
   const flag = (field: "wikilinks" | "updateLinks", name: string, description?: string): SettingRow =>
     v({ id: `vault:${field}`, name, description, control: { kind: "toggle", value: vault?.[field] ?? false } });
+  // The window's vault's sync, and what the caller may do with it: join a
+  // hub, pair again where the hub refused the token, or leave.
+  const syncRows = (s: SyncStatus | null): SettingRow[] => {
+    if (s === null) {
+      if (!canJoin) {
+        return [
+          { id: "sync:none", name: "Sync", control: { kind: "info", text: "This vault does not sync with a hub." } },
+        ];
+      }
+      return [
+        {
+          id: "sync:join",
+          name: "Sync with a hub",
+          description: "Join a vault on a hub. Notes then sync on every device that joins it.",
+          control: { kind: "button", label: "Join…" },
+        },
+      ];
+    }
+    const rows: SettingRow[] = [
+      { id: "sync:hub", name: "Hub", control: { kind: "info", text: s.url } },
+      { id: "sync:vault", name: "Hub vault", control: { kind: "info", text: s.hubVault } },
+      { id: "sync:state", name: "State", control: { kind: "info", text: statusSync(s).text } },
+      { id: "sync:conflicts", name: "Conflicts", control: { kind: "info", text: String(s.conflicts) } },
+    ];
+    if (canJoin && s.state === "revoked") {
+      rows.push({
+        id: "sync:pair",
+        name: "Pair again",
+        description: "The hub refused this device's token. Pair again with a new code to sync again.",
+        control: { kind: "button", label: "Pair again…" },
+      });
+    }
+    if (canJoin) {
+      rows.push({
+        id: "sync:leave",
+        name: "Stop syncing",
+        description: "This vault's files stay on this device, and the hub keeps its copy.",
+        control: { kind: "button", label: "Leave", danger: true },
+      });
+    }
+    return rows;
+  };
   return [
     {
       id: "editor",
@@ -230,14 +278,7 @@ export function settingsSections(
     {
       id: "sync",
       name: "Sync",
-      rows: sync
-        ? [
-            { id: "sync:hub", name: "Hub", control: { kind: "info", text: sync.url } },
-            { id: "sync:vault", name: "Hub vault", control: { kind: "info", text: sync.hubVault } },
-            { id: "sync:state", name: "State", control: { kind: "info", text: statusSync(sync).text } },
-            { id: "sync:conflicts", name: "Conflicts", control: { kind: "info", text: String(sync.conflicts) } },
-          ]
-        : [{ id: "sync:none", name: "Sync", control: { kind: "info", text: "This vault does not sync with a hub." } }],
+      rows: syncRows(sync),
     },
     ...(hub ? [hubSection(hub)] : []),
   ];
@@ -251,9 +292,14 @@ export function SettingsContainer() {
   const sync = useVaultState((s) => s.sync);
   const client = useClient();
   const vaultId = useNotes((s) => s.vaultId);
+  const syncAvailable = useVaultState((s) => s.syncAvailable);
+  const caller = useNotes((s) => s.hello?.caller);
   const [hub, setHub] = useState<HubView | null>(null);
+  const [joining, setJoining] = useState<JoinMode | null>(null);
   const narrow = useNarrow();
   const open = section !== null;
+  // A browser inside lodge may not join, leave or pair: sync admits local callers only.
+  const canJoin = syncAvailable && caller !== "session";
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -262,52 +308,90 @@ export function SettingsContainer() {
       live = false;
     };
   }, [open, client]);
+
+  /** leave stops syncing the window's vault, once the person agrees; its files stay. */
+  async function leave(): Promise<void> {
+    if (vaultId === null) return;
+    const name = useNotes.getState().vaults.find((v) => v.id === vaultId)?.name ?? "";
+    const yes = await ask({
+      title: `Stop syncing "${name}"?`,
+      text: "This vault's files stay on this device, and the hub keeps its copy.",
+      confirmLabel: "Leave",
+      danger: true,
+    });
+    if (!yes) return;
+    try {
+      await leaveHub(client, vaultId);
+    } catch (err) {
+      notify(syncError(err));
+    }
+    await loadSync(client, vaultId);
+  }
+
   if (section === null) return null;
   return (
-    <SettingsDialog
-      narrow={narrow}
-      sections={settingsSections(prefs, vault, sync, hub)}
-      section={section}
-      onSection={(id) => openSettings(id)}
-      onClose={closeSettings}
-      onChange={(id, value) => {
-        const [where, key, arg] = id.split(":") as [string, string, string | undefined];
-        if (where === "hub" && key === "revoke" && arg !== undefined) {
-          const device = hub?.devices.find((d) => d.id === Number(arg));
-          void ask({
-            title: `Revoke ${device?.name ?? "this device"}?`,
-            text: "Its token stops working at once, and it must pair again to sync.",
-            confirmLabel: "Revoke",
-            danger: true,
-          }).then(async (yes) => {
-            if (!yes) return;
-            try {
-              await client.hub.revoke({ device: Number(arg) });
-            } catch (err) {
-              notify(err instanceof Error ? err.message : String(err));
-            }
-            setHub(await loadHub(client));
-          });
-          return;
-        }
-        if (where === "pref") {
-          prefs.setPrefs({ [key]: value } as Partial<Prefs>);
-          return;
-        }
-        if (where !== "vault" || vaultId === null) return;
-        const change: VaultConfigureParams = { id: vaultId };
-        const field = key as keyof Omit<VaultConfigureParams, "id">;
-        (change as unknown as Record<string, unknown>)[field] =
-          field === "ignore"
-            ? String(value)
-                .split(",")
-                .map((s) => s.trim())
-                .filter((s) => s !== "")
-            : value;
-        client.vault
-          .configure(change)
-          .catch((err: unknown) => notify(err instanceof Error ? err.message : String(err)));
-      }}
-    />
+    <>
+      <SettingsDialog
+        narrow={narrow}
+        sections={settingsSections(prefs, vault, sync, hub, canJoin)}
+        section={section}
+        onSection={(id) => openSettings(id)}
+        onClose={closeSettings}
+        onChange={(id, value) => {
+          const [where, key, arg] = id.split(":") as [string, string, string | undefined];
+          if (where === "sync") {
+            if (key === "join" || key === "pair") setJoining(key);
+            else if (key === "leave") void leave();
+            return;
+          }
+          if (where === "hub" && key === "revoke" && arg !== undefined) {
+            const device = hub?.devices.find((d) => d.id === Number(arg));
+            void ask({
+              title: `Revoke ${device?.name ?? "this device"}?`,
+              text: "Its token stops working at once, and it must pair again to sync.",
+              confirmLabel: "Revoke",
+              danger: true,
+            }).then(async (yes) => {
+              if (!yes) return;
+              try {
+                await client.hub.revoke({ device: Number(arg) });
+              } catch (err) {
+                notify(err instanceof Error ? err.message : String(err));
+              }
+              setHub(await loadHub(client));
+            });
+            return;
+          }
+          if (where === "pref") {
+            prefs.setPrefs({ [key]: value } as Partial<Prefs>);
+            return;
+          }
+          if (where !== "vault" || vaultId === null) return;
+          const change: VaultConfigureParams = { id: vaultId };
+          const field = key as keyof Omit<VaultConfigureParams, "id">;
+          (change as unknown as Record<string, unknown>)[field] =
+            field === "ignore"
+              ? String(value)
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter((s) => s !== "")
+              : value;
+          client.vault
+            .configure(change)
+            .catch((err: unknown) => notify(err instanceof Error ? err.message : String(err)));
+        }}
+      />
+      {joining !== null && vaultId !== null && (
+        <Sheet ariaLabel="Join a hub" width={480} showClose={false} portal onClose={() => setJoining(null)}>
+          <JoinHub
+            mode={joining}
+            url={joining === "pair" ? sync?.url : undefined}
+            vaultId={vaultId}
+            onDone={() => setJoining(null)}
+            onCancel={() => setJoining(null)}
+          />
+        </Sheet>
+      )}
+    </>
   );
 }

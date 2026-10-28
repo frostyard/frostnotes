@@ -557,11 +557,27 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 | Hotkeys | the keyboard map below, read-only in M3 | | |
 | Daily notes | Date format; New file location; Template file location | `YYYY-MM-DD`; vault root; none | vault |
 | Templates | Template folder location; Date format; Time format | none; `YYYY-MM-DD`; `HH:mm` | vault |
-| Sync | the vault's hub, state, last sync, conflicts (read-only in M3) | | |
+| Sync | the window's vault's hub, hub vault, state and conflicts; Join…, Pair again… and Leave for its sync | | |
 
 "App" settings are the app's preferences, "vault" settings are the
 vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset
 ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)).
+
+The Sync section shows the window's vault's sync where notesd syncs and
+the caller is not a browser inside lodge: its hub, its hub vault, its
+state and its conflicts. A vault that syncs with no hub gets Sync with a
+hub, "Join a vault on a hub. Notes then sync on every device that joins
+it.", and Join…, which opens the join panel (the vault manager's, with
+no Location) in a dialog, "Join a hub". A synced vault gets those rows,
+then Pair again where its state is `revoked`, "The hub refused this
+device's token. Pair again with a new code to sync again.", and Pair
+again…, which opens the join panel in its pair-again mode: its Hub URL
+is the vault's hub, and it asks for no hub vault name. Last comes Stop
+syncing, "This vault's files stay on this device, and the hub keeps its
+copy.", and Leave, which asks first ('Stop syncing "<name>"?', Leave,
+danger), calls `sync.leave`, and reads the state again. A browser inside
+lodge, and a notesd that does not sync, get "This vault does not sync
+with a hub."
 
 ### Vault manager
 
@@ -596,9 +612,10 @@ Obsidian's vault chooser
   - **Open folder as vault:** "Choose a folder of Markdown files."
     Open opens the system's folder picker. Where there is none (a
     browser), a 240-wide path input and Open take its place.
-  - **Join a vault on a hub:** "Join it with `notesctl hub join URL
-    NAME`, then open its folder here." The command is selectable
-    monospace text; there is no control.
+  - **Join a vault on a hub:** "Sync a new vault with a vault on a
+    hub. To sync a vault you have, open it, then Settings, Sync." Join
+    (1px `--separator`, as Open) shows the join panel in the actions'
+    place.
 - **The create form**, in the actions' place: Back (`arrow-left`, "Back")
   and the title "Create new vault" (15/20, 600); Vault name, a 240-wide
   input, focused; Location, the chosen folder's path (12/16
@@ -609,6 +626,20 @@ Obsidian's vault chooser
   `--flag-1`: "A vault needs a name.", "A vault's name cannot start
   with a dot.", or "A vault's name cannot hold any of these: `\ / : *
   ? " < > | # ^ [ ]`" (the characters a note's title cannot hold).
+- **The join panel**, in the actions' place: Back (`arrow-left`, "Back")
+  and the title "Join a vault on a hub" (15/20, 600); Hub URL, a
+  320-wide input, focused (placeholder
+  `https://lodge.example.ts.net/device/notes`); Hub vault name, a
+  240-wide input; This device's name (optional), a 240-wide input
+  (placeholder "This computer's name"); Location, as the create form
+  has it; then Join (`--accent`), enabled once the hub's URL, the vault's
+  name and a location are set. Where the device did not pair with the
+  hub before, the approve step follows: the code, large and monospace
+  and selectable, the line "On the hub's machine, approve this device:
+  `notesctl hub approve CODE`. The code expires in 10 minutes.", and
+  Cancel; then "Joining…" and Cancel. A failure shows in 12/16
+  `--flag-1` under the fields, and the fields return with what the
+  person typed.
 - **What they do:** Open folder as vault registers the folder
   (`vault.add`); Create registers `<location>/<name>`, which notesd
   makes (`vault.add` with `create`). Either makes it the window's vault
@@ -635,6 +666,15 @@ Obsidian's vault chooser
   history on this device." (for a synced vault also "and its place on
   the hub; open it again to sync it, after joining"). Then
   `vault.remove`; the window then shows another vault, or the manager.
+  Join a vault on a hub pairs the device with the hub where it has not
+  paired with it before (`sync.pair`, the code approved on the hub,
+  `sync.paired`), registers `<location>/<hub vault name>` (`vault.add`
+  with `create`), joins it (`sync.join`), opens it and closes the
+  manager. Where the hub refuses the token of a device that was paired
+  (`revoked`), it pairs again once and joins again. A join that fails
+  after the vault was made forgets that vault (`vault.remove`; its
+  folder stays) and shows notesd's words in the panel. Only a local
+  caller joins: a browser inside lodge has no actions.
 - **The window's title** (the system's, as a task bar shows it):
   `<note> - <vault> - Frostnotes`, `<vault> - Frostnotes` when the
   active tab shows no note, `Frostnotes` without a vault.

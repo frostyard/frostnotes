@@ -31,6 +31,8 @@ export interface VaultManagerProps {
   onOpen: (id: number) => void;
   onRemove: (vault: VaultEntry) => void;
   onCreate: () => void;
+  /** Join a vault on a hub: shows the join panel in the actions' place. */
+  onJoin: () => void;
   /** Open folder as vault: no path with a picker, else the typed path, trimmed. */
   onOpenFolder: (path?: string) => void;
   onClose: () => void;
@@ -170,7 +172,7 @@ function VaultList({ vaults, current, manage, onOpen, onRemove }: VaultManagerPr
   );
 }
 
-function VaultActions({ canPick, onCreate, onOpenFolder }: VaultManagerProps) {
+function VaultActions({ canPick, onCreate, onJoin, onOpenFolder }: VaultManagerProps) {
   const [path, setPath] = useState("");
 
   function openFolder() {
@@ -213,13 +215,16 @@ function VaultActions({ canPick, onCreate, onOpenFolder }: VaultManagerProps) {
       </VaultAction>
       <VaultAction
         title="Join a vault on a hub"
-        description={
-          <>
-            Join it with <code className="select-text font-mono">notesctl hub join URL NAME</code>, then open its folder
-            here.
-          </>
-        }
-      />
+        description="Sync a new vault with a vault on a hub. To sync a vault you have, open it, then Settings, Sync."
+      >
+        <button
+          type="button"
+          className="h-7 rounded-md border border-separator px-3 hover:bg-selection-inactive"
+          onClick={onJoin}
+        >
+          Join
+        </button>
+      </VaultAction>
     </>
   );
 }

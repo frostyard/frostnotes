@@ -9,12 +9,14 @@ import { useOverlays } from "../data/overlays";
 import { DEFAULT_PREFS, usePrefs } from "../data/prefs";
 import { useNotes } from "../data/stores";
 import { emptyVault, useVaultState } from "../data/vaultState";
-import { MockTransport, mockVaults } from "../rpc/mock/mock";
+import type { SyncState, SyncStatus } from "../rpc/gen/api";
+import { HUB_URL, MockTransport, mockVaults } from "../rpc/mock/mock";
 import { fileRow, findFileRow } from "../testing/files";
 import { emptyWorkspace } from "../workspace/model";
 import { open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
+import { settingsSections } from "./Settings";
 
 afterEach(() => {
   useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null });
@@ -87,14 +89,122 @@ describe("the settings", () => {
     await waitFor(() => expect(useVaultState.getState().settings?.updateLinks).toBe(true));
   });
 
-  it("list the hotkeys with F1, and say a vault without a hub does not sync", async () => {
+  it("list the hotkeys with F1, and offer to join a hub", async () => {
     const { user } = await start();
     await user.keyboard("{F1}");
     const hotkeys = within(settings()).getByRole("region", { name: "Hotkeys" });
     const row = within(hotkeys).getByText("Open quick switcher").closest("[data-setting]") as HTMLElement;
     expect(row.querySelector("kbd")?.textContent).toBe("Ctrl + O");
     await user.click(section("Sync"));
-    expect(screen.getByText("This vault does not sync with a hub.")).toBeTruthy();
+    await waitFor(() => expect(useVaultState.getState().syncAvailable).toBe(true));
+    expect(screen.getByText("Sync with a hub")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Join… Sync with a hub" })).toBeTruthy();
+    expect(screen.queryByText("This vault does not sync with a hub.")).toBeNull();
+  });
+});
+
+describe("the Sync section", () => {
+  it("joins a hub for the window's vault, and leaves it after asking", async () => {
+    const { mock, user } = await start();
+    await user.keyboard("{Control>},{/Control}");
+    await user.click(section("Sync"));
+    await waitFor(() => expect(useVaultState.getState().syncAvailable).toBe(true));
+    await user.click(screen.getByRole("button", { name: "Join… Sync with a hub" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Join a hub" }));
+    await user.type(sheet.getByRole("textbox", { name: "Hub URL" }), "https://hub.example/");
+    await user.type(sheet.getByRole("textbox", { name: "Hub vault name" }), "shared");
+    await user.click(sheet.getByRole("button", { name: "Join" }));
+    await waitFor(() => expect(useVaultState.getState().sync?.hubVault).toBe("shared"));
+    expect(mock.calls.find((c) => c.method === "sync.join")?.params).toEqual({
+      vaultId: 3,
+      url: "https://hub.example",
+      name: "shared",
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Join a hub" })).toBeNull());
+    expect(screen.getByText("https://hub.example")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Leave Stop syncing" }));
+    const ask = await screen.findByRole("alertdialog", { name: 'Stop syncing "garden"?' });
+    expect(ask.textContent).toContain("This vault's files stay on this device, and the hub keeps its copy.");
+    await user.click(within(ask).getByRole("button", { name: "Leave" }));
+    await waitFor(() => expect(useVaultState.getState().sync).toBeNull());
+    expect(mock.calls.find((c) => c.method === "sync.leave")?.params).toEqual({ vaultId: 3 });
+    await waitFor(() => expect(screen.getByText("Sync with a hub")).toBeTruthy());
+  });
+
+  it("pairs again with a new code for a vault whose hub refused the token", async () => {
+    const mock = new MockTransport(mockVaults(), {
+      files: FILES,
+      synced: [{ vaultId: 3, url: HUB_URL, name: "shared", state: "revoked" }],
+    });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    await waitFor(() => expect(useVaultState.getState().sync?.state).toBe("revoked"));
+    const user = userEvent.setup();
+    act(() => useOverlays.setState({ settings: "sync" }));
+    const region = await within(settings()).findByRole("region", { name: "Sync" });
+    expect(within(region).getByText(HUB_URL)).toBeTruthy();
+    expect(within(region).getByText("Pair again")).toBeTruthy();
+    await user.click(within(region).getByRole("button", { name: "Pair again… Pair again" }));
+    const sheet = within(await screen.findByRole("dialog", { name: "Join a hub" }));
+    expect(sheet.queryByRole("textbox", { name: "Hub vault name" })).toBeNull();
+    const url = sheet.getByRole("textbox", { name: "Hub URL" }) as HTMLInputElement;
+    expect(url.value).toBe(HUB_URL);
+    await user.click(sheet.getByRole("button", { name: "Join" }));
+    await waitFor(() => expect(mock.calls.some((c) => c.method === "sync.pair")).toBe(true));
+    expect(mock.calls.find((c) => c.method === "sync.pair")?.params).toEqual({ url: HUB_URL });
+    expect(mock.calls.some((c) => c.method === "sync.join")).toBe(false);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Join a hub" })).toBeNull());
+  });
+
+  it("offers no join to a browser inside lodge", async () => {
+    const mock = new MockTransport(mockVaults(), { files: FILES, caller: "session", node: "phone" });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    await waitFor(() => expect(useVaultState.getState().syncAvailable).toBe(false));
+    act(() => useOverlays.setState({ settings: "sync" }));
+    const region = await within(settings()).findByRole("region", { name: "Sync" });
+    expect(within(region).getByText("This vault does not sync with a hub.")).toBeTruthy();
+    expect(within(region).queryByRole("button", { name: /Join|Leave|Pair again/ })).toBeNull();
+  });
+});
+
+describe("the Sync section's rows", () => {
+  const status = (state: SyncState): SyncStatus => ({
+    vaultId: 3,
+    url: HUB_URL,
+    hubVault: "shared",
+    state,
+    cursor: 0,
+    hubSeq: 0,
+    pending: 0,
+    conflicts: 1,
+    refused: [],
+    skipped: [],
+  });
+  const syncRows = (sync: SyncStatus | null, canJoin: boolean) =>
+    settingsSections(DEFAULT_PREFS, null, sync, null, canJoin).find((s) => s.id === "sync")?.rows ?? [];
+  const ids = (sync: SyncStatus | null, canJoin: boolean) => syncRows(sync, canJoin).map((r) => r.id);
+
+  it("offers Join for a vault with no hub, and nothing to a caller that may not join", () => {
+    expect(ids(null, true)).toEqual(["sync:join"]);
+    expect(ids(null, false)).toEqual(["sync:none"]);
+  });
+
+  it("says what Join and Pair again do", () => {
+    const join = syncRows(null, true).find((r) => r.id === "sync:join");
+    expect(join?.description).toBe("Join a vault on a hub. Notes then sync on every device that joins it.");
+    const pair = syncRows(status("revoked"), true).find((r) => r.id === "sync:pair");
+    expect(pair?.description).toBe("The hub refused this device's token. Pair again with a new code to sync again.");
+  });
+
+  it("offers Leave for a synced vault, and Pair again where the hub refused the token", () => {
+    expect(ids(status("idle"), true)).toContain("sync:leave");
+    expect(ids(status("idle"), true)).not.toContain("sync:pair");
+    expect(ids(status("revoked"), true)).toContain("sync:pair");
+    expect(ids(status("revoked"), true)).toContain("sync:leave");
+    expect(ids(status("revoked"), false)).not.toContain("sync:pair");
+    expect(ids(status("revoked"), false)).not.toContain("sync:leave");
   });
 });
 

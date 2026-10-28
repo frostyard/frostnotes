@@ -1,8 +1,8 @@
 // The vault manager's container (ADR-0024; docs/specs/ui.md#vault-manager):
 // the whole window while there is no vault, else a dialog from Manage
 // vaults…. It opens a vault in place, opens a folder or creates one with
-// the system's folder picker (or a typed path in a browser), and removes
-// one from the list after asking.
+// the system's folder picker (or a typed path in a browser), joins a vault
+// on a hub, and removes one from the list after asking.
 import { useState } from "react";
 
 import { closeVaultManager } from "../data/overlays";
@@ -12,6 +12,7 @@ import { addVault, removeVault } from "../data/vaults";
 import { CreateVault } from "../features/vaults/CreateVault";
 import { VaultManager } from "../features/vaults/VaultManager";
 import { vaultFolder } from "../lib/vaultName";
+import { JoinHub } from "./JoinHub";
 import { canPickFolders, pickFolder } from "./system";
 
 /** VaultsView draws the vault manager over the window's vaults. */
@@ -20,12 +21,14 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
   const vaults = useNotes((s) => s.vaults);
   const current = useNotes((s) => s.vaultId);
   const [creating, setCreating] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [location, setLocation] = useState<string | null>(null);
   const canPick = canPickFolders();
   // vault.add and vault.remove admit local callers only (lodge-app.md).
   const manage = useNotes((s) => s.hello?.caller !== "session");
   const close = () => {
     setCreating(false);
+    setJoining(false);
     if (props.mode === "dialog") closeVaultManager();
   };
   const added = (ok: boolean) => {
@@ -47,6 +50,7 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       onBack={() => setCreating(false)}
     />
   );
+  const join = <JoinHub onDone={close} onCancel={() => setJoining(false)} />;
   return (
     <VaultManager
       vaults={vaults}
@@ -54,7 +58,7 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       mode={props.mode}
       canPick={canPick}
       manage={manage}
-      panel={creating && manage ? form : undefined}
+      panel={manage ? (creating ? form : joining ? join : undefined) : undefined}
       onOpen={(id) => {
         if (id !== current) void openVault(client, id);
         close();
@@ -63,7 +67,14 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
         const vault = vaults.find((v) => v.id === entry.id);
         if (vault) void removeVault(client, vault);
       }}
-      onCreate={() => setCreating(true)}
+      onCreate={() => {
+        setJoining(false);
+        setCreating(true);
+      }}
+      onJoin={() => {
+        setCreating(false);
+        setJoining(true);
+      }}
       onOpenFolder={(path) =>
         void (path !== undefined ? Promise.resolve(path) : pickFolder("Open folder as vault")).then((p) => {
           if (p !== null) void addVault(client, p).then(added);

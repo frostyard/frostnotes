@@ -92,6 +92,54 @@ describe("vaults from the app", () => {
     expect(await screen.findByText("/elsewhere is not a folder.")).toBeTruthy();
   });
 
+  it("joins a vault on a hub, from the manager, with no terminal", async () => {
+    const mock = new MockTransport(mockVaults());
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    const m = await manageVaults("garden");
+    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.click(hubRow.getByRole("button", { name: "Join" }));
+    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788/");
+    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
+    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo" } });
+    await user.click(panel.getByRole("button", { name: "Join" }));
+
+    // The manager closes once the vault is made, joined and open.
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Manage vaults" })).toBeNull());
+    expect(mock.calls.find((c) => c.method === "vault.add")?.params).toEqual({
+      path: "/home/demo/shared",
+      create: true,
+    });
+    expect(mock.calls.find((c) => c.method === "sync.join")?.params).toEqual({
+      vaultId: 4,
+      url: "http://127.0.0.1:7788",
+      name: "shared",
+    });
+    await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
+  });
+
+  it("forgets the new vault when the hub refuses it, and says why in the panel", async () => {
+    const mock = new MockTransport(mockVaults(), { joinRefusals: 1 });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    const m = await manageVaults("garden");
+    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.click(hubRow.getByRole("button", { name: "Join" }));
+    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788");
+    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
+    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo" } });
+    await user.click(panel.getByRole("button", { name: "Join" }));
+
+    expect(await screen.findByText(/refused this device's token/)).toBeTruthy();
+    expect(mock.calls.find((c) => c.method === "vault.remove")?.params).toEqual({ id: 4 });
+    await waitFor(() => expect(within(manager()).getAllByRole("listitem")).toHaveLength(3));
+    expect(within(manager()).getByRole("region", { name: "Join a vault on a hub" })).toBeTruthy();
+  });
+
   it("switches vaults in place and names them in the title", async () => {
     const mock = new MockTransport(mockVaults(), { files: { 3: { "Plan.md": "Plan\n" } } });
     render(<App connect={async () => mock} />);
