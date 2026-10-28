@@ -36,6 +36,13 @@ type helperAnswer struct {
 // in the app's state directory before the run. It answers that directory.
 func runHelper(t *testing.T, files map[string]string) string {
 	t.Helper()
+	return runHelperAfter(t, files, func(string) {})
+}
+
+// runHelperAfter is runHelper, with setup, which prepares the state
+// directory after files are written and before the helper starts.
+func runHelperAfter(t *testing.T, files map[string]string, setup func(dir string)) string {
+	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is not installed")
 	}
@@ -54,6 +61,7 @@ func runHelper(t *testing.T, files map[string]string) string {
 	for name, content := range files {
 		write(t, filepath.Join(dir, name), content)
 	}
+	setup(dir)
 	cmd := exec.Command("python3", script)
 	cmd.Env = append(os.Environ(), "XDG_STATE_HOME="+state, "XDG_CONFIG_HOME="+config)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -143,4 +151,25 @@ func TestBackgroundHelperRemovesTheFailuresBelowItsGeneration(t *testing.T) {
 	if got := readFile(t, dir, "background-failure-x.json"); got == "" {
 		t.Error("the helper removed a file that is no failure")
 	}
+}
+
+// A failure that cannot be written leaves the older failures alone: they
+// hold the last message the app has.
+func TestBackgroundHelperKeepsOlderFailuresWhenItCannotWrite(t *testing.T) {
+	const older = `{"generation": 2, "error": "no lock"}`
+	dir := runHelperAfter(
+		t,
+		map[string]string{counterName: "3\n", failureName("2"): older},
+		func(dir string) {
+			// The failure of generation 3 cannot be written: its path is a
+			// directory, so os.replace fails.
+			if err := os.Mkdir(filepath.Join(dir, failureName("3")), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		},
+	)
+	if got := readFile(t, dir, failureName("2")); got != older {
+		t.Errorf("the helper removed the last failure:\n%s", got)
+	}
+	checkGone(t, dir, answerName)
 }

@@ -783,8 +783,9 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   one. A failure reads the counter too, at the moment it writes. A helper
   that cannot take the lock never writes `background.json`, so it can
   replace no newer answer: it writes its failure to
-  `background-failure-<generation>.json` in the same directory, and removes
-  the failures of lower generations. The shell reads that file and those
+  `background-failure-<generation>.json` in the same directory, and, after
+  it wrote that file, removes the failures of lower generations. When that
+  write fails, the older failures stay. The shell reads that file and those
   failures, and shows the newer of the two; an answer wins a tie. A helper
   that did take the lock removes, after it wrote its answer, the failures
   up to that answer's generation. A file name counts only in the exact form

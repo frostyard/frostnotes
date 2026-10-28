@@ -317,10 +317,10 @@ def main():
         # The counter, read now and not when the helper started.
         outcome["generation"] = generation()
         gen = outcome["generation"]
-        write_outcome(outcome, failure_name(gen))
-        # The failures of the lower generations are no answer to anything
-        # this one does not cover.
-        remove_failures(gen - 1)
+        if write_outcome(outcome, failure_name(gen)):
+            # Only now: when the write failed, the older failures hold the
+            # last message the app has, and they must stay.
+            remove_failures(gen - 1)
         return 0
     try:
         for _ in range(MAX_REQUESTS):

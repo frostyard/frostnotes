@@ -101,8 +101,9 @@ the launcher both act on it.
   the answer the app reads is the last request's. A failure reads the
   counter when it writes its outcome. A helper that cannot take the lock
   reads the counter too, and it never writes `background.json`: it writes
-  `background-failure-<generation>.json` in the same directory instead, and
-  removes the failures of lower generations. So it can replace no newer
+  `background-failure-<generation>.json` in the same directory instead, and,
+  after it wrote that file, removes the failures of lower generations. When
+  that write fails, the older failures stay. So it can replace no newer
   answer. The shell reads the answer and those failures, and shows the newer
   of the two; an answer wins a tie. A helper that did take the lock removes,
   after it wrote its answer, the failures up to its generation.
