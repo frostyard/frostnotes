@@ -63,4 +63,11 @@ describe("the Background section", () => {
     expect(sections.at(-1)?.id).toBe("background");
     expect(sections.at(-1)?.rows).toHaveLength(2);
   });
+
+  it("says that it asks the desktop while it waits for a new answer", () => {
+    const control = backgroundSection(background(true, null), true).rows[1]?.control;
+    expect(control).toEqual({ kind: "info", text: "Asking the desktop…" });
+    const sections = settingsSections(DEFAULT_PREFS, null, null, null, background(true, null), true);
+    expect(sections.at(-1)?.rows[1]?.control).toEqual({ kind: "info", text: "Asking the desktop…" });
+  });
 });

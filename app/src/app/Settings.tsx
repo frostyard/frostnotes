@@ -90,6 +90,11 @@ const REFUSED = [
   "Allow it in GNOME Settings, Apps, Frostnotes, Run in Background, then open Frostnotes again.",
 ].join(" ");
 const NOT_KNOWN = "Not known: the desktop did not answer.";
+const ASKING = "Asking the desktop…";
+
+/** POLL_MS and POLL_TRIES bound the wait for the desktop's new answer: 30 s. */
+const POLL_MS = 1000;
+const POLL_TRIES = 30;
 
 /** notKnown says the desktop gave no usable answer, with the helper's error when it wrote one. */
 function notKnown(error: string | null): string {
@@ -119,7 +124,7 @@ export function portalText(p: Background["portal"]): string {
  * file that the shell and the launcher read, and the desktop's permission
  * can stop notesd whatever the app asks.
  */
-export function backgroundSection(b: Background): SettingsSection {
+export function backgroundSection(b: Background, pending = false): SettingsSection {
   return {
     id: "background",
     name: "Background",
@@ -134,7 +139,7 @@ export function backgroundSection(b: Background): SettingsSection {
         id: "bg:desktop",
         name: "Desktop permission",
         description: DESKTOP_DESCRIPTION,
-        control: { kind: "info", text: portalText(b.portal) },
+        control: { kind: "info", text: pending ? ASKING : portalText(b.portal) },
       },
     ],
   };
@@ -180,6 +185,7 @@ export function settingsSections(
   sync: SyncStatus | null,
   hub: HubView | null = null,
   background: Background | null = null,
+  pending = false,
 ): SettingsSection[] {
   const v = (row: SettingRow): SettingRow => (vault === null ? { ...row, disabled: true } : row);
   const text = (field: keyof VaultSettings, name: string, description?: string, placeholder?: string): SettingRow =>
@@ -313,7 +319,7 @@ export function settingsSections(
         : [{ id: "sync:none", name: "Sync", control: { kind: "info", text: "This vault does not sync with a hub." } }],
     },
     ...(hub ? [hubSection(hub)] : []),
-    ...(background ? [backgroundSection(background)] : []),
+    ...(background ? [backgroundSection(background, pending)] : []),
   ];
 }
 
@@ -327,6 +333,9 @@ export function SettingsContainer() {
   const vaultId = useNotes((s) => s.vaultId);
   const [hub, setHub] = useState<HubView | null>(null);
   const [background, setBackground] = useState<Background | null>(null);
+  // asking holds the answer's `at` from before a change, while the shell
+  // waits for the desktop's new one: the row says that it asks.
+  const [asking, setAsking] = useState<{ before: string | null } | null>(null);
   const narrow = useNarrow();
   const open = section !== null;
   useEffect(() => {
@@ -338,19 +347,49 @@ export function SettingsContainer() {
       live = false;
     };
   }, [open, client]);
+  // After a change the shell asks the desktop again, and the answer is in
+  // background.json only when the desktop and the helper are done: read it
+  // again every second, at most 30 s, until `at` is a new one (ADR-0033).
+  useEffect(() => {
+    if (!open || asking === null) return;
+    let live = true;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const b = await readBackground();
+      if (!live) return;
+      if (b !== null) setBackground(b);
+      const at = b?.portal?.at ?? null;
+      tries += 1;
+      if ((at !== null && at !== asking.before) || tries >= POLL_TRIES) {
+        setAsking(null);
+        return;
+      }
+      timer = setTimeout(poll, POLL_MS);
+    };
+    timer = setTimeout(poll, POLL_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [open, asking]);
   if (section === null) return null;
   return (
     <SettingsDialog
       narrow={narrow}
-      sections={settingsSections(prefs, vault, sync, hub, background)}
+      sections={settingsSections(prefs, vault, sync, hub, background, asking !== null)}
       section={section}
       onSection={(id) => openSettings(id)}
-      onClose={closeSettings}
+      onClose={() => {
+        setAsking(null);
+        closeSettings();
+      }}
       onChange={(id, value) => {
         const [where, key, arg] = id.split(":") as [string, string, string | undefined];
         if (where === "bg" && key === "keep") {
-          // The shell writes the setting and asks the desktop again; its
-          // answer replaces the section (ADR-0033).
+          // The shell writes the setting and asks the desktop again; the row
+          // says so until a new answer is in (ADR-0033).
+          setAsking({ before: background?.portal?.at ?? null });
           void saveBackground(Boolean(value)).then((b) => {
             if (b !== null) setBackground(b);
           });

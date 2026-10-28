@@ -51,10 +51,25 @@ the launcher both act on it.
   (`app/src-tauri/src/background.rs`) writes and removes it, through the
   commands `background_get` and `background_set`; the launcher reads it. A
   file is the one store both can reach.
-- **Off stops the autostart.** While the file exists, the launcher runs the
-  helper with `--no-autostart`: the request carries `autostart` false, and
-  the portal removes the autostart entry. Without the file the request is as
-  before. The reason and the commandline do not change.
+- **Off stops the autostart, and a login.** The request helper reads the
+  file itself, so a change that a person makes while an earlier request
+  waits still wins. It takes an exclusive `fcntl.flock` on
+  `${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes/background.lock` before
+  it reads the setting, and holds the lock until it has written its answer,
+  so two helpers never undo each other. While the file exists, the request
+  carries `autostart` false, and the portal removes the autostart entry. A
+  setting that changed while the portal answered makes the helper ask
+  again, at most 3 requests in all, and it writes the last answer only. The
+  reason and the commandline do not change, and the launcher and the shell
+  start the helper with no arguments.
+- **Two modes start notesd.** `frostnotes --notesd` runs notesd and nothing
+  else, and every spawn for a window uses it (`flatpak-spawn
+  --latest-version frostnotes --notesd`). `frostnotes --background` is the
+  autostart entry's command line, which entries that an older release wrote
+  still hold: it runs notesd as `--notesd` does, unless the file exists,
+  and then it appends one line to `notesd.log` — "frostnotes: background
+  activity is off in Settings; notesd does not start at login" — and exits
+  0. So Off holds at a login, whatever the portal last answered.
 - **Off stops notesd with the last window.** When the app exits, the shell
   runs `notesctl shutdown` — the launcher's own way to stop notesd — and
   waits for it at most 35 s, then kills it. It does this only in the primary
@@ -79,7 +94,10 @@ the launcher both act on it.
   false) says how to allow it. A request with no answer, or with response
   2, says that the desktop did not answer, with the helper's error when it
   wrote one: the desktop kept its permission, and the app does not claim
-  that it refused.
+  that it refused. After a change, the shell asks the desktop again, and
+  the window reads the file again every second, at most 30 s, until `at`
+  differs from the answer it had before the change (or an answer arrives
+  after none): while it waits, the row says "Asking the desktop…".
 
 ## Consequences
 
@@ -98,16 +116,27 @@ the launcher both act on it.
   does: a window that closes before the portal answers ends its helper, and
   the answer file keeps the previous answer. The desktop asks at most once,
   so a later launch's request usually answers at once.
+- The helpers take turns on the lock, so a helper that waits for the portal
+  (at most 10 minutes) holds the next one: a new change's answer waits for
+  the earlier request's, and the window's "Asking the desktop…" stays until
+  it comes.
+- An old window, from a release before this one, starts notesd with
+  `--background` through its own launcher. With Off set — which only this
+  release can set — that start finds the file, starts no notesd and says so
+  in `notesd.log`: the old window then has no notesd until a window of the
+  new release starts one with `--notesd`.
 - The setting is per installed app, not per vault: one config directory per
   app ID, which every vault shares.
 - ADR-0031's Consequences ("the user has no switch for it in the app yet")
   no longer holds. That ADR is Accepted and stays as it is; this one carries
   the change.
 - No automated test reaches a real portal: the build sandbox has none. The
-  smoke test checks which arguments the launcher's request carries with the
-  file and without it, and Rust unit tests cover the paths, the file and the
-  answer's parse. Plan 0008's Phase 3, item 4 in each state, is still to run
-  on a real desktop.
+  smoke test checks that a window's spawn says `--notesd`, that the request
+  helper starts with no arguments, and that `frostnotes --background`
+  starts no notesd and exits 0 while the setting is off; Rust unit tests
+  cover the paths, the file and the answer's parse. The helper's own paths
+  — the lock and the second request — have no test. Plan 0008's Phase 3,
+  item 4 in each state, is still to run on a real desktop.
 
 ## Alternatives considered
 

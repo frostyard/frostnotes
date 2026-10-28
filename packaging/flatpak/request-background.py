@@ -7,16 +7,24 @@ caller leaves the bus, before the user answers. This helper subscribes to
 the request's Response signal first, makes the call, and stays on the bus
 in a GLib main loop until the Response arrives or 10 minutes pass.
 
-With `--no-autostart` the request asks for no autostart, as the app's
-setting "Keep syncing when no window is open" does when it is off: the
-portal then removes the autostart entry
-(docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
+The helper reads the app's setting itself: while
+`${XDG_CONFIG_HOME:-~/.config}/frostnotes/background-off` exists, the
+setting "Keep syncing when no window is open" is off, and the request asks
+for no autostart, so the portal removes the autostart entry
+(docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md). It
+takes an exclusive lock on
+`${XDG_STATE_HOME:-~/.local/state}/frostnotes/background.lock` before it
+reads the setting, and holds the lock until it has written its answer, so
+two helpers never undo each other. A setting that changes while it waits
+for the portal makes it ask again, at most 3 times in all: the answer that
+the app reads is the last request's.
 
 Whatever happens, the helper writes the outcome to
 `$XDG_STATE_HOME/frostnotes/background.json` for the app to read, and
 exits 0. A missing portal or a refusal changes nothing else for the app.
 """
 
+import fcntl
 import json
 import os
 import sys
@@ -24,6 +32,7 @@ import tempfile
 import time
 
 TIMEOUT_SECONDS = 600
+MAX_REQUESTS = 3
 REASON = "Keep your notes in sync without a window"
 COMMANDLINE = ["frostnotes", "--background"]
 
@@ -31,6 +40,7 @@ PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 
 OUTCOME_NAME = "background.json"
+LOCK_NAME = "background.lock"
 
 
 def log(message):
@@ -43,6 +53,33 @@ def state_dir():
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".local", "state")
     return os.path.join(base, "frostnotes")
+
+
+def off_file():
+    """The app's setting: it exists while "Keep syncing" is off."""
+    base = os.environ.get("XDG_CONFIG_HOME")
+    if not base:
+        base = os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "frostnotes", "background-off")
+
+
+def autostart_wanted():
+    """The portal should start notesd at login while the setting is on."""
+    return not os.path.exists(off_file())
+
+
+def lock():
+    """Serialize the helpers, and hold the lock until the answer is written.
+
+    A helper that waits for the portal holds the lock, and the next one
+    waits for it: so the last setting wins, and the answer belongs to the
+    setting that the last request asked about.
+    """
+    directory = state_dir()
+    os.makedirs(directory, exist_ok=True)
+    handle = open(os.path.join(directory, LOCK_NAME), "a", encoding="utf-8")
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    return handle
 
 
 def write_outcome(outcome):
@@ -85,6 +122,20 @@ def flag(results, key):
     if unpack is not None:
         value = unpack()
     return bool(value)
+
+
+def request(autostart):
+    """Ask the portal once, and answer the outcome of that request."""
+    outcome = {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "autostartRequested": autostart,
+        "response": None,
+        "background": None,
+        "autostart": None,
+        "error": None,
+    }
+    ask(outcome, autostart)
+    return outcome
 
 
 def ask(outcome, autostart):
@@ -174,20 +225,37 @@ def ask(outcome, autostart):
 
 
 def main():
-    autostart = "--no-autostart" not in sys.argv[1:]
+    # A placeholder, for the paths that cannot ask: the setting is read
+    # only under the lock.
     outcome = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "autostartRequested": autostart,
+        "autostartRequested": True,
         "response": None,
         "background": None,
         "autostart": None,
         "error": None,
     }
     try:
-        ask(outcome, autostart)
+        handle = lock()
+    except OSError as err:
+        # Without the lock the helpers could undo each other; the app still
+        # gets an answer it can show.
+        fail(outcome, f"cannot lock {os.path.join(state_dir(), LOCK_NAME)}: {err}")
+        write_outcome(outcome)
+        return 0
+    try:
+        autostart = autostart_wanted()
+        for _ in range(MAX_REQUESTS):
+            outcome = request(autostart)
+            wanted = autostart_wanted()
+            if wanted == autostart:
+                break
+            autostart = wanted
     except Exception as err:  # the helper always exits 0
         fail(outcome, f"unexpected failure: {err}")
-    write_outcome(outcome)
+    finally:
+        write_outcome(outcome)
+        handle.close()
     return 0
 
 

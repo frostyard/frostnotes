@@ -717,17 +717,22 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
 - **notesd** runs in its own sandbox of the same app, once per data
   directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
   second notesd on that directory exits at once.
-  **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
+  **The launcher** (`frostnotes.sh`): `frostnotes --notesd` runs
   `exec notesd -log $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell
-  also appending notesd's output to that file, also when the Background
-  portal starts it at login. notesd rotates the log itself, once it holds
+  also appending notesd's output to that file. `frostnotes --background`,
+  the autostart entry's command line, which entries that an older release
+  wrote still hold, runs the same, unless the app's background setting is
+  off: then it appends one line to `notesd.log` ("frostnotes: background
+  activity is off in Settings; notesd does not start at login") and exits 0
+  ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)).
+  notesd rotates the log itself, once it holds
   the data directory's lock: a log over 1 MiB moves to `notesd.log.1`, then
   notesd appends its output there. A shell check cannot do this, since 2
   launchers can both pass it, and a duplicate would move the log of the
   notesd that runs. The shell's redirect keeps what notesd says before the
   lock, such as "another notesd uses".
   `frostnotes [ARGS]`, when no notesd answers `notesctl hello` (within 2 s),
-  runs `flatpak-spawn --latest-version frostnotes --background`, so the Flatpak portal
+  runs `flatpak-spawn --latest-version frostnotes --notesd`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout,
   while the app may run in the background),
   and waits for about 10 s (the clock's) for it. Then it ends `flatpak-spawn` with
@@ -743,6 +748,11 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   portal closes a request when its caller leaves the bus, so a one-shot
   `gdbus call` cannot ask the user. Allowed once, the portal runs
   `frostnotes --background` at login, so sync goes on with no window.
+  The helper reads the app's background setting itself, under an exclusive
+  lock (`$XDG_STATE_HOME/frostnotes/background.lock`), so the last change
+  wins: with the setting off the request carries `autostart` false and the
+  portal removes the entry, and a setting that changed while the portal
+  answered makes the helper ask again, at most 3 times.
   When the user turns the permission off (GNOME Settings, Apps, Run in
   Background), the desktop ends a notesd that runs with no window: on
   GNOME 48, about 45 s after the last window closes, and within seconds
@@ -757,16 +767,19 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   own config directory, which all of its sandboxes share — and On is its
   absence. The shell (`src-tauri/src/background.rs`, the commands
   `background_get` and `background_set`) writes or removes it, and the
-  launcher reads it: while it exists, the launcher runs the helper with
-  `--no-autostart`, so the request carries `autostart` false and the portal
-  removes the autostart entry. The helper writes its outcome to
+  launcher's request helper reads it: while it exists, the request carries
+  `autostart` false and the portal removes the autostart entry, and
+  `frostnotes --background` starts no notesd at a login. The helper writes
+  its outcome to
   `$XDG_STATE_HOME/frostnotes/background.json`, atomically: when it asked,
   whether it asked for autostart, the response (0 granted, 1 cancelled,
   2 other, none for no answer), the desktop's `background` and `autostart`
   permissions, and an error. The shell reads that file, and the settings'
   Background section (`app/src/app/Settings.tsx`'s `backgroundSection`, over
   `app/src/data/background.ts`) shows the switch and, from that file, what
-  the desktop allows, refused, or did not answer. The section is drawn only
+  the desktop allows, refused, or did not answer; after a change it says
+  "Asking the desktop…", and the window reads the file again every second,
+  at most 30 s, until a new answer is in. The section is drawn only
   where `background_get` answers, that is in the Flatpak. With the file,
   the shell also stops notesd when its last window closes: on the app's
   exit, in the primary instance and in the Flatpak only, it runs
@@ -892,9 +905,10 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   through the launcher with a stand-in `flatpak-spawn`, checks that the
   launcher ends it, that notesd lives on and that the log turns over, checks
   the data directory's lock, and replaces a notesd of build A with one of build B,
-  keeping the note written before, keeps one of the latest build, and checks
-  the request's `--no-autostart` with the background setting off and without
-  it). Run `make flatpak-sources`
+  keeping the note written before, keeps one of the latest build, requires a
+  window's spawn to say `--notesd`, starts the request helper with no
+  arguments, and checks that `frostnotes --background` starts no notesd and
+  exits 0 while the background setting is off). Run `make flatpak-sources`
   after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
   A `vX.Y.Z` tag builds a release: `packaging/flatpak/stamp-version.sh`
   stamps the version and the commit into the manifest and the version, with

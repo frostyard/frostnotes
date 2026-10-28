@@ -6,11 +6,13 @@
 //! absence. In the Flatpak, `XDG_CONFIG_HOME` is the app's own config
 //! directory, which all of its sandboxes share.
 //!
-//! Off means two things: the launcher asks the Background portal with
-//! `--no-autostart`, so the portal removes the autostart entry, and this
-//! shell stops notesd when the app exits. The launcher cannot do the latter:
-//! it cannot tell the launch a person made from the second launch that
-//! tauri-plugin-single-instance hands over and ends.
+//! Off means three things: the launcher's request helper reads the file and
+//! asks the Background portal for no autostart, so the portal removes the
+//! autostart entry; `frostnotes --background`, the autostart's command line,
+//! starts no notesd at a login; and this shell stops notesd when the app
+//! exits. The launcher cannot do the last one: it cannot tell the launch a
+//! person made from the second launch that tauri-plugin-single-instance
+//! hands over and ends.
 //!
 //! The portal's last answer is the helper's, not the shell's:
 //! `frostnotes-request-background` writes `$XDG_STATE_HOME/frostnotes/background.json`
@@ -110,10 +112,9 @@ pub fn background_set(keep_running: bool) -> Result<Background, String> {
     set(keep_running, &getenv)
 }
 
-/// set creates or removes the setting's file, then starts the helper: a
-/// request without `--no-autostart` when the setting is On, so the portal
-/// writes the autostart entry again, and with it when Off, so the portal
-/// removes the entry.
+/// set creates or removes the setting's file, then starts the helper, which
+/// reads the file itself: the portal then writes the autostart entry again
+/// when the setting is On, and removes it when Off.
 fn set(
     keep_running: bool,
     getenv: &impl Fn(&str) -> Option<OsString>,
@@ -131,7 +132,7 @@ fn set(
         let text = "Off: notesd stops when the last window closes (ADR-0033).\n";
         std::fs::write(&off, text).map_err(|e| format!("write {}: {e}", off.display()))?;
     }
-    ask(getenv, keep_running);
+    ask(getenv);
     Ok(state(getenv))
 }
 
@@ -145,12 +146,13 @@ fn state(getenv: &impl Fn(&str) -> Option<OsString>) -> Background {
     Background { keep_running: !off, portal }
 }
 
-/// ask starts the helper in the background, with its output appended to
-/// background.log as the launcher's own request does. Nothing waits for it:
-/// the helper stays on the bus until the portal answers, at most 10
-/// minutes. A helper that cannot start changes nothing: the next launch of
-/// the app asks again.
-fn ask(getenv: &impl Fn(&str) -> Option<OsString>, keep_running: bool) {
+/// ask starts the helper in the background, with no arguments and its output
+/// appended to background.log, as the launcher's own request does. Nothing
+/// waits for it: the helper stays on the bus until the portal answers, at
+/// most 10 minutes. It reads the setting itself, and its lock makes it and
+/// the launcher's request take turns. A helper that cannot start changes
+/// nothing: the next launch of the app asks again.
+fn ask(getenv: &impl Fn(&str) -> Option<OsString>) {
     let Ok(dir) = state_dir(getenv) else {
         return;
     };
@@ -166,9 +168,6 @@ fn ask(getenv: &impl Fn(&str) -> Option<OsString>, keep_running: bool) {
     };
     let mut command = Command::new(helper(getenv));
     command.stdin(Stdio::null()).stdout(log).stderr(errlog);
-    if !keep_running {
-        command.arg("--no-autostart");
-    }
     // A process group of its own, as the launcher's `&` leaves it: the
     // app's signals do not reach the request.
     let _ = command.process_group(0);

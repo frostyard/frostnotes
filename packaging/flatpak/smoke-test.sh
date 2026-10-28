@@ -20,8 +20,11 @@
 #
 # The setting for background activity
 # (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md) is the
-# off file: the fake request-background records its arguments, and the
-# launcher's request must carry --no-autostart exactly while that file exists.
+# off file: the launcher starts the request helper with no arguments, since
+# the helper reads the setting itself; and `frostnotes --background`, the
+# autostart entry's command line, starts no notesd and exits 0 while the file
+# exists. A window's spawn of notesd must use `--notesd`, which the fake
+# flatpak-spawn requires.
 #
 # FROSTNOTES_BIN_DIR is where frostnotes, notesd and notesctl are; the
 # default is the Flatpak's /app/bin. The test cleans up after itself.
@@ -75,9 +78,10 @@ unset FROSTNOTES_SOCKET FROSTNOTES_DATA_DIR FROSTNOTES_FLATPAK_INFO
 # must pass it: without the flag, the real portal would run the window's own,
 # perhaps old, build), and runs the command with FROSTNOTES_FLATPAK_INFO
 # pointing at the "latest" deployment's info file, which the test controls.
-# For `frostnotes` it records its own PID and its child's, as the portal's
-# spawn does in a sandbox of its own, and waits for the child. The app and the
-# Background helper exit at once.
+# For `frostnotes` it requires --notesd (a window's spawn must not take the
+# autostart's --background path, which the setting can turn off), records its
+# own PID and its child's, as the portal's spawn does in a sandbox of its own,
+# and waits for the child. The app and the Background helper exit at once.
 cat >"$work/bin/flatpak-spawn" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" != "--latest-version" ]; then
@@ -87,6 +91,10 @@ fi
 shift
 export FROSTNOTES_FLATPAK_INFO="$SMOKE_LATEST_INFO"
 if [ "${1:-}" = "frostnotes" ]; then
+    if [ "${2:-}" != "--notesd" ]; then
+        echo "fake flatpak-spawn: a window's notesd must start with --notesd: $*" | tee -a "$SMOKE_SPAWN_FAULT" >&2
+        exit 2
+    fi
     echo "$$" >"$SMOKE_SPAWN_PID"
     "$@" &
     echo "$!" >"$SMOKE_CHILD_PID"
@@ -109,8 +117,8 @@ fi
 EOF
 chmod +x "$work/bin/flatpak-spawn"
 printf '#!/bin/sh\nexit 0\n' >"$work/libexec/frostnotes-app"
-# The Background helper records its arguments: the test checks whether the
-# launcher asked with --no-autostart.
+# The Background helper records its arguments: the test checks that the
+# launcher starts it with none, since it reads the setting itself.
 cat >"$work/libexec/frostnotes-request-background" <<'EOF'
 #!/bin/sh
 printf 'args:%s\n' "$*" >>"$SMOKE_REQUEST_ARGS"
@@ -378,15 +386,17 @@ if [ -e "$SMOKE_SPAWN_FAULT" ]; then
     exit 1
 fi
 
-# The setting for background activity is the off file, and the request to
-# the Background portal carries --no-autostart while it exists
+# The app's setting for background activity is the off file
 # (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md). The
-# launcher starts the request in the background, so wait for the fake
-# helper's record, at most 5 s.
+# request helper reads it itself, so the launcher starts the helper with no
+# arguments; and `frostnotes --background`, the autostart entry's command
+# line, starts no notesd while the file exists. The launcher starts the
+# helper in the background, so wait for the fake helper's record, at most 5 s.
+# The second `frostnotes --background` above, with notesd running, shows the
+# other way: without the file it reaches notesd's lock.
 off="$XDG_CONFIG_HOME/frostnotes/background-off"
 asked() {
-    # asked EXPECTED: one launch, then its request's arguments; --no-autostart
-    # must be there exactly when EXPECTED is 1.
+    # asked: one launch, and the request it starts must have no arguments.
     rm -f "$SMOKE_REQUEST_ARGS"
     "$bin/frostnotes" >"$work/launcher.log" 2>&1
     for _ in $(seq 1 50); do
@@ -401,12 +411,8 @@ asked() {
         print_logs
         exit 1
     fi
-    case "$args" in
-        *--no-autostart*) got=1 ;;
-        *) got=0 ;;
-    esac
-    if [ "$got" -ne "$1" ]; then
-        echo "smoke test: the request carried '$args'; --no-autostart must be absent with the setting on and present with it off (want $1, got $got)" >&2
+    if [ "$args" != "args:" ]; then
+        echo "smoke test: the launcher started the helper with '$args'; want no arguments" >&2
         print_logs
         exit 1
     fi
@@ -414,9 +420,29 @@ asked() {
 
 mkdir -p "$XDG_CONFIG_HOME/frostnotes"
 rm -f "$off"
-asked 0
+asked
+
+# With the setting off, the autostart's command line starts no notesd, says so
+# in notesd.log and exits 0; the notesd that runs keeps running.
 printf 'off\n' >"$off"
-asked 1
+rc=0
+"$bin/frostnotes" --background >/dev/null 2>&1 || rc=$?
+if [ "$rc" -ne 0 ]; then
+    echo "smoke test: 'frostnotes --background' exited $rc with the setting off; want 0" >&2
+    print_logs
+    exit 1
+fi
+off_line="frostnotes: background activity is off in Settings; notesd does not start at login"
+if ! tail -n 1 "$state/notesd.log" | grep -qxF "$off_line"; then
+    echo "smoke test: notesd.log does not end with '$off_line' with the setting off" >&2
+    print_logs
+    exit 1
+fi
+if ! kill -0 "$pid" 2>/dev/null; then
+    echo "smoke test: 'frostnotes --background' ended the notesd that runs" >&2
+    print_logs
+    exit 1
+fi
 rm -f "$off"
 
 kill -TERM "$pid"
