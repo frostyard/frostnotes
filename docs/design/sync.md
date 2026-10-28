@@ -306,6 +306,9 @@ revocations and rejoins from an older copy (`profile.go`)
 - Each device needs its own copy of a vault: two devices syncing one
   folder, such as one network share mounted on two machines, would push
   each other's changes as their own.
+- A device that moves from a host notesd to the Flatpak leaves the hub
+  there, joins again as a new device and revokes the old one
+  ([app.md](app.md#operational-notes)).
 
 ## References
 

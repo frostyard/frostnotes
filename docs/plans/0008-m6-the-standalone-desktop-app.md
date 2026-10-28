@@ -35,8 +35,9 @@ Status (2026-10-28):
   listing), item 6 with a hub over HTTPS and lodge's web app, and item 5
   on the second release.
 - **Phase 4** lists what the review found: G3 (PR #106) and G5 (PR #107)
-  are done, merged on 2026-10-28, and G2 is built on 2026-10-28 and waits
-  for its run on a real desktop; G1 and G4 are open.
+  are done, merged on 2026-10-28, G2 is built on 2026-10-28 and waits
+  for its run on a real desktop, G1 is built in PR #111, merged on
+  2026-10-28, and G4 is built in this change.
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
 
@@ -277,8 +278,8 @@ blocks Phase 2.
   over the existing `sync.pair`, `sync.join` and `sync.leave`
   ([design/sync.md](../design/sync.md#pairing-and-sessions)).
   **Done when:** Phase 3's item 6 passes in the app, with no terminal.
-  **Status (2026-10-28): built** in this change; the run of Phase 3's
-  item 6 in the app is still to do.
+  **Status (2026-10-28): built,** merged in PR #111 on 2026-10-28; the
+  run of Phase 3's item 6 in the app is still to do.
 - **G2 — A setting for background activity.** notesd lives on after the
   last window closes, until logout, and only the desktop's background
   permission controls the start at login (ADR-0031, Consequences). With
@@ -317,11 +318,49 @@ blocks Phase 2.
   build or the `.deb` has another data directory
   (`~/.local/share/frostnotes`) and socket, so both daemons can run and
   both watch one vault folder; a device joined there is not joined in the
-  Flatpak. The move must be explicit and written down: stop the host
-  notesd, join each vault again from the Flatpak (a new device), and
+  Flatpak. The move must be explicit and written down: let the host
+  notesd finish and leave the hub there, stop it, join each vault again
+  from the Flatpak (a new device, so its files match by history), and
   revoke the old device on the hub. **Done when:** the steps are in
   [design/app.md](../design/app.md#operational-notes) and were tested
   once.
+  **Status (2026-10-28): built** in this change: the steps are in
+  [design/app.md](../design/app.md#operational-notes), and they were
+  tested once, on 2026-10-28:
+  - The machine: a copy of Phase 3 run 1's VM from its snapshot
+    `after-item-4` (Snow `20261027121612`, GNOME Shell 48.7, Flatpak
+    1.16.6, the app `0.2.0` from the staged catalogue). The snapshot
+    itself was not changed.
+  - The host notesd: a build of main at `b7bf450`, as the user service
+    `notesd.service` from `~/.local/bin`, as on the M2 trial's laptop
+    ([plan 0004](0004-m2-sync.md)). The hub: a second notesd of that
+    build on `http://127.0.0.1:7788` (loopback, tokens in a file). No
+    GNOME login: a lingering user session, with a gnome-keyring-daemon
+    unlocked by hand, so the Secret Service was real. The Flatpak's
+    notesd ran as `frostnotes --notesd` through `flatpak run`, not
+    through the launcher and the portal.
+  - Before the move, both notesd ran at once, each on its own socket: the
+    gap.
+  - The host device (`laptop`) synced 4 files (2 notes, a note in a
+    subfolder, a PNG) with edits on both sides: the hub's log held 6
+    revisions. A second vault was never joined.
+  - Steps 1 to 3, then step 4: the Flatpak paired as the new device
+    `laptop-flatpak`. The hub's log stayed at 6 revisions, since every
+    file matched by history; there was no conflict, the 4 files were
+    byte for byte unchanged, and `sync verify` said `ok: 4 files match
+    the hub`. The never-joined vault only opened.
+  - An edit on the hub arrived in the Flatpak's vault, and a new note
+    from it reached the hub. Step 5: `hub revoke 1` marked `laptop`
+    revoked; `laptop-flatpak` stayed connected. The keyring held 1
+    frostnotes item.
+  - A change not pushed: the Flatpak's device left, a line was added to
+    a note, and the device joined again. The line merged on the hub with
+    no conflict.
+  - Step 6: removing `~/.local/share/frostnotes` did not change the
+    Flatpak's vaults or sync.
+  - Not tested: the move through the app's windows (G1's Sync section)
+    and against lodge's hub over HTTPS; Phase 3's item 6 covers those
+    paths.
 - **G5 — Say why when a permission is refused.** With no Flatpak portal,
   the window says only that it is reconnecting; a vault outside a
   narrowed `--filesystem` fails with a plain file error. The window

@@ -959,10 +959,51 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   keeps retrying; a notesd started later is picked up.
 - A note whose document cannot save keeps its text in the window and
   shows why; closing the window then asks before discarding it.
+- **Moving from a host notesd.** A notesd from a build or the `.deb`
+  that ran on the desktop itself has its own data directory
+  (`~/.local/share/frostnotes`) and socket
+  (`$XDG_RUNTIME_DIR/frostnotes/notesd.sock`). The Flatpak's are under
+  `~/.var/app/org.frostyard.Frostnotes/` and
+  `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/`. Both can run at once
+  and watch one vault folder, and a vault joined in one is not joined in
+  the other. The Flatpak does not read the host notesd's data directory,
+  so the move is explicit, in this order (tested once on 2026-10-28,
+  [plan 0008, G4](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)):
+  1. *Let the host notesd finish its sync.* `notesctl sync status` shows
+     each joined vault `idle` with `0 pending`, and `notesctl sync verify
+     --vault NAME` says the files match the hub.
+  2. *Leave the hub on the host notesd,* for each joined vault:
+     `notesctl sync leave --vault NAME`. The files stay. This comes
+     before the Flatpak joins: both notesd keep the device token in the
+     same Secret Service item (the key `hub/<hub ID>/token`), so the
+     Flatpak's pairing replaces the host's token, and a host notesd that
+     was still joined would sync with the Flatpak's token, as that
+     device.
+  3. *Stop the host notesd* and keep it from starting again. For a user
+     service: `systemctl --user disable --now notesd.service` (the unit's
+     name on that desktop).
+  4. *Open each vault folder in the Flatpak* (Open folder as vault, or
+     `flatpak run --command=notesctl org.frostyard.Frostnotes vault add
+     PATH`). Join again each vault that synced, from the settings' Sync
+     section or with `flatpak run --command=notesctl
+     org.frostyard.Frostnotes hub join URL NAME --vault NAME`. It is a
+     new device: approve its code on the hub. The files match the hub's
+     by history ([sync.md](sync.md#pairing-and-sessions)): a file that
+     did not change since the last sync takes the hub's revision and adds
+     none. A change the host notesd did not push is pushed now: it
+     merges, or it is a conflict the app shows; it is never lost.
+  5. *Revoke the old device on the hub:* `notesctl hub devices`, then
+     `notesctl hub revoke ID`. On lodge's hub that is `sudo -u frostnotes
+     FROSTNOTES_SOCKET=/run/frostnotes/notesd.sock notesctl hub revoke
+     ID`; the web app's Hub settings can revoke too.
+  6. *When the Flatpak works, remove the host notesd:* its binaries, its
+     unit and `~/.local/share/frostnotes`. That directory holds the
+     host's index and its local version history; the Flatpak does not
+     take them over. The hub keeps its log of revisions.
 
 ## References
 
 - Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the Flatpak), [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates), [ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md) (background activity), [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
-- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check and its updates (gaps G2 and G3) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
+- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check, its updates (gaps G2 and G3) and the move from a host notesd (G4) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
