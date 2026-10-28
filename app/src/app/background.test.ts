@@ -15,14 +15,14 @@ const answer = (fields: Partial<PortalAnswer>): PortalAnswer => ({
   background: true,
   autostart: true,
   error: null,
-  askedMs: null,
+  generation: null,
   ...fields,
 });
 
 const background = (keepRunning: boolean, portal: PortalAnswer | null): Background => ({
   keepRunning,
   portal,
-  since: null,
+  generation: null,
 });
 
 describe("the Background section", () => {

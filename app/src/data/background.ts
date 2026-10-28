@@ -20,10 +20,10 @@ export interface PortalAnswer {
   /** Why the request failed, when it did. */
   error: string | null;
   /**
-   * The moment, in milliseconds since the epoch, at which this request read
-   * the setting, under the helper's lock; null when it never asked.
+   * The change's number, as this request read the shell's counter under its
+   * lock just before it read the setting; null when it never read it.
    */
-  askedMs: number | null;
+  generation: number | null;
 }
 
 /** Background is the setting and the portal's last answer. */
@@ -33,12 +33,11 @@ export interface Background {
   /** The portal's last answer; null before the first, or when it cannot be read. */
   portal: PortalAnswer | null;
   /**
-   * The moment, in milliseconds since the epoch, at which a `setBackground`
-   * call wrote the setting: an answer that read the setting after it has a
-   * later `askedMs`. Null from `readBackground`, and when the helper could
-   * not start.
+   * This change's number: the counter as a `setBackground` call left it. An
+   * answer that read the counter at or after it is about this setting. Null
+   * from `readBackground`, and when the helper could not start.
    */
-  since: number | null;
+  generation: number | null;
 }
 
 /** readBackground reads the setting in the Flatpak, and is null anywhere else or when it cannot. */

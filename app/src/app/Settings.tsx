@@ -332,7 +332,7 @@ export function SettingsContainer() {
   const vaultId = useNotes((s) => s.vaultId);
   const [hub, setHub] = useState<HubView | null>(null);
   const [background, setBackground] = useState<Background | null>(null);
-  // awaited is the moment of the change whose answer the window waits for:
+  // awaited is the number of the change whose answer the window waits for:
   // the row says that it asks until an answer read the setting after it
   // (ADR-0033).
   const [awaited, setAwaited] = useState<number | null>(null);
@@ -360,9 +360,9 @@ export function SettingsContainer() {
       const b = await readBackground();
       if (!live) return;
       if (b !== null) {
-        const askedMs = b.portal?.askedMs ?? null;
+        const generation = b.portal?.generation ?? null;
         setBackground(b);
-        setAwaited((a) => (a !== null && askedMs !== null && askedMs > a ? null : a));
+        setAwaited((a) => (a !== null && generation !== null && generation >= a ? null : a));
       }
       timer = setTimeout(poll, POLL_MS);
     };
@@ -372,8 +372,8 @@ export function SettingsContainer() {
       clearTimeout(timer);
     };
   }, [open, hasBackground]);
-  const lastAsked = background?.portal?.askedMs ?? null;
-  const pending = awaited !== null && !(lastAsked !== null && lastAsked > awaited);
+  const lastGeneration = background?.portal?.generation ?? null;
+  const pending = awaited !== null && !(lastGeneration !== null && lastGeneration >= awaited);
   if (section === null) return null;
   return (
     <SettingsDialog
@@ -388,13 +388,13 @@ export function SettingsContainer() {
       onChange={(id, value) => {
         const [where, key, arg] = id.split(":") as [string, string, string | undefined];
         if (where === "bg" && key === "keep") {
-          // The shell times the change it sets in motion; the row says that
-          // it asks until an answer read the setting after that moment
+          // The shell counts the change it sets in motion; the row says that
+          // it asks until an answer read the setting after that number
           // (ADR-0033).
           void saveBackground(Boolean(value)).then((b) => {
             if (b === null) return;
             setBackground(b);
-            setAwaited(b.since);
+            setAwaited(b.generation);
           });
           return;
         }

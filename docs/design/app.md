@@ -774,20 +774,20 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   `$XDG_STATE_HOME/frostnotes/background.json`, atomically: when it asked,
   whether it asked for autostart, the response (0 granted, 1 cancelled,
   2 other, none for no answer), the desktop's `background` and `autostart`
-  permissions, an error, and `askedMs`: the moment, in milliseconds since the
-  epoch, at which the request read the setting. A change is timed:
-  `background_set` writes the file first, then takes `since` (the clock in
-  milliseconds) and starts the helper, and answers it. Each request of the
-  helper takes `askedMs` under its lock, before it reads the file, so
-  `askedMs > since` marks an answer about the new setting, from this
-  change's helper or from a later one. The shell reads that file, and the
+  permissions, an error, and `generation`: the shell's counter of changes, as
+  the request read it. A change is counted: `background_set` writes the file
+  first, then bumps the counter in `background-gen`, then starts the helper,
+  and answers the new number. Each request of the helper reads the counter
+  under its lock, before it reads the file, so `generation >= awaited` marks
+  an answer about the new setting, from this change's helper or from a later
+  one; a failure records the counter too. The shell reads that file, and the
   settings' Background section (`app/src/app/Settings.tsx`'s
   `backgroundSection`, over `app/src/data/background.ts`) shows the switch
   and, from that file, what the desktop allows, refused, or did not answer.
   While the dialog is open the window reads the file again every 2 s, with
-  no limit, so a late answer shows; while no answer has `askedMs > since`,
-  the row says "Asking the desktop…". The section is drawn only where
-  `background_get` answers, that is in the Flatpak. With the file,
+  no limit, so a late answer shows; while no answer has `generation >=
+  awaited`, the row says "Asking the desktop…". The section is drawn only
+  where `background_get` answers, that is in the Flatpak. With the file,
   the shell also stops notesd when its last window closes: on the app's
   exit, in the primary instance and in the Flatpak only, it runs
   `notesctl shutdown` and waits at most 35 s, then kills it. A second

@@ -85,25 +85,26 @@ the launcher both act on it.
   atomically (a temporary file in the same directory, then `os.replace`):
   `at` (RFC 3339 UTC time), `autostartRequested`, `response` (0 granted,
   1 cancelled, 2 other, null when the portal gave no answer), `background`,
-  `autostart`, `error`, and `askedMs`: the moment, in milliseconds since
-  the epoch, at which the request read the setting. `background_get` reads
-  that file, and the settings' Background section (`app/src/app/Settings.tsx`'s
-  `backgroundSection`) shows the switch, then what the desktop allows. The
-  section is drawn only where `background_get` answers, which is only in the
-  Flatpak.
-  A change is timed instead of named. `background_set` writes or removes the
-  file first, then takes `since`, the clock in milliseconds since the epoch,
-  and starts the helper; `Background.since` answers that moment, and none
-  when the helper could not start. Each request of the helper takes `askedMs`
-  under its lock, immediately before it reads the file, and writes it into
-  its answer; the answer the app reads is the last request's.
-  This holds because the file is written before `since` is taken, and a
-  helper takes `askedMs` before it reads the file under the lock: so
-  `askedMs > since` means that the request read the new setting. A later
-  helper's answer also has `askedMs > since`, and it read the setting under
-  the lock too, so it also tells the setting as it is now. And the change's
-  own helper runs after `since`, so an answer with `askedMs > since` always
-  comes, even when it replaces another helper's answer.
+  `autostart`, `error`, and `generation`: the shell's counter of changes, as
+  the request read it. `background_get` reads that file, and the settings'
+  Background section (`app/src/app/Settings.tsx`'s `backgroundSection`)
+  shows the switch, then what the desktop allows. The section is drawn only
+  where `background_get` answers, which is only in the Flatpak.
+  A change is counted. `background_set` writes or removes the file, then
+  bumps a counter in `$XDG_STATE_HOME/frostnotes/background-gen`: it reads
+  the counter (missing or bad counts 0), adds 1, and writes the new value
+  atomically. Then it starts the helper, and `Background.generation` answers
+  the new value, or none when the helper could not start. The shell is the
+  counter's only writer, since only the primary instance calls
+  `background_set`. Each request of the helper reads the counter under its
+  lock, immediately before it reads the file, and writes it into its answer;
+  the answer the app reads is the last request's, and a failure records the
+  counter at the moment it fails.
+  This holds because the counter is bumped after the setting is written, and
+  a helper reads the counter before it reads the setting, under the lock:
+  so an answer with `generation >= awaited` read the new setting, and a
+  later helper's answer has a generation at least as high. A failure records
+  the generation when it fails, so it ends the wait too.
   A refusal (response 1, or response 0 with the background permission
   false) says how to allow it. A request with no answer, or with response
   2, says that the desktop did not answer, with the helper's error when it
@@ -111,11 +112,10 @@ the launcher both act on it.
   that it refused. While the dialog is open, the window reads the file again
   every 2 s, with no limit, so a late answer shows: the desktop can keep the
   person in a dialog of its own for minutes, and a launcher's request can
-  answer long after the app read the file once. While no answer is from a
-  request that read the setting after the change (`askedMs > since`), the
-  row says "Asking the desktop…": it stops only on such an answer, or when
-  the dialog closes. There is no timeout, and an old answer never takes the
-  row back.
+  answer long after the app read the file once. While no answer read the
+  counter at or after the change (`generation >= awaited`), the row says
+  "Asking the desktop…": it stops only on such an answer, or when the dialog
+  closes. There is no timeout, and an old answer never takes the row back.
 
 ## Consequences
 
@@ -137,7 +137,7 @@ the launcher both act on it.
 - The helpers take turns on the lock, so a helper that waits for the portal
   (at most 10 minutes) holds the next one: a new change's answer waits for
   the earlier request's, and the window's "Asking the desktop…" stays until
-  an answer read the setting after that change comes.
+  an answer read the counter at or after that change comes.
 - While the settings are open, the window reads `background.json` every 2 s,
   and it stops when the dialog closes. A portal that never answers keeps the
   row on "Asking the desktop…" for as long as the dialog stays open: the row

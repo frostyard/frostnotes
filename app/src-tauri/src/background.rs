@@ -24,7 +24,7 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +42,10 @@ const ANSWER_FILE: &str = "background.json";
 
 /// LOG_FILE is the helper's output, as the launcher's request writes it.
 const LOG_FILE: &str = "background.log";
+
+/// GEN_FILE counts the changes: the shell bumps it after each one, and the
+/// helper reads it before it reads the setting.
+const GEN_FILE: &str = "background-gen";
 
 /// HELPER is the launcher's Background-portal helper.
 const HELPER: &str = "frostnotes-request-background";
@@ -76,9 +80,9 @@ pub struct PortalAnswer {
     pub autostart: Option<bool>,
     /// Why the request failed, when it did.
     pub error: Option<String>,
-    /// The moment, in milliseconds since the epoch, at which this request
-    /// read the setting, under the helper's lock; none when it never asked.
-    pub asked_ms: Option<u64>,
+    /// The change's number, as this request read the counter under its lock
+    /// just before it read the setting; none when it never read the counter.
+    pub generation: Option<u64>,
 }
 
 /// Background is the setting and the portal's last answer, for the window.
@@ -91,11 +95,10 @@ pub struct Background {
     /// The portal's last answer; none before the first, or when the file
     /// cannot be read.
     pub portal: Option<PortalAnswer>,
-    /// The moment, in milliseconds since the epoch, at which this change
-    /// wrote the setting, so that an answer that read the setting after it
-    /// has a later `askedMs`; none from `background_get`, and none when the
-    /// helper could not start.
-    pub since: Option<u64>,
+    /// This change's number: the counter as this call left it. An answer
+    /// that read the counter at or after it is about this setting; none from
+    /// `background_get`, and none when the helper could not start.
+    pub generation: Option<u64>,
 }
 
 /// background_get reports the setting in the Flatpak, and nothing anywhere
@@ -140,13 +143,13 @@ fn set(
         let text = "Off: notesd stops when the last window closes (ADR-0033).\n";
         std::fs::write(&off, text).map_err(|e| format!("write {}: {e}", off.display()))?;
     }
-    // The file first, and only then the clock: a helper that reads the file
-    // after this moment has a later askedMs, and its answer is about this
-    // setting (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
-    let since = now_ms();
+    // The file first, and only then the counter: a helper that reads the
+    // counter after this moment answers about this setting
+    // (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
+    let generation = bump_generation(getenv)?;
     let started = ask(getenv);
     let mut background = state(getenv);
-    background.since = started.then_some(since);
+    background.generation = started.then_some(generation);
     Ok(background)
 }
 
@@ -157,7 +160,7 @@ fn state(getenv: &impl Fn(&str) -> Option<OsString>) -> Background {
         .ok()
         .and_then(|d| std::fs::read_to_string(d.join(ANSWER_FILE)).ok())
         .and_then(|text| parse_portal(&text));
-    Background { keep_running: !off, portal, since: None }
+    Background { keep_running: !off, portal, generation: None }
 }
 
 /// ask starts the helper in the background, with no arguments and its output
@@ -195,11 +198,38 @@ fn ask(getenv: &impl Fn(&str) -> Option<OsString>) -> bool {
     true
 }
 
-/// now_ms is the clock in milliseconds since the epoch, as the helper's
-/// askedMs is.
-fn now_ms() -> u64 {
-    let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+/// generation_file is the counter that bumps with each change.
+fn generation_file(getenv: impl Fn(&str) -> Option<OsString>) -> Result<PathBuf, String> {
+    Ok(state_dir(getenv)?.join(GEN_FILE))
+}
+
+/// generation reads the counter; a file that is missing or holds no number
+/// counts 0.
+fn generation(getenv: &impl Fn(&str) -> Option<OsString>) -> u64 {
+    generation_file(getenv)
+        .and_then(|path| std::fs::read_to_string(path).map_err(|e| e.to_string()))
+        .ok()
+        .and_then(|text| text.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+/// bump_generation adds 1 to the counter, writes it atomically, and answers
+/// the new value. The shell is the counter's only writer: only the primary
+/// app instance calls `background_set`, and a second launch ends in
+/// tauri-plugin-single-instance before it can.
+fn bump_generation(getenv: &impl Fn(&str) -> Option<OsString>) -> Result<u64, String> {
+    let path = generation_file(getenv)?;
+    let dir = path.parent().ok_or_else(|| format!("{} has no directory", path.display()))?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
+    let next = generation(getenv).saturating_add(1);
+    let temp = dir.join(format!(".{GEN_FILE}.{}", std::process::id()));
+    std::fs::write(&temp, format!("{next}\n"))
+        .map_err(|e| format!("write {}: {e}", temp.display()))?;
+    if let Err(e) = std::fs::rename(&temp, &path) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(format!("rename {}: {e}", temp.display()));
+    }
+    Ok(next)
 }
 
 /// PRIMARY is true in the process that owns the app's windows. A second
@@ -390,7 +420,7 @@ mod tests {
         let started = set(false, &get).unwrap();
         assert!(!started.keep_running);
         // The helper could not start: nothing is pending.
-        assert_eq!(started.since, None);
+        assert_eq!(started.generation, None);
         assert!(off.exists());
         assert!(set(true, &get).unwrap().keep_running);
         assert!(!off.exists());
@@ -400,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn set_times_the_helper_it_starts() {
+    fn set_counts_the_change_it_starts() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = scratch("request");
@@ -418,10 +448,32 @@ mod tests {
         ];
         let get = env(&vars);
         let started = set(true, &get).unwrap();
-        let since = started.since.expect("a helper that started is timed");
-        assert!(since > 0, "{since}");
+        // The first change of a new state directory is 1, and the file says so.
+        assert_eq!(started.generation, Some(1));
+        assert_eq!(generation(&get), 1);
         // The file's answer belongs to no change of its own.
-        assert_eq!(state(&get).since, None);
+        assert_eq!(state(&get).generation, None);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_counter_starts_at_zero_and_counts_up() {
+        let dir = scratch("generation");
+        let base = dir.to_str().unwrap();
+        let vars = [("XDG_STATE_HOME", base), ("HOME", "/home/u")];
+        let get = env(&vars);
+        // A missing counter counts 0, and so does a bad one.
+        assert_eq!(generation(&get), 0);
+        let file = generation_file(&get).unwrap();
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(&file, "not a number\n").unwrap();
+        assert_eq!(generation(&get), 0);
+        assert_eq!(bump_generation(&get), Ok(1));
+        assert_eq!(generation(&get), 1);
+        assert_eq!(bump_generation(&get), Ok(2));
+        assert_eq!(generation(&get), 2);
+        // The write leaves no temporary file behind.
+        assert_eq!(fs::read_dir(file.parent().unwrap()).unwrap().count(), 1);
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -451,7 +503,7 @@ mod tests {
             background: Some(true),
             autostart: Some(true),
             error: None,
-            asked_ms: None,
+            generation: None,
         };
         assert_eq!(parse_portal(&text), Some(want));
         // White space between the fields changes nothing.
@@ -484,11 +536,11 @@ mod tests {
     }
 
     #[test]
-    fn reads_when_the_helper_asked() {
-        let text = r#"{"at":"2026-10-28T09:00:00Z","askedMs":1761667200123}"#;
+    fn reads_the_changes_number() {
+        let text = r#"{"at":"2026-10-28T09:00:00Z","generation":7}"#;
         let got = parse_portal(text).unwrap();
-        assert_eq!(got.asked_ms, Some(1761667200123));
-        assert_eq!(parse_portal("{}").unwrap().asked_ms, None);
+        assert_eq!(got.generation, Some(7));
+        assert_eq!(parse_portal("{}").unwrap().generation, None);
     }
 
     #[test]

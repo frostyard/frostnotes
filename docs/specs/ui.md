@@ -559,7 +559,7 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 | Templates | Template folder location; Date format; Time format | none; `YYYY-MM-DD`; `HH:mm` | vault |
 | Sync | the vault's hub, state, last sync, conflicts (read-only in M3) | | |
 | Background ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)) | Keep syncing when no window is open: On, notesd outlives the last window and may start at login; Off, it stops with the last window and starts no more at login | on | device |
-| | Desktop permission: what the Background portal last answered, read-only (Allowed at login, Allowed, Refused with the way to allow it, Not asked yet, or that the desktop did not answer, with the helper's error; Asking the desktop… while no answer read the setting after the change (its `askedMs` is later than the change's `since`), which the window reads again every 2 s while the dialog is open) | | |
+| | Desktop permission: what the Background portal last answered, read-only (Allowed at login, Allowed, Refused with the way to allow it, Not asked yet, or that the desktop did not answer, with the helper's error; Asking the desktop… while no answer read the counter at or after the change (its `generation` is at least the change's), which the window reads again every 2 s while the dialog is open) | | |
 
 "App" settings are the app's preferences, "vault" settings are the
 vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset

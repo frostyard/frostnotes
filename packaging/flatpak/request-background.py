@@ -23,10 +23,11 @@ Whatever happens, the helper writes the outcome to
 `$XDG_STATE_HOME/frostnotes/background.json` for the app to read, and
 exits 0. A missing portal or a refusal changes nothing else for the app.
 
-Each request records the moment it reads the setting, as `askedMs` in
-milliseconds since the epoch; the last request's is the one in the outcome.
-The app compares that moment with the moment it wrote the setting, so it
-can tell an answer about the new setting from an answer about an old one
+Each request reads the shell's counter of changes as `generation`, under
+its lock and immediately before it reads the setting; the last request's is
+the one in the outcome, and so is the counter at the moment of a failure.
+The app compares that number with the one its own change left, so it can
+tell an answer about the new setting from an answer about an old one
 (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
 """
 
@@ -47,6 +48,7 @@ PORTAL_PATH = "/org/freedesktop/portal/desktop"
 
 OUTCOME_NAME = "background.json"
 LOCK_NAME = "background.lock"
+GEN_NAME = "background-gen"
 
 
 def log(message):
@@ -59,6 +61,15 @@ def state_dir():
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".local", "state")
     return os.path.join(base, "frostnotes")
+
+
+def generation():
+    """The shell's counter of changes; a missing or bad file counts 0."""
+    try:
+        with open(os.path.join(state_dir(), GEN_NAME), encoding="utf-8") as handle:
+            return int(handle.read().strip())
+    except (OSError, ValueError):
+        return 0
 
 
 def off_file():
@@ -130,11 +141,11 @@ def flag(results, key):
     return bool(value)
 
 
-def request(autostart, asked_ms):
+def request(autostart, generation_value):
     """Ask the portal once, and answer the outcome of that request."""
     outcome = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "askedMs": asked_ms,
+        "generation": generation_value,
         "autostartRequested": autostart,
         "response": None,
         "background": None,
@@ -236,7 +247,8 @@ def main():
     # only under the lock.
     outcome = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "askedMs": None,
+        # A failure still carries the counter, read without the lock here.
+        "generation": generation(),
         "autostartRequested": True,
         "response": None,
         "background": None,
@@ -253,15 +265,16 @@ def main():
         return 0
     try:
         for _ in range(MAX_REQUESTS):
-            # The moment this request reads the setting, under the lock: the
-            # app compares it with the moment it wrote the setting (ADR-0033).
-            asked_ms = time.time_ns() // 1_000_000
+            # The counter, read under the lock just before the setting: the
+            # app compares it with the number its own change left (ADR-0033).
+            gen = generation()
             autostart = autostart_wanted()
-            outcome = request(autostart, asked_ms)
+            outcome = request(autostart, gen)
             if autostart_wanted() == autostart:
                 break
     except Exception as err:  # the helper always exits 0
         fail(outcome, f"unexpected failure: {err}")
+        outcome["generation"] = generation()
     finally:
         write_outcome(outcome)
         handle.close()
