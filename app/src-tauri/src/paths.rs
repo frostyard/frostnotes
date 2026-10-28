@@ -7,6 +7,12 @@ use std::path::PathBuf;
 /// The application ID, as internal/config.AppID.
 const APP_ID: &str = "org.frostyard.Frostnotes";
 
+/// in_flatpak says whether this process runs in the Frostnotes Flatpak
+/// (FLATPAK_ID is the app ID).
+pub fn in_flatpak() -> bool {
+    std::env::var_os("FLATPAK_ID").is_some_and(|id| id == APP_ID)
+}
+
 fn abs(value: Option<OsString>) -> Option<PathBuf> {
     value.map(PathBuf::from).filter(|p| p.is_absolute())
 }
@@ -55,9 +61,36 @@ fn data_dir_from(getenv: impl Fn(&str) -> Option<OsString>) -> Result<PathBuf, S
         .ok_or_else(|| "HOME is not set; set FROSTNOTES_DATA_DIR".to_string())
 }
 
+/// notesd's log, where the launcher (packaging/flatpak/frostnotes.sh) and
+/// notesd append: $XDG_STATE_HOME/frostnotes/notesd.log, else
+/// ~/.local/state/frostnotes/notesd.log, as the launcher's `state`.
+pub fn notesd_log() -> Result<PathBuf, String> {
+    notesd_log_from(|key| std::env::var_os(key))
+}
+
+fn notesd_log_from(getenv: impl Fn(&str) -> Option<OsString>) -> Result<PathBuf, String> {
+    let state = match getenv("XDG_STATE_HOME").filter(|v| !v.is_empty()) {
+        Some(p) => PathBuf::from(p),
+        None => getenv("HOME")
+            .filter(|v| !v.is_empty())
+            .map(|h| PathBuf::from(h).join(".local").join("state"))
+            .ok_or_else(|| "HOME is not set".to_string())?,
+    };
+    Ok(state.join("frostnotes").join("notesd.log"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notesd_log_follows_the_launcher() {
+        let vars = [("XDG_STATE_HOME", "/state"), ("HOME", "/home/u")];
+        assert_eq!(notesd_log_from(env(&vars)), Ok(PathBuf::from("/state/frostnotes/notesd.log")));
+        let vars = [("XDG_STATE_HOME", ""), ("HOME", "/home/u")];
+        assert_eq!(notesd_log_from(env(&vars)), Ok(PathBuf::from("/home/u/.local/state/frostnotes/notesd.log")));
+        assert!(notesd_log_from(env(&[])).is_err());
+    }
 
     #[test]
     fn data_dir_follows_internal_config() {

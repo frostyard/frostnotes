@@ -1,12 +1,14 @@
 //! The Frostnotes app shell: one instance with one main window, a line
 //! bridge to notesd's socket, notesblob://, notesd's blob store by
 //! content hash (ADR-0023), the two checked ways to open things outside
-//! the app (open.rs), and the system's folder picker, through which a
+//! the app (open.rs), why notesd is not running in the Flatpak
+//! (notesd_log.rs), and the system's folder picker, through which a
 //! person names a folder to open or create a vault in (ADR-0024). All
 //! notes logic lives in notesd; see docs/design/overview.md and
 //! docs/specs/rpc-protocol.md.
 
 mod bridge;
+mod notesd_log;
 mod open;
 mod paths;
 mod protocol;
@@ -36,6 +38,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             bridge::notesd_connect,
             bridge::notesd_send,
+            notesd_log::notesd_log,
             open::open_url,
             open::open_file,
             spike::spike_mode,
