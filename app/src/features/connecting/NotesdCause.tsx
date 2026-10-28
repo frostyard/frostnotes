@@ -6,6 +6,7 @@ import type { NotesdLog } from "../../data/notesdLog";
 
 const SHOW = "flatpak override --user --show org.frostyard.Frostnotes";
 const RESET = "flatpak override --user --reset org.frostyard.Frostnotes";
+const STATUS = "systemctl --user status flatpak-portal.service";
 
 function Cmd({ text }: { text: string }) {
   return <code className="rounded bg-code px-1 font-mono select-text">{text}</code>;
@@ -23,9 +24,12 @@ function PortalFix() {
           Remove the overrides with <Cmd text={RESET} />, if it does.
         </li>
         <li>
-          Check that <Cmd text="xdg-desktop-portal" /> runs.
+          Check the Flatpak portal with <Cmd text={STATUS} />.
         </li>
       </ol>
+      <p>
+        The Flatpak portal starts on demand through D-Bus. It comes with the <Cmd text="flatpak" /> package.
+      </p>
     </>
   );
 }

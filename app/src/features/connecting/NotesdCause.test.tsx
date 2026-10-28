@@ -21,7 +21,9 @@ describe("NotesdCause", () => {
     expect(text).toContain("flatpak override --user --show org.frostyard.Frostnotes");
     expect(text).toContain("org.freedesktop.portal.Flatpak");
     expect(text).toContain("flatpak override --user --reset org.frostyard.Frostnotes");
-    expect(text).toContain("xdg-desktop-portal");
+    expect(text).toContain("systemctl --user status flatpak-portal.service");
+    expect(text).toContain("starts on demand through D-Bus");
+    expect(text).not.toContain("xdg-desktop-portal"); // another service, which can run with no Flatpak portal
     expect(text).toContain("The log: /home/ana/.var/app/org.frostyard.Frostnotes/state/frostnotes/notesd.log");
     // The launcher's line is the cause above, not repeated.
     expect(text).not.toContain("The last line");

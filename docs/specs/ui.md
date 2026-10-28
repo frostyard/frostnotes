@@ -486,7 +486,11 @@ it; `aria-label` "Why notesd is not running") says why, from the end of
   `flatpak override --user --show org.frostyard.Frostnotes`: it must not
   list a blocked `org.freedesktop.portal.Flatpak`." "Remove the overrides
   with `flatpak override --user --reset org.frostyard.Frostnotes`, if it
-  does." "Check that `xdg-desktop-portal` runs."
+  does." "Check the Flatpak portal with `systemctl --user status
+  flatpak-portal.service`." Then: "The Flatpak portal starts on demand
+  through D-Bus. It comes with the `flatpak` package." (The service of
+  `org.freedesktop.portal.Flatpak` is `flatpak-portal`, not
+  `xdg-desktop-portal`, which can run while the Flatpak portal is absent.)
 - **Any other last line:** "The last line of notesd's log: <line>".
 - **Both:** "The log: <path>" (the path of `notesd.log` in the app's state
   directory). A log that is empty or missing adds only this line.
