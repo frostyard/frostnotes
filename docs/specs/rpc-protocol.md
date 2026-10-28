@@ -90,7 +90,7 @@ From M4:
   `local`. `hub` admits `local` and `session`, with `hub.serve`,
   `hub.approve` and `hub.setURL` narrowed to `local`
   ([lodge-app.md](lodge-app.md#methods-and-callers)). `rpc` admits
-  every kind, and `events` every kind but `agent`. `sync` stays
+  every kind, with `rpc.shutdown` narrowed to `local`, and `events` every kind but `agent`. `sync` stays
   `local`, and `log` `device`.
 - **An agent's scope binds its connection.** An `agent` connection
   carries its token's scope: one vault, and the writes it allows
@@ -112,7 +112,18 @@ From M4:
 - **`rpc.hello` says who is connected:** its result gains the
   connection's caller kind and, for a session, the signed-in login, its
   display name and the node's name, from lodge's headers. The web app
-  shows them, and hides what its caller may not use.
+  shows them, and hides what its caller may not use. It also gains an
+  optional `build`: in the desktop Flatpak, the `app-commit` of the
+  instance's `/.flatpak-info`, which differs for every build, even of one
+  version; absent elsewhere. The launcher compares it with the latest
+  deployment's to replace an older notesd
+  ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
+- **`rpc.shutdown`** is for `local` callers only (every other kind gets
+  `methodNotFound`). It answers `null`, and only then stops notesd as
+  `SIGTERM` does: requests in hand end with an error or with their
+  connection, the vaults and sync stop, the store closes, the data
+  directory's lock is released and notesd exits 0
+  ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
 - **`rpc.ping`** answers `null` to every caller after hello: the web
   app's heartbeat, which finds a connection a sleeping phone dropped.
 
