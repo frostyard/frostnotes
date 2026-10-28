@@ -473,7 +473,8 @@ controls and drags the window), the status bar and, centred between them,
 12/16 `--text-secondary` text: "Connecting to notesd…", and after a
 failure "Reconnecting to notesd… (<reason>)", retried every second.
 
-In the desktop app inside the Flatpak, once a connection has failed, a
+In the desktop app inside the Flatpak, while the connection is lost (not
+while a retry is in flight, which hides it until the next failure), a
 block under that text (at most 560 wide, left-aligned, 12/16, 16 below
 it; `aria-label` "Why notesd is not running") says why, from the end of
 `notesd.log` (the shell's `notesd_log`,
@@ -620,9 +621,10 @@ Obsidian's vault chooser
   is the folder itself when Open folder as vault refuses it, and the
   folder that holds the new vault (the Location) when Create refuses:
   the new folder does not exist yet, and Flatpak mounts only paths that
-  exist when the sandbox starts. The
-  notice has the action Copy command, which puts the `flatpak override`
-  command on the clipboard ("Copied the command."), and so stays 10 s.
+  exist when the sandbox starts. The notice shows that message as it is,
+  with no action: it holds a path that the person chose, so the app takes
+  no command out of it to copy or run. A notice leaves after 4 s, so the
+  person can select the text before.
   Remove from list asks first (the confirmation dialog,
   Remove, danger): 'Remove "<name>" from the list?', "Its folder and
   files stay where they are. Frostnotes forgets its index and version

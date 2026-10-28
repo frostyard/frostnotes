@@ -780,11 +780,23 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   - *A narrowed `--filesystem`.* A vault outside the sandbox's file access
     fails with a plain `no such file or directory` or `permission denied`.
     `internal/sandbox` reads `[Context] filesystems=` of `/.flatpak-info`
-    (`host`, `home`, `~/x`, absolute paths, `xdg-*` with a subpath, `:ro`,
-    `:rw`, `:create` and `!` negations; the deepest entry that holds a path
-    decides, a later entry beating an earlier one) and says how far a path
-    is covered. When `vault.add` (Open folder as vault and Create new
-    vault) fails with `ENOENT`, `EACCES` or `EPERM` on a path the grants
+    as a GLib key-file string list (`\;` is a literal semicolon; `\\`,
+    `\s`, `\n`, `\t` and `\r` are escapes) and says how far a path is
+    covered: `host`, `home`, `~/x`, absolute paths, `xdg-*` with a subpath,
+    `:ro`, `:rw`, `:create` and `!` negations; the deepest entry that holds
+    a path decides, a later entry beating an earlier one. It guesses
+    nothing. The user's folders (`xdg-documents` and the like) come from
+    `user-dirs.dirs` in `$XDG_CONFIG_HOME` (in a Flatpak, the copy that
+    Flatpak places in `~/.var/app/<ID>/config`), then in `~/.config`;
+    `xdg-data`, `xdg-config`, `xdg-cache` and `xdg-state` are the host's
+    (`HOST_XDG_*_HOME`) or the XDG defaults under the home. A bad escape,
+    an unknown token or modifier, or a folder that cannot be resolved makes
+    the grants *uncertain*, and then no refusal is explained: coverage
+    cannot be disproved. Nor is a path that Flatpak always exposes: the
+    app's own `~/.var/app/<ID>`, `/app`, `/usr`, `/etc`, `/tmp`,
+    `/var/tmp`, `/run` (except `/run/media`), `/proc`, `/sys`, `/dev`, the
+    runtime directory and the document portal's mount in it. When
+    `vault.add` (Open folder as vault and Create new vault) fails with `ENOENT`, `EACCES` or `EPERM` on a path the grants
     do not cover, or with `EROFS` on one they cover at most read only,
     notesd answers `invalidParams` with "Frostnotes cannot reach PATH
     because the Flatpak's file access does not include it; grant it with:
@@ -795,7 +807,8 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
     exist yet, and Flatpak mounts only paths that exist when the sandbox
     starts, so a grant of the new path alone would not let the user create
     it after the next login. A path the grants cover keeps its plain error. The app shows that message as the
-    notice, with an action that copies the command. A vault that was
+    notice, as it is, with no action: the message holds a path that the
+    person chose, so the app takes no command out of it. A vault that was
     registered and then left outside the grants fails its scan, not
     `vault.add`; the window shows no scan error yet, so that case stays in
     `notesd.log`.
