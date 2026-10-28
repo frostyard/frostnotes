@@ -92,9 +92,8 @@ const REFUSED = [
 const NOT_KNOWN = "Not known: the desktop did not answer.";
 const ASKING = "Asking the desktop…";
 
-/** POLL_MS and POLL_TRIES bound the wait for the desktop's new answer: 30 s. */
-const POLL_MS = 1000;
-const POLL_TRIES = 30;
+/** POLL_MS is how often the open dialog reads the desktop's answer again. */
+const POLL_MS = 2000;
 
 /** notKnown says the desktop gave no usable answer, with the helper's error when it wrote one. */
 function notKnown(error: string | null): string {
@@ -333,9 +332,9 @@ export function SettingsContainer() {
   const vaultId = useNotes((s) => s.vaultId);
   const [hub, setHub] = useState<HubView | null>(null);
   const [background, setBackground] = useState<Background | null>(null);
-  // asking holds the answer's `at` from before a change, while the shell
-  // waits for the desktop's new one: the row says that it asks.
-  const [asking, setAsking] = useState<{ before: string | null } | null>(null);
+  // awaited names the change whose answer the window waits for: the row says
+  // that it asks while the desktop's answer is not that change's (ADR-0033).
+  const [awaited, setAwaited] = useState<string | null>(null);
   const narrow = useNarrow();
   const open = section !== null;
   useEffect(() => {
@@ -347,23 +346,21 @@ export function SettingsContainer() {
       live = false;
     };
   }, [open, client]);
-  // After a change the shell asks the desktop again, and the answer is in
-  // background.json only when the desktop and the helper are done: read it
-  // again every second, at most 30 s, until `at` is a new one (ADR-0033).
+  // The desktop can take minutes to answer, in a dialog of its own, and a
+  // launcher's request answers late too: while the dialog is open, read the
+  // answer again every 2 s, with no limit (ADR-0033).
+  const hasBackground = background !== null;
   useEffect(() => {
-    if (!open || asking === null) return;
+    if (!open || !hasBackground) return;
     let live = true;
-    let tries = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
+      if (!live) return;
       const b = await readBackground();
       if (!live) return;
-      if (b !== null) setBackground(b);
-      const at = b?.portal?.at ?? null;
-      tries += 1;
-      if ((at !== null && at !== asking.before) || tries >= POLL_TRIES) {
-        setAsking(null);
-        return;
+      if (b !== null) {
+        setBackground(b);
+        setAwaited((a) => (a !== null && b.portal?.request === a ? null : a));
       }
       timer = setTimeout(poll, POLL_MS);
     };
@@ -372,26 +369,28 @@ export function SettingsContainer() {
       live = false;
       clearTimeout(timer);
     };
-  }, [open, asking]);
+  }, [open, hasBackground]);
+  const pending = awaited !== null && background?.portal?.request !== awaited;
   if (section === null) return null;
   return (
     <SettingsDialog
       narrow={narrow}
-      sections={settingsSections(prefs, vault, sync, hub, background, asking !== null)}
+      sections={settingsSections(prefs, vault, sync, hub, background, pending)}
       section={section}
       onSection={(id) => openSettings(id)}
       onClose={() => {
-        setAsking(null);
+        setAwaited(null);
         closeSettings();
       }}
       onChange={(id, value) => {
         const [where, key, arg] = id.split(":") as [string, string, string | undefined];
         if (where === "bg" && key === "keep") {
-          // The shell writes the setting and asks the desktop again; the row
-          // says so until a new answer is in (ADR-0033).
-          setAsking({ before: background?.portal?.at ?? null });
+          // The shell names the change it sets in motion; the row says that
+          // it asks until that change's answer is in (ADR-0033).
           void saveBackground(Boolean(value)).then((b) => {
-            if (b !== null) setBackground(b);
+            if (b === null) return;
+            setBackground(b);
+            setAwaited(b.request);
           });
           return;
         }

@@ -24,7 +24,7 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +57,11 @@ const SHUTDOWN_WAIT: Duration = Duration::from_secs(35);
 /// POLL is how often the exit checks whether `notesctl` has returned.
 const POLL: Duration = Duration::from_millis(100);
 
+/// REQUEST_VAR names a change in the helper's environment: the helper copies
+/// it into background.json, so the window knows which change an answer
+/// belongs to.
+const REQUEST_VAR: &str = "FROSTNOTES_BACKGROUND_REQUEST";
+
 /// PortalAnswer is the Background portal's last answer, as the helper wrote
 /// it to background.json.
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -76,6 +81,9 @@ pub struct PortalAnswer {
     pub autostart: Option<bool>,
     /// Why the request failed, when it did.
     pub error: Option<String>,
+    /// The change that asked, when the shell started the helper with
+    /// REQUEST_VAR; none for a request that the launcher made.
+    pub request: Option<String>,
 }
 
 /// Background is the setting and the portal's last answer, for the window.
@@ -88,6 +96,10 @@ pub struct Background {
     /// The portal's last answer; none before the first, or when the file
     /// cannot be read.
     pub portal: Option<PortalAnswer>,
+    /// The change that this answer set in motion: set, and it names the
+    /// helper that this call started; none from `background_get`, and none
+    /// when the helper could not start.
+    pub request: Option<String>,
 }
 
 /// background_get reports the setting in the Flatpak, and nothing anywhere
@@ -132,8 +144,10 @@ fn set(
         let text = "Off: notesd stops when the last window closes (ADR-0033).\n";
         std::fs::write(&off, text).map_err(|e| format!("write {}: {e}", off.display()))?;
     }
-    ask(getenv);
-    Ok(state(getenv))
+    let request = ask(getenv);
+    let mut background = state(getenv);
+    background.request = request;
+    Ok(background)
 }
 
 /// state reads the setting and the portal's last answer.
@@ -143,41 +157,52 @@ fn state(getenv: &impl Fn(&str) -> Option<OsString>) -> Background {
         .ok()
         .and_then(|d| std::fs::read_to_string(d.join(ANSWER_FILE)).ok())
         .and_then(|text| parse_portal(&text));
-    Background { keep_running: !off, portal }
+    Background { keep_running: !off, portal, request: None }
 }
 
 /// ask starts the helper in the background, with no arguments and its output
-/// appended to background.log, as the launcher's own request does. Nothing
-/// waits for it: the helper stays on the bus until the portal answers, at
-/// most 10 minutes. It reads the setting itself, and its lock makes it and
-/// the launcher's request take turns. A helper that cannot start changes
-/// nothing: the next launch of the app asks again.
-fn ask(getenv: &impl Fn(&str) -> Option<OsString>) {
+/// appended to background.log, as the launcher's own request does. It names
+/// the change in the helper's environment, so the answer it writes can say
+/// which change it belongs to, and it answers that name; none when the
+/// helper could not start. Nothing waits for the helper: it stays on the bus
+/// until the portal answers, at most 10 minutes. It reads the setting
+/// itself, and its lock makes it and the launcher's request take turns.
+fn ask(getenv: &impl Fn(&str) -> Option<OsString>) -> Option<String> {
+    let request = request_id();
     let Ok(dir) = state_dir(getenv) else {
-        return;
+        return None;
     };
     if std::fs::create_dir_all(&dir).is_err() {
-        return;
+        return None;
     }
     let opened = std::fs::OpenOptions::new().create(true).append(true).open(dir.join(LOG_FILE));
     let Ok(log) = opened else {
-        return;
+        return None;
     };
     let Ok(errlog) = log.try_clone() else {
-        return;
+        return None;
     };
     let mut command = Command::new(helper(getenv));
-    command.stdin(Stdio::null()).stdout(log).stderr(errlog);
+    command.stdin(Stdio::null()).stdout(log).stderr(errlog).env(REQUEST_VAR, &request);
     // A process group of its own, as the launcher's `&` leaves it: the
     // app's signals do not reach the request.
     let _ = command.process_group(0);
-    if let Ok(mut child) = command.spawn() {
-        // Reap it, so that a helper still waiting for the portal leaves no
-        // zombie behind.
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
-    }
+    let Ok(mut child) = command.spawn() else {
+        return None;
+    };
+    // Reap it, so that a helper still waiting for the portal leaves no
+    // zombie behind.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Some(request)
+}
+
+/// request_id names one change: the clock in nanoseconds since the epoch, as
+/// decimal digits. Two changes in one millisecond still differ.
+fn request_id() -> String {
+    let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    since.as_nanos().to_string()
 }
 
 /// PRIMARY is true in the process that owns the app's windows. A second
@@ -365,12 +390,41 @@ mod tests {
         ];
         let get = env(&vars);
         let off = off_file(&get).unwrap();
-        assert!(!set(false, &get).unwrap().keep_running);
+        let started = set(false, &get).unwrap();
+        assert!(!started.keep_running);
+        // The helper could not start: nothing is pending.
+        assert_eq!(started.request, None);
         assert!(off.exists());
         assert!(set(true, &get).unwrap().keep_running);
         assert!(!off.exists());
         // Removing a file that is not there is not an error.
         assert!(set(true, &get).is_ok());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn set_names_the_helper_it_starts() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = scratch("request");
+        let base = dir.to_str().unwrap();
+        let libexec = dir.join("libexec");
+        fs::create_dir_all(&libexec).unwrap();
+        let helper = libexec.join("frostnotes-request-background");
+        fs::write(&helper, "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        let libexec = libexec.to_str().unwrap().to_string();
+        let vars = [
+            ("XDG_CONFIG_HOME", base),
+            ("XDG_STATE_HOME", base),
+            ("FROSTNOTES_LIBEXEC_DIR", libexec.as_str()),
+        ];
+        let get = env(&vars);
+        let started = set(true, &get).unwrap();
+        let id = started.request.expect("a helper that started names its request");
+        assert!(!id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()), "{id}");
+        // The file's answer belongs to no change of its own.
+        assert_eq!(state(&get).request, None);
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -400,6 +454,7 @@ mod tests {
             background: Some(true),
             autostart: Some(true),
             error: None,
+            request: None,
         };
         assert_eq!(parse_portal(&text), Some(want));
         // White space between the fields changes nothing.
@@ -429,6 +484,14 @@ mod tests {
         // A file with no key read here keeps every default: no answer yet.
         assert_eq!(parse_portal("{}"), Some(PortalAnswer::default()));
         assert_eq!(parse_portal(r#"{"unknown": 1}"#), Some(PortalAnswer::default()));
+    }
+
+    #[test]
+    fn reads_the_requests_name() {
+        let text = r#"{"at":"2026-10-28T09:00:00Z","request":"1761667200000000000"}"#;
+        let got = parse_portal(text).unwrap();
+        assert_eq!(got.request.as_deref(), Some("1761667200000000000"));
+        assert_eq!(parse_portal("{}").unwrap().request, None);
     }
 
     #[test]

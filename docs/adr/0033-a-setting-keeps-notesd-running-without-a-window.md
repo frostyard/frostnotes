@@ -85,19 +85,29 @@ the launcher both act on it.
   atomically (a temporary file in the same directory, then `os.replace`):
   `at` (RFC 3339 UTC time), `autostartRequested`, `response` (0 granted,
   1 cancelled, 2 other, null when the portal gave no answer), `background`,
-  `autostart`, and `error`. `background_get` reads that file, and the
-  settings' Background section (`app/src/app/Settings.tsx`'s
-  `backgroundSection`) shows the switch, then what the desktop allows. The
-  section is drawn only where `background_get` answers, which is only in the
-  Flatpak.
+  `autostart`, `error`, and `request`: the change's name.
+  `background_get` reads that file, and the settings' Background section
+  (`app/src/app/Settings.tsx`'s `backgroundSection`) shows the switch, then
+  what the desktop allows. The section is drawn only where
+  `background_get` answers, which is only in the Flatpak.
+  Every change that the shell starts has a name of its own: the clock in
+  nanoseconds since the epoch, as decimal digits, in the helper's
+  `FROSTNOTES_BACKGROUND_REQUEST`. The helper copies that name into its
+  answer, and `background_set` answers the same one, so the window tells its
+  own answer from another change's, and from another helper's. A request
+  that the launcher makes carries no name, and `background_get` answers
+  none: it only reads the file.
   A refusal (response 1, or response 0 with the background permission
   false) says how to allow it. A request with no answer, or with response
   2, says that the desktop did not answer, with the helper's error when it
   wrote one: the desktop kept its permission, and the app does not claim
-  that it refused. After a change, the shell asks the desktop again, and
-  the window reads the file again every second, at most 30 s, until `at`
-  differs from the answer it had before the change (or an answer arrives
-  after none): while it waits, the row says "Asking the desktop…".
+  that it refused. While the dialog is open, the window reads the file again
+  every 2 s, with no limit, so a late answer shows: the desktop can keep the
+  person in a dialog of its own for minutes, and a launcher's request can
+  answer long after the app read the file once. While the answer to the
+  person's own change is not in, the row says "Asking the desktop…": it
+  stops only when the answer carries that change's name, or when the dialog
+  closes. There is no timeout, and an old answer never takes the row back.
 
 ## Consequences
 
@@ -119,7 +129,11 @@ the launcher both act on it.
 - The helpers take turns on the lock, so a helper that waits for the portal
   (at most 10 minutes) holds the next one: a new change's answer waits for
   the earlier request's, and the window's "Asking the desktop…" stays until
-  it comes.
+  that change's answer comes.
+- While the settings are open, the window reads `background.json` every 2 s,
+  and it stops when the dialog closes. A portal that never answers keeps the
+  row on "Asking the desktop…" for as long as the dialog stays open: the row
+  names what it waits for, and a later answer shows as soon as it is in.
 - An old window, from a release before this one, starts notesd with
   `--background` through its own launcher. With Off set — which only this
   release can set — that start finds the file, starts no notesd and says so
@@ -134,9 +148,10 @@ the launcher both act on it.
   smoke test checks that a window's spawn says `--notesd`, that the request
   helper starts with no arguments, and that `frostnotes --background`
   starts no notesd and exits 0 while the setting is off; Rust unit tests
-  cover the paths, the file and the answer's parse. The helper's own paths
-  — the lock and the second request — have no test. Plan 0008's Phase 3,
-  item 4 in each state, is still to run on a real desktop.
+  cover the paths, the file and the answer's parse; and Vitest tests cover
+  the row's wait, with fake timers. The helper's own paths — the lock and
+  the second request — have no test. Plan 0008's Phase 3, item 4 in each
+  state, is still to run on a real desktop.
 
 ## Alternatives considered
 

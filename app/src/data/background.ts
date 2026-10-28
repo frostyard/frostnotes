@@ -19,6 +19,8 @@ export interface PortalAnswer {
   autostart: boolean | null;
   /** Why the request failed, when it did. */
   error: string | null;
+  /** The change that asked; null for a request the launcher made. */
+  request: string | null;
 }
 
 /** Background is the setting and the portal's last answer. */
@@ -27,6 +29,11 @@ export interface Background {
   keepRunning: boolean;
   /** The portal's last answer; null before the first, or when it cannot be read. */
   portal: PortalAnswer | null;
+  /**
+   * The change that a `setBackground` call set in motion, as the helper names
+   * it; null from `readBackground`, and when the helper could not start.
+   */
+  request: string | null;
 }
 
 /** readBackground reads the setting in the Flatpak, and is null anywhere else or when it cannot. */

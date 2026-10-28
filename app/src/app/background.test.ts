@@ -15,10 +15,15 @@ const answer = (fields: Partial<PortalAnswer>): PortalAnswer => ({
   background: true,
   autostart: true,
   error: null,
+  request: null,
   ...fields,
 });
 
-const background = (keepRunning: boolean, portal: PortalAnswer | null): Background => ({ keepRunning, portal });
+const background = (keepRunning: boolean, portal: PortalAnswer | null): Background => ({
+  keepRunning,
+  portal,
+  request: null,
+});
 
 describe("the Background section", () => {
   it("has the switch, on with today's behaviour, and the desktop's last word", () => {

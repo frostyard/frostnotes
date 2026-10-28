@@ -774,13 +774,18 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   `$XDG_STATE_HOME/frostnotes/background.json`, atomically: when it asked,
   whether it asked for autostart, the response (0 granted, 1 cancelled,
   2 other, none for no answer), the desktop's `background` and `autostart`
-  permissions, and an error. The shell reads that file, and the settings'
-  Background section (`app/src/app/Settings.tsx`'s `backgroundSection`, over
-  `app/src/data/background.ts`) shows the switch and, from that file, what
-  the desktop allows, refused, or did not answer; after a change it says
-  "Asking the desktop…", and the window reads the file again every second,
-  at most 30 s, until a new answer is in. The section is drawn only
-  where `background_get` answers, that is in the Flatpak. With the file,
+  permissions, an error, and `request`: the change's name. Every change that
+  the shell starts has a name of its own (the clock in nanoseconds since the
+  epoch) in the helper's `FROSTNOTES_BACKGROUND_REQUEST`; the helper copies
+  it into the answer, and `background_set` answers the same name. A request
+  that the launcher makes carries no name. The shell reads that file, and
+  the settings' Background section (`app/src/app/Settings.tsx`'s
+  `backgroundSection`, over `app/src/data/background.ts`) shows the switch
+  and, from that file, what the desktop allows, refused, or did not answer.
+  While the dialog is open the window reads the file again every 2 s, with
+  no limit, so a late answer shows; while the answer to the person's own
+  change is not in, the row says "Asking the desktop…". The section is drawn
+  only where `background_get` answers, that is in the Flatpak. With the file,
   the shell also stops notesd when its last window closes: on the app's
   exit, in the primary instance and in the Flatpak only, it runs
   `notesctl shutdown` and waits at most 35 s, then kills it. A second

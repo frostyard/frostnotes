@@ -22,6 +22,12 @@ the app reads is the last request's.
 Whatever happens, the helper writes the outcome to
 `$XDG_STATE_HOME/frostnotes/background.json` for the app to read, and
 exits 0. A missing portal or a refusal changes nothing else for the app.
+
+A change that the app's shell makes names itself in
+`FROSTNOTES_BACKGROUND_REQUEST`, and the helper copies that name into the
+outcome as `request`, so the window knows which change an answer belongs
+to; a request that the launcher makes carries none. Every request of one
+helper carries the same name, the helper's own.
 """
 
 import fcntl
@@ -41,6 +47,7 @@ PORTAL_PATH = "/org/freedesktop/portal/desktop"
 
 OUTCOME_NAME = "background.json"
 LOCK_NAME = "background.lock"
+REQUEST_VAR = "FROSTNOTES_BACKGROUND_REQUEST"
 
 
 def log(message):
@@ -53,6 +60,11 @@ def state_dir():
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".local", "state")
     return os.path.join(base, "frostnotes")
+
+
+def request_name():
+    """The change that this helper asks for: the shell's name, or None."""
+    return os.environ.get(REQUEST_VAR) or None
 
 
 def off_file():
@@ -133,6 +145,7 @@ def request(autostart):
         "background": None,
         "autostart": None,
         "error": None,
+        "request": request_name(),
     }
     ask(outcome, autostart)
     return outcome
@@ -234,6 +247,7 @@ def main():
         "background": None,
         "autostart": None,
         "error": None,
+        "request": request_name(),
     }
     try:
         handle = lock()
