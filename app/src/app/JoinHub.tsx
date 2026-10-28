@@ -2,8 +2,8 @@
 // docs/specs/ui.md#settings): the form, the code to approve, and the vault
 // it makes and joins, over data/sync.ts. The panel stays while the flow
 // runs: the window holds a first vault's manager open (data/session.tsx,
-// holdVaultOpen). Cancel, Back and the panel's going away all stop the flow,
-// which then forgets a vault it made and did not join.
+// holdVaultOpen, a hold per run). Cancel, Back and the panel's going away all
+// stop the flow, which then forgets a vault it made and did not join.
 import { useEffect, useRef, useState } from "react";
 
 import { notify } from "../data/overlays";
@@ -59,7 +59,7 @@ export function JoinHub(props: JoinHubProps) {
     };
   }, []);
 
-  async function run(fields: JoinFields, signal: AbortSignal, id: number): Promise<void> {
+  async function run(fields: JoinFields, signal: AbortSignal, id: number, release: () => void): Promise<void> {
     const stopped = () => generation.current !== id || signal.aborted;
     /** fail says why the flow failed: in the panel, or in a notice once it is gone. */
     const fail = (words: string): void => {
@@ -133,7 +133,7 @@ export function JoinHub(props: JoinHubProps) {
       if (stopped()) return;
       if (created) {
         // The manager goes as the window gets the vault.
-        holdVaultOpen(false);
+        release();
         if (mounted.current) await openVault(client, target);
       }
       if (mounted.current) onDone(target);
@@ -150,7 +150,7 @@ export function JoinHub(props: JoinHubProps) {
           reason = reason === "" ? removal : `${reason} ${removal}`;
         }
       }
-      if (generation.current === id) holdVaultOpen(false);
+      release();
       if (reason !== "") fail(reason);
     }
   }
@@ -161,12 +161,12 @@ export function JoinHub(props: JoinHubProps) {
     controller.current = next;
     const id = generation.current + 1;
     generation.current = id;
-    // The manager stays while the flow makes a first vault.
-    holdVaultOpen(true);
+    // The manager stays while this flow makes a first vault: its own hold.
+    const release = holdVaultOpen();
     setError(null);
     setCode(null);
     setPhase("joining");
-    void run(fields, next.signal, id);
+    void run(fields, next.signal, id, release);
   }
 
   function cancel(): void {

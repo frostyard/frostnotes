@@ -11,7 +11,7 @@ import { useNotes } from "./stores";
 import { emptyVault, useVaultState } from "./vaultState";
 
 afterEach(() => {
-  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHold: false });
+  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHolds: 0 });
   useFiles.setState(emptyFiles(null));
   useVaultState.setState(emptyVault(null));
   usePrefs.getState().setPrefs({ lastVault: null });
@@ -70,22 +70,35 @@ describe("Session", () => {
     expect(useFiles.getState().folders).toEqual(["Old"]);
   });
 
-  it("holds the manager while a join makes the first vault", async () => {
+  it("holds the manager while every join that makes a first vault stands", async () => {
     const mock = new MockTransport([]);
     start(mock);
     await waitFor(() => expect(probe()).toMatch(/^vault=null /));
     const other = await notesctl(mock);
-    holdVaultOpen(true);
+    const one = holdVaultOpen();
+    const two = holdVaultOpen();
     await act(async () => {
       await other.vault.add({ path: "/home/demo/One" });
     });
     await waitFor(() => expect(useNotes.getState().vaults).toHaveLength(1));
     expect(useNotes.getState().vaultId).toBeNull();
-    holdVaultOpen(false);
+
+    // One hold released, and a second call of its release, still hold.
+    one();
+    one();
+    expect(useNotes.getState().joinHolds).toBe(1);
     await act(async () => {
       await other.vault.add({ path: "/home/demo/Two" });
     });
-    // With the hold off, the window takes the first vault by name.
+    await waitFor(() => expect(useNotes.getState().vaults).toHaveLength(2));
+    expect(useNotes.getState().vaultId).toBeNull();
+
+    two();
+    expect(useNotes.getState().joinHolds).toBe(0);
+    await act(async () => {
+      await other.vault.add({ path: "/home/demo/Three" });
+    });
+    // With every hold released, the window takes the first vault by name.
     await waitFor(() => expect(useNotes.getState().vaultId).toBe(1));
   });
 

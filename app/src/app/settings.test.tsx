@@ -19,7 +19,7 @@ import { App } from "./App";
 import { settingsSections } from "./Settings";
 
 afterEach(() => {
-  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHold: false });
+  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHolds: 0 });
   useFiles.setState(emptyFiles(null));
   useVaultState.setState(emptyVault(null));
   useWorkspace.setState({ vaultPath: null, ws: emptyWorkspace() });

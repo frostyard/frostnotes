@@ -20,7 +20,7 @@ import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
 
 afterEach(() => {
-  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHold: false });
+  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHolds: 0 });
   useFiles.setState(emptyFiles(null));
   useVaultState.setState(emptyVault(null));
   useWorkspace.setState({ vaultPath: null, ws: emptyWorkspace() });
@@ -136,7 +136,7 @@ describe("vaults from the app", () => {
       name: "shared",
     });
     await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
-    expect(useNotes.getState().joinHold).toBe(false);
+    expect(useNotes.getState().joinHolds).toBe(0);
   });
 
   it("keeps the panel while a first vault pairs again and joins", async () => {
@@ -167,7 +167,7 @@ describe("vaults from the app", () => {
     });
     await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
     expect(mock.calls.some((c) => c.method === "vault.remove")).toBe(false);
-    expect(useNotes.getState().joinHold).toBe(false);
+    expect(useNotes.getState().joinHolds).toBe(0);
   });
 
   it("checks whether notesd syncs before it offers Join", async () => {
@@ -224,10 +224,44 @@ describe("vaults from the app", () => {
     await screen.findByText("notesctl hub approve ABCD-EFGH");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    await waitFor(() => expect(useNotes.getState().joinHold).toBe(false));
+    await waitFor(() => expect(useNotes.getState().joinHolds).toBe(0));
     expect(mock.calls.find((c) => c.method === "vault.remove")?.params).toEqual({ id: 4 });
     expect(mock.calls.filter((c) => c.method === "sync.join")).toHaveLength(1);
     await waitFor(() => expect(within(manager()).getAllByRole("listitem")).toHaveLength(3));
+  });
+
+  it("keeps a new flow's hold when a cancelled flow ends late", async () => {
+    // Flow A waits for its approval when the person cancels it, and its reply
+    // comes after flow B takes its own hold: A ending must not release B's,
+    // or B's first vault would open and take B's panel away.
+    const mock = new MockTransport([], { folders: ["/home/demo/Documents"], paired: [HUB], latency: 20 });
+    mock.refuseJoins(1);
+    mock.holdPairings();
+    render(<App connect={async () => mock} />);
+    const user = userEvent.setup();
+    await screen.findByRole("dialog", { name: "Manage vaults" });
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo/Documents");
+    await screen.findByText("notesctl hub approve ABCD-EFGH");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // Flow B starts while A still waits for its held reply.
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo/Documents");
+    mock.releasePairings();
+
+    // A releases its own hold; B's stands. B's first vault then opens
+    // nothing, so B's panel stays.
+    await waitFor(() => expect(useNotes.getState().joinHolds).toBe(1));
+    await waitFor(() => expect(useNotes.getState().vaults.map((v) => v.id)).toEqual([2]));
+    expect(useNotes.getState().vaultId).toBeNull();
+    expect(screen.getByRole("region", { name: "Join a vault on a hub" })).toBeTruthy();
+
+    await waitFor(() => expect(mock.calls.filter((c) => c.method === "sync.join")).toHaveLength(2));
+    await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
+    expect(useNotes.getState().vaultId).toBe(2);
+    expect(mock.calls.filter((c) => c.method === "vault.remove")).toHaveLength(1);
+    expect(useNotes.getState().joinHolds).toBe(0);
   });
 
   it("makes no vault when the manager closes while it waits for the approval", async () => {
@@ -243,7 +277,7 @@ describe("vaults from the app", () => {
     fireEvent.keyDown(manager(), { key: "Escape" });
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Manage vaults" })).toBeNull());
-    await waitFor(() => expect(useNotes.getState().joinHold).toBe(false));
+    await waitFor(() => expect(useNotes.getState().joinHolds).toBe(0));
     expect(mock.calls.some((c) => c.method === "vault.add")).toBe(false);
     expect(mock.calls.some((c) => c.method === "sync.join")).toBe(false);
   });

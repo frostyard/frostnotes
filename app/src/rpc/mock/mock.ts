@@ -101,6 +101,8 @@ export class MockTransport implements Transport {
   private joinRefusals: number;
   private removeRefusals: number;
   private pendingPairings: number;
+  private pairingGate: Promise<void> | null = null;
+  private openPairingGate: (() => void) | null = null;
   private seq = 0;
   private readonly log: Event[] = [];
   private hello = false;
@@ -194,6 +196,20 @@ export class MockTransport implements Transport {
   /** refuseJoins makes the next n sync.join calls answer revoked, as a hub that refused the device's token. */
   refuseJoins(n: number): void {
     this.joinRefusals = n;
+  }
+
+  /** holdPairings makes sync.paired wait until releasePairings, as notesd's long poll waits. */
+  holdPairings(): void {
+    this.pairingGate = new Promise<void>((resolve) => {
+      this.openPairingGate = () => resolve();
+    });
+  }
+
+  /** releasePairings answers the sync.paired calls that waited, as pending. */
+  releasePairings(): void {
+    this.openPairingGate?.();
+    this.pairingGate = null;
+    this.openPairingGate = null;
   }
 
   /** syncStatus is a synced vault's state as notesd reports it. */
@@ -483,6 +499,10 @@ export class MockTransport implements Transport {
         const url = this.pairings.get(String(p.pairing));
         if (url === undefined) {
           throw new RPCError(ErrorCode.notFound, `pairing ${String(p.pairing)} does not exist`);
+        }
+        if (this.pairingGate !== null) {
+          const waiting: PairResult = { state: "pending", hub: HUB_ID };
+          return this.pairingGate.then(() => waiting);
         }
         if (this.opts.pairingExpired) {
           const expired: PairResult = { state: "expired", hub: HUB_ID };
