@@ -1171,7 +1171,7 @@ Result: none (`null`).
 
 ### `rpc.shutdown`
 
-Stop notesd as SIGTERM does: it answers, finishes the requests in hand, stops the vaults and sync, closes the store, releases the data directory's lock and exits 0. The Flatpak's launcher calls it to replace an older build (ADR-0032).
+Stop notesd as SIGTERM does: it answers, cancels the requests in hand and waits for them to return, stops the vaults and sync, closes the store, releases the data directory's lock and exits 0. The Flatpak's launcher calls it to replace an older build (ADR-0032).
 
 Callers: `local`.
 
