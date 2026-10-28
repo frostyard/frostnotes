@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -19,6 +18,12 @@ const (
 	lockName    = "background.lock"
 )
 
+// failureName is the name of the failure of generation gen, as the helper
+// writes it.
+func failureName(gen string) string {
+	return "background-failure-" + gen + ".json"
+}
+
 // helperAnswer is the part of the helper's outcome that these tests read.
 type helperAnswer struct {
 	Generation *int    `json:"generation"`
@@ -27,11 +32,9 @@ type helperAnswer struct {
 
 // runHelper runs the request helper with XDG_STATE_HOME and XDG_CONFIG_HOME
 // at fresh temporary directories, and with a lock it cannot take: the lock's
-// path is a directory, so the helper's open of it fails. counter is the
-// counter file's content, or "" for no file; answer is the outcome file's
-// content, or "" for no file. It returns the outcome file's path and the
-// helper's output.
-func runHelper(t *testing.T, counter, answer string) (string, string) {
+// path is a directory, so the helper's open of it fails. files are written
+// in the app's state directory before the run. It answers that directory.
+func runHelper(t *testing.T, files map[string]string) string {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is not installed")
@@ -48,74 +51,96 @@ func runHelper(t *testing.T, counter, answer string) (string, string) {
 	if err := os.Mkdir(filepath.Join(dir, lockName), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if counter != "" {
-		write(t, filepath.Join(dir, counterName), counter)
-	}
-	path := filepath.Join(dir, answerName)
-	if answer != "" {
-		write(t, path, answer)
+	for name, content := range files {
+		write(t, filepath.Join(dir, name), content)
 	}
 	cmd := exec.Command("python3", script)
 	cmd.Env = append(os.Environ(), "XDG_STATE_HOME="+state, "XDG_CONFIG_HOME="+config)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("the helper did not exit 0: %v\n%s", err, out)
 	}
-	return path, string(out)
+	return dir
 }
 
-// readAnswer decodes the outcome file the helper left.
-func readAnswer(t *testing.T, path string) helperAnswer {
+// readFile answers the content of the file name in dir, or fails the test.
+func readFile(t *testing.T, dir, name string) string {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {
 		t.Fatal(err)
 	}
+	return string(data)
+}
+
+// readAnswer decodes the outcome file name in dir.
+func readAnswer(t *testing.T, dir, name string) helperAnswer {
+	t.Helper()
 	var answer helperAnswer
-	if err := json.Unmarshal(data, &answer); err != nil {
-		t.Fatalf("%s is not JSON: %v\n%s", path, err, data)
+	if err := json.Unmarshal([]byte(readFile(t, dir, name)), &answer); err != nil {
+		t.Fatalf("%s is not JSON: %v", name, err)
 	}
 	return answer
 }
 
-// A helper that cannot take the lock must not replace an answer whose
-// generation is at least the counter it read: the app waits for such an
-// answer, and an older failure would leave it on "Asking the desktop…".
-func TestBackgroundHelperKeepsANewerAnswer(t *testing.T) {
+// checkFailure fails the test unless the failure name in dir has generation
+// gen and an error.
+func checkFailure(t *testing.T, dir, name string, gen int) {
+	t.Helper()
+	answer := readAnswer(t, dir, name)
+	if answer.Generation == nil || *answer.Generation != gen {
+		t.Errorf("%s has generation %v, want %d", name, answer.Generation, gen)
+	}
+	if answer.Error == nil {
+		t.Errorf("%s has no error", name)
+	}
+}
+
+// checkGone fails the test while the file name is in dir.
+func checkGone(t *testing.T, dir, name string) {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+		t.Errorf("%s is still there: %v", name, err)
+	}
+}
+
+// A helper that cannot take the lock never writes background.json, so a
+// newer answer stays the one the app waits for. Its own failure goes beside
+// that answer, with the counter it read.
+func TestBackgroundHelperWritesAFailureBesideANewerAnswer(t *testing.T) {
 	const answer = `{"generation": 2, "response": 0, "error": null}`
-	path, out := runHelper(t, "2\n", answer)
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
+	dir := runHelper(t, map[string]string{counterName: "2\n", answerName: answer})
+	if got := readFile(t, dir, answerName); got != answer {
+		t.Errorf("the helper rewrote the answer:\n%s", got)
 	}
-	if string(got) != answer {
-		t.Errorf("the helper rewrote the newer answer:\n%s", got)
-	}
-	if !strings.Contains(out, "keeps the newer answer") {
-		t.Errorf("the helper does not log that it kept the answer:\n%s", out)
-	}
+	checkFailure(t, dir, failureName("2"), 2)
 }
 
-// An answer about an older setting stays no answer to the new one, so the
-// failure replaces it, with the counter read at the write.
-func TestBackgroundHelperReplacesAnOlderAnswer(t *testing.T) {
-	path, _ := runHelper(t, "2\n", `{"generation": 1, "response": 2, "error": null}`)
-	answer := readAnswer(t, path)
-	if answer.Generation == nil || *answer.Generation != 2 {
-		t.Errorf("generation is not 2: %v", answer.Generation)
+// An answer about an older setting does not answer the new one, and the
+// helper still leaves it alone: the shell shows the newer failure instead.
+func TestBackgroundHelperWritesAFailureBesideAnOlderAnswer(t *testing.T) {
+	const answer = `{"generation": 1, "response": 2, "error": null}`
+	dir := runHelper(t, map[string]string{counterName: "2\n", answerName: answer})
+	if got := readFile(t, dir, answerName); got != answer {
+		t.Errorf("the helper rewrote the answer:\n%s", got)
 	}
-	if answer.Error == nil {
-		t.Error("the answer has no error")
-	}
+	checkFailure(t, dir, failureName("2"), 2)
 }
 
-func TestBackgroundHelperWritesAFailureWithoutAnAnswer(t *testing.T) {
-	path, _ := runHelper(t, "3\n", "")
-	answer := readAnswer(t, path)
-	if answer.Generation == nil || *answer.Generation != 3 {
-		t.Errorf("generation is not 3: %v", answer.Generation)
-	}
-	if answer.Error == nil {
-		t.Error("the answer has no error")
+// The failures of the lower generations answer nothing that this helper's
+// failure does not, so it removes them. A name that is not of their form is
+// no failure, and stays.
+func TestBackgroundHelperRemovesTheFailuresBelowItsGeneration(t *testing.T) {
+	dir := runHelper(t, map[string]string{
+		counterName:                 "3\n",
+		failureName("1"):            `{"generation": 1, "error": "no lock"}`,
+		failureName("2"):            `{"generation": 2, "error": "no lock"}`,
+		"background-failure-x.json": `{"generation": 9, "error": "no lock"}`,
+	})
+	checkFailure(t, dir, failureName("3"), 3)
+	checkGone(t, dir, failureName("1"))
+	checkGone(t, dir, failureName("2"))
+	checkGone(t, dir, answerName)
+	if got := readFile(t, dir, "background-failure-x.json"); got == "" {
+		t.Error("the helper removed a file that is no failure")
 	}
 }

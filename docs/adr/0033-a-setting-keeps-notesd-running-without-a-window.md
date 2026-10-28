@@ -100,14 +100,18 @@ the launcher both act on it.
   lock, immediately before it reads the file, and writes it into its answer;
   the answer the app reads is the last request's. A failure reads the
   counter when it writes its outcome. A helper that cannot take the lock
-  reads the counter too, and it does not replace an answer whose generation
-  is at least that counter.
+  reads the counter too, and it never writes `background.json`: it writes
+  `background-failure-<generation>.json` in the same directory instead, and
+  removes the failures of lower generations. So it can replace no newer
+  answer. The shell reads the answer and those failures, and shows the newer
+  of the two; an answer wins a tie. A helper that did take the lock removes,
+  after it wrote its answer, the failures up to its generation.
   This holds because the counter is bumped after the setting is written, and
   a helper reads the counter before it reads the setting, under the lock:
   so an answer with `generation >= awaited` read the new setting, and a
   later helper's answer has a generation at least as high. A failure records
   the generation when it fails, so it ends the wait too, unless a newer
-  answer is already in the file.
+  answer or failure is already there.
   A refusal (response 1, or response 0 with the background permission
   false) says how to allow it. A request with no answer, or with response
   2, says that the desktop did not answer, with the helper's error when it
@@ -161,9 +165,12 @@ the launcher both act on it.
   starts no notesd and exits 0 while the setting is off; Rust unit tests
   cover the paths, the file and the answer's parse; and Vitest tests cover
   the row's wait, with fake timers. The helper's lock failure has a test in
-  `internal/packagecheck` (`TestBackgroundHelperKeepsANewerAnswer`,
-  `TestBackgroundHelperReplacesAnOlderAnswer` and
-  `TestBackgroundHelperWritesAFailureWithoutAnAnswer`); the second request
+  `internal/packagecheck` (`TestBackgroundHelperWritesAFailureBesideANewerAnswer`,
+  `TestBackgroundHelperWritesAFailureBesideAnOlderAnswer` and
+  `TestBackgroundHelperRemovesTheFailuresBelowItsGeneration`), and the
+  shell's choice of the newer message has Rust unit tests
+  (`the_window_shows_the_newer_of_the_answer_and_a_failure` and
+  `an_answer_wins_a_tie_with_a_failure`); the second request
   still has none. Plan 0008's Phase 3, item 4 in each
   state, is still to run on a real desktop.
 

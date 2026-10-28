@@ -18,10 +18,13 @@
 //! `frostnotes-request-background` writes `$XDG_STATE_HOME/frostnotes/background.json`
 //! (packaging/flatpak/request-background.py), and `background_get` reads it,
 //! so the window can show whether the desktop allows background activity.
+//! A helper that cannot take the lock writes no answer: it writes
+//! `background-failure-<generation>.json` beside the answer instead, and
+//! `background_get` shows the newer of the two, an answer winning a tie.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -39,6 +42,13 @@ const OFF_FILE: &str = "background-off";
 /// ANSWER_FILE holds the Background portal's last answer, written by the
 /// helper.
 const ANSWER_FILE: &str = "background.json";
+
+/// FAILURE_PREFIX starts the name of an unlocked helper's failure:
+/// background-failure-<generation>.json.
+const FAILURE_PREFIX: &str = "background-failure-";
+
+/// FAILURE_SUFFIX ends it. A name of any other form is no failure.
+const FAILURE_SUFFIX: &str = ".json";
 
 /// LOG_FILE is the helper's output, as the launcher's request writes it.
 const LOG_FILE: &str = "background.log";
@@ -61,8 +71,8 @@ const SHUTDOWN_WAIT: Duration = Duration::from_secs(35);
 /// POLL is how often the exit checks whether `notesctl` has returned.
 const POLL: Duration = Duration::from_millis(100);
 
-/// PortalAnswer is the Background portal's last answer, as the helper wrote
-/// it to background.json.
+/// PortalAnswer is the portal's last message, as the helper wrote it to
+/// background.json, or to the file of a failure of its own.
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PortalAnswer {
@@ -92,8 +102,9 @@ pub struct Background {
     /// On: notesd keeps syncing after the last window closes, and the
     /// portal may start it at login.
     pub keep_running: bool,
-    /// The portal's last answer; none before the first, or when the file
-    /// cannot be read.
+    /// The portal's last message: the helper's answer, or the failure of a
+    /// helper that could not take the lock; none before the first, or when
+    /// neither file can be read.
     pub portal: Option<PortalAnswer>,
     /// This change's number: the counter as this call left it. An answer
     /// that read the counter at or after it is about this setting; none from
@@ -153,14 +164,64 @@ fn set(
     Ok(background)
 }
 
-/// state reads the setting and the portal's last answer.
+/// state reads the setting and the portal's last message: the helper's own
+/// answer, or the failure of a helper that could not take the lock.
 fn state(getenv: &impl Fn(&str) -> Option<OsString>) -> Background {
     let off = off_file(getenv).is_ok_and(|p| p.exists());
-    let portal = state_dir(getenv)
-        .ok()
-        .and_then(|d| std::fs::read_to_string(d.join(ANSWER_FILE)).ok())
-        .and_then(|text| parse_portal(&text));
-    Background { keep_running: !off, portal, generation: None }
+    let dir = state_dir(getenv).ok();
+    let answer = dir.as_deref().and_then(read_answer);
+    let failure = dir.as_deref().and_then(newest_failure);
+    Background { keep_running: !off, portal: newest(answer, failure), generation: None }
+}
+
+/// read_answer is the helper's answer in dir, if it can be read.
+fn read_answer(dir: &Path) -> Option<PortalAnswer> {
+    let text = std::fs::read_to_string(dir.join(ANSWER_FILE)).ok()?;
+    parse_portal(&text)
+}
+
+/// newest_failure is the failure of the highest generation in dir: a helper
+/// that could not take the lock wrote it.
+fn newest_failure(dir: &Path) -> Option<PortalAnswer> {
+    let newest = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| failure_number(&entry.file_name()))
+        .max()?;
+    let text = std::fs::read_to_string(dir.join(failure_file(newest))).ok()?;
+    parse_portal(&text)
+}
+
+/// failure_number is the generation in a failure's file name, or none for a
+/// name of any other form: only background-failure-<digits>.json counts.
+fn failure_number(name: &OsStr) -> Option<u64> {
+    let name = name.to_str()?;
+    let digits = name.strip_prefix(FAILURE_PREFIX)?.strip_suffix(FAILURE_SUFFIX)?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+/// failure_file is the name of the failure of generation generation.
+fn failure_file(generation: u64) -> String {
+    format!("{FAILURE_PREFIX}{generation}{FAILURE_SUFFIX}")
+}
+
+/// newest is the message the window shows: the newer of the helper's answer
+/// and a failure, with an answer winning a tie. A failure without a
+/// generation is no answer at all.
+fn newest(answer: Option<PortalAnswer>, failure: Option<PortalAnswer>) -> Option<PortalAnswer> {
+    let failure_wins = match (&answer, &failure) {
+        (None, Some(f)) => f.generation.is_some(),
+        (Some(a), Some(f)) => match (f.generation, a.generation) {
+            (Some(f), Some(a)) => f > a,
+            (Some(_), None) => true,
+            _ => false,
+        },
+        _ => false,
+    };
+    if failure_wins { failure } else { answer }
 }
 
 /// ask starts the helper in the background, with no arguments and its output
@@ -548,5 +609,70 @@ mod tests {
         for text in ["", "null", "[1]", r#"{"background": "yes"}"#, r#"{"response": 300}"#] {
             assert_eq!(parse_portal(text), None, "{text:?}");
         }
+    }
+
+    /// answer is a parsed answer of generation generation.
+    fn answer(generation: Option<u64>) -> PortalAnswer {
+        PortalAnswer { generation, ..PortalAnswer::default() }
+    }
+
+    #[test]
+    fn an_answer_wins_a_tie_with_a_failure() {
+        // The answer of generation 2 is newer than a failure of 1, and it
+        // wins a tie with the failure of its own generation.
+        assert_eq!(newest(Some(answer(Some(2))), Some(answer(Some(1)))), Some(answer(Some(2))));
+        assert_eq!(newest(Some(answer(Some(2))), Some(answer(Some(2)))), Some(answer(Some(2))));
+        // A failure of a higher generation is the newer message.
+        assert_eq!(newest(Some(answer(Some(1))), Some(answer(Some(2)))), Some(answer(Some(2))));
+        // Without an answer, a failure with a generation is shown.
+        assert_eq!(newest(None, Some(answer(Some(3)))), Some(answer(Some(3))));
+        // A failure without a generation is no answer to anything.
+        assert_eq!(newest(None, Some(answer(None))), None);
+        assert_eq!(newest(Some(answer(None)), Some(answer(Some(1)))), Some(answer(Some(1))));
+        assert_eq!(newest(Some(answer(None)), Some(answer(None))), Some(answer(None)));
+        assert_eq!(newest(Some(answer(Some(1))), None), Some(answer(Some(1))));
+        assert_eq!(newest(None, None), None);
+    }
+
+    #[test]
+    fn only_a_failures_exact_name_counts() {
+        assert_eq!(failure_number(OsStr::new("background-failure-2.json")), Some(2));
+        assert_eq!(failure_number(OsStr::new("background-failure-0.json")), Some(0));
+        assert_eq!(failure_number(OsStr::new("background-failure-x.json")), None);
+        assert_eq!(failure_number(OsStr::new("background-failure-2.json.tmp")), None);
+        assert_eq!(failure_number(OsStr::new("background-failure-.json")), None);
+        assert_eq!(failure_number(OsStr::new("background.json")), None);
+        assert_eq!(failure_number(OsStr::new("background-failure-2.jsonx")), None);
+    }
+
+    #[test]
+    fn the_window_shows_the_newer_of_the_answer_and_a_failure() {
+        let dir = scratch("state-failure");
+        let base = dir.to_str().unwrap();
+        let vars = [("XDG_CONFIG_HOME", base), ("XDG_STATE_HOME", base)];
+        let get = env(&vars);
+        let state_path = state_dir(&get).unwrap();
+        fs::create_dir_all(&state_path).unwrap();
+        let failure = |generation: u64, error: &str| {
+            let generation = generation.to_string();
+            let error = format!("\"{error}\"");
+            json(&[("generation", generation.as_str()), ("error", error.as_str())])
+        };
+        fs::write(state_path.join(ANSWER_FILE), json(&[("generation", "2")])).unwrap();
+        fs::write(state_path.join(failure_file(1)), failure(1, "one")).unwrap();
+        fs::write(state_path.join(failure_file(3)), failure(3, "three")).unwrap();
+        // The newest failure, 3, is above the answer's 2, so it shows.
+        let got = state(&get).portal.unwrap();
+        assert_eq!((got.generation, got.error.as_deref()), (Some(3), Some("three")));
+        // An answer of a higher generation wins, and so does one of the
+        // failure's own generation: a tie goes to the answer.
+        fs::write(state_path.join(ANSWER_FILE), json(&[("generation", "4")])).unwrap();
+        assert_eq!(state(&get).portal.unwrap().error, None);
+        fs::write(state_path.join(ANSWER_FILE), json(&[("generation", "3")])).unwrap();
+        assert_eq!(state(&get).portal.unwrap().error, None);
+        // With no answer, the failure is the message.
+        fs::remove_file(state_path.join(ANSWER_FILE)).unwrap();
+        assert_eq!(state(&get).portal.unwrap().generation, Some(3));
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
