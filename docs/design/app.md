@@ -780,10 +780,20 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   and answers the new number. Each request of the helper reads the counter
   under its lock, before it reads the file, so `generation >= awaited` marks
   an answer about the new setting, from this change's helper or from a later
-  one; a failure records the counter too. The shell reads that file, and the
-  settings' Background section (`app/src/app/Settings.tsx`'s
+  one. A failure reads the counter too, at the moment it writes. A helper
+  that cannot take the lock never writes `background.json`, so it can
+  replace no newer answer: it writes its failure to
+  `background-failure-<generation>.json` in the same directory, and, after
+  it wrote that file, removes the failures of lower generations. When that
+  write fails, the older failures stay. The shell reads that file and those
+  failures, and shows the newer of the two; an answer wins a tie. A helper
+  that did take the lock removes, after it wrote its answer, the failures
+  up to that answer's generation. A file name counts only in the exact form
+  `background-failure-<digits>.json`. The settings' Background section
+  (`app/src/app/Settings.tsx`'s
   `backgroundSection`, over `app/src/data/background.ts`) shows the switch
-  and, from that file, what the desktop allows, refused, or did not answer.
+  and, from those files, what the desktop allows, refused, or did not
+  answer.
   While the dialog is open the window reads the file again every 2 s, with
   no limit, so a late answer shows; while no answer has `generation >=
   awaited`, the row says "Asking the desktop…". The section is drawn only

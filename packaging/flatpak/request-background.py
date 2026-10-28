@@ -19,16 +19,23 @@ two helpers never undo each other. A setting that changes while it waits
 for the portal makes it ask again, at most 3 times in all: the answer that
 the app reads is the last request's.
 
-Whatever happens, the helper writes the outcome to
-`$XDG_STATE_HOME/frostnotes/background.json` for the app to read, and
-exits 0. A missing portal or a refusal changes nothing else for the app.
+Whatever happens, the helper writes its outcome to
+`$XDG_STATE_HOME/frostnotes/` for the app to read, and exits 0: an answer
+to `background.json`, and a failure that could not take the lock to
+`background-failure-<generation>.json`. A missing portal or a refusal
+changes nothing else for the app.
 
 Each request reads the shell's counter of changes as `generation`, under
 its lock and immediately before it reads the setting; the last request's is
-the one in the outcome, and so is the counter at the moment of a failure.
-The app compares that number with the one its own change left, so it can
-tell an answer about the new setting from an answer about an old one
-(docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
+the one in the outcome. A failure reads the counter when it writes. A
+failure that cannot take the lock never writes `background.json`, so it
+cannot replace a newer answer: it writes `background-failure-<generation>.json`
+beside the answer, and removes the failures of lower generations. The app
+shows the newest of the two, and an answer wins a tie. A helper that did
+take the lock removes, after it wrote its answer, the failures up to that
+answer's generation. The app compares those numbers with the one its own
+change left, so it can tell an answer about the new setting from an answer
+about an old one (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
 """
 
 import fcntl
@@ -49,6 +56,8 @@ PORTAL_PATH = "/org/freedesktop/portal/desktop"
 OUTCOME_NAME = "background.json"
 LOCK_NAME = "background.lock"
 GEN_NAME = "background-gen"
+FAILURE_PREFIX = "background-failure-"
+FAILURE_SUFFIX = ".json"
 
 
 def log(message):
@@ -99,10 +108,51 @@ def lock():
     return handle
 
 
-def write_outcome(outcome):
-    """Write the outcome atomically: the app reads the file at any time."""
+def failure_name(gen):
+    """The name of the failure of generation gen."""
+    return f"{FAILURE_PREFIX}{gen}{FAILURE_SUFFIX}"
+
+
+def failure_generation(name):
+    """The generation of a failure's name, or None for any other name.
+
+    Only the exact form `background-failure-<digits>.json` counts.
+    """
+    if not name.startswith(FAILURE_PREFIX) or not name.endswith(FAILURE_SUFFIX):
+        return None
+    digits = name[len(FAILURE_PREFIX) : -len(FAILURE_SUFFIX)]
+    if not digits.isascii() or not digits.isdigit():
+        return None
+    return int(digits)
+
+
+def remove_failures(up_to):
+    """Remove the failures of the generations up to up_to, best effort.
+
+    Neither a failure that no longer exists nor one that cannot be removed
+    changes what the app must know.
+    """
+    try:
+        names = os.listdir(state_dir())
+    except OSError:
+        return
+    for name in names:
+        gen = failure_generation(name)
+        if gen is None or gen > up_to:
+            continue
+        try:
+            os.unlink(os.path.join(state_dir(), name))
+        except OSError:
+            pass
+
+
+def write_outcome(outcome, name=OUTCOME_NAME):
+    """Write the outcome atomically, and answer whether it is there.
+
+    The app reads the file at any time.
+    """
     directory = state_dir()
-    path = os.path.join(directory, OUTCOME_NAME)
+    path = os.path.join(directory, name)
     temp = None
     try:
         os.makedirs(directory, exist_ok=True)
@@ -116,12 +166,14 @@ def write_outcome(outcome):
         temp = None
     except OSError as err:
         log(f"cannot write {path}: {err}")
+        return False
     finally:
         if temp is not None:
             try:
                 os.unlink(temp)
             except OSError:
                 pass
+    return True
 
 
 def fail(outcome, message):
@@ -244,11 +296,10 @@ def ask(outcome, autostart):
 
 def main():
     # A placeholder, for the paths that cannot ask: the setting is read
-    # only under the lock.
+    # only under the lock, and each failure reads the counter when it writes.
     outcome = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        # A failure still carries the counter, read without the lock here.
-        "generation": generation(),
+        "generation": 0,
         "autostartRequested": True,
         "response": None,
         "background": None,
@@ -258,10 +309,18 @@ def main():
     try:
         handle = lock()
     except OSError as err:
-        # Without the lock the helpers could undo each other; the app still
-        # gets an answer it can show.
+        # Without the lock the helpers could undo each other. This helper
+        # never writes background.json, so it cannot replace a newer
+        # answer: it writes its own failure beside the answer, and the app
+        # shows whichever is newer (ADR-0033).
         fail(outcome, f"cannot lock {os.path.join(state_dir(), LOCK_NAME)}: {err}")
-        write_outcome(outcome)
+        # The counter, read now and not when the helper started.
+        outcome["generation"] = generation()
+        gen = outcome["generation"]
+        if write_outcome(outcome, failure_name(gen)):
+            # Only now: when the write failed, the older failures hold the
+            # last message the app has, and they must stay.
+            remove_failures(gen - 1)
         return 0
     try:
         for _ in range(MAX_REQUESTS):
@@ -276,7 +335,10 @@ def main():
         fail(outcome, f"unexpected failure: {err}")
         outcome["generation"] = generation()
     finally:
-        write_outcome(outcome)
+        if write_outcome(outcome):
+            # An answer wins over a failure of the same or a lower
+            # generation, so those failures are never needed again.
+            remove_failures(outcome["generation"])
         handle.close()
     return 0
 
