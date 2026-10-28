@@ -41,6 +41,8 @@ export function refusal(err: unknown, path: string): string {
     if (text.endsWith("already exists")) return `${path} already exists.`;
   }
   if (err instanceof RPCError && err.code === ErrorCode.invalidParams) {
+    // The Flatpak's file access does not include the folder: notesd names the cause and the fix.
+    if (text.startsWith("Frostnotes cannot ")) return text;
     // A new vault's parent (create), else the folder itself.
     if (text.startsWith("the folder to hold the vault") || text.endsWith("is not a folder")) {
       return `${path.slice(0, path.lastIndexOf("/")) || "/"} is not a folder.`;

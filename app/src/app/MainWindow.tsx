@@ -12,6 +12,7 @@ import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";
 import { feed } from "../data/events";
+import { type NotesdLog, readNotesdLog } from "../data/notesdLog";
 import { ask, openVaultManager } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
@@ -22,6 +23,7 @@ import { DocumentRegistry, DocumentsContext } from "../editor/registry";
 import { Ribbon } from "../features/chrome/Ribbon";
 import { TitleBar } from "../features/chrome/TitleBar";
 import { TitleBarEnd } from "../features/chrome/TitleBarEnd";
+import { NotesdCause } from "../features/connecting/NotesdCause";
 import { BottomBar } from "../features/mobile/BottomBar";
 import { Drawer } from "../features/mobile/Drawer";
 import { EditingToolbar } from "../features/mobile/EditingToolbar";
@@ -502,10 +504,31 @@ function keepUnsaved(docs: DocumentRegistry): () => void {
   };
 }
 
-/** Connecting stands in for MainWindow until notesd answers; the title bar stays usable. */
+/**
+ * Connecting stands in for MainWindow until notesd answers; the title bar
+ * stays usable. In the Flatpak, while the connection is lost it says why
+ * notesd is not running, from notesd.log's end (NotesdCause).
+ */
 export function Connecting() {
   const connection = useNotes((s) => s.connection);
   const maximized = useMaximized();
+  const [log, setLog] = useState<NotesdLog | null>(null);
+  const lost = connection.state === "lost";
+  useEffect(() => {
+    // Only while the connection is lost: a retry in flight, or a connection
+    // that came, shows no cause, and the next failure reads the log again.
+    if (!lost) {
+      setLog(null);
+      return;
+    }
+    let stale = false;
+    void readNotesdLog().then((read) => {
+      if (!stale) setLog(read);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [lost]);
   const text = connection.state === "lost" ? `Reconnecting to notesd… (${connection.reason})` : "Connecting to notesd…";
   return (
     <div className="flex h-full flex-col bg-window">
@@ -516,8 +539,12 @@ export function Connecting() {
         windowControls={isTauri()}
         onCommand={windowCommand}
       />
-      <div data-tauri-drag-region className="text-empty flex flex-1 items-center justify-center px-8 text-secondary">
+      <div
+        data-tauri-drag-region
+        className="text-empty flex flex-1 flex-col items-center justify-center gap-4 px-8 text-secondary"
+      >
         {text}
+        {lost && log && <NotesdCause log={log} />}
       </div>
       <StatusBar
         connection={connection}

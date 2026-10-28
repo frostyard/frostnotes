@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/sandbox"
 	"github.com/frostyard/frostnotes/internal/store"
 	"github.com/frostyard/frostnotes/internal/vault"
 )
@@ -17,6 +18,8 @@ import (
 type vaults struct {
 	db *store.DB
 	m  *vault.Manager
+	// sandbox holds the Flatpak's file grants; nil outside a Flatpak.
+	sandbox *sandbox.Grants
 }
 
 func (v vaults) List(ctx context.Context, _ *api.VaultListParams) ([]api.Vault, error) {
@@ -41,7 +44,7 @@ func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, err
 		return nil, api.InvalidParams("vault path %q is not absolute", p.Path)
 	}
 	create := p.Create != nil && *p.Create
-	path, err := vaultPath(p.Path, create)
+	path, err := v.vaultPath(p.Path, create)
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +70,10 @@ func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, err
 			if err := os.Mkdir(path, 0o755); errors.Is(err, fs.ErrExist) {
 				return api.Conflict("%s already exists", path)
 			} else if err != nil {
+				// The folder to grant is the one that holds the new vault.
+				if refused := v.refused(filepath.Dir(filepath.Clean(p.Path)), filepath.Dir(path), err); refused != nil {
+					return refused
+				}
 				return api.InvalidParams("make the vault's folder: %v", err)
 			}
 		}
@@ -113,15 +120,24 @@ func (v vaults) Reindex(ctx context.Context, p *api.VaultReindexParams) (*api.Sc
 
 // vaultPath resolves a vault's path through symlinks: the directory's
 // own, or for one to create, its parent's, which must be a directory,
-// while the directory itself must not exist yet.
-func vaultPath(p string, create bool) (string, error) {
-	p = sandboxHome(p, os.Lstat)
+// while the directory itself must not exist yet. Inside a Flatpak, a file
+// error on a path the sandbox's file access does not cover says so
+// (refused): for an existing vault the message names its folder, for one
+// to create the folder that holds it.
+func (v vaults) vaultPath(shown string, create bool) (string, error) {
+	p := sandboxHome(shown, os.Lstat)
 	if !create {
 		path, err := filepath.EvalSymlinks(p)
 		if err != nil {
+			if refused := v.refused(shown, p, err); refused != nil {
+				return "", refused
+			}
 			return "", api.InvalidParams("vault path %q: %v", p, err)
 		}
 		if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
+			if refused := v.refused(shown, path, err); refused != nil {
+				return "", refused
+			}
 			return "", api.InvalidParams("vault path %q is not a directory", p)
 		}
 		return path, nil
@@ -131,11 +147,21 @@ func vaultPath(p string, create bool) (string, error) {
 	if base == string(filepath.Separator) || base == "." {
 		return "", api.InvalidParams("vault path %q names no folder to make", p)
 	}
+	// A vault to create does not exist yet, and Flatpak mounts only paths
+	// that exist when the sandbox starts: the grant must name the folder
+	// that holds it, so a refusal names that folder.
+	shownParent := filepath.Dir(filepath.Clean(shown))
 	parent, err := filepath.EvalSymlinks(filepath.Dir(clean))
 	if err != nil {
+		if refused := v.refused(shownParent, filepath.Dir(clean), err); refused != nil {
+			return "", refused
+		}
 		return "", api.InvalidParams("the folder to hold the vault: %v", err)
 	}
 	if fi, err := os.Stat(parent); err != nil || !fi.IsDir() {
+		if refused := v.refused(shownParent, filepath.Dir(clean), err); refused != nil {
+			return "", refused
+		}
 		return "", api.InvalidParams("%s is not a folder", filepath.Dir(clean))
 	}
 	path := filepath.Join(parent, base)
@@ -143,6 +169,19 @@ func vaultPath(p string, create bool) (string, error) {
 		return "", api.Conflict("%s already exists", path)
 	}
 	return path, nil
+}
+
+// refused says why a file error on path (shown to the person as shown) is
+// the Flatpak's file access and not the folder: an invalidParams error that
+// names the path and the grant, or nil when the sandbox does not explain
+// err (outside a Flatpak, a path it covers, any other error).
+func (v vaults) refused(shown, path string, err error) error {
+	var e *sandbox.Error
+	if !errors.As(v.sandbox.Explain(path, err), &e) {
+		return nil
+	}
+	e.Path = shown
+	return api.InvalidParams("%s", e.Error())
 }
 
 // sandboxHome maps a path under /home to /var/home when the sandbox has

@@ -804,6 +804,61 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   (Snow, Fedora's atomic desktops), the host's `/home` does not exist in
   the sandbox, so notesd reads a vault path under `/home` as the same
   path under `/var/home` when only that exists.
+- **Refused permissions** say why in the window
+  ([plan 0008, G5](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review);
+  the texts are in [specs/ui.md](../specs/ui.md#connecting)):
+  - *No Flatpak portal.* The launcher's last act is a line in `notesd.log`:
+    `frostnotes: notesd did not start through the Flatpak portal
+    (flatpak-spawn); see $state/notesd.log`. While the window cannot reach
+    notesd it calls the shell's command `notesd_log` (`src-tauri/src/notesd_log.rs`),
+    which answers only when `FLATPAK_ID` is the app ID. It reads at most
+    the last 8 KiB of the log and returns the log's path, its last line
+    with text and whether that line starts with the launcher's sentence
+    (`internal/packagecheck` reads both `notesd_log.rs` and
+    `frostnotes.sh`, so a change of the sentence on either side fails it;
+    the Flatpak tests the crate from `app/` alone, so a Rust test cannot
+    read the launcher). The window (`Connecting`, `features/connecting/NotesdCause.tsx`)
+    then says that the Flatpak portal did not start notesd, and what to
+    check; for any other last line it shows the line. It always names the
+    log. Outside the Flatpak, and in lodge's web build, it shows nothing
+    more. Only the window that has never reached notesd shows it; a window
+    that lost notesd later keeps its work, and the status bar says that it
+    is reconnecting.
+  - *A narrowed `--filesystem`.* A vault outside the sandbox's file access
+    fails with a plain `no such file or directory` or `permission denied`.
+    `internal/sandbox` reads `[Context] filesystems=` of `/.flatpak-info`
+    as a GLib key-file string list (`\;` is a literal semicolon; `\\`,
+    `\s`, `\n`, `\t` and `\r` are escapes) and says how far a path is
+    covered: `host`, `home`, `~/x`, absolute paths, `xdg-*` with a subpath,
+    `:ro`, `:rw`, `:create` and `!` negations; the deepest entry that holds
+    a path decides, a later entry beating an earlier one. It guesses
+    nothing. The user's folders (`xdg-documents` and the like) come from
+    `user-dirs.dirs` in `$XDG_CONFIG_HOME` (in a Flatpak, the copy that
+    Flatpak places in `~/.var/app/<ID>/config`), then in `~/.config`;
+    `xdg-data`, `xdg-config`, `xdg-cache` and `xdg-state` are the host's
+    (`HOST_XDG_*_HOME`) or the XDG defaults under the home. A bad escape,
+    an unknown token or modifier, or a folder that cannot be resolved makes
+    the grants *uncertain*, and then no refusal is explained: coverage
+    cannot be disproved. Nor is a path that Flatpak always exposes: the
+    app's own `~/.var/app/<ID>`, `/app`, `/usr`, `/etc`, `/tmp`,
+    `/var/tmp`, `/run` (except `/run/media`), `/proc`, `/sys`, `/dev`, the
+    runtime directory and the document portal's mount in it. When
+    `vault.add` (Open folder as vault and Create new vault) fails with `ENOENT`, `EACCES` or `EPERM` on a path the grants
+    do not cover, or with `EROFS` on one they cover at most read only,
+    notesd answers `invalidParams` with "Frostnotes cannot reach PATH
+    because the Flatpak's file access does not include it; grant it with:
+    `flatpak override --user --filesystem=PATH org.frostyard.Frostnotes`,
+    then log out and in (notesd keeps its sandbox until then)." PATH is
+    the vault's own folder for an existing vault, and the folder that
+    holds the new vault when `create` is set: the new folder does not
+    exist yet, and Flatpak mounts only paths that exist when the sandbox
+    starts, so a grant of the new path alone would not let the user create
+    it after the next login. A path the grants cover keeps its plain error. The app shows that message as the
+    notice, as it is, with no action: the message holds a path that the
+    person chose, so the app takes no command out of it. A vault that was
+    registered and then left outside the grants fails its scan, not
+    `vault.add`; the window shows no scan error yet, so that case stays in
+    `notesd.log`.
 - **The build** is offline: `make flatpak-sources` writes `cargo-sources.json`,
   `node-sources.json` and `go-sources.json` from the lockfiles (with a
   patched node generator and hash-pinned Python dependencies), and the

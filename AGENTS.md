@@ -105,6 +105,9 @@ file a step names before writing its frostnotes counterpart.
   (`make m3-evidence`); `internal/webevidence`: M4's, Firefox ESR through
   geckodriver in lodge's development build (`make m4-evidence`,
   `scripts/lodge-e2e.sh`).
+- `internal/sandbox`: a Flatpak sandbox's file grants (`/.flatpak-info`) and the
+  explanation of a file error they cause; the engine uses it for `vault.add`
+  ([design/app.md](docs/design/app.md#the-flatpak)).
 - `internal/mcpserver`: the MCP tools `notesctl mcp` serves
   ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
   only package that imports the MCP SDK.
