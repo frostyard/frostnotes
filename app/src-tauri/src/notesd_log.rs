@@ -17,7 +17,9 @@ const TAIL: u64 = 8 * 1024;
 
 /// PORTAL_FAILURE starts the line the launcher appends when no notesd
 /// answers after flatpak-spawn. The launcher's own line continues with
-/// "; see $state/notesd.log"; a test pins this prefix to the launcher.
+/// "; see $state/notesd.log". internal/packagecheck's
+/// TestPortalFailureLineMatchesTheApp pins this prefix to the launcher: the
+/// Flatpak's build of this crate has no packaging/ tree to read.
 const PORTAL_FAILURE: &str = "frostnotes: notesd did not start through the Flatpak portal (flatpak-spawn)";
 
 /// NotesdLog is what the window learns from notesd.log.
@@ -77,15 +79,6 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("frostnotes-log-{name}-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         dir
-    }
-
-    // The launcher is a shell script that another change may rewrite: its
-    // line must stay the one the window recognises.
-    #[test]
-    fn the_prefix_is_the_launchers_line() {
-        let launcher = include_str!("../../../packaging/flatpak/frostnotes.sh");
-        let line = format!("msg=\"{PORTAL_FAILURE}; see $state/notesd.log\"");
-        assert!(launcher.contains(&line), "frostnotes.sh no longer holds {line}");
     }
 
     #[test]

@@ -768,9 +768,11 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
     notesd it calls the shell's command `notesd_log` (`src-tauri/src/notesd_log.rs`),
     which answers only when `FLATPAK_ID` is the app ID. It reads at most
     the last 8 KiB of the log and returns the log's path, its last line
-    with text and whether that line starts with the launcher's sentence (a
-    Rust test reads `frostnotes.sh`, so a change of the sentence fails
-    it). The window (`Connecting`, `features/connecting/NotesdCause.tsx`)
+    with text and whether that line starts with the launcher's sentence
+    (`internal/packagecheck` reads both `notesd_log.rs` and
+    `frostnotes.sh`, so a change of the sentence on either side fails it;
+    the Flatpak tests the crate from `app/` alone, so a Rust test cannot
+    read the launcher). The window (`Connecting`, `features/connecting/NotesdCause.tsx`)
     then says that the Flatpak portal did not start notesd, and what to
     check; for any other last line it shows the line. It always names the
     log. Outside the Flatpak, and in lodge's web build, it shows nothing
