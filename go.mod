@@ -6,7 +6,7 @@ toolchain go1.27.3
 
 require (
 	github.com/frostyard/clix v0.4.0
-	github.com/frostyard/lodge/kit v0.3.0
+	github.com/frostyard/lodge/kit v0.3.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
