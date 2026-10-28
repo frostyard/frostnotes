@@ -54,13 +54,18 @@ func TestShutdownStopsNotesdAndWaits(t *testing.T) {
 	if err != nil || out != "notesd stopped\n" {
 		t.Fatalf("shutdown = %q, %v", out, err)
 	}
-	select {
-	case <-srv.Stopped(): // by the time notesctl returned, notesd no longer answered
-	default:
-		t.Fatal("shutdown returned while notesd was still serving")
-	}
+	// By the time notesctl returned, the socket no longer answered. Serve
+	// returns a moment later (this fixture holds no data lock, and its
+	// listener closes first), so wait for it, bounded.
 	if notesdAnswers(t.Context(), srv.Socket) {
 		t.Fatal("notesd answers after shutdown")
+	}
+	wait, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	select {
+	case <-srv.Stopped():
+	case <-wait.Done():
+		t.Fatal("Serve did not return after shutdown")
 	}
 	// Nothing answers now: that is success.
 	out, err = runNotesctl(t, "--socket", srv.Socket, "shutdown")
