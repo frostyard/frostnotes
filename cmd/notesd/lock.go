@@ -6,16 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/frostyard/frostnotes/internal/config"
 )
 
-// lockDataDir takes an exclusive lock on dir/notesd.lock and returns the
+// lockDataDir takes an exclusive lock on dir/notesd.lock (config.LockFile) and returns the
 // open file; the lock lasts until the file is closed or the process ends,
 // even by a crash. A second notesd on the same data directory fails here
 // at once, as the socket's "already listening" check cannot stop one that
 // uses another socket, such as one in another Flatpak sandbox
 // (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md).
 func lockDataDir(dir string) (*os.File, error) {
-	f, err := os.OpenFile(filepath.Join(dir, "notesd.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	f, err := os.OpenFile(filepath.Join(dir, config.LockFile), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}

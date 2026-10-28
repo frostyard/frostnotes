@@ -1169,6 +1169,16 @@ No params.
 
 Result: none (`null`).
 
+### `rpc.shutdown`
+
+Stop notesd as SIGTERM does: it answers, cancels the requests in hand and waits for their handlers to return, stops the vaults and sync, closes the store, releases the data directory's lock and exits 0. A request in hand can complete, return an error, or lose its reply when its connection closes; a committed write stays whole and is indexed, so a client must not treat a write without an answer as absent, and sends it again on the same base. The Flatpak's launcher calls it to replace an older build (ADR-0032).
+
+Callers: `local`.
+
+No params.
+
+Result: none (`null`).
+
 ### Type `Hello`
 
 Server identity, the negotiated protocol, and who the connection is.
@@ -1182,6 +1192,7 @@ Server identity, the negotiated protocol, and who the connection is.
 | `displayName` | `string` (optional) | A session's display name, when lodge sends one. |
 | `node` | `string` (optional) | A session's node: its short host name, from lodge. |
 | `contentKey` | `string` (optional) | A session's key for content URLs, 32 bytes in unpadded base64url: a file's URL on lodge-content names it by an HMAC under this key (docs/specs/lodge-app.md#contentblobs). |
+| `build` | `string` (optional) | The Flatpak build this notesd runs from: the app-commit of its instance, which differs for every build, even of one version. Absent outside the Flatpak (ADR-0032). |
 
 ## sync
 

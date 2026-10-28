@@ -364,7 +364,7 @@ lodge-content adds its own sandbox policy and cross-origin headers
 
 | Domain | Callers | Narrowed |
 | --- | --- | --- |
-| `rpc` (`hello`, `ping`) | local, session, device, agent | |
+| `rpc` (`hello`, `ping`, `shutdown`) | local, session, device, agent | `shutdown`: local ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)) |
 | `events` | local, session, device | |
 | `note` | local, session, agent | the methods marked `writes`: `create`, `write`, `move`, `delete`, `revert`, `daily`, `upload`, `mkdir`, `moveFolder`, `deleteFolder` |
 | `vault` | local, session | `add`, `remove`: local |

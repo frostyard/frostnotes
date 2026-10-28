@@ -295,6 +295,17 @@ blocks Phase 2.
   It needs an ADR. **Done when:** after `flatpak update` and a new window,
   `notesctl hello` names the new version with no logout, and no write is
   lost.
+  **Status: built, in review** (branch `feat/g3-update-replaces-notesd`),
+  by another path than the candidate:
+  [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) has the
+  launcher, not notesd, replace the notesd of an older build when a new
+  window opens (`notesctl hello --build` against `flatpak-spawn
+  --latest-version notesd -build`, then `notesctl shutdown`), after
+  frostmail's. `rpc.hello` gains `build` and `rpc.shutdown` is new
+  ([design/app.md](../design/app.md#the-flatpak), "Updates"). The smoke test
+  covers the replacement; the run on a second published release
+  (Phase 3, item 5) is still to do, and the update that brings G3 keeps
+  the old notesd until logout, since that notesd has no `rpc.shutdown`.
 - **G4 — Moving from a host notesd.** A desktop that ran notesd from a
   build or the `.deb` has another data directory
   (`~/.local/share/frostnotes`) and socket, so both daemons can run and

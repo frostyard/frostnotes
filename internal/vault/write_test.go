@@ -448,6 +448,27 @@ func TestWriteSurvivesACancelledClient(t *testing.T) {
 	}
 }
 
+// An update stops notesd while a save is in flight: the write may have
+// landed and its answer been lost. The editor sends it again on the same
+// base, and that is no conflict: the file already holds the text, so the
+// repeat changes nothing (docs/adr/0032-an-update-replaces-the-running-notesd.md).
+func TestRepeatedWriteAfterALostAnswerChangesNothing(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"Plan.md": three}, nil)
+	tv.scan()
+	base := tv.read("Plan.md").Hash
+	sent := "one, edited\ntwo\nthree\n"
+	first := tv.write("Plan.md", base, sent, editor)
+	again := tv.write("Plan.md", base, sent, editor) // the answer to the first never arrived
+	if again.Conflicts != 0 || again.Hash != first.Hash || tv.disk("Plan.md") != sent {
+		t.Fatalf("a repeated write = %+v; want no conflict, hash %s, file %q (file %q)", again, first.Hash, sent, tv.disk("Plan.md"))
+	}
+	// The editor's next save names the answer's hash and merges as usual.
+	next := tv.write("Plan.md", again.Hash, sent+"four\n", editor)
+	if next.Merged || tv.disk("Plan.md") != sent+"four\n" {
+		t.Fatalf("the save after it = %+v, file %q", next, tv.disk("Plan.md"))
+	}
+}
+
 // A vault being removed refuses changes before its row goes, so no write
 // lands on disk that its index could not record.
 func TestRemovedVaultRefusesChanges(t *testing.T) {

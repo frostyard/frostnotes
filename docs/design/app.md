@@ -18,7 +18,8 @@ shared look comes from lodge's UI package),
 [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md)
 (the web app inside lodge),
 [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)
-(the Flatpak).
+(the Flatpak) and [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)
+(an update replaces the running notesd).
 Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) (the reading view's HTML), [specs/rpc-protocol.md](../specs/rpc-protocol.md),
 [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md)
 (the syntax both parsers read).
@@ -702,7 +703,8 @@ desktop's, with a different transport and frame:
 
 ## The Flatpak
 
-Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)
+Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
+[ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates)
 and [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md);
 built in [M6](../plans/0002-roadmap.md) (core's
 [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)).
@@ -724,11 +726,11 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   launchers can both pass it, and a duplicate would move the log of the
   notesd that runs. The shell's redirect keeps what notesd says before the
   lock, such as "another notesd uses".
-  `frostnotes [ARGS]`, when `notesctl hello`
-  fails, runs `flatpak-spawn frostnotes --background`, so the Flatpak portal
+  `frostnotes [ARGS]`, when no notesd answers `notesctl hello` (within 2 s),
+  runs `flatpak-spawn --latest-version frostnotes --background`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout,
   while the app may run in the background),
-  and waits for about 10 s for it. Then it ends `flatpak-spawn` with
+  and waits for about 10 s (the clock's) for it. Then it ends `flatpak-spawn` with
   `SIGKILL`: `flatpak-spawn` waits for its command and would keep the
   window's sandbox alive, it forwards every signal it can catch to notesd,
   and without `--watch-bus` the portal keeps notesd when it goes. With no
@@ -748,6 +750,49 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   and the portal deletes the autostart entry; turned on again, the
   permission brings the entry back only at the next launch of the app
   ([plan 0008, Phase 3](../plans/0008-m6-the-standalone-desktop-app.md#record)).
+- **Updates.** `flatpak update` installs a new deployment and leaves the
+  sandbox of a running notesd alone ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
+  So a new window replaces a notesd of an older build, only forward:
+  - *Build.* A Flatpak notesd reports its `build` in `rpc.hello`: the
+    `app-commit` of `[Instance]` in `/.flatpak-info` (`FROSTNOTES_FLATPAK_INFO`
+    names another file, for tests), which differs for every build, even of
+    one version. `notesd -build` prints it; `notesctl hello --build` prints
+    the build of the notesd that answers (an empty line when it has none).
+  - *Stop.* `rpc.shutdown` (`local` callers only) answers, then stops
+    notesd as `SIGTERM` does: `run`'s context ends, `Serve` returns once
+    its connections' requests have returned, the sync loops stop, the vault
+    actors stop, the store closes, the lock is released and notesd exits 0.
+    Shutdown cancels the contexts of the requests in hand and waits for
+    their handlers to return. Such a request can complete, return an
+    error, or lose its reply when its connection closes. A write that
+    committed stays whole and is indexed (a client having gone does not
+    stop that); one that did not commit is not made. So a client must not
+    treat a write without an answer as absent: the editor sends its text
+    again on the same base, which merges with no conflict, since the file
+    already holds it
+    ([documents](#documents-saves-and-merges)). `notesctl shutdown` calls it
+    and waits, 30 s in all, until the socket no longer answers and the
+    lock is free.
+  - *Replace.* When a notesd answers and `flatpak-spawn` exists, the
+    launcher compares `notesctl hello --build` with `flatpak-spawn
+    --latest-version notesd -build` (the portal runs it from the latest
+    deployment). When both are known and differ, it runs `notesctl
+    shutdown` and starts notesd as above, now of the latest build. An empty
+    build, or a call that fails or runs late (each is bounded: 2 s, 10 s,
+    35 s), keeps the notesd that runs. Windows that stay open reconnect to
+    the new notesd by themselves. The bounds hold, so a stuck notesd or
+    portal delays the window by the sum of those bounds at most, and does not block it:
+    the latest-build query writes to a temporary file in the state
+    directory, which the launcher reads only when the query succeeded and
+    removes on every path, and not to a pipe in a command substitution.
+    flatpak-spawn hands its pipe to the portal and to the new sandbox,
+    which the timeout does not kill, so a substitution would wait for
+    them past the bound. `notesctl hello --build` stays a substitution:
+    it runs in this sandbox, and its only writer is the process the
+    timeout kills.
+  - *The first update.* A notesd from before this change reports no build
+    and has no `rpc.shutdown`, so the update that brings these keeps it
+    until logout; every update after that replaces it.
 - **The socket** is `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`
   when `FLATPAK_ID` is the app ID, the one runtime directory Flatpak shares
   between the app's sandboxes. `internal/config` and `src-tauri/src/paths.rs`
@@ -765,8 +810,9 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   `Flatpak` workflow (`.github/workflows/flatpak.yml`) checks they are
   current, then builds and tests the manifest (the smoke test starts notesd
   through the launcher with a stand-in `flatpak-spawn`, checks that the
-  launcher ends it, that notesd lives on and that the log turns over, and
-  checks the data directory's lock). Run `make flatpak-sources`
+  launcher ends it, that notesd lives on and that the log turns over, checks
+  the data directory's lock, and replaces a notesd of build A with one of build B,
+  keeping the note written before, and keeps one of the latest build). Run `make flatpak-sources`
   after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
   A `vX.Y.Z` tag builds a release: `packaging/flatpak/stamp-version.sh`
   stamps the version and the commit into the manifest and the version, with
@@ -813,7 +859,7 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
 
 ## References
 
-- Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the Flatpak), [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
+- Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the Flatpak), [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates), [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
-- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication and its clean-install check in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
+- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check and its updates (gap G3) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))

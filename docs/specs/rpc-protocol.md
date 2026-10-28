@@ -90,7 +90,7 @@ From M4:
   `local`. `hub` admits `local` and `session`, with `hub.serve`,
   `hub.approve` and `hub.setURL` narrowed to `local`
   ([lodge-app.md](lodge-app.md#methods-and-callers)). `rpc` admits
-  every kind, and `events` every kind but `agent`. `sync` stays
+  every kind, with `rpc.shutdown` narrowed to `local`, and `events` every kind but `agent`. `sync` stays
   `local`, and `log` `device`.
 - **An agent's scope binds its connection.** An `agent` connection
   carries its token's scope: one vault, and the writes it allows
@@ -112,7 +112,23 @@ From M4:
 - **`rpc.hello` says who is connected:** its result gains the
   connection's caller kind and, for a session, the signed-in login, its
   display name and the node's name, from lodge's headers. The web app
-  shows them, and hides what its caller may not use.
+  shows them, and hides what its caller may not use. It also gains an
+  optional `build`: in the desktop Flatpak, the `app-commit` of the
+  instance's `/.flatpak-info`, which differs for every build, even of one
+  version; absent elsewhere. The launcher compares it with the latest
+  deployment's to replace an older notesd
+  ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
+- **`rpc.shutdown`** is for `local` callers only (every other kind gets
+  `methodNotFound`). It answers `null`, and only then stops notesd as
+  `SIGTERM` does: it cancels the contexts of the requests in hand and
+  waits for their handlers, stops the vaults and sync, closes the store,
+  releases the data directory's lock and exits 0. A request in hand can
+  complete, return an error, or lose its reply when its connection
+  closes. A committed write stays whole and is indexed, even when its
+  client has gone, so a client must not treat a write without an answer
+  as absent: the editor sends its text again on the same base, which
+  merges with no conflict
+  ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
 - **`rpc.ping`** answers `null` to every caller after hello: the web
   app's heartbeat, which finds a connection a sleeping phone dropped.
 

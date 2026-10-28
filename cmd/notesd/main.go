@@ -45,7 +45,18 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, args []string) error {
+func run(ctx context.Context, args []string) error { return runWith(ctx, args, nil) }
+
+// runWith is run; serving, when set, is called once the socket is open and
+// just before notesd accepts on it, for tests.
+//
+// notesd stops in this order, from the deferred calls below, whether SIGTERM
+// or rpc.shutdown ended ctx: Serve returns once the requests in hand have
+// returned (a write that has reached the disk is indexed even when its
+// caller has gone); the sync loops stop, then the vault actors; the store
+// closes; the data directory's lock is released.
+func runWith(ctx context.Context, args []string, serving func()) error {
+	// rpc.shutdown, like SIGTERM, ends ctx.
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 	fs := flag.NewFlagSet("notesd", flag.ContinueOnError)
@@ -57,6 +68,7 @@ func run(ctx context.Context, args []string) error {
 		"the simulation and the evidence; devices on other machines reach the hub through lodge, -lodge)")
 	lodge := fs.Bool("lodge", false, "serve lodge's app socket as app \"notes\": the web app's API, lodge-content's files "+
 		"and the hub's device routes (docs/specs/lodge-app.md); LODGE_ROOT and LODGE_UID move it for development")
+	showBuild := fs.Bool("build", false, "print the Flatpak build of this instance (app-commit in /.flatpak-info) and exit")
 	maxBlob := fs.Int64("hub-max-blob", blobxfer.DefaultMaxSize, "with -hub, the largest file a device may upload, in bytes")
 	logPath := fs.String("log", "", "after notesd takes the data directory's lock, move FILE to FILE.1 when it is larger "+
 		"than 1 MiB, and append notesd's output (stdout and stderr) to FILE")
@@ -66,6 +78,9 @@ func run(ctx context.Context, args []string) error {
 	if *showVersion {
 		fmt.Printf("notesd %s (%s)\n", version, commit)
 		return nil
+	}
+	if *showBuild {
+		return printBuild(os.Stdout)
 	}
 	if *hubAddr != "" {
 		if err := checkLoopback(*hubAddr); err != nil {
@@ -118,7 +133,8 @@ func run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger})
+	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger,
+		Build: serverBuild(logger), Shutdown: stop})
 	ln, err := srv.Listen(paths.Socket)
 	if err != nil {
 		return err
@@ -185,6 +201,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	logger.Info("notesd started", "version", version, "socket", paths.Socket, "db", paths.DB)
 
+	if serving != nil {
+		serving()
+	}
 	err = srv.Serve(ctx, ln, router)
 	logger.Info("notesd stopped")
 	return err

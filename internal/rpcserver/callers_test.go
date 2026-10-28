@@ -15,7 +15,7 @@ import (
 func admitted(method string) []api.Caller {
 	local, session, device, agent := api.CallerLocal, api.CallerSession, api.CallerDevice, api.CallerAgent
 	switch method {
-	case "vault.add", "vault.remove", "hub.serve", "hub.approve", "hub.setURL":
+	case "vault.add", "vault.remove", "hub.serve", "hub.approve", "hub.setURL", "rpc.shutdown":
 		return []api.Caller{local}
 	}
 	domain, _, _ := strings.Cut(method, ".")
@@ -57,6 +57,9 @@ func TestEveryMethodAdmitsItsCallers(t *testing.T) {
 			if want == nil {
 				t.Errorf("%s is not in the spec's table", m)
 				continue
+			}
+			if m == "rpc.shutdown" && id.Caller == api.CallerLocal {
+				continue // it would stop this server; TestShutdownAnswersThenStops calls it
 			}
 			err := c.Call(t.Context(), m, map[string]any{}, nil)
 			refused := errors.Is(err, api.ErrMethodNotFound)

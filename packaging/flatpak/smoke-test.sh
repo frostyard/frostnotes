@@ -7,6 +7,17 @@
 # sandbox has no portal and no display. It needs no Secret Service (notesd
 # keeps its secrets in a file without one).
 #
+# An update replaces the engine, only forward (docs/adr/0032-an-update-replaces-the-running-notesd.md):
+# once a notesd of build A runs, the fake flatpak-spawn answers
+# `--latest-version notesd -build` with build B, and the launcher stops that
+# notesd (`notesctl shutdown`) and starts one that reports B, with the note
+# written before the stop still there. A notesd of the latest build is kept.
+# A latest-build query that leaves a detached process holding its output, as
+# the portal does, and prints no build: the launcher must not wait for the
+# process, must keep the running notesd and must run the app within its bounds.
+# The fake flatpak-spawn fails, and records the fault, when the launcher calls
+# it without --latest-version.
+#
 # FROSTNOTES_BIN_DIR is where frostnotes, notesd and notesctl are; the
 # default is the Flatpak's /app/bin. The test cleans up after itself.
 
@@ -17,6 +28,10 @@ bin="${FROSTNOTES_BIN_DIR:-/app/bin}"
 work="$(mktemp -d)"
 pid=
 cleanup() {
+    # The detached process of the latest-build query case, when it still runs.
+    if [ -s "$work/detached.pid" ]; then
+        kill -KILL "$(cat "$work/detached.pid")" 2>/dev/null || true
+    fi
     if [ -n "$pid" ]; then
         kill -TERM "$pid" 2>/dev/null || true
         wait "$pid" 2>/dev/null || true
@@ -49,17 +64,43 @@ export XDG_STATE_HOME="$work/state"
 export FLATPAK_ID=org.frostyard.Frostnotes
 # No session bus: the Secret Service is absent, as in the build sandbox.
 export DBUS_SESSION_BUS_ADDRESS=unix:path="$work/no-bus"
-unset FROSTNOTES_SOCKET FROSTNOTES_DATA_DIR
+unset FROSTNOTES_SOCKET FROSTNOTES_DATA_DIR FROSTNOTES_FLATPAK_INFO
 
-# A fake flatpak-spawn, first on PATH: it records its own PID and its child's,
-# runs the command as that child, and waits for it, as the portal's spawn in
-# a sandbox of its own does. The app and the Background helper exit at once.
+# A fake flatpak-spawn, first on PATH. It drops --latest-version (the launcher
+# must pass it: without the flag, the real portal would run the window's own,
+# perhaps old, build), and runs the command with FROSTNOTES_FLATPAK_INFO
+# pointing at the "latest" deployment's info file, which the test controls.
+# For `frostnotes` it records its own PID and its child's, as the portal's
+# spawn does in a sandbox of its own, and waits for the child. The app and the
+# Background helper exit at once.
 cat >"$work/bin/flatpak-spawn" <<'EOF'
 #!/bin/sh
-echo "$$" >"$SMOKE_SPAWN_PID"
-"$@" &
-echo "$!" >"$SMOKE_CHILD_PID"
-wait "$!"
+if [ "${1:-}" != "--latest-version" ]; then
+    echo "fake flatpak-spawn: called without --latest-version: $*" | tee -a "$SMOKE_SPAWN_FAULT" >&2
+    exit 2
+fi
+shift
+export FROSTNOTES_FLATPAK_INFO="$SMOKE_LATEST_INFO"
+if [ "${1:-}" = "frostnotes" ]; then
+    echo "$$" >"$SMOKE_SPAWN_PID"
+    "$@" &
+    echo "$!" >"$SMOKE_CHILD_PID"
+    wait "$!"
+elif [ -n "${SMOKE_SPAWN_DETACH:-}" ] && [ "$*" = "notesd -build" ]; then
+    # A process in a session of its own that keeps this command's output open
+    # and says nothing, as the portal's sandbox does; the query itself ends.
+    setsid sh -c 'echo $$ >"$1"; exec sleep 60' sh "$SMOKE_DETACHED_PID" &
+    # Return only once that process has written its PID, so the test reads
+    # it and its cleanup can end it (at most 5 s).
+    n=0
+    while [ ! -s "$SMOKE_DETACHED_PID" ] && [ "$n" -lt 100 ]; do
+        sleep 0.05
+        n=$((n + 1))
+    done
+    exit 0
+else
+    exec "$@"
+fi
 EOF
 chmod +x "$work/bin/flatpak-spawn"
 printf '#!/bin/sh\nexit 0\n' >"$work/libexec/frostnotes-app"
@@ -67,7 +108,18 @@ printf '#!/bin/sh\nexit 0\n' >"$work/libexec/frostnotes-request-background"
 chmod +x "$work/libexec/frostnotes-app" "$work/libexec/frostnotes-request-background"
 SMOKE_SPAWN_PID="$work/spawn.pid"
 SMOKE_CHILD_PID="$work/notesd.pid"
-export SMOKE_SPAWN_PID SMOKE_CHILD_PID
+SMOKE_SPAWN_FAULT="$work/spawn.fault"
+SMOKE_DETACHED_PID="$work/detached.pid"
+export SMOKE_DETACHED_PID
+# info FILE COMMIT writes a minimal .flatpak-info; the build is the app-commit
+# of its [Instance] group.
+info() {
+    printf '[Application]\napp-commit=not-the-build\n\n[Instance]\napp-commit=%s\n' "$2" >"$1"
+}
+info "$work/info-a" buildA
+info "$work/info-b" buildB
+SMOKE_LATEST_INFO="$work/info-a"
+export SMOKE_SPAWN_PID SMOKE_CHILD_PID SMOKE_SPAWN_FAULT SMOKE_LATEST_INFO
 export FROSTNOTES_LIBEXEC_DIR="$work/libexec"
 PATH="$work/bin:$bin:$PATH"
 export PATH
@@ -175,6 +227,13 @@ if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ] || ! grep -q "another notesd uses" "$wor
 fi
 notesctl hello >/dev/null
 
+got="$(notesctl hello --build)"
+if [ "$got" != "buildA" ]; then
+    echo "smoke test: the first notesd reports build '$got', not buildA" >&2
+    print_logs
+    exit 1
+fi
+
 notesctl vault add "$work/vault" --name smoke
 printf 'hello from the smoke test\n' | notesctl write --create smoke.md
 got="$(notesctl cat smoke.md)"
@@ -189,12 +248,127 @@ if [ ! -f "$work/vault/smoke.md" ]; then
     exit 1
 fi
 
-kill -TERM "$pid"
-# notesd is not this shell's child (flatpak-spawn started it): wait until it
-# has gone, for up to 10 s, before the cleanup removes its directories.
-for _ in $(seq 1 40); do
-    kill -0 "$pid" 2>/dev/null || break
+# wait_gone PID: wait, for up to 10 s, until the process has gone. notesd is
+# not this shell's child (flatpak-spawn started it).
+wait_gone() {
+    for _ in $(seq 1 40); do
+        kill -0 "$1" 2>/dev/null || return 0
+        sleep 0.25
+    done
+    return 1
+}
+
+# An update replaces the engine: the latest build is now B, and the notesd
+# that runs reports A. The launcher stops it and starts one of build B
+# through flatpak-spawn, which ends; the note written before is still there.
+old="$pid"
+rm -f "$SMOKE_SPAWN_PID" "$SMOKE_CHILD_PID"
+SMOKE_LATEST_INFO="$work/info-b"
+export SMOKE_LATEST_INFO
+"$bin/frostnotes" >"$work/launcher.log" 2>&1
+for _ in $(seq 1 20); do
+    if [ -s "$SMOKE_CHILD_PID" ]; then
+        break
+    fi
     sleep 0.25
 done
+if [ ! -s "$SMOKE_CHILD_PID" ]; then
+    echo "smoke test: the launcher did not start a notesd of the latest build" >&2
+    print_logs
+    exit 1
+fi
+spawned="$(cat "$SMOKE_SPAWN_PID" 2>/dev/null || true)"
+pid="$(cat "$SMOKE_CHILD_PID")"
+if [ "$pid" = "$old" ] || ! wait_gone "$old"; then
+    echo "smoke test: the old notesd $old still runs" >&2
+    print_logs
+    exit 1
+fi
+if [ -n "$spawned" ] && kill -0 "$spawned" 2>/dev/null; then
+    echo "smoke test: flatpak-spawn $spawned outlived the launcher" >&2
+    print_logs
+    exit 1
+fi
+got="$(notesctl hello --build 2>/dev/null || true)"
+if [ "$got" != "buildB" ]; then
+    echo "smoke test: the replacement reports build '$got', not buildB" >&2
+    print_logs
+    exit 1
+fi
+got="$(notesctl cat smoke.md)"
+if [ "$got" != "hello from the smoke test" ]; then
+    echo "smoke test: after the update the note reads back '$got'" >&2
+    print_logs
+    exit 1
+fi
+sleep 1
+if ! kill -0 "$pid" 2>/dev/null; then
+    echo "smoke test: the replacement notesd $pid ended with flatpak-spawn" >&2
+    print_logs
+    exit 1
+fi
+
+# A notesd of the latest build is kept, the same process.
+rm -f "$SMOKE_SPAWN_PID" "$SMOKE_CHILD_PID"
+"$bin/frostnotes" >"$work/launcher.log" 2>&1
+if [ -e "$SMOKE_SPAWN_PID" ] || ! kill -0 "$pid" 2>/dev/null || ! notesctl hello >/dev/null; then
+    echo "smoke test: the launcher did not keep the notesd of the latest build" >&2
+    print_logs
+    exit 1
+fi
+
+# An unknown latest build keeps the running notesd too.
+SMOKE_LATEST_INFO="$work/no-info"
+export SMOKE_LATEST_INFO
+"$bin/frostnotes" >"$work/launcher.log" 2>&1
+if [ -e "$SMOKE_SPAWN_PID" ] || ! kill -0 "$pid" 2>/dev/null || ! notesctl hello >/dev/null; then
+    echo "smoke test: the launcher did not keep the notesd when the latest build was unknown" >&2
+    print_logs
+    exit 1
+fi
+
+# A latest-build query that leaves a detached process on its output, and
+# prints no build: the launcher does not wait for it, keeps the notesd and
+# runs the app, all within 20 s (the query's bound is 10 s).
+SMOKE_LATEST_INFO="$work/info-b"
+SMOKE_SPAWN_DETACH=1
+export SMOKE_LATEST_INFO SMOKE_SPAWN_DETACH
+rm -f "$SMOKE_SPAWN_PID" "$SMOKE_CHILD_PID"
+start="$(date +%s)"
+rc=0
+"$bin/frostnotes" >"$work/launcher.log" 2>&1 || rc=$?
+took=$(($(date +%s) - start))
+unset SMOKE_SPAWN_DETACH
+detached="$(cat "$SMOKE_DETACHED_PID" 2>/dev/null || true)"
+if [ -z "$detached" ] || ! kill -0 "$detached" 2>/dev/null; then
+    echo "smoke test: the latest-build query did not leave its detached process" >&2
+    print_logs
+    exit 1
+fi
+if [ "$rc" -ne 0 ] || [ "$took" -gt 20 ]; then
+    echo "smoke test: the launcher exited $rc after $took s beside a detached process on the query's output; want 0 within 20 s" >&2
+    print_logs
+    exit 1
+fi
+if [ -e "$SMOKE_SPAWN_PID" ] || ! kill -0 "$pid" 2>/dev/null || ! notesctl hello >/dev/null; then
+    echo "smoke test: the launcher did not keep the notesd beside a detached process on the query's output" >&2
+    print_logs
+    exit 1
+fi
+if ls "$state"/latest-build.* >/dev/null 2>&1; then
+    echo "smoke test: the launcher left a latest-build file in $state" >&2
+    exit 1
+fi
+kill -KILL "$detached" 2>/dev/null || true
+
+if [ -e "$SMOKE_SPAWN_FAULT" ]; then
+    echo "smoke test: the launcher called flatpak-spawn without --latest-version" >&2
+    print_logs
+    exit 1
+fi
+
+kill -TERM "$pid"
+# Wait until it has gone, before the cleanup removes its directories.
+wait_gone "$pid" || true
 pid=
 echo "smoke test passed"

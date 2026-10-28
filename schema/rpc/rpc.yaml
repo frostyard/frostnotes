@@ -15,6 +15,7 @@ types:
       - {name: displayName, type: string, optional: true, doc: "A session's display name, when lodge sends one."}
       - {name: node, type: string, optional: true, doc: "A session's node: its short host name, from lodge."}
       - {name: contentKey, type: string, optional: true, doc: "A session's key for content URLs, 32 bytes in unpadded base64url: a file's URL on lodge-content names it by an HMAC under this key (docs/specs/lodge-app.md#contentblobs)."}
+      - {name: build, type: string, optional: true, doc: "The Flatpak build this notesd runs from: the app-commit of its instance, which differs for every build, even of one version. Absent outside the Flatpak (ADR-0032)."}
 methods:
   - name: hello
     doc: Negotiate the protocol major version. Changes within a major version are additive only.
@@ -27,3 +28,14 @@ methods:
     doc: >-
       Nothing, answered: the web app's heartbeat while it is visible, which
       finds a connection a sleeping phone dropped.
+  - name: shutdown
+    callers: [local]
+    doc: >-
+      Stop notesd as SIGTERM does: it answers, cancels the requests in hand and
+      waits for their handlers to return, stops the vaults and sync, closes the
+      store, releases the data directory's lock and exits 0. A request in hand
+      can complete, return an error, or lose its reply when its connection
+      closes; a committed write stays whole and is indexed, so a client must
+      not treat a write without an answer as absent, and sends it again on the
+      same base. The Flatpak's launcher calls it to replace an older build
+      (ADR-0032).
