@@ -6,12 +6,12 @@ import { MockTransport, mockVaults } from "../rpc/mock/mock";
 import { feed } from "./events";
 import { emptyFiles, useFiles } from "./files";
 import { usePrefs } from "./prefs";
-import { type Retry, retryDelay, Session } from "./session";
+import { holdVaultOpen, type Retry, retryDelay, Session } from "./session";
 import { useNotes } from "./stores";
 import { emptyVault, useVaultState } from "./vaultState";
 
 afterEach(() => {
-  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null });
+  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHold: false });
   useFiles.setState(emptyFiles(null));
   useVaultState.setState(emptyVault(null));
   usePrefs.getState().setPrefs({ lastVault: null });
@@ -68,6 +68,25 @@ describe("Session", () => {
     });
     await waitFor(() => expect(probe()).toBe("vault=3 files=b.md,Old/a.md wikilinks=false sync=true"));
     expect(useFiles.getState().folders).toEqual(["Old"]);
+  });
+
+  it("holds the manager while a join makes the first vault", async () => {
+    const mock = new MockTransport([]);
+    start(mock);
+    await waitFor(() => expect(probe()).toMatch(/^vault=null /));
+    const other = await notesctl(mock);
+    holdVaultOpen(true);
+    await act(async () => {
+      await other.vault.add({ path: "/home/demo/One" });
+    });
+    await waitFor(() => expect(useNotes.getState().vaults).toHaveLength(1));
+    expect(useNotes.getState().vaultId).toBeNull();
+    holdVaultOpen(false);
+    await act(async () => {
+      await other.vault.add({ path: "/home/demo/Two" });
+    });
+    // With the hold off, the window takes the first vault by name.
+    await waitFor(() => expect(useNotes.getState().vaultId).toBe(1));
   });
 
   it("switches to another vault when the window's is removed", async () => {

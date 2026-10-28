@@ -20,7 +20,7 @@ import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
 
 afterEach(() => {
-  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null });
+  useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null, joinHold: false });
   useFiles.setState(emptyFiles(null));
   useVaultState.setState(emptyVault(null));
   useWorkspace.setState({ vaultPath: null, ws: emptyWorkspace() });
@@ -38,6 +38,29 @@ async function manageVaults(current: string) {
   await user.click(screen.getByRole("button", { name: new RegExp(current) }));
   await user.click(screen.getByRole("menuitem", { name: "Manage vaults…" }));
   return within(manager());
+}
+
+/** HUB is the hub the join tests reach. */
+const HUB = "http://127.0.0.1:7788";
+
+/** joinButton waits for Join, which comes once the manager hears that notesd syncs. */
+async function joinButton() {
+  return waitFor(() => {
+    const row = screen.getByRole("region", { name: "Join a vault on a hub" });
+    return within(row).getByRole("button", { name: "Join" });
+  });
+}
+
+/** joinPanel is the open join panel's fields. */
+const joinPanel = () => within(screen.getByRole("region", { name: "Join a vault on a hub" }));
+
+/** fillJoin fills the open join panel and joins. */
+async function fillJoin(user: ReturnType<typeof userEvent.setup>, location: string) {
+  const panel = joinPanel();
+  await user.type(panel.getByRole("textbox", { name: "Hub URL" }), HUB);
+  await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
+  fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: location } });
+  await user.click(panel.getByRole("button", { name: "Join" }));
 }
 
 describe("vaults from the app", () => {
@@ -97,14 +120,9 @@ describe("vaults from the app", () => {
     render(<App connect={async () => mock} />);
     await screen.findByRole("main", { name: "Workspace" });
     const user = userEvent.setup();
-    const m = await manageVaults("garden");
-    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.click(hubRow.getByRole("button", { name: "Join" }));
-    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788/");
-    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
-    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo" } });
-    await user.click(panel.getByRole("button", { name: "Join" }));
+    await manageVaults("garden");
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo");
 
     // The manager closes once the vault is made, joined and open.
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Manage vaults" })).toBeNull());
@@ -114,36 +132,62 @@ describe("vaults from the app", () => {
     });
     expect(mock.calls.find((c) => c.method === "sync.join")?.params).toEqual({
       vaultId: 4,
-      url: "http://127.0.0.1:7788",
+      url: HUB,
       name: "shared",
     });
     await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
+    expect(useNotes.getState().joinHold).toBe(false);
   });
 
-  it("joins and opens the first vault, with no vaults yet", async () => {
-    // notesd tells of the vault before vault.add answers: the window leaves
-    // the manager for it, and the join goes on with the panel gone.
-    const mock = new MockTransport([], { folders: ["/home/demo/Documents"], addEventFirst: true });
+  it("keeps the panel while a first vault pairs again and joins", async () => {
+    // The hub refuses the token once: the panel pairs again, shows its code,
+    // and joins, with the window still on the manager (data/session.tsx, the
+    // hold) even though notesd sends vault.added before vault.add answers.
+    const mock = new MockTransport([], {
+      folders: ["/home/demo/Documents"],
+      paired: [HUB],
+      addEventFirst: true,
+      latency: 5,
+      pendingPairings: 3,
+    });
+    mock.refuseJoins(1);
     render(<App connect={async () => mock} />);
-    const m = within(await screen.findByRole("dialog", { name: "Manage vaults" }));
     const user = userEvent.setup();
-    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.click(hubRow.getByRole("button", { name: "Join" }));
-    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788");
-    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
-    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo/Documents" } });
-    await user.click(panel.getByRole("button", { name: "Join" }));
+    await screen.findByRole("dialog", { name: "Manage vaults" });
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo/Documents");
 
-    await waitFor(() => expect(mock.calls.some((c) => c.method === "sync.join")).toBe(true));
+    // The refused join pairs again: the panel is still there to show the code.
+    expect(await screen.findByText("notesctl hub approve ABCD-EFGH")).toBeTruthy();
+    await waitFor(() => expect(mock.calls.filter((c) => c.method === "sync.join")).toHaveLength(2));
     expect(mock.calls.find((c) => c.method === "sync.join")?.params).toEqual({
       vaultId: 1,
-      url: "http://127.0.0.1:7788",
+      url: HUB,
       name: "shared",
     });
-    await screen.findByRole("main", { name: "Workspace" });
     await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
     expect(mock.calls.some((c) => c.method === "vault.remove")).toBe(false);
+    expect(useNotes.getState().joinHold).toBe(false);
+  });
+
+  it("checks whether notesd syncs before it offers Join", async () => {
+    const mock = new MockTransport([], { folders: ["/home/demo/Documents"], latency: 200 });
+    render(<App connect={async () => mock} />);
+    const m = within(await screen.findByRole("dialog", { name: "Manage vaults" }));
+    expect(m.getByText("Checking whether this notesd syncs…")).toBeTruthy();
+    expect(m.queryByRole("button", { name: "Join" })).toBeNull();
+    await waitFor(() => expect(m.getByRole("button", { name: "Join" })).toBeTruthy());
+  });
+
+  it("checks again with a new connection", async () => {
+    const first = new MockTransport([], { folders: ["/home/demo/Documents"] });
+    const second = new MockTransport([], { folders: ["/home/demo/Documents"], latency: 200 });
+    const view = render(<App connect={async () => first} />);
+    const m = within(await screen.findByRole("dialog", { name: "Manage vaults" }));
+    await waitFor(() => expect(m.getByRole("button", { name: "Join" })).toBeTruthy());
+    view.rerender(<App connect={async () => second} />);
+    expect(await m.findByText("Checking whether this notesd syncs…")).toBeTruthy();
+    await waitFor(() => expect(m.getByRole("button", { name: "Join" })).toBeTruthy());
   });
 
   it("hides Join where notesd does not sync", async () => {
@@ -154,19 +198,64 @@ describe("vaults from the app", () => {
     expect(m.queryByRole("button", { name: "Join" })).toBeNull();
   });
 
+  it("goes back from the form and makes no vault", async () => {
+    const mock = new MockTransport([], { folders: ["/home/demo/Documents"] });
+    render(<App connect={async () => mock} />);
+    const user = userEvent.setup();
+    await screen.findByRole("dialog", { name: "Manage vaults" });
+    await user.click(await joinButton());
+    await user.type(screen.getByRole("textbox", { name: "Hub vault name" }), "shared");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(within(manager()).getByRole("button", { name: "Create" })).toBeTruthy();
+    expect(mock.calls.some((c) => c.method === "vault.add")).toBe(false);
+    expect(mock.calls.some((c) => c.method === "sync.join")).toBe(false);
+  });
+
+  it("removes the vault it made when the person cancels the pairing again", async () => {
+    const mock = new MockTransport(mockVaults(), { paired: [HUB], latency: 2, pendingPairings: 1000 });
+    mock.refuseJoins(1);
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    await manageVaults("garden");
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo");
+
+    await screen.findByText("notesctl hub approve ABCD-EFGH");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(useNotes.getState().joinHold).toBe(false));
+    expect(mock.calls.find((c) => c.method === "vault.remove")?.params).toEqual({ id: 4 });
+    expect(mock.calls.filter((c) => c.method === "sync.join")).toHaveLength(1);
+    await waitFor(() => expect(within(manager()).getAllByRole("listitem")).toHaveLength(3));
+  });
+
+  it("makes no vault when the manager closes while it waits for the approval", async () => {
+    const mock = new MockTransport(mockVaults(), { latency: 2, pendingPairings: 1000 });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    await manageVaults("garden");
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo");
+
+    await screen.findByText("notesctl hub approve ABCD-EFGH");
+    fireEvent.keyDown(manager(), { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Manage vaults" })).toBeNull());
+    await waitFor(() => expect(useNotes.getState().joinHold).toBe(false));
+    expect(mock.calls.some((c) => c.method === "vault.add")).toBe(false);
+    expect(mock.calls.some((c) => c.method === "sync.join")).toBe(false);
+  });
+
   it("forgets the new vault when the hub refuses it, and says why in the panel", async () => {
     const mock = new MockTransport(mockVaults(), { joinRefusals: 1 });
     render(<App connect={async () => mock} />);
     await screen.findByRole("main", { name: "Workspace" });
     const user = userEvent.setup();
-    const m = await manageVaults("garden");
-    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.click(hubRow.getByRole("button", { name: "Join" }));
-    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788");
-    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
-    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo" } });
-    await user.click(panel.getByRole("button", { name: "Join" }));
+    await manageVaults("garden");
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo");
 
     expect(await screen.findByText(/refused this device's token/)).toBeTruthy();
     expect(mock.calls.find((c) => c.method === "vault.remove")?.params).toEqual({ id: 4 });
@@ -179,14 +268,9 @@ describe("vaults from the app", () => {
     render(<App connect={async () => mock} />);
     await screen.findByRole("main", { name: "Workspace" });
     const user = userEvent.setup();
-    const m = await manageVaults("garden");
-    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.click(hubRow.getByRole("button", { name: "Join" }));
-    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
-    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788");
-    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
-    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo" } });
-    await user.click(panel.getByRole("button", { name: "Join" }));
+    await manageVaults("garden");
+    await user.click(await joinButton());
+    await fillJoin(user, "/home/demo");
 
     expect(await screen.findByText(/could not remove the new vault "shared" from the list/)).toBeTruthy();
     expect(screen.getByText(/Remove it in Manage vaults\./)).toBeTruthy();

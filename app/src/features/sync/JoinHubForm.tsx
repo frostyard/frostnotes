@@ -94,15 +94,18 @@ export function JoinHubForm(props: JoinHubFormProps) {
   return (
     <section aria-label={pair ? "Pair again" : "Join a vault on a hub"} className="space-y-4 text-sidebar-row">
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Back"
-          title="Back"
-          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-selection-inactive"
-          onClick={onBack}
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-        </button>
+        {/* Back stops the flow: only the fields have one to go back to. */}
+        {phase === "form" && (
+          <button
+            type="button"
+            aria-label="Back"
+            title="Back"
+            className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-selection-inactive"
+            onClick={onBack}
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+          </button>
+        )}
         <h2 className="font-semibold text-empty">{pair ? "Pair again" : "Join a vault on a hub"}</h2>
       </div>
       {phase === "form" && (

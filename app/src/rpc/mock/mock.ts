@@ -58,6 +58,10 @@ export interface MockOptions {
   joinRefusals?: number;
   /** sync.paired answers expired, as a code not approved within 10 minutes. */
   pairingExpired?: boolean;
+  /** Hubs this device paired with, as sync.hubs lists them, with no vault synced yet. */
+  paired?: string[];
+  /** How many sync.paired calls answer pending before one answers approved; 0 approves at once. */
+  pendingPairings?: number;
   /** sync answers unavailable, as a notesd that does not sync. */
   noSync?: boolean;
   /** How many of the next vault.remove calls fail, as notesd does while it is busy. */
@@ -96,6 +100,7 @@ export class MockTransport implements Transport {
   private readonly synced = new Map<number, SyncStatus>();
   private joinRefusals: number;
   private removeRefusals: number;
+  private pendingPairings: number;
   private seq = 0;
   private readonly log: Event[] = [];
   private hello = false;
@@ -116,6 +121,8 @@ export class MockTransport implements Transport {
     for (const v of this.vaults) this.contents.set(v.id, this.newVault(v.id, opts.files?.[v.id]));
     this.joinRefusals = opts.joinRefusals ?? 0;
     this.removeRefusals = opts.removeRefusals ?? 0;
+    this.pendingPairings = opts.pendingPairings ?? 0;
+    for (const url of opts.paired ?? []) this.addHub(url);
     for (const s of opts.synced ?? []) {
       this.synced.set(s.vaultId, this.syncStatus(s.vaultId, s.url, s.name, s.state ?? "idle"));
       this.addHub(s.url);
@@ -480,6 +487,11 @@ export class MockTransport implements Transport {
         if (this.opts.pairingExpired) {
           const expired: PairResult = { state: "expired", hub: HUB_ID };
           return expired;
+        }
+        if (this.pendingPairings > 0) {
+          this.pendingPairings -= 1;
+          const pending: PairResult = { state: "pending", hub: HUB_ID };
+          return pending;
         }
         this.addHub(url);
         const approved: PairResult = { state: "approved", hub: HUB_ID };

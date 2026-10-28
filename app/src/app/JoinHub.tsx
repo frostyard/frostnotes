@@ -1,12 +1,13 @@
 // The join flow's container (docs/specs/ui.md#vault-manager,
 // docs/specs/ui.md#settings): the form, the code to approve, and the vault
-// it makes and joins, over data/sync.ts. Cancel stops the pairing wait; once
-// the flow makes or joins the vault it runs to its end, even when the panel
-// goes away (the session opens a first vault as notesd adds it).
+// it makes and joins, over data/sync.ts. The panel stays while the flow
+// runs: the window holds a first vault's manager open (data/session.tsx,
+// holdVaultOpen). Cancel, Back and the panel's going away all stop the flow,
+// which then forgets a vault it made and did not join.
 import { useEffect, useRef, useState } from "react";
 
 import { notify } from "../data/overlays";
-import { openVault, useClient } from "../data/session";
+import { holdVaultOpen, openVault, useClient } from "../data/session";
 import { byName, useNotes } from "../data/stores";
 import { ensurePaired, hubURL, isCancelled, joinPaired, pairAgain, syncError } from "../data/sync";
 import { loadSync } from "../data/vaultState";
@@ -33,7 +34,7 @@ export interface JoinHubProps {
   vaultId?: number;
   /** The flow ended: the vault is joined (or paired again), or none was made. */
   onDone: (vaultId: number | null) => void;
-  /** The person went back or cancelled, before the flow committed to a vault. */
+  /** The person went back, cancelled, or the panel went away. */
   onCancel: () => void;
 }
 
@@ -48,24 +49,19 @@ export function JoinHub(props: JoinHubProps) {
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const mounted = useRef(false);
-  // committed says the flow makes or joins the vault already: a panel that
-  // goes away then no longer stops it.
-  const committed = useRef(false);
 
+  // The panel's going away is a stop, as Cancel and Back are.
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (!committed.current) controller.current?.abort();
+      controller.current?.abort();
     };
   }, []);
 
   async function run(fields: JoinFields, signal: AbortSignal, id: number): Promise<void> {
-    // stopped says the flow must not go on: the person cancelled, or a newer
-    // run replaced it. A panel that goes away stops the pairing wait only;
-    // from vault.add on, the flow runs to its end.
     const stopped = () => generation.current !== id || signal.aborted;
-    /** fail says why the last attempt failed: in the panel, or in a notice once it is gone. */
+    /** fail says why the flow failed: in the panel, or in a notice once it is gone. */
     const fail = (words: string): void => {
       if (mounted.current) {
         setPhase("form");
@@ -79,21 +75,7 @@ export function JoinHub(props: JoinHubProps) {
       setCode(c);
       setPhase("approve");
     };
-    /** make registers the new vault at <location>/<name>; null when notesd refuses it. */
-    const make = async (name: string): Promise<number | null> => {
-      const path = vaultFolder(location ?? "", name);
-      try {
-        const added = await client.vault.add({ path, create: true });
-        if (mounted.current) {
-          useNotes.setState((s) => ({ vaults: [...s.vaults.filter((v) => v.id !== added.id), added].sort(byName) }));
-        }
-        return added.id;
-      } catch (err) {
-        if (!stopped()) fail(refusal(err, path));
-        return null;
-      }
-    };
-    /** forget removes the vault a failed join left; it says why notesd would not, or null. */
+    /** forget removes the vault the flow made and did not join; it says why notesd would not, or null. */
     const forget = async (id: number): Promise<string | null> => {
       try {
         await client.vault.remove({ id });
@@ -109,11 +91,13 @@ export function JoinHub(props: JoinHubProps) {
     const url = hubURL(fields.url);
     const device = fields.device === "" ? undefined : fields.device;
     const created = vaultId === undefined;
+    let made: number | null = null;
+    let joined = false;
+    let reason = "";
     try {
       if (mode === "pair") {
         await pairAgain(client, { url, device }, onCode, signal);
         if (stopped()) return;
-        committed.current = true;
         if (vaultId !== undefined) await loadSync(client, vaultId);
         if (stopped()) return;
         if (mounted.current) onDone(vaultId ?? null);
@@ -122,41 +106,52 @@ export function JoinHub(props: JoinHubProps) {
       // A device paired with the hub joins at once; another shows the code to approve first.
       const paired = await ensurePaired(client, url, device, onCode, signal);
       if (stopped()) return;
-      // The pairing is done: the flow makes or joins the vault from here on, with no Cancel.
-      committed.current = true;
+      // From here the panel shows "Joining…" with no Back and no Cancel: the
+      // calls below make and join the vault, and a stop cleans up after them.
       if (mounted.current) setPhase("joining");
-      const made = created ? await make(fields.name) : vaultId;
-      if (made === null || made === undefined) return;
-      if (stopped()) return;
-      try {
-        await joinPaired(client, { vaultId: made, url, name: fields.name }, paired, device, onCode, signal);
-      } catch (err) {
-        if (stopped() || isCancelled(err)) return;
-        let words = syncError(err);
-        if (created) {
-          // The new vault joins nothing: forget it, as notesd does; its folder stays.
-          const problem = await forget(made);
-          if (problem !== null) {
-            words = [
-              words,
-              `Frostnotes could not remove the new vault "${fields.name}" from the list: ${problem}.`,
-              "Remove it in Manage vaults.",
-            ].join(" ");
+      let target = vaultId ?? null;
+      if (created) {
+        const path = vaultFolder(location ?? "", fields.name);
+        try {
+          const added = await client.vault.add({ path, create: true });
+          made = added.id;
+          target = added.id;
+          if (mounted.current) {
+            useNotes.setState((s) => ({ vaults: [...s.vaults.filter((v) => v.id !== added.id), added].sort(byName) }));
           }
+        } catch (err) {
+          if (!stopped()) reason = refusal(err, path);
+          return;
         }
-        fail(words);
-        return;
       }
+      if (target === null || stopped()) return;
+      await joinPaired(client, { vaultId: target, url, name: fields.name }, paired, device, onCode, signal);
+      // The vault is joined: a stop now keeps it, and only skips what follows.
+      joined = true;
       if (stopped()) return;
-      await loadSync(client, made);
+      await loadSync(client, target);
       if (stopped()) return;
-      if (mounted.current) {
-        // Without the panel the session opened the new vault already.
-        if (created) await openVault(client, made);
-        onDone(made);
+      if (created) {
+        // The manager goes as the window gets the vault.
+        holdVaultOpen(false);
+        if (mounted.current) await openVault(client, target);
       }
+      if (mounted.current) onDone(target);
     } catch (err) {
-      if (!stopped() && !isCancelled(err)) fail(syncError(err));
+      if (!stopped() && !isCancelled(err)) reason = syncError(err);
+    } finally {
+      if (made !== null && !joined) {
+        const problem = await forget(made);
+        if (problem !== null) {
+          const removal = [
+            `Frostnotes could not remove the new vault "${fields.name}" from the list: ${problem}.`,
+            "Remove it in Manage vaults.",
+          ].join(" ");
+          reason = reason === "" ? removal : `${reason} ${removal}`;
+        }
+      }
+      if (generation.current === id) holdVaultOpen(false);
+      if (reason !== "") fail(reason);
     }
   }
 
@@ -166,7 +161,8 @@ export function JoinHub(props: JoinHubProps) {
     controller.current = next;
     const id = generation.current + 1;
     generation.current = id;
-    committed.current = false;
+    // The manager stays while the flow makes a first vault.
+    holdVaultOpen(true);
     setError(null);
     setCode(null);
     setPhase("joining");
@@ -176,7 +172,6 @@ export function JoinHub(props: JoinHubProps) {
   function cancel(): void {
     controller.current?.abort();
     controller.current = null;
-    generation.current += 1;
     onCancel();
   }
 

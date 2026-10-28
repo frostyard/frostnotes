@@ -15,6 +15,12 @@ export interface NotesState {
   vaults: Vault[];
   /** The vault the window shows; null when there is none. */
   vaultId: number | null;
+  /**
+   * joinHold keeps the window on the vault manager while a join makes a
+   * first vault: Session opens no vault from vault.added while it is set
+   * (data/session.tsx, holdVaultOpen).
+   */
+  joinHold: boolean;
 }
 
 export const useNotes = create<NotesState>(() => ({
@@ -22,6 +28,7 @@ export const useNotes = create<NotesState>(() => ({
   hello: null,
   vaults: [],
   vaultId: null,
+  joinHold: false,
 }));
 
 /** UIState is the window's own state. */

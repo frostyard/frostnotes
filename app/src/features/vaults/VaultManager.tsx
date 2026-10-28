@@ -5,12 +5,15 @@ import { Menu, Sheet } from "@frostyard/lodge-ui/react";
 import { Ellipsis, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-/** JOIN_DESCRIPTION is the join row's words; a notesd that does not sync says NO_SYNC_DESCRIPTION instead. */
-const JOIN_DESCRIPTION =
-  "Sync a new vault with a vault on a hub. To sync a vault you have, open it, then Settings, Sync.";
+/** SyncAvailability is whether this notesd syncs: unknown while the check runs. */
+export type SyncAvailability = "unknown" | "yes" | "no";
 
-/** NO_SYNC_DESCRIPTION is the join row's words where notesd does not sync. */
-const NO_SYNC_DESCRIPTION = "This notesd does not sync.";
+/** JOIN_WORDS is the join row's words, by whether this notesd syncs. */
+const JOIN_WORDS: Record<SyncAvailability, string> = {
+  unknown: "Checking whether this notesd syncs…",
+  yes: "Sync a new vault with a vault on a hub. To sync a vault you have, open it, then Settings, Sync.",
+  no: "This notesd does not sync.",
+};
 
 /** VaultEntry is a vault the manager lists. */
 export interface VaultEntry {
@@ -40,8 +43,8 @@ export interface VaultManagerProps {
   onCreate: () => void;
   /** Join a vault on a hub: shows the join panel in the actions' place. */
   onJoin: () => void;
-  /** This notesd syncs: without it the join row says so and has no button. */
-  syncAvailable: boolean;
+  /** Whether this notesd syncs: the Join button shows for "yes" alone. */
+  syncAvailable: SyncAvailability;
   /** Open folder as vault: no path with a picker, else the typed path, trimmed. */
   onOpenFolder: (path?: string) => void;
   onClose: () => void;
@@ -222,8 +225,8 @@ function VaultActions({ canPick, onCreate, onJoin, syncAvailable, onOpenFolder }
           Open
         </button>
       </VaultAction>
-      <VaultAction title="Join a vault on a hub" description={syncAvailable ? JOIN_DESCRIPTION : NO_SYNC_DESCRIPTION}>
-        {syncAvailable && (
+      <VaultAction title="Join a vault on a hub" description={JOIN_WORDS[syncAvailable]}>
+        {syncAvailable === "yes" && (
           <button
             type="button"
             className="h-7 rounded-md border border-separator px-3 hover:bg-selection-inactive"

@@ -177,6 +177,16 @@ export async function openVault(c: Client, id: number | null, since = feed.since
   ]);
 }
 
+/**
+ * holdVaultOpen holds the window's vault as it is while a join flow makes a
+ * first vault: the session does not open a vault for vault.added while the
+ * hold is on, so the manager and its panel stay. The join flow sets it and
+ * clears it when it ends, even after an unmount.
+ */
+export function holdVaultOpen(on: boolean): void {
+  useNotes.setState({ joinHold: on });
+}
+
 /** useOpenVault returns a function that makes a vault the window's. */
 export function useOpenVault(): (id: number) => Promise<void> {
   const c = useClient();
@@ -192,8 +202,14 @@ function route(c: Client, e: Event, liveFrom: number): void {
     case "vault.added":
     case "vault.removed": {
       useNotes.setState((s) => ({ vaults: applyVaultEvent(s.vaults, e) }));
-      const { vaults, vaultId } = useNotes.getState();
-      if (vaultId === null || !vaults.some((v) => v.id === vaultId)) void openVault(c, vaults[0]?.id ?? null);
+      const { vaults, vaultId, joinHold } = useNotes.getState();
+      // A join holds the manager on screen while it makes a first vault: the
+      // window keeps showing none until the flow ends.
+      if (vaultId === null) {
+        if (!joinHold) void openVault(c, vaults[0]?.id ?? null);
+      } else if (!vaults.some((v) => v.id === vaultId)) {
+        void openVault(c, vaults[0]?.id ?? null);
+      }
       break;
     }
     case "note.changed":

@@ -44,13 +44,15 @@ describe("JoinHubForm", () => {
     expect(screen.getByText("ABCD-EFGH")).toBeTruthy();
     expect(screen.getByText("notesctl hub approve ABCD-EFGH").tagName).toBe("CODE");
     expect(screen.getByText(/The code expires in 10 minutes\./)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(props.onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("says it is joining, with no Cancel once the vault is agreed", () => {
+  it("says it is joining, with no Back and no Cancel", () => {
     setup({ phase: "joining" });
     expect(screen.getByText("Joining…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 

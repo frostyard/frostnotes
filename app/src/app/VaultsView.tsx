@@ -10,7 +10,7 @@ import { openVault, useClient } from "../data/session";
 import { useNotes } from "../data/stores";
 import { addVault, removeVault } from "../data/vaults";
 import { CreateVault } from "../features/vaults/CreateVault";
-import { VaultManager } from "../features/vaults/VaultManager";
+import { type SyncAvailability, VaultManager } from "../features/vaults/VaultManager";
 import { vaultFolder } from "../lib/vaultName";
 import { ErrorCode } from "../rpc/gen/api";
 import { RPCError } from "../rpc/transport";
@@ -25,22 +25,25 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [location, setLocation] = useState<string | null>(null);
-  const [syncAvailable, setSyncAvailable] = useState(true);
+  const [sync, setSync] = useState<SyncAvailability>("unknown");
   const canPick = canPickFolders();
   // vault.add and vault.remove admit local callers only (lodge-app.md).
   const manage = useNotes((s) => s.hello?.caller !== "session");
 
   // Join needs sync, which admits local callers only: a notesd without it
-  // answers unavailable, or methodNotFound. Any other error keeps Join.
+  // answers unavailable, or methodNotFound, and any other error keeps Join.
   useEffect(() => {
     let live = true;
+    setSync("unknown");
     const probe = async () => {
       try {
         await client.sync.hubs();
+        if (live) setSync("yes");
       } catch (err) {
+        if (!live) return;
         const missing =
           err instanceof RPCError && (err.code === ErrorCode.unavailable || err.code === ErrorCode.methodNotFound);
-        if (live && missing) setSyncAvailable(false);
+        setSync(missing ? "no" : "yes");
       }
     };
     void probe();
@@ -48,6 +51,11 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       live = false;
     };
   }, [client]);
+
+  // The join panel goes where Join does.
+  useEffect(() => {
+    if (sync !== "yes") setJoining(false);
+  }, [sync]);
 
   const close = () => {
     setCreating(false);
@@ -81,7 +89,7 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       mode={props.mode}
       canPick={canPick}
       manage={manage}
-      syncAvailable={syncAvailable}
+      syncAvailable={sync}
       panel={manage ? (creating ? form : joining ? join : undefined) : undefined}
       onOpen={(id) => {
         if (id !== current) void openVault(client, id);

@@ -616,9 +616,11 @@ Obsidian's vault chooser
   - **Join a vault on a hub:** "Sync a new vault with a vault on a
     hub. To sync a vault you have, open it, then Settings, Sync." Join
     (1px `--separator`, as Open) shows the join panel in the actions'
-    place. Where notesd does not sync (`sync.hubs` answers
-    `unavailable` or `methodNotFound`), the row reads "This notesd does
-    not sync." and has no button.
+    place. Join shows once `sync.hubs` answers: before that the row
+    reads "Checking whether this notesd syncs…", and where notesd does
+    not sync (`unavailable`, `methodNotFound`) it reads "This notesd
+    does not sync."; neither has a button, and the panel is open only
+    while notesd syncs.
 - **The create form**, in the actions' place: Back (`arrow-left`, "Back")
   and the title "Create new vault" (15/20, 600); Vault name, a 240-wide
   input, focused; Location, the chosen folder's path (12/16
@@ -638,15 +640,17 @@ Obsidian's vault chooser
   12/16 `--flag-1` under it); This device's name (optional), a
   240-wide input (placeholder "This computer's name"); Location, as the
   create form has it; then Join (`--accent`), enabled once the hub's
-  URL, a name that passes and a location are set. Where the device did
-  not pair with the hub before, the approve step follows: the code,
-  large and monospace and selectable, the line "On the hub's machine,
-  approve this device: `notesctl hub approve CODE`. The code expires in
-  10 minutes.", and Cancel. Then "Joining…", with no Cancel: from the
-  vault's making or joining the flow runs to its end, even where the
-  panel goes away. A failure shows in 12/16 `--flag-1` under the
-  fields, and the fields return with what the person typed (a notice
-  instead, where the panel is gone).
+  URL, a name that passes and a location are set. Back stops the flow,
+  so the fields alone have one. Where the device did not pair with the
+  hub before, the approve step follows: the code, large and monospace
+  and selectable, the line "On the hub's machine, approve this device:
+  `notesctl hub approve CODE`. The code expires in 10 minutes.", and
+  Cancel, which stops the flow. Then "Joining…", with no Back and no
+  Cancel, while a call to `vault.add` or `sync.join` is under way. A
+  failure shows in 12/16 `--flag-1` under the fields, and the fields
+  return with what the person typed (a notice instead, where the panel
+  is gone). The settings' dialog holds the same panel, with no
+  Location, and a stop there is the same.
 - **What they do:** Open folder as vault registers the folder
   (`vault.add`); Create registers `<location>/<name>`, which notesd
   makes (`vault.add` with `create`). Either makes it the window's vault
@@ -677,17 +681,19 @@ Obsidian's vault chooser
   paired with it before (`sync.pair`, the code approved on the hub,
   `sync.paired`), registers `<location>/<hub vault name>` (`vault.add`
   with `create`), joins it (`sync.join`), opens it and closes the
-  manager. From the vault's making it runs with no Cancel, even where
-  the window leaves the manager for that vault (a first vault: the
-  window shows it as notesd adds it). Where the hub refuses the token
-  of a device that was paired (`revoked`), it pairs again once and
-  joins again. A join that fails after the vault was made forgets that
-  vault (`vault.remove`; its folder stays) and drops it from the list
-  only when notesd removes it; where notesd refuses that too, the panel says
+  manager. The panel stays while the flow runs: the window holds the
+  manager open for a first vault, which the session would otherwise
+  open as notesd adds it. Back (the fields), Cancel (the approval) and
+  the panel's going away (Close, Escape, a click outside) stop the flow
+  between two calls; a vault the panel made and did not join is
+  forgotten (`vault.remove`; its folder stays), and a vault it joined
+  stays joined. Where notesd refuses the removal too, the panel says
   both: "<join error> Frostnotes could not remove the new vault
   "<name>" from the list: <notesd's words>. Remove it in Manage
-  vaults." Only a local caller joins: a browser inside lodge has no
-  actions.
+  vaults." Where the hub refuses the token of a device that was paired
+  (`revoked`), the flow pairs again once, with Cancel in that approval
+  as in any, and joins again. Only a local caller joins: a browser
+  inside lodge has no actions.
 - **The window's title** (the system's, as a task bar shows it):
   `<note> - <vault> - Frostnotes`, `<vault> - Frostnotes` when the
   active tab shows no note, `Frostnotes` without a vault.
