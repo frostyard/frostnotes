@@ -2,13 +2,15 @@
 // sections from the app's preferences (data/prefs.ts, kept on this
 // device), the vault's settings (vault.settings, changed with
 // vault.configure; ADR-0021), the keyboard map, the vault's sync (joining a
-// hub, leaving one, pairing again), and on a hub its devices and pending
-// pairings (docs/design/hub.md#hub-settings-in-the-app). A row's id says
-// where it goes: "pref:<key>", "vault:<field>", "sync:<action>" or
-// "hub:revoke:<device>".
+// hub, leaving one, pairing again), on a hub its devices and pending
+// pairings (docs/design/hub.md#hub-settings-in-the-app), and in the Flatpak
+// the background setting with the desktop's own (data/background.ts,
+// ADR-0033). A row's id says where it goes: "pref:<key>", "vault:<field>",
+// "sync:<action>", "hub:revoke:<device>" or "bg:<key>".
 import { Sheet } from "@frostyard/lodge-ui/react";
 import { useEffect, useState } from "react";
 
+import { type Background, readBackground, setBackground as saveBackground } from "../data/background";
 import { ask, closeSettings, notify, openSettings, useOverlays } from "../data/overlays";
 import { type Prefs, usePrefs } from "../data/prefs";
 import { useClient } from "../data/session";
@@ -74,6 +76,80 @@ export async function loadHub(c: Client): Promise<HubView | null> {
 const time = (at: string) => at.replace("T", " ").replace(/:\d\d(\.\d+)?Z$/, " UTC");
 
 /**
+ * The Background section's texts (docs/specs/ui.md#settings-batch-2,
+ * ADR-0033). The long ones are arrays of shorter strings joined with a
+ * space, so that no line is longer than Biome's width.
+ */
+const KEEP_NAME = "Keep syncing when no window is open";
+const KEEP_DESCRIPTION = [
+  "On: notesd keeps your notes in sync after the last window closes, and starts when you log in.",
+  "Off: notesd stops when the last window closes and does not start at login;",
+  "notes sync only while a Frostnotes window is open.",
+].join(" ");
+const DESKTOP_DESCRIPTION = "The desktop's own switch. Off there wins over On here.";
+const ALLOWED_AT_LOGIN = "Allowed; notesd starts at login.";
+const ALLOWED_NO_LOGIN = "Allowed; notesd does not start at login.";
+const NOT_ASKED = "Not asked yet.";
+const REFUSED = [
+  "Refused. The desktop stops notesd about 45 seconds after the last window closes, and at login.",
+  "Allow it in GNOME Settings, Apps, Frostnotes, Run in Background, then open Frostnotes again.",
+].join(" ");
+const NOT_KNOWN = "Not known: the desktop did not answer.";
+const ASKING = "Asking the desktop…";
+
+/** POLL_MS is how often the open dialog reads the desktop's answer again. */
+const POLL_MS = 2000;
+
+/** notKnown says the desktop gave no usable answer, with the helper's error when it wrote one. */
+function notKnown(error: string | null): string {
+  if (error === null) {
+    return NOT_KNOWN;
+  }
+  return `Not known: the desktop did not answer (${error}).`;
+}
+
+/** portalText says what the desktop allows, as the Background portal last answered. */
+export function portalText(p: Background["portal"]): string {
+  if (p === null) {
+    return NOT_ASKED;
+  }
+  if (p.response === 0 && p.background === true) {
+    return p.autostart === true ? ALLOWED_AT_LOGIN : ALLOWED_NO_LOGIN;
+  }
+  if (p.response === 1 || (p.response === 0 && p.background === false)) {
+    return REFUSED;
+  }
+  return notKnown(p.error);
+}
+
+/**
+ * backgroundSection is the Flatpak's background setting, and the desktop's
+ * own switch as the portal last answered it (ADR-0033): the app's Off is a
+ * file that the shell and the launcher read, and the desktop's permission
+ * can stop notesd whatever the app asks.
+ */
+export function backgroundSection(b: Background, pending = false): SettingsSection {
+  return {
+    id: "background",
+    name: "Background",
+    rows: [
+      {
+        id: "bg:keep",
+        name: KEEP_NAME,
+        description: KEEP_DESCRIPTION,
+        control: { kind: "toggle", value: b.keepRunning },
+      },
+      {
+        id: "bg:desktop",
+        name: "Desktop permission",
+        description: DESKTOP_DESCRIPTION,
+        control: { kind: "info", text: pending ? ASKING : portalText(b.portal) },
+      },
+    ],
+  };
+}
+
+/**
  * hubSection lists the hub's devices, each with Revoke while it is not
  * revoked, and its pending pairings, each with the node lodge named and
  * the command that approves it on the hub's machine: approving is local
@@ -112,6 +188,8 @@ export function settingsSections(
   vault: VaultSettings | null,
   sync: SyncStatus | null,
   hub: HubView | null = null,
+  background: Background | null = null,
+  pending = false,
   canJoin = true,
 ): SettingsSection[] {
   const v = (row: SettingRow): SettingRow => (vault === null ? { ...row, disabled: true } : row);
@@ -281,6 +359,7 @@ export function settingsSections(
       rows: syncRows(sync),
     },
     ...(hub ? [hubSection(hub)] : []),
+    ...(background ? [backgroundSection(background, pending)] : []),
   ];
 }
 
@@ -296,6 +375,11 @@ export function SettingsContainer() {
   const caller = useNotes((s) => s.hello?.caller);
   const [hub, setHub] = useState<HubView | null>(null);
   const [joining, setJoining] = useState<JoinMode | null>(null);
+  const [background, setBackground] = useState<Background | null>(null);
+  // awaited is the number of the change whose answer the window waits for:
+  // the row says that it asks until an answer read the setting after it
+  // (ADR-0033).
+  const [awaited, setAwaited] = useState<number | null>(null);
   const narrow = useNarrow();
   const open = section !== null;
   // A browser inside lodge may not join, leave or pair: sync admits local callers only.
@@ -304,10 +388,38 @@ export function SettingsContainer() {
     if (!open) return;
     let live = true;
     void loadHub(client).then((h) => live && setHub(h));
+    void readBackground().then((b) => live && setBackground(b));
     return () => {
       live = false;
     };
   }, [open, client]);
+  // The desktop can take minutes to answer, in a dialog of its own, and a
+  // launcher's request answers late too: while the dialog is open, read the
+  // answer again every 2 s, with no limit (ADR-0033).
+  const hasBackground = background !== null;
+  useEffect(() => {
+    if (!open || !hasBackground) return;
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      if (!live) return;
+      const b = await readBackground();
+      if (!live) return;
+      if (b !== null) {
+        const generation = b.portal?.generation ?? null;
+        setBackground(b);
+        setAwaited((a) => (a !== null && generation !== null && generation >= a ? null : a));
+      }
+      timer = setTimeout(poll, POLL_MS);
+    };
+    timer = setTimeout(poll, POLL_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [open, hasBackground]);
+  const lastGeneration = background?.portal?.generation ?? null;
+  const pending = awaited !== null && !(lastGeneration !== null && lastGeneration >= awaited);
 
   /** leave stops syncing the window's vault, once the person agrees; its files stay. */
   async function leave(): Promise<void> {
@@ -333,12 +445,26 @@ export function SettingsContainer() {
     <>
       <SettingsDialog
         narrow={narrow}
-        sections={settingsSections(prefs, vault, sync, hub, canJoin)}
+        sections={settingsSections(prefs, vault, sync, hub, background, pending, canJoin)}
         section={section}
         onSection={(id) => openSettings(id)}
-        onClose={closeSettings}
+        onClose={() => {
+          setAwaited(null);
+          closeSettings();
+        }}
         onChange={(id, value) => {
           const [where, key, arg] = id.split(":") as [string, string, string | undefined];
+          if (where === "bg" && key === "keep") {
+            // The shell counts the change it sets in motion; the row says that
+            // it asks until an answer read the setting after that number
+            // (ADR-0033).
+            void saveBackground(Boolean(value)).then((b) => {
+              if (b === null) return;
+              setBackground(b);
+              setAwaited(b.generation);
+            });
+            return;
+          }
           if (where === "sync") {
             if (key === "join" || key === "pair") setJoining(key);
             else if (key === "leave") void leave();

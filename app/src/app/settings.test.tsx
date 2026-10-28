@@ -183,7 +183,7 @@ describe("the Sync section's rows", () => {
     skipped: [],
   });
   const syncRows = (sync: SyncStatus | null, canJoin: boolean) =>
-    settingsSections(DEFAULT_PREFS, null, sync, null, canJoin).find((s) => s.id === "sync")?.rows ?? [];
+    settingsSections(DEFAULT_PREFS, null, sync, null, null, false, canJoin).find((s) => s.id === "sync")?.rows ?? [];
   const ids = (sync: SyncStatus | null, canJoin: boolean) => syncRows(sync, canJoin).map((r) => r.id);
 
   it("offers Join for a vault with no hub, and nothing to a caller that may not join", () => {

@@ -558,10 +558,18 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 | Daily notes | Date format; New file location; Template file location | `YYYY-MM-DD`; vault root; none | vault |
 | Templates | Template folder location; Date format; Time format | none; `YYYY-MM-DD`; `HH:mm` | vault |
 | Sync | the window's vault's hub, hub vault, state and conflicts; Join…, Pair again… and Leave for its sync | | |
+| Background ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)) | Keep syncing when no window is open: On, notesd outlives the last window and may start at login; Off, it stops with the last window and starts no more at login | on | device |
+| | Desktop permission: what the Background portal last answered, read-only (Allowed at login, Allowed, Refused with the way to allow it, Not asked yet, or that the desktop did not answer, with the helper's error; Asking the desktop… while no answer read the counter at or after the change (its `generation` is at least the change's), which the window reads again every 2 s while the dialog is open) | | |
 
 "App" settings are the app's preferences, "vault" settings are the
 vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset
 ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)).
+"Device" settings belong to the installed app on that machine, not to a
+vault: the Background section's off file is
+`$XDG_CONFIG_HOME/frostnotes/background-off`, which the shell writes and the
+launcher reads. The section is drawn only in the Flatpak, where
+`background_get` answers
+([design/app.md](../design/app.md#the-flatpak)).
 
 The Sync section shows the window's vault's sync where notesd syncs and
 the caller is not a browser inside lodge: its hub, its hub vault, its
