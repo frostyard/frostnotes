@@ -506,7 +506,7 @@ function keepUnsaved(docs: DocumentRegistry): () => void {
 
 /**
  * Connecting stands in for MainWindow until notesd answers; the title bar
- * stays usable. In the Flatpak, once the connection fails it says why
+ * stays usable. In the Flatpak, while the connection is lost it says why
  * notesd is not running, from notesd.log's end (NotesdCause).
  */
 export function Connecting() {
@@ -515,7 +515,12 @@ export function Connecting() {
   const [log, setLog] = useState<NotesdLog | null>(null);
   const lost = connection.state === "lost";
   useEffect(() => {
-    if (!lost) return;
+    // Only while the connection is lost: a retry in flight, or a connection
+    // that came, shows no cause, and the next failure reads the log again.
+    if (!lost) {
+      setLog(null);
+      return;
+    }
     let stale = false;
     void readNotesdLog().then((read) => {
       if (!stale) setLog(read);
@@ -539,7 +544,7 @@ export function Connecting() {
         className="text-empty flex flex-1 flex-col items-center justify-center gap-4 px-8 text-secondary"
       >
         {text}
-        {log && <NotesdCause log={log} />}
+        {lost && log && <NotesdCause log={log} />}
       </div>
       <StatusBar
         connection={connection}

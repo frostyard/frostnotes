@@ -39,6 +39,26 @@ describe("Connecting", () => {
     expect(screen.getByRole("status").textContent).toContain("Reconnecting to notesd… (connection refused)");
   });
 
+  it("shows the cause only while the connection is lost, and reads the log again at the next failure", async () => {
+    read.mockResolvedValue({ path: "/s/notesd.log", lastLine: "notesd: another notesd uses /d", portalRefused: false });
+    useNotes.setState({ connection: { state: "lost", reason: "connection refused" } });
+    render(<Connecting />);
+    await screen.findByRole("region", { name: "Why notesd is not running" });
+    expect(read).toHaveBeenCalledOnce();
+
+    act(() => useNotes.setState({ connection: { state: "connecting" } })); // a retry
+    expect(cause()).toBeNull();
+    expect(read).toHaveBeenCalledOnce();
+
+    read.mockResolvedValue({ path: "/s/notesd.log", lastLine: "notesd: a newer line", portalRefused: false });
+    act(() => useNotes.setState({ connection: { state: "lost", reason: "connection refused" } }));
+    await vi.waitFor(() => expect(cause()?.textContent).toContain("notesd: a newer line"));
+    expect(read).toHaveBeenCalledTimes(2);
+
+    act(() => useNotes.setState({ connection: { state: "connecting" } }));
+    expect(cause()).toBeNull();
+  });
+
   it("shows another last line as it is", async () => {
     read.mockResolvedValue({ path: "/s/notesd.log", lastLine: "notesd: another notesd uses /d", portalRefused: false });
     useNotes.setState({ connection: { state: "lost", reason: "connection refused" } });
