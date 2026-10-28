@@ -5,6 +5,16 @@ import { Menu, Sheet } from "@frostyard/lodge-ui/react";
 import { Ellipsis, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+/** SyncAvailability is whether this notesd syncs: unknown while the check runs. */
+export type SyncAvailability = "unknown" | "yes" | "no";
+
+/** JOIN_WORDS is the join row's words, by whether this notesd syncs. */
+const JOIN_WORDS: Record<SyncAvailability, string> = {
+  unknown: "Checking whether this notesd syncs…",
+  yes: "Sync a new vault with a vault on a hub. To sync a vault you have, open it, then Settings, Sync.",
+  no: "This notesd does not sync.",
+};
+
 /** VaultEntry is a vault the manager lists. */
 export interface VaultEntry {
   id: number;
@@ -31,6 +41,10 @@ export interface VaultManagerProps {
   onOpen: (id: number) => void;
   onRemove: (vault: VaultEntry) => void;
   onCreate: () => void;
+  /** Join a vault on a hub: shows the join panel in the actions' place. */
+  onJoin: () => void;
+  /** Whether this notesd syncs: the Join button shows for "yes" alone. */
+  syncAvailable: SyncAvailability;
   /** Open folder as vault: no path with a picker, else the typed path, trimmed. */
   onOpenFolder: (path?: string) => void;
   onClose: () => void;
@@ -170,7 +184,7 @@ function VaultList({ vaults, current, manage, onOpen, onRemove }: VaultManagerPr
   );
 }
 
-function VaultActions({ canPick, onCreate, onOpenFolder }: VaultManagerProps) {
+function VaultActions({ canPick, onCreate, onJoin, syncAvailable, onOpenFolder }: VaultManagerProps) {
   const [path, setPath] = useState("");
 
   function openFolder() {
@@ -211,15 +225,17 @@ function VaultActions({ canPick, onCreate, onOpenFolder }: VaultManagerProps) {
           Open
         </button>
       </VaultAction>
-      <VaultAction
-        title="Join a vault on a hub"
-        description={
-          <>
-            Join it with <code className="select-text font-mono">notesctl hub join URL NAME</code>, then open its folder
-            here.
-          </>
-        }
-      />
+      <VaultAction title="Join a vault on a hub" description={JOIN_WORDS[syncAvailable]}>
+        {syncAvailable === "yes" && (
+          <button
+            type="button"
+            className="h-7 rounded-md border border-separator px-3 hover:bg-selection-inactive"
+            onClick={onJoin}
+          >
+            Join
+          </button>
+        )}
+      </VaultAction>
     </>
   );
 }

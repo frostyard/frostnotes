@@ -4,7 +4,8 @@
 // docs/specs/rpc-api.md): rpc.hello first; events only after
 // events.subscribe, durable ones kept and replayed after sinceSeq; the
 // vault domain; the note domain over each vault's MockVault (vault.ts);
-// and a sync domain for vaults that sync with no hub. As caller session
+// and a sync domain: pairing with one code, joining, leaving and the synced
+// vaults' states. As caller session
 // (MockOptions.caller) it refuses what notesd refuses a browser inside
 // lodge, and names a session's writes as notesd does.
 import { byName } from "../../data/stores";
@@ -18,8 +19,13 @@ import {
   type HubStatus,
   METHOD_CALLERS,
   type Method,
+  type Pairing,
+  type PairResult,
   type PendingPairing,
   PROTOCOL,
+  type SyncHub,
+  type SyncState,
+  type SyncStatus,
   type Vault,
   type VaultConfigureParams,
   type VersionSource,
@@ -46,6 +52,22 @@ export interface MockOptions {
   caller?: CallerKind;
   /** A hub's state, when this notesd is one: hub.status, hub.devices and hub.pending answer from it, and hub.revoke changes it. */
   hub?: { status: HubStatus; devices: HubDevice[]; pending: PendingPairing[] };
+  /** Vaults this device already syncs, as sync.status reports them; their hubs count as paired. */
+  synced?: { vaultId: number; url: string; name: string; state?: SyncState }[];
+  /** How many of the next sync.join calls answer revoked, as a hub that refused the device's token. */
+  joinRefusals?: number;
+  /** sync.paired answers expired, as a code not approved within 10 minutes. */
+  pairingExpired?: boolean;
+  /** Hubs this device paired with, as sync.hubs lists them, with no vault synced yet. */
+  paired?: string[];
+  /** How many sync.paired calls answer pending before one answers approved; 0 approves at once. */
+  pendingPairings?: number;
+  /** sync answers unavailable, as a notesd that does not sync. */
+  noSync?: boolean;
+  /** How many of the next vault.remove calls fail, as notesd does while it is busy. */
+  removeRefusals?: number;
+  /** vault.add answers after its vault.added event, as notesd may: the window opens the vault first. */
+  addEventFirst?: boolean;
   /** A session's login, display name and node, as lodge names them. */
   login?: string;
   displayName?: string;
@@ -53,6 +75,15 @@ export interface MockOptions {
 }
 
 type Params = Record<string, unknown>;
+
+/** HUB_ID is the ID of the hub a pairing in the mock reaches. */
+const HUB_ID = "0123456789abcdef0123456789abcdef";
+
+/** PAIRING_CODE is the code every mock pairing shows to approve. */
+const PAIRING_CODE = "ABCD-EFGH";
+
+/** HUB_URL is where the mock's hub listens, as the browser shows it. */
+export const HUB_URL = "https://lodge.example.ts.net/device/notes";
 
 /** MockTransport serves vaults from memory through the Transport interface. */
 export class MockTransport implements Transport {
@@ -64,6 +95,16 @@ export class MockTransport implements Transport {
   /** The folders on the mock's disk: its vaults', their parents', and MockOptions.folders. */
   private readonly folders = new Set<string>();
   private nextId = 1;
+  private readonly hubs: SyncHub[] = [];
+  private readonly pairings = new Map<string, string>();
+  private readonly synced = new Map<number, SyncStatus>();
+  private joinRefusals: number;
+  private removeRefusals: number;
+  private pendingPairings: number;
+  private pairingGate: Promise<void> | null = null;
+  private openPairingGate: (() => void) | null = null;
+  private joinGate: Promise<void> | null = null;
+  private openJoinGate: (() => void) | null = null;
   private seq = 0;
   private readonly log: Event[] = [];
   private hello = false;
@@ -82,6 +123,14 @@ export class MockTransport implements Transport {
     this.nextVault = Math.max(0, ...vaults.map((v) => v.id)) + 1;
     for (const f of [...this.vaults.map((v) => v.path), ...(opts.folders ?? [])]) this.addFolder(f);
     for (const v of this.vaults) this.contents.set(v.id, this.newVault(v.id, opts.files?.[v.id]));
+    this.joinRefusals = opts.joinRefusals ?? 0;
+    this.removeRefusals = opts.removeRefusals ?? 0;
+    this.pendingPairings = opts.pendingPairings ?? 0;
+    for (const url of opts.paired ?? []) this.addHub(url);
+    for (const s of opts.synced ?? []) {
+      this.synced.set(s.vaultId, this.syncStatus(s.vaultId, s.url, s.name, s.state ?? "idle"));
+      this.addHub(s.url);
+    }
   }
 
   call<T>(method: string, params: unknown): Promise<T> {
@@ -146,6 +195,85 @@ export class MockTransport implements Transport {
     this.script = script;
   }
 
+  /** refuseJoins makes the next n sync.join calls answer revoked, as a hub that refused the device's token. */
+  refuseJoins(n: number): void {
+    this.joinRefusals = n;
+  }
+
+  /** holdPairings makes sync.paired wait until releasePairings, as notesd's long poll waits. */
+  holdPairings(): void {
+    this.pairingGate = new Promise<void>((resolve) => {
+      this.openPairingGate = () => resolve();
+    });
+  }
+
+  /** releasePairings answers the sync.paired calls that waited, as pending. */
+  releasePairings(): void {
+    this.openPairingGate?.();
+    this.pairingGate = null;
+    this.openPairingGate = null;
+  }
+
+  /** holdJoins makes sync.join wait until releaseJoins, as a slow hub does. */
+  holdJoins(): void {
+    this.joinGate = new Promise<void>((resolve) => {
+      this.openJoinGate = () => resolve();
+    });
+  }
+
+  /** releaseJoins lets the sync.join calls that waited answer. */
+  releaseJoins(): void {
+    this.openJoinGate?.();
+    this.joinGate = null;
+    this.openJoinGate = null;
+  }
+
+  /** syncStatus is a synced vault's state as notesd reports it. */
+  private syncStatus(vaultId: number, url: string, hubVault: string, state: SyncState): SyncStatus {
+    return {
+      vaultId,
+      url,
+      hubVault,
+      state,
+      cursor: 0,
+      hubSeq: 0,
+      pending: 0,
+      conflicts: 0,
+      refused: [],
+      skipped: [],
+      syncedAt: this.now().toISOString(),
+    };
+  }
+
+  /** joinVault syncs the vault with the hub, as sync.join does. */
+  private joinVault(p: Params): unknown {
+    const v = this.target(p.vaultId);
+    const url = String(p.url ?? "");
+    if (this.joinRefusals > 0) {
+      this.joinRefusals -= 1;
+      throw new RPCError(ErrorCode.revoked, `the hub at ${url} refused this device's token`);
+    }
+    if (!this.hubs.some((h) => h.url === url)) {
+      throw new RPCError(ErrorCode.unavailable, `the hub at ${url} cannot be reached`);
+    }
+    const status = this.syncStatus(v.id, url, String(p.name ?? ""), "idle");
+    this.synced.set(v.id, status);
+    this.emit({ event: "sync.changed", data: { status: { ...status } } });
+    return { ...status };
+  }
+
+  /** addHub records a pairing with the hub at url, once. */
+  private addHub(url: string): void {
+    if (this.hubs.some((h) => h.url === url)) return;
+    this.hubs.push({
+      id: this.nextId++,
+      hub: HUB_ID,
+      url,
+      device: this.nextId++,
+      pairedAt: this.now().toISOString(),
+    });
+  }
+
   private newVault(id: number, files?: Record<string, string | Uint8Array>): MockVault {
     return new MockVault(
       id,
@@ -178,18 +306,23 @@ export class MockTransport implements Transport {
   }
 
   // emit keeps a durable event and delivers it to a subscribed connection
-  // after the reply that caused it, as notesd sends events after the commit.
-  private emit(event: Omit<Event, "seq">): void {
+  // after the reply that caused it, as notesd sends events after the commit;
+  // before sends it at once, for MockOptions.addEventFirst.
+  private emit(event: Omit<Event, "seq">, before = false): void {
     const e = { ...event, seq: ++this.seq } as Event;
     this.log.push(e);
-    if (this.subscribed) this.deliver([e]);
+    if (!this.subscribed) return;
+    if (before) this.send([e]);
+    else this.deliver([e]);
   }
 
   private deliver(events: Event[]): void {
-    setTimeout(() => {
-      if (this.closed !== undefined) return;
-      for (const e of events) for (const h of this.eventHandlers) h(e);
-    }, this.opts.latency ?? 0);
+    setTimeout(() => this.send(events), this.opts.latency ?? 0);
+  }
+
+  private send(events: Event[]): void {
+    if (this.closed !== undefined) return;
+    for (const e of events) for (const h of this.eventHandlers) h(e);
   }
 
   private get caller(): CallerKind {
@@ -257,6 +390,10 @@ export class MockTransport implements Transport {
         const id = Number(p.id);
         const i = this.vaults.findIndex((v) => v.id === id);
         if (i < 0) throw new RPCError(ErrorCode.notFound, `vault ${id}: not found`);
+        if (this.removeRefusals > 0) {
+          this.removeRefusals -= 1;
+          throw new RPCError(ErrorCode.internal, "notesd is busy");
+        }
         this.vaults.splice(i, 1);
         this.contents.delete(id);
         this.emit({ event: "vault.removed", data: { id } });
@@ -371,12 +508,66 @@ export class MockTransport implements Transport {
     throw new RPCError(ErrorCode.methodNotFound, `method ${method} does not exist`);
   }
 
-  // No mock vault syncs: sync.status lists none, and the rest answer as
-  // notesd does for a vault without a hub.
+  // The sync domain: pairing shows one code, which is approved at once
+  // unless MockOptions.pairingExpired; joining, leaving and status are the
+  // device's synced vaults, seeded from MockOptions.synced; a notesd without
+  // sync (MockOptions.noSync) answers unavailable to all of them.
   private sync(method: string, p: Params): unknown {
-    if (method === "sync.status" || method === "sync.hubs") return [];
-    if (p.vaultId !== undefined) this.target(p.vaultId);
-    throw new RPCError(ErrorCode.notFound, `vault ${String(p.vaultId)} does not sync with a hub`);
+    if (this.opts.noSync) throw new RPCError(ErrorCode.unavailable, "this notesd does not sync");
+    switch (method) {
+      case "sync.pair": {
+        const url = String(p.url ?? "");
+        const pairing = `pairing-${this.nextId++}`;
+        this.pairings.set(pairing, url);
+        const answer: Pairing = {
+          pairing,
+          code: PAIRING_CODE,
+          hub: HUB_ID,
+          url,
+          expiresAt: new Date(this.now().getTime() + 10 * 60 * 1000).toISOString(),
+        };
+        return answer;
+      }
+      case "sync.paired": {
+        const url = this.pairings.get(String(p.pairing));
+        if (url === undefined) {
+          throw new RPCError(ErrorCode.notFound, `pairing ${String(p.pairing)} does not exist`);
+        }
+        if (this.pairingGate !== null) {
+          const waiting: PairResult = { state: "pending", hub: HUB_ID };
+          return this.pairingGate.then(() => waiting);
+        }
+        if (this.opts.pairingExpired) {
+          const expired: PairResult = { state: "expired", hub: HUB_ID };
+          return expired;
+        }
+        if (this.pendingPairings > 0) {
+          this.pendingPairings -= 1;
+          const pending: PairResult = { state: "pending", hub: HUB_ID };
+          return pending;
+        }
+        this.addHub(url);
+        const approved: PairResult = { state: "approved", hub: HUB_ID };
+        return approved;
+      }
+      case "sync.hubs":
+        return this.hubs.map((h) => ({ ...h }));
+      case "sync.join": {
+        if (this.joinGate !== null) return this.joinGate.then(() => this.joinVault(p));
+        return this.joinVault(p);
+      }
+      case "sync.leave": {
+        const v = this.target(p.vaultId);
+        this.synced.delete(v.id);
+        return null;
+      }
+      case "sync.status": {
+        if (p.vaultId !== undefined) this.target(p.vaultId);
+        const all = [...this.synced.values()].map((s) => ({ ...s }));
+        return p.vaultId === undefined ? all : all.filter((s) => s.vaultId === p.vaultId);
+      }
+    }
+    throw new RPCError(ErrorCode.methodNotFound, `method ${method} does not exist`);
   }
 
   private target(id: unknown): MockVault {
@@ -429,7 +620,7 @@ export class MockTransport implements Transport {
     const vault: Vault = { id: this.nextVault++, name, path, createdAt: this.now().toISOString() };
     this.vaults.push(vault);
     this.contents.set(vault.id, this.newVault(vault.id));
-    this.emit({ event: "vault.added", data: { vault: { ...vault } } });
+    this.emit({ event: "vault.added", data: { vault: { ...vault } } }, this.opts.addEventFirst === true);
     return vault;
   }
 }

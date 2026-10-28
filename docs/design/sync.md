@@ -215,6 +215,15 @@ checks the token. To renew the token of a hub whose vaults all stay
 joined, leave one of them and join it again, or join another vault on
 that hub; either new pairing serves every vault on the hub.
 
+From M6 the app runs the same flow with no terminal: the vault
+manager's Join panel asks for the hub's URL and the vault's name, shows
+the code to approve, and waits for the approval as `notesctl hub join`
+does; the settings' Sync section joins the open vault, leaves a hub, and
+pairs again with a new code for a vault in state `revoked`
+([specs/ui.md](../specs/ui.md#vault-manager)). A join pairs the device
+first where it has not paired with the hub, and a hub that refuses a
+paired device's token pairs again once, as the command does.
+
 A device that joins with files already in its folder matches them by
 history: a file whose hash is a revision of the hub's file at the same
 path takes that revision as its agreed base, so an unchanged older copy

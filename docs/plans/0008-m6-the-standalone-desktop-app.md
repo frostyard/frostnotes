@@ -277,6 +277,8 @@ blocks Phase 2.
   over the existing `sync.pair`, `sync.join` and `sync.leave`
   ([design/sync.md](../design/sync.md#pairing-and-sessions)).
   **Done when:** Phase 3's item 6 passes in the app, with no terminal.
+  **Status (2026-10-28): built** in this change; the run of Phase 3's
+  item 6 in the app is still to do.
 - **G2 — A setting for background activity.** notesd lives on after the
   last window closes, until logout, and only the desktop's background
   permission controls the start at login (ADR-0031, Consequences). With

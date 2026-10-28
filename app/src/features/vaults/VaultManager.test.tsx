@@ -20,6 +20,8 @@ function setup(props: Partial<VaultManagerProps> = {}) {
     onOpen: vi.fn(),
     onRemove: vi.fn(),
     onCreate: vi.fn(),
+    onJoin: vi.fn(),
+    syncAvailable: "yes",
     onOpenFolder: vi.fn(),
     onClose: vi.fn(),
     ...props,
@@ -72,6 +74,7 @@ describe("VaultManager", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: /^garden/ }), { clientX: 40, clientY: 60 });
     expect(screen.queryByRole("menu")).toBeNull();
     expect(screen.queryByRole("button", { name: "Create" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Join" })).toBeNull();
     expect(screen.getByText(/added and removed on the machine that runs notesd/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /^Work/ }));
     expect(props.onOpen).toHaveBeenCalledWith(2);
@@ -83,7 +86,7 @@ describe("VaultManager", () => {
     expect(screen.queryByRole("list", { name: "Vaults" })).toBeNull();
   });
 
-  it("offers Create new vault, Open folder as vault and how to join a hub", async () => {
+  it("offers Create new vault, Open folder as vault and Join a vault on a hub", async () => {
     const { props, user } = setup();
     expect(screen.getByRole("heading", { name: "Frostnotes" })).toBeTruthy();
     const createRow = screen.getByRole("region", { name: "Create new vault" });
@@ -96,7 +99,23 @@ describe("VaultManager", () => {
     await user.click(within(openRow).getByRole("button", { name: "Open" }));
     expect(props.onOpenFolder).toHaveBeenCalledWith();
     const hubRow = screen.getByRole("region", { name: "Join a vault on a hub" });
-    expect(within(hubRow).getByText("notesctl hub join URL NAME").tagName).toBe("CODE");
+    expect(within(hubRow).getByText(/^Sync a new vault with a vault on a hub\./)).toBeTruthy();
+    await user.click(within(hubRow).getByRole("button", { name: "Join" }));
+    expect(props.onJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a notesd that does not sync cannot join", () => {
+    setup({ syncAvailable: "no" });
+    const hubRow = screen.getByRole("region", { name: "Join a vault on a hub" });
+    expect(within(hubRow).getByText("This notesd does not sync.")).toBeTruthy();
+    expect(within(hubRow).queryByRole("button", { name: "Join" })).toBeNull();
+  });
+
+  it("waits for the check before it offers Join", () => {
+    setup({ syncAvailable: "unknown" });
+    const hubRow = screen.getByRole("region", { name: "Join a vault on a hub" });
+    expect(within(hubRow).getByText("Checking whether this notesd syncs…")).toBeTruthy();
+    expect(within(hubRow).queryByRole("button", { name: "Join" })).toBeNull();
   });
 
   it("takes a typed folder where there is no picker", async () => {
