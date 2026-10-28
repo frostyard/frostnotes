@@ -789,8 +789,12 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
     notesd answers `invalidParams` with "Frostnotes cannot reach PATH
     because the Flatpak's file access does not include it; grant it with:
     `flatpak override --user --filesystem=PATH org.frostyard.Frostnotes`,
-    then log out and in (notesd keeps its sandbox until then)." A path the
-    grants cover keeps its plain error. The app shows that message as the
+    then log out and in (notesd keeps its sandbox until then)." PATH is
+    the vault's own folder for an existing vault, and the folder that
+    holds the new vault when `create` is set: the new folder does not
+    exist yet, and Flatpak mounts only paths that exist when the sandbox
+    starts, so a grant of the new path alone would not let the user create
+    it after the next login. A path the grants cover keeps its plain error. The app shows that message as the
     notice, with an action that copies the command. A vault that was
     registered and then left outside the grants fails its scan, not
     `vault.add`; the window shows no scan error yet, so that case stays in

@@ -39,8 +39,15 @@ func TestVaultPathExplainsARefusedFlatpakPath(t *testing.T) {
 		if !errors.As(err, &rpc) || rpc.Code != api.CodeInvalidParams {
 			t.Fatalf("create=%t: vaultPath(%s) = %v, want an invalidParams error", create, outside, err)
 		}
-		want := "Frostnotes cannot reach " + outside + " because the Flatpak's file access does not include it; " +
-			"grant it with: flatpak override --user --filesystem=" + outside + " org.frostyard.Frostnotes, " +
+		// An existing vault's folder is what to grant. A vault to create does
+		// not exist yet, and Flatpak mounts only paths that exist when the
+		// sandbox starts, so the folder that holds it is.
+		named := outside
+		if create {
+			named = filepath.Dir(outside)
+		}
+		want := "Frostnotes cannot reach " + named + " because the Flatpak's file access does not include it; " +
+			"grant it with: flatpak override --user --filesystem=" + named + " org.frostyard.Frostnotes, " +
 			"then log out and in (notesd keeps its sandbox until then)."
 		if rpc.Message != want {
 			t.Errorf("create=%t: message =\n%s\nwant\n%s", create, rpc.Message, want)

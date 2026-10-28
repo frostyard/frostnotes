@@ -70,7 +70,8 @@ func (v vaults) Add(ctx context.Context, p *api.VaultAddParams) (*api.Vault, err
 			if err := os.Mkdir(path, 0o755); errors.Is(err, fs.ErrExist) {
 				return api.Conflict("%s already exists", path)
 			} else if err != nil {
-				if refused := v.refused(p.Path, path, err); refused != nil {
+				// The folder to grant is the one that holds the new vault.
+				if refused := v.refused(filepath.Dir(filepath.Clean(p.Path)), filepath.Dir(path), err); refused != nil {
 					return refused
 				}
 				return api.InvalidParams("make the vault's folder: %v", err)
@@ -121,7 +122,8 @@ func (v vaults) Reindex(ctx context.Context, p *api.VaultReindexParams) (*api.Sc
 // own, or for one to create, its parent's, which must be a directory,
 // while the directory itself must not exist yet. Inside a Flatpak, a file
 // error on a path the sandbox's file access does not cover says so
-// (refused).
+// (refused): for an existing vault the message names its folder, for one
+// to create the folder that holds it.
 func (v vaults) vaultPath(shown string, create bool) (string, error) {
 	p := sandboxHome(shown, os.Lstat)
 	if !create {
@@ -145,15 +147,19 @@ func (v vaults) vaultPath(shown string, create bool) (string, error) {
 	if base == string(filepath.Separator) || base == "." {
 		return "", api.InvalidParams("vault path %q names no folder to make", p)
 	}
+	// A vault to create does not exist yet, and Flatpak mounts only paths
+	// that exist when the sandbox starts: the grant must name the folder
+	// that holds it, so a refusal names that folder.
+	shownParent := filepath.Dir(filepath.Clean(shown))
 	parent, err := filepath.EvalSymlinks(filepath.Dir(clean))
 	if err != nil {
-		if refused := v.refused(shown, clean, err); refused != nil {
+		if refused := v.refused(shownParent, filepath.Dir(clean), err); refused != nil {
 			return "", refused
 		}
 		return "", api.InvalidParams("the folder to hold the vault: %v", err)
 	}
 	if fi, err := os.Stat(parent); err != nil || !fi.IsDir() {
-		if refused := v.refused(shown, clean, err); refused != nil {
+		if refused := v.refused(shownParent, filepath.Dir(clean), err); refused != nil {
 			return "", refused
 		}
 		return "", api.InvalidParams("%s is not a folder", filepath.Dir(clean))

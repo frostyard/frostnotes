@@ -616,7 +616,11 @@ Obsidian's vault chooser
   override --user --filesystem=<path> org.frostyard.Frostnotes`, then log
   out and in (notesd keeps its sandbox until then)." (where the access
   covers the folder read only: "Frostnotes cannot write to <path> because
-  the Flatpak's file access to it is read-only; grant it with: …"); the
+  the Flatpak's file access to it is read-only; grant it with: …"). <path>
+  is the folder itself when Open folder as vault refuses it, and the
+  folder that holds the new vault (the Location) when Create refuses:
+  the new folder does not exist yet, and Flatpak mounts only paths that
+  exist when the sandbox starts. The
   notice has the action Copy command, which puts the `flatpak override`
   command on the clipboard ("Copied the command."), and so stays 10 s.
   Remove from list asks first (the confirmation dialog,

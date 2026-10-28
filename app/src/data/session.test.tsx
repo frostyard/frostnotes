@@ -124,6 +124,22 @@ describe("Session", () => {
   });
 });
 
+describe("Session when notesd never answers", () => {
+  // src-tauri's notesd_connect fails at once on a missing or refused socket,
+  // and Tauri's invoke rejects with that text, a string: the connection is
+  // lost, with the text as its reason, so Connecting can show its cause.
+  it("is lost at once, with the refusal's text", async () => {
+    const refusal = "connect to notesd at /run/user/1000/app/x/notesd.sock: No such file or directory (os error 2)";
+    render(
+      <Session connect={() => Promise.reject(refusal)} fallback={<p>connecting</p>}>
+        <Probe />
+      </Session>,
+    );
+    await waitFor(() => expect(useNotes.getState().connection).toEqual({ state: "lost", reason: refusal }));
+    expect(screen.getByText("connecting")).toBeTruthy();
+  });
+});
+
 describe("retryDelay", () => {
   it("doubles from the first wait to the most, within 20% either way", () => {
     const r: Retry = { firstMs: 1000, maxMs: 30_000 };
