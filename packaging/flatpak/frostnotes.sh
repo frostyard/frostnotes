@@ -98,7 +98,19 @@ fi
 # (notesctl's own limit is 30 s).
 if hello && [ -n "$have_spawn" ]; then
     running=$(bounded 2 notesctl hello --build 2>/dev/null) || running=
-    latest=$(bounded 10 flatpak-spawn --latest-version notesd -build 2>/dev/null) || latest=
+    # The query's output goes to a regular file, not to a command
+    # substitution: a substitution waits for EOF on its pipe, and
+    # flatpak-spawn hands that pipe to the portal and the new sandbox, which
+    # the timeout does not kill, so a stuck query would hold the window
+    # after its bound. Reading a regular file never waits.
+    latest=
+    latest_file=$(mktemp "$state/latest-build.XXXXXX" 2>/dev/null) || latest_file=
+    if [ -n "$latest_file" ]; then
+        if bounded 10 flatpak-spawn --latest-version notesd -build </dev/null >"$latest_file" 2>/dev/null; then
+            read -r latest <"$latest_file" || true
+        fi
+        rm -f "$latest_file"
+    fi
     if [ -n "$running" ] && [ -n "$latest" ] && [ "$running" != "$latest" ]; then
         bounded 35 notesctl shutdown >>"$state/notesd.log" 2>&1 || true
     fi
