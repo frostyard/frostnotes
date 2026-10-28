@@ -26,7 +26,36 @@ func grants(t *testing.T, filesystems string, env Env) *Grants {
 	return g
 }
 
-var home = Env{Home: "/home/ana", RuntimeDir: "/run/user/1000", UserDirs: "/nonexistent/user-dirs.dirs"}
+var home = Env{Home: "/home/ana", RuntimeDir: "/run/user/1000"}
+
+// defaultDirs is a user-dirs.dirs that names the XDG default folders.
+const defaultDirs = `# a comment
+XDG_DESKTOP_DIR="$HOME/Desktop"
+XDG_DOWNLOAD_DIR="$HOME/Downloads"
+XDG_TEMPLATES_DIR="$HOME/Templates"
+XDG_PUBLICSHARE_DIR="$HOME/Public"
+XDG_DOCUMENTS_DIR="$HOME/Documents"
+XDG_MUSIC_DIR="$HOME/Music"
+XDG_PICTURES_DIR="$HOME/Pictures"
+XDG_VIDEOS_DIR="$HOME/Videos"
+`
+
+// writeUserDirs writes a user-dirs.dirs in a new directory and returns the directory.
+func writeUserDirs(t *testing.T, text string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "user-dirs.dirs"), []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// withDirs is home with the user's folders named by defaultDirs.
+func withDirs(t *testing.T) Env {
+	e := home
+	e.ConfigHome = writeUserDirs(t, defaultDirs)
+	return e
+}
 
 func TestAccess(t *testing.T) {
 	for _, tc := range []struct {
@@ -75,10 +104,13 @@ func TestAccess(t *testing.T) {
 		{"an unknown modifier", "home:bogus;", "/home/ana/Notes", None},
 		{"a relative path", "home;", "Notes", None},
 		{"an unclean path", "home;", "/home/ana/x/../Notes/", ReadWrite},
-		{"spaces around entries", " home ; !~/Secret ;", "/home/ana/Secret", None},
+		{"an escaped semicolon in a path", `/srv/a\;b;`, "/srv/a;b/x", ReadWrite},
+		{"an escaped space in a path", `/srv/a\sb;`, "/srv/a b/x", ReadWrite},
+		{"a doubled semicolon", "home;;~/Notes:ro;", "/home/ana/Notes", ReadOnly},
+		{"host dirs, defaults", "xdg-state;", "/home/ana/.local/state/x", ReadWrite},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := grants(t, tc.filesystems, home).Access(tc.path); got != tc.want {
+			if got := grants(t, tc.filesystems, withDirs(t)).Access(tc.path); got != tc.want {
 				t.Errorf("filesystems=%s: Access(%s) = %d, want %d", tc.filesystems, tc.path, got, tc.want)
 			}
 		})
@@ -118,31 +150,33 @@ func TestParseReadsTheAppName(t *testing.T) {
 }
 
 func TestUserDirsFile(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "user-dirs.dirs")
-	text := "# comment\nXDG_DOCUMENTS_DIR=\"$HOME/Papers\"\nXDG_DOWNLOAD_DIR=\"/data/dl\"\nXDG_MUSIC_DIR=\"relative\"\nXDG_VIDEOS_DIR=\"$HOMEBREW/v\"\n"
-	if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	text := "# comment\nXDG_DOCUMENTS_DIR=\"$HOME/Papers\"\nXDG_DOWNLOAD_DIR=\"/data/dl\"\nXDG_MUSIC_DIR=\"relative\"\n" +
+		"XDG_VIDEOS_DIR=\"$HOMEBREW/v\"\n"
 	env := home
-	env.UserDirs = file
+	env.ConfigHome = writeUserDirs(t, text)
 	for _, tc := range []struct {
+		fs   string
 		path string
 		want Mode
+		sure bool
 	}{
-		{"/home/ana/Papers/Notes", ReadWrite}, // renamed
-		{"/home/ana/Documents/Notes", None},   // no longer there
-		{"/data/dl/x", ReadWrite},             // absolute
-		{"/home/ana/Music/x", ReadWrite},      // a relative value: the default
-		{"/home/ana/Videos/x", ReadWrite},     // not $HOME exactly: the default
+		{"xdg-documents;", "/home/ana/Papers/Notes", ReadWrite, true}, // renamed
+		{"xdg-documents;", "/home/ana/Documents/Notes", None, true},   // no longer there
+		{"xdg-download;", "/data/dl/x", ReadWrite, true},              // absolute
+		{"xdg-music;", "/home/ana/Music/x", None, false},              // a relative value: not resolved
+		{"xdg-videos;", "/home/ana/Videos/x", None, false},            // not $HOME exactly: not resolved
+		{"xdg-pictures;", "/home/ana/Pictures/x", None, false},        // not named: not guessed
 	} {
-		g := grants(t, "xdg-documents;xdg-download;xdg-music;xdg-videos;", env)
-		if got := g.Access(tc.path); got != tc.want {
-			t.Errorf("Access(%s) = %d, want %d", tc.path, got, tc.want)
+		g := grants(t, tc.fs, env)
+		if got := g.Access(tc.path); got != tc.want || g.Certain() != tc.sure {
+			t.Errorf("%s: Access(%s) = %d, Certain = %t; want %d, %t", tc.fs, tc.path, got, g.Certain(), tc.want, tc.sure)
 		}
 	}
 }
 
-func TestUserDirsFromTheHome(t *testing.T) {
+// The file in $XDG_CONFIG_HOME (the sandbox's copy of the host's) comes
+// first, then ~/.config's; with neither, a grant of a user folder is uncertain.
+func TestUserDirsFileOrder(t *testing.T) {
 	h := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(h, ".config"), 0o755); err != nil {
 		t.Fatal(err)
@@ -151,8 +185,39 @@ func TestUserDirsFromTheHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := grants(t, "xdg-pictures;", Env{Home: h})
-	if g.Access(filepath.Join(h, "Fotos", "a")) != ReadWrite || g.Access(filepath.Join(h, "Pictures", "a")) != None {
-		t.Errorf("grants = %+v, want %s/Fotos", g.grants, h)
+	if !g.Certain() || g.Access(filepath.Join(h, "Fotos", "a")) != ReadWrite || g.Access(filepath.Join(h, "Pictures", "a")) != None {
+		t.Errorf("~/.config only: grants = %+v, want %s/Fotos", g.grants, h)
+	}
+
+	cfg := writeUserDirs(t, "XDG_PICTURES_DIR=\"$HOME/Bilder\"\n")
+	g = grants(t, "xdg-pictures;", Env{Home: h, ConfigHome: cfg})
+	if !g.Certain() || g.Access(filepath.Join(h, "Bilder", "a")) != ReadWrite || g.Access(filepath.Join(h, "Fotos", "a")) != None {
+		t.Errorf("both: grants = %+v, want %s/Bilder", g.grants, h)
+	}
+
+	// An unreadable $XDG_CONFIG_HOME file falls through to ~/.config's.
+	g = grants(t, "xdg-pictures;", Env{Home: h, ConfigHome: t.TempDir()})
+	if !g.Certain() || g.Access(filepath.Join(h, "Fotos", "a")) != ReadWrite {
+		t.Errorf("config home without the file: grants = %+v, want %s/Fotos", g.grants, h)
+	}
+
+	g = grants(t, "xdg-pictures;", Env{Home: t.TempDir()})
+	if g.Certain() {
+		t.Errorf("no user-dirs.dirs: grants = %+v, want uncertain", g.grants)
+	}
+}
+
+func TestHostXDGDirectories(t *testing.T) {
+	env := home
+	env.HostDataHome, env.HostConfigHome, env.HostCacheHome, env.HostStateHome = "/data/d", "/data/c", "/data/k", "/data/s"
+	g := grants(t, "xdg-data/a;xdg-config/b;xdg-cache/c;xdg-state/d;", env)
+	for _, p := range []string{"/data/d/a/x", "/data/c/b/x", "/data/k/c/x", "/data/s/d/x"} {
+		if g.Access(p) != ReadWrite {
+			t.Errorf("Access(%s) = none, want the host's directory", p)
+		}
+	}
+	if !g.Certain() || g.Access("/home/ana/.local/share/a") != None || g.Access("/home/ana/.config/b") != None {
+		t.Errorf("grants = %+v: the defaults under home must not stand in when the host's are set", g.grants)
 	}
 }
 
@@ -254,5 +319,133 @@ func TestQuote(t *testing.T) {
 		if got := Quote(in); got != want {
 			t.Errorf("Quote(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestSplitList(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want []string
+		ok   bool
+	}{
+		{"", nil, true},
+		{"home;", []string{"home"}, true},
+		{"home;~/Notes:ro;", []string{"home", "~/Notes:ro"}, true},
+		{"home;~/Notes", []string{"home", "~/Notes"}, true},
+		{`/srv/a\;b;`, []string{"/srv/a;b"}, true},
+		{`/srv/a\sb;`, []string{"/srv/a b"}, true},
+		{`\s/srv/x;`, []string{" /srv/x"}, true},
+		{`/srv/a\\b;`, []string{`/srv/a\b`}, true},
+		{`/srv/a\\;b;`, []string{`/srv/a\`, "b"}, true},
+		{`/srv/a\nb\tc\rd;`, []string{"/srv/a\nb\tc\rd"}, true},
+		{"a;;b;", []string{"a", "", "b"}, true},
+		{`/srv/a\xb;`, nil, false},
+		{`/srv/a\;b\`, nil, false},
+		{`\`, nil, false},
+		{`/srv/a\ b;`, nil, false},
+		{`/srv/a\1;`, nil, false},
+	} {
+		got, ok := splitList(tc.in)
+		if ok != tc.ok || strings.Join(got, "\x00") != strings.Join(tc.want, "\x00") {
+			t.Errorf("splitList(%q) = %q, %t; want %q, %t", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// A value or an entry that cannot be decoded or resolved makes every
+// refusal uncertain: Explain keeps the plain error.
+func TestExplainSaysNothingWhenUncertain(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		filesystems string
+		env         Env
+	}{
+		{"a bad escape", `~/Notes;/srv/a\xb;`, home},
+		{"a backslash at the end", `~/Notes;/srv/a\`, home},
+		{"an unknown token", "~/Notes;xdg-nothing;", home},
+		{"an unknown modifier", "~/Notes;/srv/a:bogus;", home},
+		{"a user folder with no user-dirs.dirs", "~/Notes;xdg-documents;", home},
+		{"a user folder that the file does not name", "~/Notes;xdg-music;", Env{Home: "/home/ana", ConfigHome: writeUserDirs(t, "XDG_DOCUMENTS_DIR=\"$HOME/D\"\n")}},
+		{"a relative home", "~/Notes;", Env{Home: "ana"}},
+		{"no home for home", "home;", Env{}},
+		{"no runtime directory for xdg-run", "xdg-run/app;", Env{Home: "/home/ana"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := grants(t, tc.filesystems, tc.env)
+			if g.Certain() {
+				t.Fatalf("filesystems=%s: Certain = true, want false", tc.filesystems)
+			}
+			err := pathError(syscall.ENOENT)
+			if got := g.Explain("/srv/elsewhere/Vault", err); got != err {
+				t.Errorf("Explain = %v, want the plain error", got)
+			}
+		})
+	}
+	// The same value, understood, explains.
+	g := grants(t, "~/Notes;", home)
+	if !g.Certain() || g.Explain("/srv/elsewhere/Vault", pathError(syscall.ENOENT)) == nil {
+		t.Error("a decoded value must explain")
+	}
+	var none *Grants
+	if none.Certain() {
+		t.Error("a nil Grants is not certain")
+	}
+}
+
+// Flatpak always exposes some paths, so a missing grant does not prove a
+// missing access there.
+func TestExposed(t *testing.T) {
+	g := grants(t, "", home)
+	for p, want := range map[string]bool{
+		"/app/bin":                     true,
+		"/usr/lib/x":                   true,
+		"/etc/hosts":                   true,
+		"/tmp/vault":                   true,
+		"/tmp":                         true,
+		"/var/tmp/x":                   true,
+		"/run/foo/x":                   true,
+		"/proc/1/status":               true,
+		"/sys/class":                   true,
+		"/dev/null":                    true,
+		"/run/user/1000":               true,
+		"/run/user/1000/app/x":         true,
+		"/run/user/1000/doc/abc/Notes": true,
+		"/home/ana/.var/app/org.frostyard.Frostnotes":   true,
+		"/home/ana/.var/app/org.frostyard.Frostnotes/x": true,
+		"/run/media/ana/disk":                           false,
+		"/run/media":                                    false,
+		"/home/ana/Notes":                               false,
+		"/home/ana/.var/app/org.example.Other/x":        false,
+		"/home/ana/.var":                                false,
+		"/srv/notes":                                    false,
+		"/var/home/ana":                                 false,
+		"/var/lib/x":                                    false,
+		"/usrlocal":                                     false,
+		"/tmpx":                                         false,
+		"relative":                                      false,
+	} {
+		if got := g.Exposed(p); got != want {
+			t.Errorf("Exposed(%s) = %t, want %t", p, got, want)
+		}
+	}
+	var none *Grants
+	if none.Exposed("/tmp") {
+		t.Error("a nil Grants exposes nothing")
+	}
+}
+
+func TestExplainKeepsTheErrorOfAnExposedPath(t *testing.T) {
+	g := grants(t, "~/Notes;", home)
+	for _, p := range []string{"/tmp/Vault", "/usr/x", "/run/user/1000/doc/a/Notes", "/home/ana/.var/app/org.frostyard.Frostnotes/Vault"} {
+		for _, errno := range []syscall.Errno{syscall.ENOENT, syscall.EACCES, syscall.EPERM, syscall.EROFS} {
+			err := pathError(errno)
+			if got := g.Explain(p, err); got != err {
+				t.Errorf("Explain(%s, %v) = %v, want the plain error", p, errno, got)
+			}
+		}
+	}
+	// /run/media is not exposed, so a refusal there is explained.
+	if got := g.Explain("/run/media/ana/disk/Vault", pathError(syscall.ENOENT)); got == nil || !strings.Contains(got.Error(), "Frostnotes cannot reach") {
+		t.Errorf("Explain(/run/media/...) = %v, want an explanation", got)
 	}
 }

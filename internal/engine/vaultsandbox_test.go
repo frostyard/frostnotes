@@ -25,10 +25,9 @@ func flatpak(t *testing.T, home, filesystems string) vaults {
 // A vault outside the Flatpak's file access says so; one inside it, and
 // any vault outside a Flatpak, keep the plain file error.
 func TestVaultPathExplainsARefusedFlatpakPath(t *testing.T) {
-	home := t.TempDir()
-	if err := os.Mkdir(filepath.Join(home, "Notes"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// A home that does not exist: no path under it is real, and none is under
+	// /tmp, which Flatpak always exposes.
+	home := "/nonexistent-g5-home/ana"
 	narrow := flatpak(t, home, "~/Notes;")
 	outside := filepath.Join(home, "Elsewhere", "Vault")
 	inside := filepath.Join(home, "Notes", "Missing", "Vault") // its parent is missing too

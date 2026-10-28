@@ -4,7 +4,9 @@
 // denied", which does not tell a person that a narrowed --filesystem is the
 // cause. Grants reads the [Context] filesystems of /.flatpak-info and says
 // how far a path is covered; Explain turns a file error on an uncovered
-// path into one that names the fix.
+// path into one that names the fix, and only when it is sure: a grant it
+// cannot decode or resolve, or a path that Flatpak always exposes, leaves
+// the plain error.
 package sandbox
 
 import (
@@ -43,15 +45,28 @@ type Env struct {
 	Home string
 	// RuntimeDir is $XDG_RUNTIME_DIR, what "xdg-run" names.
 	RuntimeDir string
-	// UserDirs is the file that names the user's folders; Home's
-	// .config/user-dirs.dirs when empty. When it cannot be read, the XDG
-	// defaults (Documents, Downloads, ...) stand in.
-	UserDirs string
+	// ConfigHome is the sandbox's $XDG_CONFIG_HOME (in a Flatpak,
+	// ~/.var/app/<ID>/config), where Flatpak puts a copy of the host's
+	// user-dirs.dirs; it is read before Home's .config/user-dirs.dirs.
+	ConfigHome string
+	// HostDataHome, HostConfigHome, HostCacheHome and HostStateHome are the
+	// host's $XDG_*_HOME, which Flatpak passes on as HOST_XDG_*_HOME when
+	// the host sets them; "xdg-data" and its kin name them, and the XDG
+	// defaults under Home when they are empty.
+	HostDataHome, HostConfigHome, HostCacheHome, HostStateHome string
 }
 
 // EnvFromOS returns the Env of this process.
 func EnvFromOS() Env {
-	return Env{Home: os.Getenv("HOME"), RuntimeDir: os.Getenv("XDG_RUNTIME_DIR")}
+	return Env{
+		Home:           os.Getenv("HOME"),
+		RuntimeDir:     os.Getenv("XDG_RUNTIME_DIR"),
+		ConfigHome:     os.Getenv("XDG_CONFIG_HOME"),
+		HostDataHome:   os.Getenv("HOST_XDG_DATA_HOME"),
+		HostConfigHome: os.Getenv("HOST_XDG_CONFIG_HOME"),
+		HostCacheHome:  os.Getenv("HOST_XDG_CACHE_HOME"),
+		HostStateHome:  os.Getenv("HOST_XDG_STATE_HOME"),
+	}
 }
 
 // grant is one filesystem entry: root and the mode below it.
@@ -66,6 +81,11 @@ type grant struct {
 type Grants struct {
 	app    string
 	grants []grant
+	// always are the paths Flatpak exposes whatever the grants say.
+	always []string
+	// uncertain is set when a grant could not be decoded or resolved: what
+	// the grants cover is then unknown, so nothing can be said to be refused.
+	uncertain bool
 }
 
 // Load reads the file grants of the sandbox described by the file at
@@ -79,11 +99,12 @@ func Load(infoPath string, env Env) (*Grants, error) {
 	return Parse(f, env)
 }
 
-// Parse reads the [Context] filesystems of a /.flatpak-info from r.
+// Parse reads the [Context] filesystems of a /.flatpak-info from r. A
+// value it cannot decode, or an entry it cannot understand or resolve,
+// makes the grants uncertain (Certain).
 func Parse(r io.Reader, env Env) (*Grants, error) {
 	g := &Grants{app: AppID}
-	var section string
-	var entries []string
+	var section, raw string
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -99,20 +120,116 @@ func Parse(r io.Reader, env Env) (*Grants, error) {
 			case section == "Application" && key == "name" && strings.TrimSpace(value) != "":
 				g.app = strings.TrimSpace(value)
 			case section == "Context" && key == "filesystems":
-				entries = strings.Split(value, ";") // the last one wins, as in a key file
+				raw = strings.TrimLeft(value, " \t") // the last one wins, as in a key file
 			}
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("read the sandbox's file grants: %w", err)
 	}
+	g.always = alwaysExposed(g.app, env)
+	entries, ok := splitList(raw)
+	if !ok {
+		g.uncertain = true
+		return g, nil
+	}
 	dirs := loadUserDirs(env)
 	for _, e := range entries {
-		if root, mode, ok := entry(strings.TrimSpace(e), env, dirs); ok {
+		if e == "" {
+			continue // "a;;b", and the end of "a;b;"
+		}
+		root, mode, res := entry(e, env, dirs)
+		switch res {
+		case resolved:
 			g.grants = append(g.grants, grant{root, mode})
+		case unknown:
+			g.uncertain = true
 		}
 	}
 	return g, nil
+}
+
+// splitList decodes a GLib key file's string list: entries end at a ";"
+// that no backslash escapes, and an entry decodes \; to ";", \\ to a
+// backslash and \s, \n, \t and \r to a space, a line feed, a tab and a
+// carriage return. It is not ok for any other escape, or a
+// backslash at the end: the value cannot then be trusted.
+func splitList(raw string) ([]string, bool) {
+	var out []string
+	var cur strings.Builder
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c != '\\' {
+			if c == ';' {
+				out = append(out, cur.String())
+				cur.Reset()
+			} else {
+				cur.WriteByte(c)
+			}
+			continue
+		}
+		i++
+		if i == len(raw) {
+			return nil, false
+		}
+		switch raw[i] {
+		case ';':
+			cur.WriteByte(';')
+		case '\\':
+			cur.WriteByte('\\')
+		case 's':
+			cur.WriteByte(' ')
+		case 'n':
+			cur.WriteByte('\n')
+		case 't':
+			cur.WriteByte('\t')
+		case 'r':
+			cur.WriteByte('\r')
+		default:
+			return nil, false
+		}
+	}
+	if cur.Len() > 0 {
+		out = append(out, cur.String()) // an unterminated last entry
+	}
+	return out, true
+}
+
+// Certain says whether every grant was decoded and resolved. Explain says
+// nothing when it is not: coverage cannot be disproved.
+func (g *Grants) Certain() bool { return g != nil && !g.uncertain }
+
+// alwaysExposed lists the paths that a Flatpak sandbox has whatever its
+// filesystems say: the app's own directory under the home, its runtime,
+// the temporary and system directories, and the runtime directory (with
+// the document portal's mount).
+func alwaysExposed(app string, env Env) []string {
+	exposed := []string{"/app", "/usr", "/etc", "/tmp", "/var/tmp", "/run", "/proc", "/sys", "/dev"}
+	if filepath.IsAbs(env.Home) {
+		exposed = append(exposed, path.Join(env.Home, ".var", "app", app))
+	}
+	if filepath.IsAbs(env.RuntimeDir) {
+		exposed = append(exposed, path.Clean(env.RuntimeDir), path.Join(env.RuntimeDir, "doc"))
+	}
+	return exposed
+}
+
+// Exposed says whether Flatpak gives the sandbox p whatever the grants
+// say. Under /run only /run/media is left out.
+func (g *Grants) Exposed(p string) bool {
+	if g == nil || !filepath.IsAbs(p) {
+		return false
+	}
+	p = filepath.Clean(p)
+	if under(p, "/run/media") {
+		return false
+	}
+	for _, root := range g.always {
+		if under(p, root) {
+			return true
+		}
+	}
+	return false
 }
 
 // App is the sandbox's application ID.
@@ -152,10 +269,18 @@ func under(p, root string) bool {
 	return p == root || root == "/" || strings.HasPrefix(p, root+"/")
 }
 
+// result says what an entry of the filesystems list came to.
+type result int
+
+const (
+	resolved result = iota // it names a path
+	ignored                // it names no user path (host-os, host-etc)
+	unknown                // it cannot be understood or resolved
+)
+
 // entry parses one filesystems entry into the path it names and the mode
-// it grants; a negation has mode None. It is not ok for an entry that
-// names no user path (host-os, an unknown token).
-func entry(s string, env Env, dirs map[string]string) (string, Mode, bool) {
+// it grants; a negation has mode None.
+func entry(s string, env Env, dirs map[string]string) (string, Mode, result) {
 	deny := strings.HasPrefix(s, "!")
 	s = strings.TrimPrefix(s, "!")
 	mode := ReadWrite
@@ -166,26 +291,28 @@ func entry(s string, env Env, dirs map[string]string) (string, Mode, bool) {
 		case "rw", "create":
 			mode = ReadWrite
 		default:
-			return "", None, false
+			return "", None, unknown
 		}
 		s = s[:i]
 	}
-	root, ok := resolve(s, env, dirs)
-	if !ok {
-		return "", None, false
+	root, res := resolve(s, env, dirs)
+	if res != resolved {
+		return "", None, res
 	}
 	if deny {
 		mode = None
 	}
-	return root, mode, true
+	return root, mode, resolved
 }
 
 // resolve returns the absolute path that a filesystems token names.
-func resolve(s string, env Env, dirs map[string]string) (string, bool) {
+func resolve(s string, env Env, dirs map[string]string) (string, result) {
 	token, sub, _ := strings.Cut(s, "/")
 	switch {
 	case s == "host":
-		return "/", true
+		return "/", resolved
+	case s == "host-os" || s == "host-etc" || s == "host-reset":
+		return "", ignored
 	case s == "home":
 		return abs(env.Home, "")
 	case token == "~":
@@ -195,52 +322,72 @@ func resolve(s string, env Env, dirs map[string]string) (string, bool) {
 	case token == "xdg-run":
 		return abs(env.RuntimeDir, sub)
 	case token == "xdg-data":
-		return abs(path.Join(env.Home, ".local/share"), sub)
+		return abs(hostDir(env.HostDataHome, env.Home, ".local/share"), sub)
 	case token == "xdg-config":
-		return abs(path.Join(env.Home, ".config"), sub)
+		return abs(hostDir(env.HostConfigHome, env.Home, ".config"), sub)
 	case token == "xdg-cache":
-		return abs(path.Join(env.Home, ".cache"), sub)
+		return abs(hostDir(env.HostCacheHome, env.Home, ".cache"), sub)
+	case token == "xdg-state":
+		return abs(hostDir(env.HostStateHome, env.Home, ".local/state"), sub)
 	}
 	if name, ok := strings.CutPrefix(token, "xdg-"); ok {
 		if dir, ok := dirs[name]; ok {
 			return abs(dir, sub)
 		}
 	}
-	return "", false
+	return "", unknown
 }
 
-func abs(base, sub string) (string, bool) {
-	if !filepath.IsAbs(base) {
-		return "", false
+// hostDir is the host's XDG base directory: host when set, else def under home.
+func hostDir(host, home, def string) string {
+	if host != "" {
+		return host
 	}
-	return path.Join(base, sub), true
+	if !filepath.IsAbs(home) {
+		return ""
+	}
+	return path.Join(home, def)
 }
 
-// userDirKeys maps the XDG token to the user-dirs.dirs key and the default.
-var userDirKeys = []struct{ name, key, fallback string }{
-	{"desktop", "XDG_DESKTOP_DIR", "Desktop"},
-	{"documents", "XDG_DOCUMENTS_DIR", "Documents"},
-	{"download", "XDG_DOWNLOAD_DIR", "Downloads"},
-	{"music", "XDG_MUSIC_DIR", "Music"},
-	{"pictures", "XDG_PICTURES_DIR", "Pictures"},
-	{"public-share", "XDG_PUBLICSHARE_DIR", "Public"},
-	{"templates", "XDG_TEMPLATES_DIR", "Templates"},
-	{"videos", "XDG_VIDEOS_DIR", "Videos"},
+func abs(base, sub string) (string, result) {
+	if !filepath.IsAbs(base) {
+		return "", unknown
+	}
+	return path.Join(base, sub), resolved
 }
 
-// loadUserDirs resolves the user's folders: what user-dirs.dirs names
-// when it can be read, else the XDG defaults under the home directory.
+// userDirKeys maps the XDG token to the user-dirs.dirs key.
+var userDirKeys = []struct{ name, key string }{
+	{"desktop", "XDG_DESKTOP_DIR"},
+	{"documents", "XDG_DOCUMENTS_DIR"},
+	{"download", "XDG_DOWNLOAD_DIR"},
+	{"music", "XDG_MUSIC_DIR"},
+	{"pictures", "XDG_PICTURES_DIR"},
+	{"public-share", "XDG_PUBLICSHARE_DIR"},
+	{"templates", "XDG_TEMPLATES_DIR"},
+	{"videos", "XDG_VIDEOS_DIR"},
+}
+
+// loadUserDirs reads the user's folders from the first user-dirs.dirs that
+// can be read: $XDG_CONFIG_HOME's (in a Flatpak, the copy of the host's
+// that Flatpak places there), then ~/.config's. A folder it does not name
+// is missing from the map, and so is every folder when no file can be
+// read: nothing is guessed.
 func loadUserDirs(env Env) map[string]string {
 	dirs := map[string]string{}
-	if env.Home == "" {
-		return dirs
+	var files []string
+	if filepath.IsAbs(env.ConfigHome) {
+		files = append(files, filepath.Join(env.ConfigHome, "user-dirs.dirs"))
 	}
-	file := env.UserDirs
-	if file == "" {
-		file = filepath.Join(env.Home, ".config", "user-dirs.dirs")
+	if filepath.IsAbs(env.Home) {
+		files = append(files, filepath.Join(env.Home, ".config", "user-dirs.dirs"))
 	}
-	named := map[string]string{}
-	if b, err := os.ReadFile(file); err == nil {
+	for _, file := range files {
+		b, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		named := map[string]string{}
 		for line := range strings.SplitSeq(string(b), "\n") {
 			key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
 			if !ok || strings.HasPrefix(key, "#") {
@@ -254,13 +401,12 @@ func loadUserDirs(env Env) map[string]string {
 				named[key] = path.Clean(value)
 			}
 		}
-	}
-	for _, k := range userDirKeys {
-		if v, ok := named[k.key]; ok {
-			dirs[k.name] = v
-		} else {
-			dirs[k.name] = path.Join(env.Home, k.fallback)
+		for _, k := range userDirKeys {
+			if v, ok := named[k.key]; ok {
+				dirs[k.name] = v
+			}
 		}
+		break
 	}
 	return dirs
 }
@@ -269,10 +415,12 @@ func loadUserDirs(env Env) map[string]string {
 // explain for p: no such file, permission denied or not permitted on a path
 // that the grants do not cover, or a read-only file system on one that
 // they cover at most read-only. It then returns an *Error that says what
-// to grant. A path that the grants cover keeps its plain error, and so
-// does a nil Grants (not in a Flatpak).
+// to grant. It says nothing, and returns err, when it cannot be sure: a
+// nil Grants (not in a Flatpak), grants that are not Certain, and a path
+// that Flatpak always exposes (Exposed). A path that the grants cover keeps
+// its plain error too.
 func (g *Grants) Explain(p string, err error) error {
-	if g == nil || err == nil || !filepath.IsAbs(p) {
+	if !g.Certain() || err == nil || !filepath.IsAbs(p) || g.Exposed(p) {
 		return err
 	}
 	access := g.Access(p)
