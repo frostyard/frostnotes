@@ -53,11 +53,7 @@ const failed = (generation: number | null): PortalAnswer => ({
 });
 
 /** background is the shell's answer, with the change's generation when it made one. */
-const background = (
-  keepRunning: boolean,
-  p: PortalAnswer | null,
-  generation: number | null = null,
-): Background => ({
+const background = (keepRunning: boolean, p: PortalAnswer | null, generation: number | null = null): Background => ({
   keepRunning,
   portal: p,
   generation,
