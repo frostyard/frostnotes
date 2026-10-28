@@ -90,6 +90,13 @@ elif [ -n "${SMOKE_SPAWN_DETACH:-}" ] && [ "$*" = "notesd -build" ]; then
     # A process in a session of its own that keeps this command's output open
     # and says nothing, as the portal's sandbox does; the query itself ends.
     setsid sh -c 'echo $$ >"$1"; exec sleep 60' sh "$SMOKE_DETACHED_PID" &
+    # Return only once that process has written its PID, so the test reads
+    # it and its cleanup can end it (at most 5 s).
+    n=0
+    while [ ! -s "$SMOKE_DETACHED_PID" ] && [ "$n" -lt 100 ]; do
+        sleep 0.05
+        n=$((n + 1))
+    done
     exit 0
 else
     exec "$@"
