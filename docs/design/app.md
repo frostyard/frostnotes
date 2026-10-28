@@ -717,17 +717,22 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
 - **notesd** runs in its own sandbox of the same app, once per data
   directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
   second notesd on that directory exits at once.
-  **The launcher** (`frostnotes.sh`): `frostnotes --background` runs
+  **The launcher** (`frostnotes.sh`): `frostnotes --notesd` runs
   `exec notesd -log $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell
-  also appending notesd's output to that file, also when the Background
-  portal starts it at login. notesd rotates the log itself, once it holds
+  also appending notesd's output to that file. `frostnotes --background`,
+  the autostart entry's command line, which entries that an older release
+  wrote still hold, runs the same, unless the app's background setting is
+  off: then it appends one line to `notesd.log` ("frostnotes: background
+  activity is off in Settings; notesd does not start at login") and exits 0
+  ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)).
+  notesd rotates the log itself, once it holds
   the data directory's lock: a log over 1 MiB moves to `notesd.log.1`, then
   notesd appends its output there. A shell check cannot do this, since 2
   launchers can both pass it, and a duplicate would move the log of the
   notesd that runs. The shell's redirect keeps what notesd says before the
   lock, such as "another notesd uses".
   `frostnotes [ARGS]`, when no notesd answers `notesctl hello` (within 2 s),
-  runs `flatpak-spawn --latest-version frostnotes --background`, so the Flatpak portal
+  runs `flatpak-spawn --latest-version frostnotes --notesd`, so the Flatpak portal
   starts notesd in a new sandbox that outlives the window (until logout,
   while the app may run in the background),
   and waits for about 10 s (the clock's) for it. Then it ends `flatpak-spawn` with
@@ -743,6 +748,11 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   portal closes a request when its caller leaves the bus, so a one-shot
   `gdbus call` cannot ask the user. Allowed once, the portal runs
   `frostnotes --background` at login, so sync goes on with no window.
+  The helper reads the app's background setting itself, under an exclusive
+  lock (`$XDG_STATE_HOME/frostnotes/background.lock`), so the last change
+  wins: with the setting off the request carries `autostart` false and the
+  portal removes the entry, and a setting that changed while the portal
+  answered makes the helper ask again, at most 3 times.
   When the user turns the permission off (GNOME Settings, Apps, Run in
   Background), the desktop ends a notesd that runs with no window: on
   GNOME 48, about 45 s after the last window closes, and within seconds
@@ -750,6 +760,41 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   and the portal deletes the autostart entry; turned on again, the
   permission brings the entry back only at the next launch of the app
   ([plan 0008, Phase 3](../plans/0008-m6-the-standalone-desktop-app.md#record)).
+- **Background activity is a setting**
+  ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)):
+  "Keep syncing when no window is open", On by default. Off is the existence
+  of `$XDG_CONFIG_HOME/frostnotes/background-off` — in the Flatpak the app's
+  own config directory, which all of its sandboxes share — and On is its
+  absence. The shell (`src-tauri/src/background.rs`, the commands
+  `background_get` and `background_set`) writes or removes it, and the
+  launcher's request helper reads it: while it exists, the request carries
+  `autostart` false and the portal removes the autostart entry, and
+  `frostnotes --background` starts no notesd at a login. The helper writes
+  its outcome to
+  `$XDG_STATE_HOME/frostnotes/background.json`, atomically: when it asked,
+  whether it asked for autostart, the response (0 granted, 1 cancelled,
+  2 other, none for no answer), the desktop's `background` and `autostart`
+  permissions, an error, and `generation`: the shell's counter of changes, as
+  the request read it. A change is counted: `background_set` writes the file
+  first, then bumps the counter in `background-gen`, then starts the helper,
+  and answers the new number. Each request of the helper reads the counter
+  under its lock, before it reads the file, so `generation >= awaited` marks
+  an answer about the new setting, from this change's helper or from a later
+  one; a failure records the counter too. The shell reads that file, and the
+  settings' Background section (`app/src/app/Settings.tsx`'s
+  `backgroundSection`, over `app/src/data/background.ts`) shows the switch
+  and, from that file, what the desktop allows, refused, or did not answer.
+  While the dialog is open the window reads the file again every 2 s, with
+  no limit, so a late answer shows; while no answer has `generation >=
+  awaited`, the row says "Asking the desktop…". The section is drawn only
+  where `background_get` answers, that is in the Flatpak. With the file,
+  the shell also stops notesd when its last window closes: on the app's
+  exit, in the primary instance and in the Flatpak only, it runs
+  `notesctl shutdown` and waits at most 35 s, then kills it. A second
+  launch ends in `tauri-plugin-single-instance` before the setup closure
+  that marks the instance primary, and a spike run never marks itself, so
+  neither stops a notesd. Off therefore holds also where the desktop's
+  permission is on; with the permission off, the desktop's own stop wins.
 - **Updates.** `flatpak update` installs a new deployment and leaves the
   sandbox of a running notesd alone ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
   So a new window replaces a notesd of an older build, only forward:
@@ -867,7 +912,10 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
   through the launcher with a stand-in `flatpak-spawn`, checks that the
   launcher ends it, that notesd lives on and that the log turns over, checks
   the data directory's lock, and replaces a notesd of build A with one of build B,
-  keeping the note written before, and keeps one of the latest build). Run `make flatpak-sources`
+  keeping the note written before, keeps one of the latest build, requires a
+  window's spawn to say `--notesd`, starts the request helper with no
+  arguments, and checks that `frostnotes --background` starts no notesd and
+  exits 0 while the background setting is off). Run `make flatpak-sources`
   after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
   A `vX.Y.Z` tag builds a release: `packaging/flatpak/stamp-version.sh`
   stamps the version and the commit into the manifest and the version, with
@@ -914,7 +962,7 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
 
 ## References
 
-- Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the Flatpak), [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates), [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
+- Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the Flatpak), [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates), [ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md) (background activity), [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md), [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md); for the web app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) and lodge's [ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md) to [ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md); frostmail's `docs/design/app.md`, which this copies
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
-- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check and its updates (gap G3) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
+- Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check and its updates (gaps G2 and G3) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))

@@ -3,16 +3,35 @@
 # The manifest installs it as /app/bin/frostnotes, and the Tauri app as
 # /app/libexec/frostnotes-app.
 #
-#   frostnotes --background   Run notesd and nothing else. A second notesd on
-#                             the same data directory exits at once (notesd
-#                             locks it), so this is safe to run twice. The
-#                             Background portal starts this at login. notesd
-#                             appends its output to notesd.log in the state
-#                             directory, and moves a log over 1 MiB to
+#   frostnotes --notesd       Run notesd and nothing else: how a window's
+#                             launcher and `--background` start it. A second
+#                             notesd on the same data directory exits at once
+#                             (notesd locks it), so this is safe to run twice.
+#                             notesd appends its output to notesd.log in the
+#                             state directory, and moves a log over 1 MiB to
 #                             notesd.log.1 itself, once it holds the data
 #                             directory's lock, so no live log ever moves.
+#   frostnotes --background   The autostart entry's command line, which the
+#                             Background portal runs at login, and which
+#                             entries that an older release wrote still hold:
+#                             run notesd as --notesd does, unless the app's
+#                             setting has background activity off, and then
+#                             append one line to notesd.log and exit 0.
 #   frostnotes [ARGS]         Make sure the latest notesd runs, ask the
 #                             Background portal for autostart, and run the app.
+#
+# The app's setting "Keep syncing when no window is open" is a file:
+# $XDG_CONFIG_HOME/frostnotes/background-off when it is off, and no file when
+# it is on (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
+# In the Flatpak, XDG_CONFIG_HOME is the app's own config directory, which all
+# of its sandboxes share.
+#
+# So Off holds at a login too, and not only for the autostart entry: the
+# request helper reads the file itself and asks the portal for no autostart,
+# which removes the entry; and `--background`, which an entry of an older
+# release still runs, starts no notesd while the file exists. The app's shell
+# stops notesd when its last window closes (no launcher can: see
+# app/src-tauri/src/background.rs).
 #
 # FROSTNOTES_LIBEXEC_DIR, when set, is the directory of frostnotes-app and
 # frostnotes-request-background: /app/libexec in the Flatpak, and a test's
@@ -20,7 +39,7 @@
 #
 # A notesd that the window's sandbox started would die with the sandbox, and
 # with a duplicate window that tauri-plugin-single-instance closes at once.
-# So the launcher has the Flatpak portal start `frostnotes --background` in a
+# So the launcher has the Flatpak portal start `frostnotes --notesd` in a
 # new sandbox of this app, and then ends the flatpak-spawn process it made
 # once that notesd answers: flatpak-spawn forwards catchable signals to the
 # command it spawned, but only SIGKILL ends flatpak-spawn alone, and the
@@ -73,7 +92,11 @@ hello() {
     bounded 2 notesctl hello >/dev/null 2>&1
 }
 
-if [ "${1:-}" = "--background" ]; then
+off="${XDG_CONFIG_HOME:-$HOME/.config}/frostnotes/background-off"
+
+# run_notesd replaces this shell with notesd, which lives on when the caller
+# that started it goes.
+run_notesd() {
     mkdir -p "$state"
     # notesd rotates the log itself, with -log, once it holds the data
     # directory's lock: a shell check cannot tell 2 launchers apart, and a
@@ -82,6 +105,21 @@ if [ "${1:-}" = "--background" ]; then
     # Both the shell and notesd open the file for appending.
     # shellcheck disable=SC2094
     exec notesd -log "$state/notesd.log" >>"$state/notesd.log" 2>&1
+}
+
+if [ "${1:-}" = "--notesd" ]; then
+    run_notesd
+fi
+
+if [ "${1:-}" = "--background" ]; then
+    # The autostart entry's command line, also from an older release's entry.
+    # With the setting off, a login starts no notesd at all.
+    if [ -e "$off" ]; then
+        mkdir -p "$state"
+        echo "frostnotes: background activity is off in Settings; notesd does not start at login" >>"$state/notesd.log"
+        exit 0
+    fi
+    run_notesd
 fi
 
 mkdir -p "$state"
@@ -121,7 +159,7 @@ if ! hello; then
     if [ -n "$have_spawn" ]; then
         # No --watch-bus: the spawned notesd must outlive this sandbox. It
         # holds its own stdout and stderr, so flatpak-spawn may end.
-        flatpak-spawn --latest-version frostnotes --background </dev/null >>"$state/notesd.log" 2>&1 &
+        flatpak-spawn --latest-version frostnotes --notesd </dev/null >>"$state/notesd.log" 2>&1 &
         spawned=$!
     fi
     # Wait, for about 10 s in all, until that notesd answers. The deadline is
@@ -152,8 +190,11 @@ if ! hello; then
     fi
 fi
 
-# Ask the Background portal to run `frostnotes --background` at login. The
-# helper stays on the bus until the portal answers (it asks the user once).
+# Ask the Background portal to run `frostnotes --background` at login, or,
+# with the setting off, to stop doing so: the helper reads the setting
+# itself, and takes its own lock (packaging/flatpak/request-background.py).
+# It stays on the bus until the portal answers (it asks the user once), and
+# writes that answer to $state/background.json, which the app shows.
 "$request_background" >>"$state/background.log" 2>&1 &
 
 exec "$app" "$@"

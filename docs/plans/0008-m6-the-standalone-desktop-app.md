@@ -35,7 +35,8 @@ Status (2026-10-28):
   listing), item 6 with a hub over HTTPS and lodge's web app, and item 5
   on the second release.
 - **Phase 4** lists what the review found: G3 (PR #106) and G5 (PR #107)
-  are done, merged on 2026-10-28; G1, G2 and G4 are open.
+  are done, merged on 2026-10-28, and G2 is built on 2026-10-28 and waits
+  for its run on a real desktop; G1 and G4 are open.
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
 
@@ -286,6 +287,9 @@ blocks Phase 2.
   window is open". **Done when:** the setting exists, its off state stops
   notesd when the last window closes, and Phase 3's item 4 passes with it
   in each state.
+  **Status (2026-10-28): built** in this change
+  ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md));
+  Phase 3's item 4 in each state is still to run on a real desktop.
 - **G3 — A clean update of the running notesd.** After `flatpak update`,
   the notesd that runs keeps the old version until logout, and new
   windows use it; a method the new app calls and the old notesd lacks
@@ -345,6 +349,7 @@ blocks Phase 2.
   [design/sync.md](../design/sync.md#pairing-and-sessions),
   [specs/ui.md](../specs/ui.md#vault-manager)
 - Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
+  [ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md),
   [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
   [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
   [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md)
