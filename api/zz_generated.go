@@ -2176,9 +2176,13 @@ type RPCService interface {
 	// it is visible, which finds a connection a sleeping phone dropped.
 	Ping(ctx context.Context, p *RPCPingParams) error
 	// Shutdown implements rpc.shutdown. Stop notesd as SIGTERM does: it answers,
-	// cancels the requests in hand and waits for them to return, stops the vaults
-	// and sync, closes the store, releases the data directory's lock and exits 0.
-	// The Flatpak's launcher calls it to replace an older build (ADR-0032).
+	// cancels the requests in hand and waits for their handlers to return, stops
+	// the vaults and sync, closes the store, releases the data directory's lock
+	// and exits 0. A request in hand can complete, return an error, or lose its
+	// reply when its connection closes; a committed write stays whole and is
+	// indexed, so a client must not treat a write without an answer as absent,
+	// and sends it again on the same base. The Flatpak's launcher calls it to
+	// replace an older build (ADR-0032).
 	Shutdown(ctx context.Context, p *RPCShutdownParams) error
 }
 

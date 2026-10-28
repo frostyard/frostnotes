@@ -762,10 +762,14 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
     notesd as `SIGTERM` does: `run`'s context ends, `Serve` returns once
     its connections' requests have returned, the sync loops stop, the vault
     actors stop, the store closes, the lock is released and notesd exits 0.
-    A request in hand when it comes is cancelled and answers an error, or
-    its connection ends: a write that already reached the disk is indexed
-    (the client having gone does not stop that), and any other is not made.
-    No write is half done, and the editor saves again
+    Shutdown cancels the contexts of the requests in hand and waits for
+    their handlers to return. Such a request can complete, return an
+    error, or lose its reply when its connection closes. A write that
+    committed stays whole and is indexed (a client having gone does not
+    stop that); one that did not commit is not made. So a client must not
+    treat a write without an answer as absent: the editor sends its text
+    again on the same base, which merges with no conflict, since the file
+    already holds it
     ([documents](#documents-saves-and-merges)). `notesctl shutdown` calls it
     and waits, 30 s in all, until the socket no longer answers and the
     lock is free.
@@ -776,7 +780,16 @@ The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/
     shutdown` and starts notesd as above, now of the latest build. An empty
     build, or a call that fails or runs late (each is bounded: 2 s, 10 s,
     35 s), keeps the notesd that runs. Windows that stay open reconnect to
-    the new notesd by themselves.
+    the new notesd by themselves. The bounds hold, so a stuck notesd or
+    portal delays the window by the sum of those bounds at most, and does not block it:
+    the latest-build query writes to a temporary file in the state
+    directory, which the launcher reads only when the query succeeded and
+    removes on every path, and not to a pipe in a command substitution.
+    flatpak-spawn hands its pipe to the portal and to the new sandbox,
+    which the timeout does not kill, so a substitution would wait for
+    them past the bound. `notesctl hello --build` stays a substitution:
+    it runs in this sandbox, and its only writer is the process the
+    timeout kills.
   - *The first update.* A notesd from before this change reports no build
     and has no `rpc.shutdown`, so the update that brings these keeps it
     until logout; every update after that replaces it.

@@ -120,9 +120,14 @@ From M4:
   ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
 - **`rpc.shutdown`** is for `local` callers only (every other kind gets
   `methodNotFound`). It answers `null`, and only then stops notesd as
-  `SIGTERM` does: requests in hand end with an error or with their
-  connection, the vaults and sync stop, the store closes, the data
-  directory's lock is released and notesd exits 0
+  `SIGTERM` does: it cancels the contexts of the requests in hand and
+  waits for their handlers, stops the vaults and sync, closes the store,
+  releases the data directory's lock and exits 0. A request in hand can
+  complete, return an error, or lose its reply when its connection
+  closes. A committed write stays whole and is indexed, even when its
+  client has gone, so a client must not treat a write without an answer
+  as absent: the editor sends its text again on the same base, which
+  merges with no conflict
   ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
 - **`rpc.ping`** answers `null` to every caller after hello: the web
   app's heartbeat, which finds a connection a sleeping phone dropped.

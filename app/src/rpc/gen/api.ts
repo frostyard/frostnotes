@@ -1356,9 +1356,13 @@ export interface RPCClient {
   ping(params?: RPCPingParams): Promise<void>;
   /**
    * Stop notesd as SIGTERM does: it answers, cancels the requests in hand and
-   * waits for them to return, stops the vaults and sync, closes the store,
-   * releases the data directory's lock and exits 0. The Flatpak's launcher
-   * calls it to replace an older build (ADR-0032).
+   * waits for their handlers to return, stops the vaults and sync, closes the
+   * store, releases the data directory's lock and exits 0. A request in hand
+   * can complete, return an error, or lose its reply when its connection
+   * closes; a committed write stays whole and is indexed, so a client must
+   * not treat a write without an answer as absent, and sends it again on the
+   * same base. The Flatpak's launcher calls it to replace an older build
+   * (ADR-0032).
    */
   shutdown(params?: RPCShutdownParams): Promise<void>;
 }
