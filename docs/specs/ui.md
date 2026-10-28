@@ -568,7 +568,8 @@ the caller is not a browser inside lodge: its hub, its hub vault, its
 state and its conflicts. A vault that syncs with no hub gets Sync with a
 hub, "Join a vault on a hub. Notes then sync on every device that joins
 it.", and Join…, which opens the join panel (the vault manager's, with
-no Location) in a dialog, "Join a hub". A synced vault gets those rows,
+no Location, and a rule on the name alone, since it makes no folder) in
+a dialog, "Join a hub". A synced vault gets those rows,
 then Pair again where its state is `revoked`, "The hub refused this
 device's token. Pair again with a new code to sync again.", and Pair
 again…, which opens the join panel in its pair-again mode: its Hub URL
@@ -615,7 +616,9 @@ Obsidian's vault chooser
   - **Join a vault on a hub:** "Sync a new vault with a vault on a
     hub. To sync a vault you have, open it, then Settings, Sync." Join
     (1px `--separator`, as Open) shows the join panel in the actions'
-    place.
+    place. Where notesd does not sync (`sync.hubs` answers
+    `unavailable` or `methodNotFound`), the row reads "This notesd does
+    not sync." and has no button.
 - **The create form**, in the actions' place: Back (`arrow-left`, "Back")
   and the title "Create new vault" (15/20, 600); Vault name, a 240-wide
   input, focused; Location, the chosen folder's path (12/16
@@ -630,16 +633,20 @@ Obsidian's vault chooser
   and the title "Join a vault on a hub" (15/20, 600); Hub URL, a
   320-wide input, focused (placeholder
   `https://lodge.example.ts.net/device/notes`); Hub vault name, a
-  240-wide input; This device's name (optional), a 240-wide input
-  (placeholder "This computer's name"); Location, as the create form
-  has it; then Join (`--accent`), enabled once the hub's URL, the vault's
-  name and a location are set. Where the device did not pair with the
-  hub before, the approve step follows: the code, large and monospace
-  and selectable, the line "On the hub's machine, approve this device:
-  `notesctl hub approve CODE`. The code expires in 10 minutes.", and
-  Cancel; then "Joining…" and Cancel. A failure shows in 12/16
-  `--flag-1` under the fields, and the fields return with what the
-  person typed.
+  240-wide input, checked as a new vault's name where the panel makes
+  one, since the folder takes that name (the create form's messages, in
+  12/16 `--flag-1` under it); This device's name (optional), a
+  240-wide input (placeholder "This computer's name"); Location, as the
+  create form has it; then Join (`--accent`), enabled once the hub's
+  URL, a name that passes and a location are set. Where the device did
+  not pair with the hub before, the approve step follows: the code,
+  large and monospace and selectable, the line "On the hub's machine,
+  approve this device: `notesctl hub approve CODE`. The code expires in
+  10 minutes.", and Cancel. Then "Joining…", with no Cancel: from the
+  vault's making or joining the flow runs to its end, even where the
+  panel goes away. A failure shows in 12/16 `--flag-1` under the
+  fields, and the fields return with what the person typed (a notice
+  instead, where the panel is gone).
 - **What they do:** Open folder as vault registers the folder
   (`vault.add`); Create registers `<location>/<name>`, which notesd
   makes (`vault.add` with `create`). Either makes it the window's vault
@@ -670,11 +677,17 @@ Obsidian's vault chooser
   paired with it before (`sync.pair`, the code approved on the hub,
   `sync.paired`), registers `<location>/<hub vault name>` (`vault.add`
   with `create`), joins it (`sync.join`), opens it and closes the
-  manager. Where the hub refuses the token of a device that was paired
-  (`revoked`), it pairs again once and joins again. A join that fails
-  after the vault was made forgets that vault (`vault.remove`; its
-  folder stays) and shows notesd's words in the panel. Only a local
-  caller joins: a browser inside lodge has no actions.
+  manager. From the vault's making it runs with no Cancel, even where
+  the window leaves the manager for that vault (a first vault: the
+  window shows it as notesd adds it). Where the hub refuses the token
+  of a device that was paired (`revoked`), it pairs again once and
+  joins again. A join that fails after the vault was made forgets that
+  vault (`vault.remove`; its folder stays) and drops it from the list
+  only when notesd removes it; where notesd refuses that too, the panel says
+  both: "<join error> Frostnotes could not remove the new vault
+  "<name>" from the list: <notesd's words>. Remove it in Manage
+  vaults." Only a local caller joins: a browser inside lodge has no
+  actions.
 - **The window's title** (the system's, as a task bar shows it):
   `<note> - <vault> - Frostnotes`, `<vault> - Frostnotes` when the
   active tab shows no note, `Frostnotes` without a vault.

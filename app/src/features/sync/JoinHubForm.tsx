@@ -5,6 +5,8 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { vaultNameError } from "../../lib/vaultName";
+
 /** JoinPhase is what the form shows: its fields, the code to approve, or the wait. */
 export type JoinPhase = "form" | "approve" | "joining";
 
@@ -49,8 +51,17 @@ export interface JoinHubFormProps {
   onJoin: (fields: JoinFields) => void;
   /** Back: the fields go and the panel closes. */
   onBack: () => void;
-  /** Cancel, while the device waits for the approval or joins. */
+  /** Cancel, while the device waits for the approval. */
   onCancel: () => void;
+}
+
+/**
+ * hubNameProblem says why a hub vault's name is not one, or null: a new
+ * vault needs a vault's name, a vault that exists a name at all.
+ */
+function hubNameProblem(name: string, makesVault: boolean): string | null {
+  if (makesVault) return vaultNameError(name);
+  return name.trim() === "" ? "A vault needs a name." : null;
 }
 
 /** JoinHubForm draws the join form. */
@@ -60,8 +71,10 @@ export function JoinHubForm(props: JoinHubFormProps) {
   const [url, setURL] = useState(props.url ?? "");
   const [name, setName] = useState("");
   const [device, setDevice] = useState("");
+  const [edited, setEdited] = useState(false);
   const urlId = useId();
   const nameId = useId();
+  const nameErrorId = useId();
   const deviceId = useId();
   const urlInput = useRef<HTMLInputElement>(null);
 
@@ -69,10 +82,14 @@ export function JoinHubForm(props: JoinHubFormProps) {
     urlInput.current?.focus();
   }, []);
 
-  // Join needs the hub's URL, the vault's name and, for a new vault, a folder.
-  const named = pair || name.trim() !== "";
+  // A new vault's name is a vault's name: the folder takes it. Where the
+  // vault exists already (the settings), the hub hears the name only.
+  const makesVault = location !== undefined;
+  const nameProblem = pair ? null : hubNameProblem(name, makesVault);
+  const showNameProblem = edited && nameProblem !== null;
   const located = location === undefined || !!location.path?.trim();
-  const canJoin = url.trim() !== "" && named && located;
+  // Join needs the hub's URL, a name and, for a new vault, a folder.
+  const canJoin = url.trim() !== "" && nameProblem === null && located;
 
   return (
     <section aria-label={pair ? "Pair again" : "Join a vault on a hub"} className="space-y-4 text-sidebar-row">
@@ -121,9 +138,19 @@ export function JoinHubForm(props: JoinHubFormProps) {
                 type="text"
                 value={name}
                 spellCheck={false}
+                aria-invalid={showNameProblem || undefined}
+                aria-describedby={showNameProblem ? nameErrorId : undefined}
                 className="h-7 w-60 max-w-full rounded-md border border-separator bg-window px-2"
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setEdited(true);
+                }}
               />
+              {showNameProblem && (
+                <p id={nameErrorId} className="text-flag-1 text-xs leading-4">
+                  {nameProblem}
+                </p>
+              )}
             </div>
           )}
           <div className="space-y-1">
@@ -194,18 +221,9 @@ export function JoinHubForm(props: JoinHubFormProps) {
         </div>
       )}
       {phase === "joining" && (
-        <div className="space-y-4">
-          <p role="status" className="text-sm leading-5 text-secondary">
-            Joining…
-          </p>
-          <button
-            type="button"
-            className="h-7 rounded-md border border-separator px-3 hover:bg-selection-inactive"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-        </div>
+        <p role="status" className="text-sm leading-5 text-secondary">
+          Joining…
+        </p>
       )}
       {error !== null && error !== undefined && <p className="text-flag-1 text-xs leading-4">{error}</p>}
     </section>

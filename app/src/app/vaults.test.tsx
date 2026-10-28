@@ -120,6 +120,40 @@ describe("vaults from the app", () => {
     await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
   });
 
+  it("joins and opens the first vault, with no vaults yet", async () => {
+    // notesd tells of the vault before vault.add answers: the window leaves
+    // the manager for it, and the join goes on with the panel gone.
+    const mock = new MockTransport([], { folders: ["/home/demo/Documents"], addEventFirst: true });
+    render(<App connect={async () => mock} />);
+    const m = within(await screen.findByRole("dialog", { name: "Manage vaults" }));
+    const user = userEvent.setup();
+    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.click(hubRow.getByRole("button", { name: "Join" }));
+    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788");
+    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
+    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo/Documents" } });
+    await user.click(panel.getByRole("button", { name: "Join" }));
+
+    await waitFor(() => expect(mock.calls.some((c) => c.method === "sync.join")).toBe(true));
+    expect(mock.calls.find((c) => c.method === "sync.join")?.params).toEqual({
+      vaultId: 1,
+      url: "http://127.0.0.1:7788",
+      name: "shared",
+    });
+    await screen.findByRole("main", { name: "Workspace" });
+    await waitFor(() => expect(document.title).toBe("shared - Frostnotes"));
+    expect(mock.calls.some((c) => c.method === "vault.remove")).toBe(false);
+  });
+
+  it("hides Join where notesd does not sync", async () => {
+    const mock = new MockTransport([], { folders: ["/home/demo/Documents"], noSync: true });
+    render(<App connect={async () => mock} />);
+    const m = within(await screen.findByRole("dialog", { name: "Manage vaults" }));
+    expect(await m.findByText("This notesd does not sync.")).toBeTruthy();
+    expect(m.queryByRole("button", { name: "Join" })).toBeNull();
+  });
+
   it("forgets the new vault when the hub refuses it, and says why in the panel", async () => {
     const mock = new MockTransport(mockVaults(), { joinRefusals: 1 });
     render(<App connect={async () => mock} />);
@@ -138,6 +172,25 @@ describe("vaults from the app", () => {
     expect(mock.calls.find((c) => c.method === "vault.remove")?.params).toEqual({ id: 4 });
     await waitFor(() => expect(within(manager()).getAllByRole("listitem")).toHaveLength(3));
     expect(within(manager()).getByRole("region", { name: "Join a vault on a hub" })).toBeTruthy();
+  });
+
+  it("says both when the join fails and the new vault cannot go", async () => {
+    const mock = new MockTransport(mockVaults(), { joinRefusals: 1, removeRefusals: 1 });
+    render(<App connect={async () => mock} />);
+    await screen.findByRole("main", { name: "Workspace" });
+    const user = userEvent.setup();
+    const m = await manageVaults("garden");
+    const hubRow = within(m.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.click(hubRow.getByRole("button", { name: "Join" }));
+    const panel = within(screen.getByRole("region", { name: "Join a vault on a hub" }));
+    await user.type(panel.getByRole("textbox", { name: "Hub URL" }), "http://127.0.0.1:7788");
+    await user.type(panel.getByRole("textbox", { name: "Hub vault name" }), "shared");
+    fireEvent.change(panel.getByRole("textbox", { name: "Location" }), { target: { value: "/home/demo" } });
+    await user.click(panel.getByRole("button", { name: "Join" }));
+
+    expect(await screen.findByText(/could not remove the new vault "shared" from the list/)).toBeTruthy();
+    expect(screen.getByText(/Remove it in Manage vaults\./)).toBeTruthy();
+    await waitFor(() => expect(within(manager()).getAllByRole("listitem")).toHaveLength(4));
   });
 
   it("switches vaults in place and names them in the title", async () => {

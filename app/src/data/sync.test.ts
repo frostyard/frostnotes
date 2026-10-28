@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Client, ErrorCode, PROTOCOL } from "../rpc/gen/api";
-import { MockTransport, type MockOptions, mockVaults } from "../rpc/mock/mock";
+import { type MockOptions, MockTransport, mockVaults } from "../rpc/mock/mock";
 import { RPCError } from "../rpc/transport";
 import { ensurePaired, hubURL, joinHub, leaveHub, pairAgain, syncError } from "./sync";
 

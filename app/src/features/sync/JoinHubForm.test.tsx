@@ -48,11 +48,10 @@ describe("JoinHubForm", () => {
     expect(props.onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("says it is joining, and cancels", async () => {
-    const { props, user } = setup({ phase: "joining" });
+  it("says it is joining, with no Cancel once the vault is agreed", () => {
+    setup({ phase: "joining" });
     expect(screen.getByText("Joining…")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(props.onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("pairs again with no name field, at the vault's hub", () => {
@@ -69,6 +68,44 @@ describe("JoinHubForm", () => {
     await user.type(screen.getByRole("textbox", { name: "Hub URL" }), "https://hub.example");
     await user.type(screen.getByRole("textbox", { name: "Hub vault name" }), "shared");
     expect(screen.getByRole("textbox", { name: "Location" })).toBeTruthy();
+    expect(join().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("refuses a name that cannot name a folder, for a new vault", async () => {
+    const { user } = setup({
+      location: { path: "/home/demo", canPick: false, onBrowse: vi.fn(), onLocation: vi.fn() },
+    });
+    await user.type(screen.getByRole("textbox", { name: "Hub URL" }), "https://hub.example");
+    const name = screen.getByRole("textbox", { name: "Hub vault name" });
+
+    await user.type(name, "../outside");
+    expect(screen.getByText("A vault's name cannot start with a dot.")).toBeTruthy();
+    expect(join().hasAttribute("disabled")).toBe(true);
+
+    await user.clear(name);
+    await user.type(name, "a/b");
+    expect(screen.getByText(/cannot hold any of these/)).toBeTruthy();
+    expect(join().hasAttribute("disabled")).toBe(true);
+
+    await user.clear(name);
+    await user.type(name, ".hidden");
+    expect(screen.getByText("A vault's name cannot start with a dot.")).toBeTruthy();
+    expect(join().hasAttribute("disabled")).toBe(true);
+
+    await user.clear(name);
+    expect(screen.getByText("A vault needs a name.")).toBeTruthy();
+    expect(join().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("asks only for a name where it makes no vault (the settings)", async () => {
+    const { user } = setup();
+    await user.type(screen.getByRole("textbox", { name: "Hub URL" }), "https://hub.example");
+    const name = screen.getByRole("textbox", { name: "Hub vault name" });
+    await user.type(name, "../outside");
+    expect(screen.queryByText(/cannot hold any of these|cannot start with a dot/)).toBeNull();
+    expect(join().hasAttribute("disabled")).toBe(false);
+    await user.clear(name);
+    expect(screen.getByText("A vault needs a name.")).toBeTruthy();
     expect(join().hasAttribute("disabled")).toBe(true);
   });
 

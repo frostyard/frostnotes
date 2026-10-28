@@ -21,6 +21,7 @@ function setup(props: Partial<VaultManagerProps> = {}) {
     onRemove: vi.fn(),
     onCreate: vi.fn(),
     onJoin: vi.fn(),
+    syncAvailable: true,
     onOpenFolder: vi.fn(),
     onClose: vi.fn(),
     ...props,
@@ -101,6 +102,13 @@ describe("VaultManager", () => {
     expect(within(hubRow).getByText(/^Sync a new vault with a vault on a hub\./)).toBeTruthy();
     await user.click(within(hubRow).getByRole("button", { name: "Join" }));
     expect(props.onJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a notesd that does not sync cannot join", () => {
+    setup({ syncAvailable: false });
+    const hubRow = screen.getByRole("region", { name: "Join a vault on a hub" });
+    expect(within(hubRow).getByText("This notesd does not sync.")).toBeTruthy();
+    expect(within(hubRow).queryByRole("button", { name: "Join" })).toBeNull();
   });
 
   it("takes a typed folder where there is no picker", async () => {
