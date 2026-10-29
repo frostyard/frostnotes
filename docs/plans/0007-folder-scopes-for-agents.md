@@ -201,15 +201,19 @@ Status (2026-10-28):
     - is refused at a user's note, `edit_note` of `Garden.md`;
     - appends to today's daily note, `Daily/2026-10-28.md` (the first
       route's append creates it from the template).
-  - **Every refusal** says "outside this token's writes" and "this
-    token may write under Porter/ except Porter/Routines/, and append to
-    today's daily note". The refused notes are byte for byte as before
+  - **Every refusal** is `invalidParams`, and says "outside this
+    token's writes" and "this token may write under Porter/ except
+    Porter/Routines/, and append to today's daily note". The refused notes are byte for byte as before
     on the hub's disk, and no new note is in `Porter/Routines/` in any
     case.
-  - **Each version** that a route wrote has source `agent` and names
-    that route's token. The daily note holds the template's heading and
-    both lines in order, and its versions are by `porter-notes`,
-    `porter-notes-tailnet` and `porter-notes-tailnet`.
+  - **Every version** of the notes the run wrote has source `agent`
+    and names the token of the route that wrote it, and there are no
+    others. Newest first:
+    - `Porter/Memory.md` and the brief: `porter-notes`, then
+      `porter-notes-tailnet`;
+    - the daily note: `porter-notes`, then `porter-notes-tailnet` twice
+      (the template's version and the first line's). It holds the
+      template's heading and both lines in order.
   - **A token works only on its own route:** `porter-notes` on the
     listener and `porter-notes-tailnet` on the agent socket each answer
     401.

@@ -92,28 +92,31 @@ func toolCall(t *testing.T, cs *sdk.ClientSession, tool string, args map[string]
 	return res, text.String()
 }
 
-// latest is the newest version of a note on the hub.
-func (w *world) latest(t *testing.T, path string) api.Version {
-	t.Helper()
-	vs, err := w.hub.C.Note().Versions(t.Context(), &api.NoteVersionsParams{VaultID: w.hub.Vault, Path: path})
-	if err != nil || len(vs) == 0 {
-		t.Fatalf("the versions of %s = %v, %v", path, vs, err)
-	}
-	return vs[0]
-}
-
-// versionAuthors are the authors of every version of a note on the hub.
-func (w *world) versionAuthors(t *testing.T, path string) []string {
+// agentVersions checks every version of a note on the hub, newest first:
+// each is an agent's, by the token names in want, and there are no others.
+// It returns the authors it found.
+func (w *world) agentVersions(t *testing.T, path string, want ...string) []string {
 	t.Helper()
 	vs, err := w.hub.C.Note().Versions(t.Context(), &api.NoteVersionsParams{VaultID: w.hub.Vault, Path: path})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("the versions of %s: %v", path, err)
 	}
-	var out []string
-	for _, v := range vs {
-		out = append(out, v.Author)
+	var authors []string
+	ok := len(vs) == len(want)
+	for i, v := range vs {
+		authors = append(authors, v.Author)
+		if v.Source != api.VersionSourceAgent || i >= len(want) || v.Author != want[i] {
+			ok = false
+		}
 	}
-	return out
+	if !ok {
+		var got []string
+		for _, v := range vs {
+			got = append(got, string(v.Source)+" by "+v.Author)
+		}
+		t.Errorf("the versions of %s, newest first, are %v; want agent versions by %v", path, got, want)
+	}
+	return authors
 }
 
 // TestIPorterThroughLodge is plan 0007's Phase 4 on loopback: tokens of
@@ -207,12 +210,13 @@ func TestIPorterThroughLodge(t *testing.T) {
 	routes := []struct {
 		name, token, endpoint string
 		client                *http.Client
-		first                 bool // the route that creates, not appends
+		first                 bool     // the route that creates, not appends
+		before                []string // the versions the earlier route left, newest first
 	}{
 		{"listener", tailnetName, w.url + "/mcp/notes",
-			&http.Client{Transport: &bearer{token: tailnetToken, base: http.DefaultTransport}}, true},
+			&http.Client{Transport: &bearer{token: tailnetToken, base: http.DefaultTransport}}, true, nil},
 		{"agent-socket", agentName, "http://lodge/mcp/notes",
-			&http.Client{Transport: &bearer{token: agentToken, base: viaSocket(sock)}}, false},
+			&http.Client{Transport: &bearer{token: agentToken, base: viaSocket(sock)}}, false, []string{tailnetName}},
 	}
 	for _, r := range routes {
 		t.Run(r.name, func(t *testing.T) {
@@ -241,11 +245,8 @@ func TestIPorterThroughLodge(t *testing.T) {
 				if !strings.Contains(w.disk(p), text) {
 					t.Errorf("%s: %s lacks the line written through the %s", r.name, p, r.name)
 				}
-				v := w.latest(t, p)
-				if v.Source != api.VersionSourceAgent || v.Author != r.token {
-					t.Errorf("%s: the latest version of %s is %s by %q; want agent by %q", r.name, p, v.Source, v.Author, r.token)
-				}
-				t.Logf("%s: %s %s: written, version by %s (%s)", r.name, tool, p, v.Author, v.Source)
+				authors := w.agentVersions(t, p, append([]string{r.token}, r.before...)...)
+				t.Logf("%s: %s %s: written; its versions, newest first, are the agent's by %v", r.name, tool, p, authors)
 			}
 
 			// Refused at Porter's routines in two spellings of the case.
@@ -253,11 +254,11 @@ func TestIPorterThroughLodge(t *testing.T) {
 				t.Helper()
 				p := args["path"].(string)
 				res, text := toolCall(t, cs, tool, args)
-				if !res.IsError || !strings.Contains(text, outsideWrites) || !strings.Contains(text, porterMayWrite) {
-					t.Errorf("%s: %s %s = error %v, %q; want a refusal naming %q", r.name, tool, p, res.IsError, text, porterMayWrite)
+				if !res.IsError || !strings.Contains(text, "invalidParams") || !strings.Contains(text, outsideWrites) || !strings.Contains(text, porterMayWrite) {
+					t.Errorf("%s: %s %s = error %v, %q; want invalidParams naming %q", r.name, tool, p, res.IsError, text, porterMayWrite)
 					return
 				}
-				t.Logf("%s: %s %s: refused (%s; %s)", r.name, tool, p, outsideWrites, porterMayWrite)
+				t.Logf("%s: %s %s: refused, invalidParams (%s; %s)", r.name, tool, p, outsideWrites, porterMayWrite)
 			}
 			// edit_note reads the note first, and on a case-sensitive disk
 			// porter/routines/Morning.md is no note, so the edit in the second
@@ -280,12 +281,15 @@ func TestIPorterThroughLodge(t *testing.T) {
 				t.Errorf("%s: append_to_daily_note = %s; want %s", r.name, text, want)
 			}
 			daily := "Daily/" + day + ".md"
-			v := w.latest(t, daily)
-			if v.Source != api.VersionSourceAgent || v.Author != r.token {
-				t.Errorf("%s: the latest version of %s is %s by %q; want agent by %q", r.name, daily, v.Source, v.Author, r.token)
+			// The first append writes 2 versions, the template's and the
+			// appended line's; each later append writes 1.
+			want := []string{r.token, r.token}
+			if !r.first {
+				want = []string{r.token, tailnetName, tailnetName}
 			}
-			t.Logf("%s: append_to_daily_note %s: appended, %s the note, version by %s (%s)", r.name, daily,
-				map[bool]string{true: "created", false: "did not create"}[r.first], v.Author, v.Source)
+			authors := w.agentVersions(t, daily, want...)
+			t.Logf("%s: append_to_daily_note %s: appended, %s the note; its versions, newest first, are the agent's by %v", r.name, daily,
+				map[bool]string{true: "created", false: "did not create"}[r.first], authors)
 
 			// The refusals changed nothing.
 			if got := w.disk("Porter/Routines/Morning.md"); got != routineBefore {
@@ -349,15 +353,6 @@ func TestIPorterThroughLodge(t *testing.T) {
 	if got := w.disk(daily); got != want {
 		t.Errorf("%s on disk is %q; want %q", daily, got, want)
 	}
-	authors := w.versionAuthors(t, daily)
-	for _, name := range []string{tailnetName, agentName} {
-		found := false
-		for _, a := range authors {
-			found = found || a == name
-		}
-		if !found {
-			t.Errorf("the versions of %s are by %v; want one by %s", daily, authors, name)
-		}
-	}
-	t.Logf("%s holds the template's heading and both appended lines in order; its versions are by %v", daily, authors)
+	authors := w.agentVersions(t, daily, agentName, tailnetName, tailnetName)
+	t.Logf("%s holds the template's heading and both appended lines in order; its versions, newest first, are the agent's by %v", daily, authors)
 }
