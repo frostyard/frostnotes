@@ -25,7 +25,7 @@ Work is split per
   boundary and its contract.
 - **No cards.**
 
-Status (2026-10-21):
+Status (2026-10-28):
 - **Phase 1 is done.** The user approved building this plan on
   2026-10-19, ahead of acceptance, and accepted ADR-0028 on 2026-10-21.
 - **Phases 2 and 3 are built, in two PRs.**
@@ -49,7 +49,10 @@ Status (2026-10-21):
     - a path that reaches an existing file by a name its folder does
       not list is refused (a share's 8.3 names, trimmed dots and other
       foldings).
-- **Phase 4,** the evidence through lodge, is still to come.
+- **Phase 4's run is recorded** (2026-10-28,
+  [below](#phase-4--evidence-through-lodge-planner)), through lodge's
+  listener and its agent socket. Its "done when" still waits for the
+  user to issue Porter's token on the hub.
 - **Today's time zone,** the open question below, is checked when the
   hub runs it.
 
@@ -164,12 +167,70 @@ Status (2026-10-21):
   - each version names the token.
 - Once lodge ships its local agent socket, the same run goes through
   it.
+- `make porter-evidence` runs this alone, without Firefox or the
+  desktop app.
 - **Done when:** that run is recorded here, and the user issues
   Porter's token on the hub after plan 0006's Phase 7.
   *Note (2026-10-21):* a token of Porter's scope was already in use on
   the overnight test deployment from 2026-10-19, and on 2026-10-20
   probably on the trial's vault (owner-reported;
   [plan 0006](0006-m4-notes-inside-lodge.md#decisions-taken-for-m4)).
+- **Recorded (2026-10-28, `make porter-evidence` and `make
+  m4-evidence`, `TestIPorterThroughLodge` in `internal/webevidence`):**
+  the run holds through both of lodge's routes to `/mcp/notes`.
+  - **Where:** in the nsl machine `frostnotes` (Debian 13, nsl v0.11.0,
+    `dev/nsl/provision.sh`), with lodge's development build at
+    `e76a17c` (`make lodge-e2e`). The pin moved from `c48d43a`, which
+    has no agent socket.
+  - **The tokens:** `lodgectl token issue` gave 2 tokens of Porter's
+    scope, `vault=1;write=Porter/;except=Porter/Routines/;daily`:
+    - `porter-notes-tailnet`, for lodge's listener (the tailnet's
+      rules);
+    - `porter-notes`, issued `--agent` for the test's user, for the
+      agent socket.
+  - **The client:** the MCP SDK's client, first on the listener's
+    `/mcp/notes`, then on the agent socket's.
+  - **Each route:**
+    - writes `Porter/Memory.md` and `Porter/Briefs/2026-10-28.md` (the
+      first route creates them, the second appends);
+    - is refused at `Porter/Routines/` in two spellings of its case:
+      - `edit_note` of `Porter/Routines/Morning.md` and of
+        `porter/routines/Spelled.md`;
+      - `create_note` of `Porter/Routines/New.md` and of
+        `porter/routines/New.md`;
+    - is refused at a user's note, `edit_note` of `Garden.md`;
+    - appends to today's daily note, `Daily/2026-10-28.md` (the first
+      route's append creates it from the template).
+  - **Every refusal** says "outside this token's writes" and "this
+    token may write under Porter/ except Porter/Routines/, and append to
+    today's daily note". The refused notes are byte for byte as before
+    on the hub's disk, and no new note is in `Porter/Routines/` in any
+    case.
+  - **Each version** that a route wrote has source `agent` and names
+    that route's token. The daily note holds the template's heading and
+    both lines in order, and its versions are by `porter-notes`,
+    `porter-notes-tailnet` and `porter-notes-tailnet`.
+  - **A token works only on its own route:** `porter-notes` on the
+    listener and `porter-notes-tailnet` on the agent socket each answer
+    401.
+  - **The rest of M4's evidence** also passes at `e76a17c`, in the same
+    `make m4-evidence` run:
+    - `TestIWebAppInLodge` (frames 1232 and 390 wide);
+    - `TestIPhoneEditReachesTheDesktop`, with a p95 of 1.035 s over 20
+      edits;
+    - `TestIRenderedNotesRunNoScript`.
+
+  How the run differs from Porter's on the hub:
+  - lodge runs from `--root` and admits its own uid on the agent socket,
+    so the run does not show the socket's peer check (lodge's tests
+    hold it).
+  - The vault is on a case-sensitive disk. There, `porter/routines/`
+    is a folder of its own, which the case-folded check also refuses.
+    An edit of `porter/routines/Morning.md` answers `notFound`: no note
+    has that path. So the run edits a note seeded under that
+    spelling.
+  - The run's notesd and hub are a loopback vault, not the user's.
+  - What stays open is the user issuing Porter's token on the hub.
 
 ## Later / ideas
 
@@ -182,8 +243,15 @@ Status (2026-10-21):
 - **Today's date:** notesd decides "today" in its own time zone. The
   hub's must be the user's, or capture lands in the wrong day's note.
   Phase 2 checks the hub's, or the scope learns a time zone.
-- **lodge's agent socket:** does it pass the same three headers, and
-  `Lodge-Node-Name` for the log? By Phase 4, from lodge's ADR-0014.
+- **lodge's agent socket** *(answered, 2026-10-28)*: it passes the
+  same three headers. Phase 4's run through the socket shows it:
+  - the session is an agent's;
+  - the versions name the token;
+  - the scope holds.
+
+  It passes no `Lodge-Node-Name`. notesd reads none, and lodge's own
+  log names the agent's user in place of a node (lodge's
+  [lodge-http.md](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-http.md#the-agent-socket)).
 
 ## References
 
