@@ -271,9 +271,10 @@ A read-only check on the hub's VM on 2026-10-29 at 13:07Z found:
   - `Porter/Briefs/2026-10-27.md` (seq 768);
   - `Porter/Briefs/2026-10-28.md` (seq 785);
   - `Porter/Briefs/2026-10-29.md` (seq 897).
-- **Routines:** no version in `Porter/Routines/` comes from an agent.
-- **porterd's log:** no warning since 2026-10-26 13:08, so no missing
-  or refused token.
+- **Routines:** the 2 notes in `Porter/Routines/` have only versions
+  with source `editor`.
+- **porterd's log:** `journalctl -p warning` for Porter's service has
+  no entries since 2026-10-26 13:08.
 - **Today's date:** notesd runs with `TZ` set to the user's time zone,
   the same zone as `time_zone` in Porter's configuration.
 
