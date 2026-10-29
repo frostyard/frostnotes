@@ -34,7 +34,9 @@ of lodge's app contract is
   append to today's daily note, for Porter, frostyard's assistant
   ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
   Its evidence through lodge (Phase 4, `make porter-evidence`) was
-  recorded on 2026-10-28; Porter's token on the hub is still to come.
+  recorded on 2026-10-28. Porter's token on the hub, issued at the
+  move on 2026-10-26, was checked live on 2026-10-29; the user's
+  acceptance of it is still to come.
 - **Phase 7** moved the user's hub behind lodge on 2026-10-26; the 7
   days of sync through lodge run to 2026-11-02.
 
