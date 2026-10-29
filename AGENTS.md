@@ -162,6 +162,31 @@ file a step names before writing its frostnotes counterpart.
   name a unit test `TestI…`; `internal/repocheck` fails if you do.
 - Fix a lint finding rather than loosening `.golangci.yml`.
 
+## Releases and dependencies
+
+- **Tags** are `v1.2.3` (`.svu.yml`: prefix `v`, v0 mode). `svu next` reads
+  Conventional Commits; on v0 a breaking change gives a minor.
+- **A release starts** when a `v*` tag is pushed. `.github/workflows/release.yml`
+  checks the tag, builds the web app and `frostyard-notesd`'s .deb (`make deb`, nFPM),
+  attests it, and makes the GitHub release with `gh release create`. `flatpak.yml`
+  also runs on the tag and publishes the Flatpak image to GHCR.
+- **Brian tags.** Agents never tag, push a tag or release. `make bump` is the
+  only sanctioned path: from a clean `main` equal to `origin/main` it runs
+  `make check`, tags `svu next` and pushes the tag.
+- **Go modules** (`go.mod`): `github.com/frostyard/clix` v0.5.0 (the CLI shell of
+  `notesctl`), `github.com/frostyard/lodge/kit` v0.3.1 (the RPC and app runtime),
+  and `github.com/frostyard/std` v0.3.0 (indirect, from clix). Run
+  `make flatpak-sources` after a bump: it rewrites `packaging/flatpak/go-sources.json`.
+- **App packages** (`app/package.json`): `@frostyard/lodge-client` as
+  `github:frostyard/lodge#client/v0.3.2&path:client` and `@frostyard/lodge-ui` as
+  `github:frostyard/lodge#ui/v0.6.0&path:ui`.
+- **Tool pins** (`mise.toml`): golangci-lint 2.15.0, svu 3.4.1, nfpm 2.48.0
+  (these are not frostyard modules). No bketelsen module is used.
+- **Who uses this repository:** lodge hosts `notesd --lodge` as its `notes` app
+  (`packaging/lodge/app.json`); Porter calls lodge's `/mcp/notes` with a
+  folder-scoped token, and lodge forwards it to `/mcp` on notesd's app socket
+  ([docs/specs/mcp.md](docs/specs/mcp.md)). Other users: not stated.
+
 ## Invariants (decided; binding from the first line of code)
 
 - **Files are the truth.** A note is a `.md` file with YAML frontmatter.
