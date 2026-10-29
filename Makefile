@@ -265,16 +265,24 @@ m3-evidence: ## Record M3's exit evidence 1-3 with build/frostnotes-app (from ma
 # Phases 5 and 7): lodge's development build at LODGE_E2E_REF
 # (scripts/lodge-e2e.sh), notes' web build in it, Firefox ESR through
 # geckodriver at a desktop size and at 390 x 844, and for evidence 2 the
-# desktop app under Xvfb.
-LODGE_E2E_REF := c48d43acc70038ff07100c8f816de387570bd817
+# desktop app under Xvfb. m4-evidence also runs Porter's evidence through
+# lodge (docs/plans/0007-folder-scopes-for-agents.md, Phase 4):
+# tokens of Porter's scope from lodgectl, an MCP client on lodge's listener
+# and on its agent socket; porter-evidence runs that alone, without
+# Firefox or the desktop app.
+# The ref has the agent socket and lodgectl's --agent.
+LODGE_E2E_REF := e76a17c57766bad3797b8d78708591d88c5e7777
 
-.PHONY: lodge-e2e m4-evidence
+.PHONY: lodge-e2e m4-evidence porter-evidence
 lodge-e2e: ## Build lodge's development build at LODGE_E2E_REF into build/lodge-e2e (nsl)
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(LODGE_E2E_REF) build/lodge-e2e'
 
 m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 and 2 on loopback (nsl; run make app-build first)
 	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
 	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes FROSTNOTES_APP=$$PWD/build/frostnotes-app $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
+
+porter-evidence: lodge-app lodge-e2e ## Record Porter's evidence through lodge (plan 0007, Phase 4) on loopback (nsl)
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes go test -tags integration -count=1 -timeout 20m -v -run "^TestIPorter" ./internal/webevidence'
 
 # Task cards (docs/design/agent-workflow.md). The executor is Codex with the
 # user's model unless EXECUTOR_MODEL names one; or opencode with
