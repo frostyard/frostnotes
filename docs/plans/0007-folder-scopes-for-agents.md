@@ -25,7 +25,7 @@ Work is split per
   boundary and its contract.
 - **No cards.**
 
-Status (2026-10-28):
+Status (2026-10-29):
 - **Phase 1 is done.** The user approved building this plan on
   2026-10-19, ahead of acceptance, and accepted ADR-0028 on 2026-10-21.
 - **Phases 2 and 3 are built, in two PRs.**
@@ -51,10 +51,15 @@ Status (2026-10-28):
       foldings).
 - **Phase 4's run is recorded** (2026-10-28,
   [below](#phase-4--evidence-through-lodge-planner)), through lodge's
-  listener and its agent socket. Its "done when" still waits for the
-  user to issue Porter's token on the hub.
-- **Today's time zone,** the open question below, is checked when the
-  hub runs it.
+  listener and its agent socket.
+- **Porter's token on the hub** was issued at the hub's move behind
+  lodge, on 2026-10-26, and a read-only check on 2026-10-29 found it
+  live and in use
+  ([below](#porters-token-on-the-hub-2026-10-29)). Phase 4's "done
+  when" waits only for the user to accept that token as the step, or
+  to issue it again (asked 2026-10-29).
+- **Today's time zone,** the open question below, is answered: the
+  hub's notesd runs in the user's time zone.
 
 ## Phase 1 — Decisions (planner)
 
@@ -234,7 +239,48 @@ Status (2026-10-28):
     has that path. So the run edits a note seeded under that
     spelling.
   - The run's notesd and hub are a loopback vault, not the user's.
-  - What stays open is the user issuing Porter's token on the hub.
+
+### Porter's token on the hub (2026-10-29)
+
+The token was issued on 2026-10-26 at 13:08Z, at step 8 of
+[plan 0006's run sheet](0006-m4-notes-inside-lodge.md#run-sheet-for-the-move-2026-10-26),
+with the user present. That step revoked the token that named lodge's
+own copy of the vault (`vault=2`) and issued `porter-notes` again with
+`vault=1`, piped from `lodgectl` straight into `porterd token set
+notes`.
+
+A read-only check on the hub's VM on 2026-10-29 at 13:07Z found:
+
+- **The token:** `lodgectl tokens` lists 1 live `porter-notes`:
+  - app `notes`;
+  - scope `vault=1;write=Porter/;except=Porter/Routines/;daily`;
+  - agent `frostporter`;
+  - created 2026-10-26 13:08, last used 2026-10-29 13:07.
+- **Earlier tokens:** the `vault=2` token is revoked. So is a `vault=1`
+  token lost in a failed pipe at the move, as plan 0006 records.
+- **No tailnet token for Porter.** Porter runs on lodge's host and uses
+  only the agent socket. `porter-notes-tailnet` belongs to Phase 4's
+  run in lodge's development build only.
+- **lodge's agents:** `/etc/lodge/config.json` lists `frostporter`.
+- **porterd's copy:** `/var/lib/frostporter/tokens/notes` is 0600,
+  owned by `frostporter`, written on 2026-10-26 at 13:08. Its value was
+  not read.
+- **The vault:** vault 1 is the hub's only vault.
+- **Porter's writes:** its briefs since the move each have a version
+  with source `agent` and author `porter-notes`:
+  - `Porter/Briefs/2026-10-27.md` (seq 768);
+  - `Porter/Briefs/2026-10-28.md` (seq 785);
+  - `Porter/Briefs/2026-10-29.md` (seq 897).
+- **Routines:** the 2 notes in `Porter/Routines/` have only versions
+  with source `editor`.
+- **porterd's log:** `journalctl -p warning` for Porter's service has
+  no entries since 2026-10-26 13:08.
+- **Today's date:** notesd runs with `TZ` set to the user's time zone,
+  the same zone as `time_zone` in Porter's configuration.
+
+The check wrote nothing. It shows no refusal on the hub, since a
+refusal needs a write. Phase 4's run holds the refusals for this
+scope, and the hub's notesd enforces the same scope.
 
 ## Later / ideas
 
@@ -244,9 +290,12 @@ Status (2026-10-28):
 
 ## Open questions
 
-- **Today's date:** notesd decides "today" in its own time zone. The
-  hub's must be the user's, or capture lands in the wrong day's note.
-  Phase 2 checks the hub's, or the scope learns a time zone.
+- **Today's date** *(answered, 2026-10-29)*: notesd decides "today" in
+  its own time zone. The hub's must be the user's, or capture lands in
+  the wrong day's note. The hub's notesd runs with `TZ` set to the
+  user's time zone, the same as Porter's `time_zone`
+  ([the check](#porters-token-on-the-hub-2026-10-29)). The scope needs
+  no time zone of its own.
 - **lodge's agent socket** *(answered, 2026-10-28)*: it passes the
   same three headers. Phase 4's run through the socket shows it:
   - the session is an agent's;
