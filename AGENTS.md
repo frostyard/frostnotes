@@ -183,7 +183,8 @@ file a step names before writing its frostnotes counterpart.
 - **Tool pins** (`mise.toml`): golangci-lint 2.15.0, svu 3.4.1, nfpm 2.48.0
   (these are not frostyard modules). No bketelsen module is used.
 - **Who uses this repository:** lodge hosts `notesd --lodge` as its `notes` app
-  (`packaging/lodge/app.json`); Porter calls `/mcp` with a folder-scoped token
+  (`packaging/lodge/app.json`); Porter calls lodge's `/mcp/notes` with a
+  folder-scoped token, and lodge forwards it to `/mcp` on notesd's app socket
   ([docs/specs/mcp.md](docs/specs/mcp.md)). Other users: not stated.
 
 ## Invariants (decided; binding from the first line of code)
