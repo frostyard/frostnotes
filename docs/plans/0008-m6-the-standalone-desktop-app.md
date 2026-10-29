@@ -23,7 +23,7 @@ vault's files and its own index, and the hub reconciles them
 [design/sync.md](../design/sync.md)). A device that leaves a hub keeps its
 files (`notesctl sync leave`).
 
-Status (2026-10-28):
+Status (2026-10-29):
 - **Phase 1 is done:** the review below.
 - **Phase 2 is built** in PR #103. `v0.2.0` was tagged and published
   on 2026-10-27, and the package is public; the remote's entry
@@ -31,9 +31,10 @@ Status (2026-10-28):
 - **Phase 3,** the clean-install check: the first run, on `v0.2.0` on
   2026-10-27, passed items 1, 3, 4 and 7, and item 2 from a staged
   catalogue ("Record" below). Item 6 passed in part, with a loopback hub
-  and no lodge. Still to run: item 2 from the public remote (after the
-  listing), item 6 with a hub over HTTPS and lodge's web app, and item 5
-  on the second release.
+  and no lodge. Item 5 passed on 2026-10-29, on the update from `v0.2.0`
+  to `v0.3.0` (Run 2). Still to run: item 2 from the public remote
+  (after the listing), and item 6 with a hub over HTTPS and lodge's web
+  app.
 - **Phase 4** lists what the review found: G3 (PR #106) and G5 (PR #107)
   are done, merged on 2026-10-28, G2 is built on 2026-10-28 and waits
   for its run on a real desktop, G1 is built in PR #111, merged on
@@ -233,7 +234,7 @@ verified the attestation, and served on `127.0.0.1:8765` in the VM.
 | 2. Install | Pass from the staged catalogue; the public remote not run | `flatpak install --user frostyard-staged org.frostyard.Frostnotes` installed it; `flatpak info` showed 0.2.0 and the commit above. The install from the public remote, which the item names, can run only after flatpak-index lists the app, so it is still to run. The app grid showed Frostnotes with its icon (on its second page); GNOME 48's grid shows no summaries, and the desktop file's `Comment` is "Plain markdown notes on your own computer" |
 | 3. Local, no terminal | Pass | From the grid: the vault manager, and 2 instances (`flatpak ps`), notesd's under `flatpak-portal`. Create new vault, Browse (the portal's chooser): Location `/var/home/tester/Documents`, a real path. Two notes with a wikilink each way, tags, and a pasted screenshot (`Pasted image ….png`, embedded and shown); search found both notes, backlinks and the tag pane counted the link and the tags. 2 edits in vim to the open note showed in the window within 1 s, with no conflict copy. Open folder as vault opened `~/Journal`, a folder of Markdown with a subfolder. `notesctl vault list` listed both. Nothing asked for a hub, an account, lodge or the network; notesd and the window held no TCP socket |
 | 4. Restart, login, background | Pass | The first launch got `background` and `autostart` with no dialog, and wrote the autostart entry. Closed: only notesd's instance stayed; reopened, the window used that notesd, with no `flatpak-spawn`. Logout stopped notesd ("notesd stopped"); at login gnome-session started it with no window, and `notesd.log` shows the start. Run in Background off: see below. Opening the app with it off started a notesd and showed both vaults. On again, and after one launch of the app, a login started notesd |
-| 5. Update | Not run | Needs the second release. The VM is kept stopped with the snapshot `after-item-4` |
+| 5. Update | Not run | Needs the second release. The VM is kept stopped with the snapshot `after-item-4`. Run 2 below ran it on 2026-10-29 |
 | 6. Sync, opt-in | In part: sync passed with a loopback hub; HTTPS and lodge's web app not run | The hub was the Flatpak's own notesd with its own data directory, on `http://127.0.0.1:7788` in the VM, as in ADR-0031's record: plain HTTP on loopback, not a hub over HTTPS as the item asks, and with no lodge, so its web app was not part of the run. `notesctl hub join http://127.0.0.1:7788 shared --vault "Field Notes"` and `hub approve` (the terminal, until G1): no keyring prompt, since the password login unlocked the `login` keyring. With the window closed, a new note reached the hub in 2.2 s and one from the hub arrived in 0.1 s; with the window open, a note typed in the app reached the hub in 2.6 s, and a hub edit showed in the open note in 0.2 s |
 | 7. Disconnects | Pass | Hub stopped ("connection refused"; the status bar's sync icon showed offline). On both sides, edits to different lines of Harbor, one line of Lighthouse changed 2 ways, and a new note each. The hub back, the device reconnected within 40 s (its backoff): Harbor held both edits, the new notes crossed, and Lighthouse was a conflict, shown as "1 conflict" in the status bar and both lines in the merge view; taking the device's line and Done resolved it on both sides. `sync leave`: the files stayed and edited locally in the app, and the hub's copy stayed. The never-joined Journal kept its hashes and times from before item 6 |
 
@@ -262,6 +263,84 @@ logout:
   ran a moment later.
 - `flatpak remote-info` on the staged remote answered 401, while
   `remote-ls` and `install` worked.
+
+#### Run 2: item 5, the update from `v0.2.0` to `v0.3.0` on Snow, 2026-10-29 (pass)
+
+**The release.** `v0.3.0`, commit `2d80734337b90f497c5b6f0c7e87038d2bc96b20`,
+Flatpak run 40755467431, the tag run. The tested image is
+`ghcr.io/frostyard/frostnotes@sha256:46e19029bb751b1bfe9c0182e9e72d5d052ed1618b84f5bd7145360a4dd96145`,
+which `v0.3.0` and `latest` named on the day. `gh attestation verify`
+passed for that digest, with `--repo frostyard/frostnotes
+--signer-workflow github.com/frostyard/frostnotes/.github/workflows/flatpak.yml`:
+SLSA provenance v1, signer `flatpak.yml@refs/tags/v0.3.0`, source digest
+`2d80734`.
+
+From: `v0.2.0` as Run 1 installed it, Flatpak commit `a824995e…`,
+subject "Built from 0573fab7…". To: Flatpak commit `b531eccf…`,
+Version 0.3.0, subject "Built from 2d807343…", Alt-id the digest above.
+
+**The machine.** Run 1's VM `dev-frostnotes-clean` (incus on minideb),
+restored from its snapshot `after-item-4`: Snow `20261027121612`
+(booted; image `sha256:ffee4848…5243`), GNOME Shell 48.7 on Wayland,
+xdg-desktop-portal 1.20.3, Flatpak 1.16.6, kernel 7.2.12. A newer Snow
+(`20261029102309`) was staged by the OS and did not apply: the run had
+no reboot.
+
+Two changes to the test setup, neither of them the app's:
+- Memory 4 GiB, not 8 GiB, since minideb had about 9 GiB free.
+- Run 1's test password was in `~/.cache/fnclean-test/` on the Pi Pocket
+  host that ran Run 1, which is retired and could not be reached. So
+  `tester`'s password was set again as root, the old login keyring was
+  set aside (it could hold no frostnotes item: the snapshot is from
+  before item 6), and one logout and login made a new keyring. That login
+  started notesd 0.2.0 from the autostart entry.
+
+**The update's source.** Not Run 1's staged catalogue: the remote
+`frostyard-staged` on `127.0.0.1:8765` served nothing now. Its URL moved
+to the public index, `flatpak remote-modify --user
+--url=oci+https://frostyard.github.io/flatpak-index frostyard-staged`, so
+`flatpak update` pulled from the public catalogue (journal: "Pulled …
+from https://ghcr.io/"). `remote-ls` showed Frostnotes at commit
+`46e19029bb75`. This is not item 2's install from the public remote:
+item 2 stays to run. No hub: the snapshot is from before item 6, so no
+vault was joined.
+
+**Before the update.** The window was open on vault Journal with 2 tabs
+(Packing list, and readme active). notesd 0.2.0 ran, from 07:14 EDT
+(all times are EDT). The VM
+held 2 vaults (Field Notes, Journal), 5 notes, 7 files (2 of them PNG
+images) and 19 versions.
+
+| Item | Result | What happened |
+| --- | --- | --- |
+| 5. Update | Pass | `flatpak update --user -y org.frostyard.Frostnotes` at 07:17:07: about 16 MB, "Updates complete." in about 4 s, no error, no dialog. The open window went on working, and `hello` said `notesd 0.2.0 (protocol 1)`. Closed with Alt+F4, only notesd's instance stayed. Opened again from the overview's search: the 0.3.0 window used the running notesd (no new line in `notesd.log`), restored both tabs, and `hello` said `notesd 0.2.0 (protocol 1)`. Logout at 07:18:58 wrote "notesd stopped" at 07:19:10, and no notesd and no app process stayed; at login the autostart entry started notesd, "notesd started" `version=0.3.0` at 07:19:25, with the same socket and database paths, and `hello` said `notesd 0.3.0 (protocol 1)`; the window showed vault Journal with both tabs. The loss check ran at 2 points, after the reopen and after the login: both vault folders gave the same `sha256sum` for all 7 files, and the same sizes and modes (`diff` empty); `notesctl ls` gave the same 5 notes, `notesctl versions` the same 19 versions, and `vault list` the same 2 vaults. The workspace (2 tabs) came back each time |
+
+**What it shows:**
+- The update that brings G3 keeps the old notesd until logout, as
+  [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) says:
+  0.2.0 has no `rpc.shutdown`, so the new window used the old notesd.
+  After a logout and a login, the new version ran.
+- Nothing was lost: every note, file and version stayed, and the
+  workspace came back.
+- No database migration was tested: the store migrations did not change
+  between `v0.2.0` and `v0.3.0`.
+- G3's own replacement, a new window that replaces an older notesd with
+  no logout, is still to test. It needs an update from `v0.3.0` to a
+  later release, and G3's Done when (Phase 4) stays open until then.
+  This VM is deleted after the run (Brian's decision T329a), so that run
+  needs a new VM.
+
+**Other findings,** none a gate failure:
+- The public catalogue publishes no version string: `remote-ls` showed
+  Frostnotes at commit `46e19029bb75` and an empty version column.
+- At login, Snow's own windows showed: the GNOME Tour ("Let's set up
+  your user account") and Bazaar. They are not the app's.
+- The 0.3.0 launch at 07:18 rewrote the autostart entry; its content did
+  not change.
+- Screenshots were checked and are kept out of the repository, as in
+  Run 1. Before the update the window showed vault Journal with the 2
+  tabs; after the reopen and after the login, the same 2 tabs, readme
+  rendered ("Plain old note."), no dialog and no error.
 
 ## Phase 4 — Gaps found by the review
 
@@ -311,9 +390,10 @@ blocks Phase 2.
   --latest-version notesd -build`, then `notesctl shutdown`), after
   frostmail's. `rpc.hello` gains `build` and `rpc.shutdown` is new
   ([design/app.md](../design/app.md#the-flatpak), "Updates"). The smoke test
-  covers the replacement; the run on a second published release
-  (Phase 3, item 5) is still to do, and the update that brings G3 keeps
-  the old notesd until logout, since that notesd has no `rpc.shutdown`.
+  covers the replacement. Phase 3's item 5 ran on 2026-10-29 (Run 2)
+  and confirmed that the update that brings G3 keeps the old notesd
+  until logout, since that notesd has no `rpc.shutdown`; the replacement
+  itself still needs a run on the update after `v0.3.0`.
 - **G4 — Moving from a host notesd.** A desktop that ran notesd from a
   build or the `.deb` has another data directory
   (`~/.local/share/frostnotes`) and socket, so both daemons can run and
