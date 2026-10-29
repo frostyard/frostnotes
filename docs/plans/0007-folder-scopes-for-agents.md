@@ -55,9 +55,9 @@ Status (2026-10-29):
 - **Porter's token on the hub** was issued at the hub's move behind
   lodge, on 2026-10-26, and a read-only check on 2026-10-29 found it
   live and in use
-  ([below](#porters-token-on-the-hub-2026-10-29)). Phase 4's "done
-  when" waits only for the user to accept that token as the step, or
-  to issue it again (asked 2026-10-29).
+  ([below](#porters-token-on-the-hub-2026-10-29)).
+- **Phase 4 is done** (2026-10-29): the user accepted that token as
+  Phase 4's step. With it, all 4 phases of this plan are done.
 - **Today's time zone,** the open question below, is answered: the
   hub's notesd runs in the user's time zone.
 
@@ -176,6 +176,10 @@ Status (2026-10-29):
   desktop app.
 - **Done when:** that run is recorded here, and the user issues
   Porter's token on the hub after plan 0006's Phase 7.
+  **Met (2026-10-29):** the run is recorded below, and the user
+  accepted the token issued at the hub's move on 2026-10-26 as the
+  token step
+  ([the acceptance](#the-users-acceptance-2026-10-29); desk T475a).
   *Note (2026-10-21):* a token of Porter's scope was already in use on
   the overnight test deployment from 2026-10-19, and on 2026-10-20
   probably on the trial's vault (owner-reported;
@@ -281,6 +285,18 @@ A read-only check on the hub's VM on 2026-10-29 at 13:07Z found:
 The check wrote nothing. It shows no refusal on the hub, since a
 refusal needs a write. Phase 4's run holds the refusals for this
 scope, and the hub's notesd enforces the same scope.
+
+#### The user's acceptance (2026-10-29)
+
+The user answered on 2026-10-29: "Accept the 2026-10-26 token" (desk
+T475a). So the token above counts as Phase 4's step "the user issues
+Porter's token on the hub":
+
+- `porter-notes`, of Porter's scope, issued `--agent frostporter`;
+- issued on the hub at the move, on 2026-10-26 at 13:08Z, with the
+  user present.
+
+The token was not issued again. Its value is in no document.
 
 ## Later / ideas
 
