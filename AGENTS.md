@@ -33,7 +33,8 @@ of lodge's app contract is
   Phases 2 and 3, which limit an agent's writes to folders and let it
   append to today's daily note, for Porter, frostyard's assistant
   ([ADR-0028](docs/adr/0028-an-agents-scope-can-limit-writes-to-folders.md)).
-  Its evidence through lodge (Phase 4) is still to come.
+  Its evidence through lodge (Phase 4, `make porter-evidence`) was
+  recorded on 2026-10-28; Porter's token on the hub is still to come.
 - **Phase 7** moved the user's hub behind lodge on 2026-10-26; the 7
   days of sync through lodge run to 2026-11-02.
 
@@ -104,7 +105,8 @@ file a step names before writing its frostnotes counterpart.
   evidence; `internal/appevidence`: M3's, over the built app under Xvfb
   (`make m3-evidence`); `internal/webevidence`: M4's, Firefox ESR through
   geckodriver in lodge's development build (`make m4-evidence`,
-  `scripts/lodge-e2e.sh`).
+  `scripts/lodge-e2e.sh`), and plan 0007's Porter run through lodge's
+  listener and agent socket (`make porter-evidence`).
 - `internal/sandbox`: a Flatpak sandbox's file grants (`/.flatpak-info`) and the
   explanation of a file error they cause; the engine uses it for `vault.add`
   ([design/app.md](docs/design/app.md#the-flatpak)).
