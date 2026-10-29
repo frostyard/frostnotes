@@ -26,15 +26,16 @@ files (`notesctl sync leave`).
 Status (2026-10-29):
 - **Phase 1 is done:** the review below.
 - **Phase 2 is built** in PR #103. `v0.2.0` was tagged and published
-  on 2026-10-27, and the package is public; the remote's entry
-  (frostyard/flatpak-index#4) waits for Phase 3's first run.
+  on 2026-10-27, and the package is public. The remote's entry
+  (frostyard/flatpak-index#4) merged on 2026-10-27, after Phase 3's
+  first run; on 2026-10-29 the public catalogue listed the app at
+  `v0.3.0`'s image (Run 2), with no version string.
 - **Phase 3,** the clean-install check: the first run, on `v0.2.0` on
   2026-10-27, passed items 1, 3, 4 and 7, and item 2 from a staged
   catalogue ("Record" below). Item 6 passed in part, with a loopback hub
   and no lodge. Item 5 passed on 2026-10-29, on the update from `v0.2.0`
-  to `v0.3.0` (Run 2). Still to run: item 2 from the public remote
-  (after the listing), and item 6 with a hub over HTTPS and lodge's web
-  app.
+  to `v0.3.0` (Run 2). Still to run: item 2, an install from the
+  public remote, and item 6 with a hub over HTTPS and lodge's web app.
 - **Phase 4** lists what the review found: G3 (PR #106) and G5 (PR #107)
   are done, merged on 2026-10-28, G2 is built on 2026-10-28 and waits
   for its run on a real desktop, G1 is built in PR #111, merged on
