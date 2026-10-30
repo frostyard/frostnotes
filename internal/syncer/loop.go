@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -368,14 +369,23 @@ func (l *loop) cycle(ctx context.Context, sess *session) (bool, time.Duration, e
 	return worked, next, nil
 }
 
-// due reports whether a change to the given paths is past its quiet
-// period, and if not, how long until it is.
-func (l *loop) due(now time.Time, paths ...string) (bool, time.Duration) {
+// marks returns a copy of the quiet periods' marks, by path. One push
+// judges all its changes by one copy: the events that mark paths arrive
+// while it judges them, and two changes that share paths, the two files
+// of a swap, must be held or sent together. Split, the hub would number
+// the file that moves first onto the path the other still holds.
+func (l *loop) marks() map[string]mark {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return maps.Clone(l.dirty)
+}
+
+// due reports whether a change to the given paths is past its quiet
+// period in marks, and if not, how long until it is.
+func (l *loop) due(marks map[string]mark, now time.Time, paths ...string) (bool, time.Duration) {
 	wait := time.Duration(0)
 	for _, p := range paths {
-		m, ok := l.dirty[p]
+		m, ok := marks[p]
 		if !ok {
 			continue
 		}
@@ -422,7 +432,7 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 	for _, p := range sends {
 		inFlight[p.FileID] = true
 	}
-	now := l.s.cfg.Now()
+	now, marks := l.s.cfg.Now(), l.marks()
 	var held time.Duration
 	for _, c := range changes {
 		if _, parked := l.parked[c.FileID]; inFlight[c.FileID] || parked {
@@ -432,7 +442,7 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 		if c.Agreed != nil {
 			paths = append(paths, c.Agreed.Path)
 		}
-		if ok, wait := l.due(now, paths...); !ok {
+		if ok, wait := l.due(marks, now, paths...); !ok {
 			if held == 0 || wait < held {
 				held = wait
 			}
