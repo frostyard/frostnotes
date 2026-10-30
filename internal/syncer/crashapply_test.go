@@ -1,7 +1,10 @@
 package syncer_test
 
 import (
+	"context"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -56,13 +59,74 @@ func (d *crashy) down() {
 // vault's open scan.
 func (d *crashy) up() {
 	d.t.Helper()
+	d.start()
+	d.waitScanned()
+	d.net.heal()
+	d.srv.Syncer.Kick(d.vault)
+}
+
+// start starts the device's notesd again on its data, cut off.
+func (d *crashy) start() {
+	d.t.Helper()
 	o := d.opts
 	o.Vault.Debounce = 10 * time.Millisecond
 	d.srv = rpctest.StartWith(d.t, o)
 	d.c = d.srv.Dial(d.t)
-	d.waitScanned()
-	d.net.heal()
-	d.srv.Syncer.Kick(d.vault)
+}
+
+// waitSyncError waits, by the device's sync.changed events, until its sync
+// reports an error that holds text, or it has pushed something.
+func (d *crashy) waitSyncError(text string) {
+	d.t.Helper()
+	ctx, cancel := context.WithTimeout(d.t.Context(), settleWait)
+	defer cancel()
+	c, _, err := api.Dial(ctx, d.srv.Socket, "sync error watch")
+	if err != nil {
+		d.t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if _, err := c.Events().Subscribe(ctx, &api.EventsSubscribeParams{}); err != nil {
+		d.t.Fatal(err)
+	}
+	has := func(st api.SyncStatus) bool {
+		if st.Error != nil && strings.Contains(*st.Error, text) {
+			return true
+		}
+		ps, err := d.srv.DB.Pushes(ctx, d.vault)
+		un, err2 := d.srv.DB.Unanswered(ctx, d.vault)
+		return err == nil && err2 == nil && len(ps)+len(un) > 0
+	}
+	if st, err := d.c.Sync().Status(ctx, &api.SyncStatusParams{VaultID: &d.vault}); err == nil && has(st[0]) {
+		return
+	}
+	for {
+		select {
+		case ev := <-c.Notifications():
+			if e, err := api.DecodeEvent(ev.Event, ev.Data); err == nil {
+				if ch, ok := e.(api.SyncChanged); ok && ch.Status.VaultID == d.vault && has(ch.Status) {
+					return
+				}
+			}
+		case <-ctx.Done():
+			d.t.Fatalf("the device's sync never reported %q", text)
+		}
+	}
+}
+
+// noPushes fails if device d pushed anything.
+func noPushes(t *testing.T, d *node) {
+	t.Helper()
+	ps, err := d.srv.DB.Pushes(t.Context(), d.vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	un, err := d.srv.DB.Unanswered(t.Context(), d.vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all := append(ps, un...); len(all) > 0 {
+		t.Fatalf("the device pushed %+v, but changed nothing itself", all)
+	}
 }
 
 // noConflictRevision fails if the hub's log holds a conflict revision.
@@ -269,4 +333,57 @@ func equalFiles(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// A device that restarts after a crash while it applied a head settles
+// it only after a scan that succeeded. A scan that fails (here on a folder
+// it cannot read) changes nothing, and the index still holds the file the
+// interrupted move took away: settled then, the device would push that
+// stale row as a create, and the hub would make the file again.
+func TestACrashWhileApplyingAHeadWaitsForAScanThatSucceeded(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every folder")
+	}
+	h := newHub(t, map[string]string{"f.md": "one\n", "locked/x.md": "x\n"})
+	a := newCrashy(t, h, "a")
+	b := newPartitioned(t, h, "b", nil)
+	settle(t, h, a.node, b.node)
+	a.net.cut()
+	b.move("f.md", "g.md")
+	a.armed.Store(true)
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	a.down()
+
+	locked := filepath.Join(a.dir, "locked")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	a.start()
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	a.waitSyncError("no scan of the vault has succeeded")
+	noPushes(t, a.node)
+	want := map[string]string{"g.md": "one\n", "locked/x.md": "x\n"}
+	if got := files(t, h.dir); !equalFiles(got, want) {
+		t.Fatalf("the hub while a's scan fails = %q, want %q", got, want)
+	}
+	if rows, err := a.srv.DB.Applying(t.Context(), a.vault); err != nil || len(rows) != 1 {
+		t.Fatalf("a's heads being applied = %+v, %v; want the interrupted move", rows, err)
+	}
+
+	if err := os.Chmod(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a.rescan()
+	a.srv.Syncer.Kick(a.vault)
+	settle(t, h, a.node, b.node)
+	if got := same(t, h, a.node, b.node); !equalFiles(got, want) {
+		t.Fatalf("the vaults after a's scan succeeded = %q, want %q", got, want)
+	}
+	noPushes(t, a.node)
+	if rows, err := a.srv.DB.Applying(t.Context(), a.vault); err != nil || len(rows) != 0 {
+		t.Fatalf("a's heads being applied = %+v, %v; want none", rows, err)
+	}
 }

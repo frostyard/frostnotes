@@ -2,6 +2,8 @@ package vault
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -111,8 +113,9 @@ type Vault struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 
-	scanned     chan struct{} // closed when the open scan has finished
+	scanned     chan struct{} // closed when the first scan has finished, done or failed
 	scannedOnce sync.Once
+	scanOK      atomic.Bool // a scan has succeeded since the vault opened
 }
 
 func newVault(cfg *Config, v store.Vault) *Vault {
@@ -164,18 +167,30 @@ func (v *Vault) setRemoved(removed bool) {
 // goes through one, so no path escapes the vault.
 func (v *Vault) open() (*os.Root, error) { return os.OpenRoot(v.root) }
 
-// Scanned waits until the vault's open scan has finished, done or
-// failed: the index then holds what the disk held when notesd started, a
-// file a crash left behind or took away included.
+// ErrNotScanned is what Scanned returns while no scan of the vault has
+// succeeded since it opened.
+var ErrNotScanned = errors.New("no scan of the vault has succeeded since it opened")
+
+// Scanned waits until the vault's first scan has finished. It returns nil
+// once a scan has succeeded since the vault opened: the index then holds
+// what the disk held when notesd started, a file a crash left behind or
+// took away included. While none has (a scan fails as a whole, changing
+// nothing, on a folder it cannot read or an empty folder of an indexed
+// vault), it returns ErrNotScanned at once: the index may still hold rows
+// of files that are gone. A later scan that succeeds, the next rescan
+// among them, makes it return nil.
 func (v *Vault) Scanned(ctx context.Context) error {
 	select {
 	case <-v.scanned:
-		return nil
 	case <-v.done:
 		return api.NotFound("vault %d stopped", v.id)
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+	if !v.scanOK.Load() {
+		return fmt.Errorf("vault %d: %w", v.id, ErrNotScanned)
+	}
+	return nil
 }
 
 // Status is the state of the vault's index and scans.

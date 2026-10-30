@@ -41,7 +41,6 @@ func (v *Vault) run(ctx context.Context) {
 			if _, _ = v.runScan(ctx, v.reindex.Swap(false)); ctx.Err() != nil {
 				return // runScan logs a failure and keeps it in the status
 			}
-			v.scannedOnce.Do(func() { close(v.scanned) })
 			interval := v.cfg.Rescan
 			if s, _ := v.Status(ctx); s.Network {
 				interval = v.cfg.NetworkRescan

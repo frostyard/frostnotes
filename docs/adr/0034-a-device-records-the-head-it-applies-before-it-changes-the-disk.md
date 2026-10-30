@@ -52,9 +52,15 @@ crashes at this point, but it did not find these orderings.
   sets or drops the agreed row and answers the push. When nothing reached
   the disk (the file changed, or the vault cannot hold the path), the
   record is deleted at once.
-- **Each sync session settles the records first,** before it pushes. It
-  waits for the vault's open scan, which indexes what the crash left on
-  disk. A record whose file is now the head (at its path with its hash,
+- **The records are settled before each sync session starts,** so before
+  it pushes. This waits for the vault's first scan and needs a scan that
+  succeeded, which indexed what the crash left on disk. A scan fails as a
+  whole and changes nothing (a folder it cannot read, or an empty folder
+  of an indexed vault, such as an unmounted share): the index can still
+  hold a file the crash took away, which would go out as a create. While
+  no scan has succeeded since the vault opened, the loop does not start
+  the session: it reports the error and tries again after its backoff,
+  without dialing the hub, until a rescan succeeds. A record whose file is now the head (at its path with its hash,
   or, for a delete, nothing at the old path and the local file gone from
   the index) is agreed, and its push answered, as the lost `Tx` would have
   done. A head that moves and rewrites its file and stopped between the
@@ -69,6 +75,9 @@ crashes at this point, but it did not find these orderings.
 - A device never pushes back as its own a change it only applied: what
   the hub did meanwhile stands.
 - Each head a device applies costs one more small `Tx`.
+- After a crash that left records, a vault whose scans keep failing does
+  not sync at all, pulls included, until a scan succeeds: `sync.status`
+  shows the vault offline with the error.
 - A delete settled after a crash is indexed as an outside deletion (the
   scan found it), not as a `sync` version: its attribution is lost, as it
   is for a local write that crashes in the same place.

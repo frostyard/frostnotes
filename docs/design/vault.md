@@ -296,9 +296,11 @@ as an outside deletion.
 A crash after the rename and before the `Tx` loses only the attribution:
 the next scan indexes the new bytes as an outside version. For a head that
 sync applies (`vault.Apply`), the device's sync loop also records the head
-before the rename, and settles it after the restart, once the open scan
-has finished (`Vault.Scanned`): so the head is agreed, not pushed back as
-the device's own change
+before the rename, and settles it after the restart, once a scan has
+succeeded (`Vault.Scanned`; while the first scan failed it returns
+`ErrNotScanned`, the sync session waits, and a later rescan that succeeds
+lets it go on): so the head is agreed, not pushed back as the device's
+own change
 ([ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)).
 
 ### Daily notes

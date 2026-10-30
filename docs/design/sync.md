@@ -124,8 +124,9 @@ change as another program's, and the agreed row still names the old
 revision: pushed from it, the change would undo what the hub did
 meanwhile, such as deleting again a file another device brought back. So
 the loop records each head before it applies it, the agreeing `Tx`
-deletes the record, and each session settles what a crash left before
-it pushes: a file that holds the head is agreed, and anything else waits
+deletes the record, and before each session starts the loop settles what
+a crash left, after a scan of the vault that succeeded (it waits with its
+backoff until one has): a file that holds the head is agreed, and anything else waits
 for its own push or the next pull
 ([sync-protocol.md](../specs/sync-protocol.md#pulling-and-applying),
 [ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)).

@@ -145,11 +145,17 @@ func (l *loop) run(ctx context.Context) {
 		l.mu.Lock()
 		l.hub = remote.Hub
 		l.mu.Unlock()
-		sess, err := l.s.dial(ctx, remote.Hub)
+		// The heads a crash interrupted are settled before a session
+		// starts; while they cannot be (no scan has succeeded), the loop
+		// waits with its backoff, without dialing the hub.
+		err = l.finishApplying(ctx)
 		if err == nil {
-			backoff = l.s.cfg.Backoff
-			err = l.serve(ctx, sess)
-			_ = sess.client.Close()
+			var sess *session
+			if sess, err = l.s.dial(ctx, remote.Hub); err == nil {
+				backoff = l.s.cfg.Backoff
+				err = l.serve(ctx, sess)
+				_ = sess.client.Close()
+			}
 		}
 		if ctx.Err() != nil {
 			return
@@ -238,9 +244,6 @@ func (l *loop) serve(ctx context.Context, sess *session) error {
 	served := slices.IndexFunc(vaults, func(v api.LogVault) bool { return v.Sync == remote.SyncID })
 	if served < 0 {
 		return errReset
-	}
-	if err := l.finishApplying(ctx); err != nil {
-		return err
 	}
 	if err := l.ownReplica(ctx, sess, remote); err != nil {
 		return err
@@ -892,9 +895,12 @@ func notApplied(err error) bool {
 var errNotGone = errors.New("the file is still in the index")
 
 // finishApplying settles the heads that a crash left half applied, before
-// the session pushes anything (ADR-0034, docs/specs/sync-protocol.md,
-// Pulling and applying). It waits for the vault's open scan, which has
-// indexed what the crash left on disk. A head the file now holds (its
+// a session starts, so before it pushes anything (ADR-0034,
+// docs/specs/sync-protocol.md, Pulling and applying). It waits for the
+// vault's first scan, and needs a scan that succeeded, which has indexed
+// what the crash left on disk: while none has (vault.ErrNotScanned), it
+// returns the error, and the loop tries again after its backoff, a later
+// rescan perhaps succeeding. A head the file now holds (its
 // path and hash, or, for a delete, no file where it was, and the local
 // file gone) is agreed, and its push answered, as the change's own
 // transaction would have done. Otherwise the record goes: the disk did
@@ -912,7 +918,7 @@ func (l *loop) finishApplying(ctx context.Context) error {
 		return err
 	}
 	if err := v.Scanned(ctx); err != nil {
-		return err
+		return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", len(rows), err)
 	}
 	for _, in := range rows {
 		agreed, err := l.finishOne(ctx, v, in)
