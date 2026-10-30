@@ -234,6 +234,22 @@ func (t *Tx) DeleteAgreed(ctx context.Context, vaultID, hubFile int64) error {
 	return hubReadError("delete agreed", err)
 }
 
+// DropAgreed removes the agreed row of hub file hubFile in vault vaultID,
+// for a delete that applied, unless its local file has a conflict version
+// that no answered push has carried: then the row stays, so the device
+// pushes the version as a conflict item, and the delete back, whose
+// answer drops the row (docs/specs/sync-protocol.md, Pending changes).
+// Without the row, PendingConflicts would never find the version. A
+// missing row is not an error.
+func (t *Tx) DropAgreed(ctx context.Context, vaultID, hubFile int64) error {
+	_, err := t.ExecContext(ctx, `DELETE FROM sync_files WHERE vault_id = ? AND hub_file = ? AND NOT EXISTS (
+		SELECT 1 FROM versions v WHERE v.vault_id = sync_files.vault_id AND v.file_id = sync_files.file_id
+		AND v.conflict = 1 AND v.hash != ''
+		AND NOT EXISTS (SELECT 1 FROM sync_pushes p WHERE p.vault_id = v.vault_id AND p.file_id = v.file_id
+			AND p.hash = v.hash AND p.status IS NOT NULL))`, vaultID, hubFile)
+	return hubReadError("drop agreed", err)
+}
+
 // AgreedByHubFile returns the agreed row of hub file hubFile in vault
 // vaultID, or ErrNotFound. Task card T-0027.
 func (d *DB) AgreedByHubFile(ctx context.Context, vaultID, hubFile int64) (Agreed, error) {

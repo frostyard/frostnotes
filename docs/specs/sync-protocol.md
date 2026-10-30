@@ -307,7 +307,14 @@ A device has a change to push for a file when, comparing its index
   [vault.md](../design/vault.md#writes)) that no push has carried is
   pushed as a `conflict` item: base the agreed revision, path the agreed
   path, hash the version's. So every device's history keeps it, and the
-  file is flagged on the hub too.
+  file is flagged on the hub too. A delete that applies (a pulled head
+  or an answer) keeps the agreed row of a file with such a version that
+  no answered push has carried: the device then pushes the version, and
+  the delete back (accepted, appending nothing, since the hub's file is
+  deleted), whose answer drops the row. Without the row, the version
+  would never go. A file the device never agreed (the hub never had it,
+  or it changed before the answer to its create applied) has no agreed
+  row: its conflict versions stay in the device's history.
 
 ### A push, on the hub
 
@@ -424,8 +431,10 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
 - In one `Tx` with the file's index rows: a version with `source: sync`
   and author `author@deviceName` (or `deviceName` when the author is
   empty, `hub` for the hub's own writers), and the agreed row set to the
-  head (dropped for a delete). The cursor advances to a page's `next` once
-  every file in the page is agreed or skipped.
+  head (dropped for a delete, but kept while a local conflict version of
+  the file waits to be pushed, [Pending changes](#pending-changes)). The
+  cursor advances to a page's `next` once every file in the page is
+  agreed or skipped.
 - The answers to one push apply in order. An answer that moves a file
   onto the path of a file a later item of the same push carried, still as
   pushed, parks that file first; its own answer moves it on from there. An

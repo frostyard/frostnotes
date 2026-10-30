@@ -2,6 +2,7 @@ package synctest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -139,7 +140,7 @@ func (w *World) checkTokens(heads map[string]string) error {
 	}
 	var lost []string
 	for tok := range w.oracle.inserted {
-		if !w.oracle.removed[tok] && !present[tok] {
+		if !w.oracle.removed[tok] && !present[tok] && !w.neverAgreed(tok) {
 			lost = append(lost, tok)
 		}
 	}
@@ -153,6 +154,53 @@ func (w *World) checkTokens(heads map[string]string) error {
 			strings.Join(where, "; "), w.history(lost[0], revs))
 	}
 	return nil
+}
+
+// neverAgreed reports whether tok's write lost its hunk in a merge on its
+// device, so only a local conflict version held it, of a file the device
+// deleted before it ever agreed the file with the hub. A conflict version
+// goes to the hub as a conflict item of the file's hub file, from the
+// file's agreed row (docs/specs/sync-protocol.md, Pending changes): a file
+// never agreed, because the hub never had it or because it changed again
+// before the answer to its create applied, has none, so the version stays
+// in the device's history, as it would without sync, and the check does
+// not count it lost. A file the device agreed leaves a trace when it
+// goes: a pulled delete is a version from sync, a pushed delete names its
+// hub file.
+func (w *World) neverAgreed(tok string) bool {
+	cv, ok := w.oracle.conflicted[tok]
+	if !ok || !slices.Contains(w.Devices, cv.d) {
+		return false
+	}
+	ctx := w.t.Context()
+	db := cv.d.Srv.DB
+	v, err := db.GetVersion(ctx, cv.id)
+	if err != nil {
+		return false
+	}
+	if _, err := db.FileByID(ctx, v.FileID); !errors.Is(err, store.ErrNotFound) {
+		return false // still there: its content has to reach the hub
+	}
+	vs, err := db.Versions(ctx, v.FileID, 1<<20)
+	if err != nil {
+		return false
+	}
+	for _, v := range vs {
+		if v.Source == api.VersionSourceSync {
+			return false // a change from the hub, which agreed it
+		}
+	}
+	answered, err := db.Pushes(ctx, cv.d.Vault)
+	if err != nil {
+		return false
+	}
+	unanswered, err := db.Unanswered(ctx, cv.d.Vault)
+	if err != nil {
+		return false
+	}
+	return !slices.ContainsFunc(append(answered, unanswered...), func(p store.LocalPush) bool {
+		return p.FileID == v.FileID && p.HubFile != 0
+	})
 }
 
 // checkLog checks the hub's log: no gaps, every base earlier, and no two
@@ -389,6 +437,19 @@ func (w *World) history(tok string, revs []store.Revision) string {
 	ctx := w.t.Context()
 	for _, d := range w.Devices {
 		local := map[int64]string{}
+		if cv, ok := w.oracle.conflicted[tok]; ok && cv.d == d {
+			if v, err := d.Srv.DB.GetVersion(ctx, cv.id); err == nil {
+				local[v.FileID] = fmt.Sprintf("its conflict version %d", cv.id)
+				if ps, err := d.Srv.DB.Pushes(ctx, d.Vault); err == nil {
+					for _, lp := range ps {
+						if lp.FileID == v.FileID {
+							out += fmt.Sprintf("\n  %s push %d of file %d: hub %d base %d conflict %v %s %.8s: %s %s", d.Name, lp.PushID,
+								lp.FileID, lp.HubFile, lp.Base, lp.Conflict, lp.Path, lp.Hash, lp.Status, lp.Reason)
+						}
+					}
+				}
+			}
+		}
 		for f := range files {
 			if a, err := d.Srv.DB.AgreedByHubFile(ctx, d.Vault, f); err == nil {
 				local[a.FileID] = fmt.Sprintf("hub %d", f)

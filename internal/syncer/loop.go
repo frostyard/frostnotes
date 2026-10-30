@@ -714,7 +714,8 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 			return err
 		}
 		if f.Deleted {
-			return tx.DeleteAgreed(ctx, l.vaultID, f.File)
+			// Kept while a conflict version of the file waits to be pushed.
+			return tx.DropAgreed(ctx, l.vaultID, f.File)
 		}
 		id := file.ID
 		if id == 0 {
@@ -953,7 +954,9 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 	}
 	rec := func(ctx context.Context, tx *store.Tx, file store.File) error {
 		if f.Deleted {
-			return tx.DeleteAgreed(ctx, l.vaultID, f.File)
+			// Kept while a conflict version of the file waits to be pushed:
+			// the device then pushes it, and the delete back.
+			return tx.DropAgreed(ctx, l.vaultID, f.File)
 		}
 		return tx.PutAgreed(ctx, agreedOf(l.vaultID, f, file.ID))
 	}
