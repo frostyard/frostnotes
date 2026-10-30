@@ -205,12 +205,13 @@ func (w *World) editAt(d *Node, p string, s Step, source api.VersionSource) (edi
 		}
 	}
 	author := "editor@" + d.Name
-	_, err = d.C.Note().Write(ctx, &api.NoteWriteParams{VaultID: d.Vault, Path: p, Base: note.Hash, Content: content,
+	res, err := d.C.Note().Write(ctx, &api.NoteWriteParams{VaultID: d.Vault, Path: p, Base: note.Hash, Content: content,
 		Source: &source, Author: &author})
 	switch {
 	case err == nil:
 		w.oracle.insert(tok)
 		w.oracle.wrote(tok, d.Name, p)
+		w.oracle.conflict(tok, d, res)
 		if removed != "" {
 			w.oracle.remove(removed)
 		}
@@ -259,10 +260,11 @@ func (w *World) staleEdit(d *Node, s Step) error {
 	}
 	tok := w.oracle.token()
 	content, _ := insertLine(string(old), tok+"\n", s.B, false)
-	_, err = d.C.Note().Write(ctx, &api.NoteWriteParams{VaultID: d.Vault, Path: p, Base: v.Hash, Content: content})
+	res, err := d.C.Note().Write(ctx, &api.NoteWriteParams{VaultID: d.Vault, Path: p, Base: v.Hash, Content: content})
 	if err == nil {
 		w.oracle.insert(tok)
 		w.oracle.wrote(tok, d.Name, p+" (stale)")
+		w.oracle.conflict(tok, d, res)
 	}
 	return ignoreBenign(err)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -368,14 +369,23 @@ func (l *loop) cycle(ctx context.Context, sess *session) (bool, time.Duration, e
 	return worked, next, nil
 }
 
-// due reports whether a change to the given paths is past its quiet
-// period, and if not, how long until it is.
-func (l *loop) due(now time.Time, paths ...string) (bool, time.Duration) {
+// marks returns a copy of the quiet periods' marks, by path. One push
+// judges all its changes by one copy: the events that mark paths arrive
+// while it judges them, and two changes that share paths, the two files
+// of a swap, must be held or sent together. Split, the hub would number
+// the file that moves first onto the path the other still holds.
+func (l *loop) marks() map[string]mark {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return maps.Clone(l.dirty)
+}
+
+// due reports whether a change to the given paths is past its quiet
+// period in marks, and if not, how long until it is.
+func (l *loop) due(marks map[string]mark, now time.Time, paths ...string) (bool, time.Duration) {
 	wait := time.Duration(0)
 	for _, p := range paths {
-		m, ok := l.dirty[p]
+		m, ok := marks[p]
 		if !ok {
 			continue
 		}
@@ -422,7 +432,7 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 	for _, p := range sends {
 		inFlight[p.FileID] = true
 	}
-	now := l.s.cfg.Now()
+	now, marks := l.s.cfg.Now(), l.marks()
 	var held time.Duration
 	for _, c := range changes {
 		if _, parked := l.parked[c.FileID]; inFlight[c.FileID] || parked {
@@ -432,7 +442,7 @@ func (l *loop) push(ctx context.Context, sess *session) (bool, time.Duration, er
 		if c.Agreed != nil {
 			paths = append(paths, c.Agreed.Path)
 		}
-		if ok, wait := l.due(now, paths...); !ok {
+		if ok, wait := l.due(marks, now, paths...); !ok {
 			if held == 0 || wait < held {
 				held = wait
 			}
@@ -569,10 +579,15 @@ func (l *loop) items(ctx context.Context, batch []store.LocalPush) ([]api.PushIt
 		}
 		if p.HubFile != 0 {
 			a, err := db.AgreedByHubFile(ctx, l.vaultID, p.HubFile)
-			if err == nil && p.Conflict {
+			baseHash := a.Hash
+			switch {
+			case err == nil && p.Conflict:
 				p.Base = a.Revision // a conflict item adds to the file whatever its head
-			}
-			if err != nil || a.Revision != p.Base {
+			case errors.Is(err, store.ErrNotFound) && p.Conflict && p.BaseHash != "":
+				// Carried past a delete that dropped the agreed row
+				// (store.Tx.DropAgreed): its base is the row it had.
+				baseHash = p.BaseHash
+			case err != nil || a.Revision != p.Base:
 				if err := db.Tx(ctx, func(tx *store.Tx) error {
 					return tx.AnswerPush(ctx, l.vaultID, p.PushID, api.PushStatusRefused, api.RefuseReasonBase)
 				}); err != nil {
@@ -581,7 +596,7 @@ func (l *loop) items(ctx context.Context, batch []store.LocalPush) ([]api.PushIt
 				continue
 			}
 			file := p.HubFile
-			it.File, it.Base, it.BaseHash = &file, p.Base, a.Hash
+			it.File, it.Base, it.BaseHash = &file, p.Base, baseHash
 		}
 		if p.Conflict {
 			conflict := true
@@ -714,7 +729,8 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 			return err
 		}
 		if f.Deleted {
-			return tx.DeleteAgreed(ctx, l.vaultID, f.File)
+			// The file's unpushed conflict versions go on as pushes.
+			return tx.DropAgreed(ctx, l.vaultID, f.File)
 		}
 		id := file.ID
 		if id == 0 {
@@ -793,7 +809,7 @@ func (l *loop) dropOther(ctx context.Context, prev store.Agreed) error {
 		return err
 	}
 	rec := func(ctx context.Context, tx *store.Tx, _ store.File) error {
-		return tx.DeleteAgreed(ctx, l.vaultID, prev.HubFile)
+		return tx.DropAgreed(ctx, l.vaultID, prev.HubFile)
 	}
 	_, err = v.Apply(ctx, vault.Expect{Path: prev.Path, Hash: prev.Hash}, vault.Head{Path: prev.Path, Deleted: true},
 		vault.Author{Source: api.VersionSourceSync, Name: "sync"}, rec)
@@ -953,7 +969,8 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 	}
 	rec := func(ctx context.Context, tx *store.Tx, file store.File) error {
 		if f.Deleted {
-			return tx.DeleteAgreed(ctx, l.vaultID, f.File)
+			// The file's unpushed conflict versions go on as pushes.
+			return tx.DropAgreed(ctx, l.vaultID, f.File)
 		}
 		return tx.PutAgreed(ctx, agreedOf(l.vaultID, f, file.ID))
 	}
@@ -1096,6 +1113,18 @@ func (l *loop) refreshStatus(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// A conflict push without an answer is no change of a file, but it
+	// is still to go.
+	sends, err := db.Unanswered(ctx, l.vaultID)
+	if err != nil {
+		return err
+	}
+	unsent := 0
+	for _, p := range sends {
+		if p.Conflict {
+			unsent++
+		}
+	}
 	rows, err := db.AgreedRows(ctx, l.vaultID)
 	if err != nil {
 		return err
@@ -1117,7 +1146,7 @@ func (l *loop) refreshStatus(ctx context.Context) error {
 	l.mu.Lock()
 	l.status.URL, l.status.HubVault, l.status.Cursor = h.URL, remote.Name, remote.Cursor
 	l.status.HubSeq = max(l.status.HubSeq, remote.HubSeq)
-	l.status.Pending, l.status.Conflicts, l.status.Refused = int64(len(changes)+len(lost)), int64(conflicts), refused
+	l.status.Pending, l.status.Conflicts, l.status.Refused = int64(len(changes)+len(lost)+unsent), int64(conflicts), refused
 	l.status.Skipped = l.status.Skipped[:0]
 	for p := range l.skipped {
 		l.status.Skipped = append(l.status.Skipped, p)

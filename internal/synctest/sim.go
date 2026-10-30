@@ -102,6 +102,15 @@ type oracle struct {
 	// and failed.
 	tried map[string][]string
 	step  int
+	// conflicted are the tokens whose write lost a hunk in a merge on its
+	// device, and the conflict version that keeps the writer's content.
+	conflicted map[string]conflictVersion
+}
+
+// conflictVersion is a local conflict version of a device.
+type conflictVersion struct {
+	d  *Node
+	id int64
 }
 
 var tokenRE = regexp.MustCompile(`tok[0-9a-f]+-[0-9]+`)
@@ -122,6 +131,14 @@ func (o *oracle) wrote(tok, device, p string) {
 func (o *oracle) remove(content string) {
 	for _, tok := range tokenRE.FindAllString(content, -1) {
 		o.removed[tok] = true
+	}
+}
+
+// conflict records, for a write of tok on device d that lost a hunk in a
+// merge there, the conflict version that keeps the writer's content.
+func (o *oracle) conflict(tok string, d *Node, res *api.WriteResult) {
+	if res != nil && res.ConflictVersion != nil {
+		o.conflicted[tok] = conflictVersion{d, *res.ConflictVersion}
 	}
 }
 
@@ -179,7 +196,8 @@ func NewWorld(t testing.TB, o Options) *World {
 	t.Helper()
 	o = o.withDefaults()
 	w := &World{t: t, o: o, oracle: oracle{prefix: fmt.Sprintf("tok%x", o.Seed), inserted: map[string]bool{},
-		removed: map[string]bool{}, origin: map[string]string{}, at: map[string]string{}, tried: map[string][]string{}}, paths: map[string]bool{},
+		removed: map[string]bool{}, origin: map[string]string{}, at: map[string]string{}, tried: map[string][]string{},
+		conflicted: map[string]conflictVersion{}}, paths: map[string]bool{},
 		snapshots: map[int]map[string]string{}}
 	w.Hub = newNode(t, "hub", o, true, freeAddr(t))
 	for p, c := range seedFiles {

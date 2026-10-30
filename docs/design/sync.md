@@ -88,7 +88,10 @@ else records pending changes, so a crash or an outage loses none
    safely, and until it is answered no new change of its file is pushed:
    two creates of one file in flight would make two files on the hub. A
    writer's content that lost a merge on the device goes too, as a
-   conflict item, so the hub's log keeps it.
+   conflict item, so the hub's log keeps it, even when a delete of its
+   file applies first: the delete records the item as a push from the
+   agreed row it drops
+   ([Pending changes](../specs/sync-protocol.md#pending-changes)).
 4. **Apply the answer.** The device writes the head (the merged content,
    or the head that refused its delete), expecting the state it pushed,
    and records the head as agreed. If the file changed meanwhile, nothing
@@ -265,7 +268,10 @@ inserts a unique token. At each quiet point, the checks are:
 
 - every device's vault equals the hub's heads, byte for byte;
 - every token no writer removed on purpose is in a head or in a conflict
-  revision, so no write was lost;
+  revision, so no write was lost (but one only a local conflict version
+  holds, of a file its device deleted before it ever agreed the file with
+  the hub: no conflict item can carry it, and it stays in that device's
+  history);
 - no file in any vault is a conflict copy;
 - the log's sequence numbers increase without gaps, every revision's base
   exists, and no two live files share a path, ignoring case;

@@ -72,11 +72,18 @@ func (w *World) Write(d *Node, p, content string) error {
 // that conflicts keeps the content as a conflict version.
 func (w *World) WriteFrom(d *Node, p, base, content string) error {
 	ctx := w.t.Context()
-	if _, err := d.C.Note().Write(ctx, &api.NoteWriteParams{VaultID: d.Vault, Path: p, Base: base, Content: content}); err != nil {
+	res, err := d.C.Note().Write(ctx, &api.NoteWriteParams{VaultID: d.Vault, Path: p, Base: base, Content: content})
+	if err != nil {
 		return err
 	}
 	old, _ := d.Srv.Blobs.Get(base)
 	w.books(d, p, string(old), content)
+	had := tokenRE.FindAllString(string(old), -1)
+	for _, tok := range tokenRE.FindAllString(content, -1) {
+		if !slices.Contains(had, tok) {
+			w.oracle.conflict(tok, d, res)
+		}
+	}
 	return nil
 }
 

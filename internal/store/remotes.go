@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
@@ -77,6 +78,10 @@ type LocalPush struct {
 	Status   api.PushStatus   // "" until answered
 	Reason   api.RefuseReason // "" unless refused
 	Conflict bool             // a local conflict version, for the hub's log
+	// BaseHash is the content hash of revision Base, for a conflict item
+	// whose file has no agreed row when it is sent (DropAgreed); "" when
+	// the agreed row gives it.
+	BaseHash string
 }
 
 // PutSyncHub records a pairing with h.PairedAt = t.Now(): a new row, or,
@@ -234,6 +239,60 @@ func (t *Tx) DeleteAgreed(ctx context.Context, vaultID, hubFile int64) error {
 	return hubReadError("delete agreed", err)
 }
 
+// DropAgreed removes the agreed row of hub file hubFile in vault vaultID,
+// for a delete that applied, as DeleteAgreed does. Its local file's
+// conflict versions that no push has carried, which PendingConflicts finds
+// only through the row, are recorded first as unanswered conflict pushes
+// from the row (hub file, revision and its hash, path), and its unanswered
+// conflict pushes take the row as their base: the device sends them as it
+// sends every unanswered push, and the hub keeps them as conflict
+// revisions of the file, live or deleted (docs/specs/sync-protocol.md,
+// Pending changes). A missing row is not an error.
+func (t *Tx) DropAgreed(ctx context.Context, vaultID, hubFile int64) error {
+	a, err := t.AgreedByHubFileTx(ctx, vaultID, hubFile)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	rows, err := t.QueryContext(ctx, `SELECT v.hash FROM versions v
+		WHERE v.vault_id = ? AND v.file_id = ? AND v.conflict = 1 AND v.hash != ''
+		AND NOT EXISTS (SELECT 1 FROM sync_pushes p WHERE p.vault_id = v.vault_id AND p.file_id = v.file_id AND p.hash = v.hash)
+		ORDER BY v.id`, vaultID, a.FileID)
+	if err != nil {
+		return fmt.Errorf("drop agreed: %w", err)
+	}
+	var hashes []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("drop agreed: %w", err)
+		}
+		if !slices.Contains(hashes, h) {
+			hashes = append(hashes, h)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("drop agreed: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("drop agreed: %w", err)
+	}
+	if _, err := t.ExecContext(ctx, `UPDATE sync_pushes SET base = ?, base_hash = ?
+		WHERE vault_id = ? AND file_id = ? AND hub_file = ? AND conflict = 1 AND status IS NULL`,
+		a.Revision, a.Hash, vaultID, a.FileID, a.HubFile); err != nil {
+		return fmt.Errorf("drop agreed: %w", err)
+	}
+	for _, h := range hashes {
+		if _, err := t.AddPush(ctx, LocalPush{VaultID: vaultID, FileID: a.FileID, HubFile: a.HubFile, Base: a.Revision,
+			BaseHash: a.Hash, Path: a.Path, Hash: h, Conflict: true}); err != nil {
+			return fmt.Errorf("drop agreed: %w", err)
+		}
+	}
+	return t.DeleteAgreed(ctx, vaultID, hubFile)
+}
+
 // AgreedByHubFile returns the agreed row of hub file hubFile in vault
 // vaultID, or ErrNotFound. Task card T-0027.
 func (d *DB) AgreedByHubFile(ctx context.Context, vaultID, hubFile int64) (Agreed, error) {
@@ -322,10 +381,10 @@ func (d *DB) Pending(ctx context.Context, vaultID int64) ([]Change, error) {
 // ignored), and returns it. Task card T-0027.
 func (t *Tx) AddPush(ctx context.Context, p LocalPush) (LocalPush, error) {
 	stored, err := scanLocalPush(t.QueryRowContext(ctx, `INSERT INTO sync_pushes
-		(vault_id, push_id, file_id, hub_file, base, path, hash, at, status, reason)
-		SELECT ?, COALESCE(MAX(push_id), 0) + 1, ?, NULLIF(?, 0), ?, ?, ?, ?, NULL, ''
+		(vault_id, push_id, file_id, hub_file, base, path, hash, at, status, reason, base_hash)
+		SELECT ?, COALESCE(MAX(push_id), 0) + 1, ?, NULLIF(?, 0), ?, ?, ?, ?, NULL, '', ?
 		FROM sync_pushes WHERE vault_id = ? RETURNING `+localPushColumns,
-		p.VaultID, p.FileID, p.HubFile, p.Base, p.Path, p.Hash, FormatTime(t.Now()), p.VaultID))
+		p.VaultID, p.FileID, p.HubFile, p.Base, p.Path, p.Hash, FormatTime(t.Now()), p.BaseHash, p.VaultID))
 	if err == nil && p.Conflict {
 		if _, err := t.ExecContext(ctx, `UPDATE sync_pushes SET conflict = 1 WHERE vault_id = ? AND push_id = ?`,
 			stored.VaultID, stored.PushID); err != nil {
@@ -363,7 +422,8 @@ func (d *DB) Pushes(ctx context.Context, vaultID int64) ([]LocalPush, error) {
 const syncHubColumns = `id, hub_id, url, device_id, paired_at`
 const remoteColumns = `vault_id, hub, sync_id, name, replica_id, cursor, hub_seq, joined_at, synced_at`
 const agreedColumns = `vault_id, hub_file, file_id, seq, revision, path, hash, conflicted`
-const localPushColumns = `vault_id, push_id, file_id, COALESCE(hub_file, 0), base, path, hash, at, COALESCE(status, ''), reason, conflict`
+const localPushColumns = `vault_id, push_id, file_id, COALESCE(hub_file, 0), base, path, hash, at, COALESCE(status, ''), reason, conflict,
+	base_hash`
 
 func scanSyncHub(sc interface{ Scan(...any) error }) (SyncHub, error) {
 	var h SyncHub
@@ -405,7 +465,7 @@ func scanLocalPush(sc interface{ Scan(...any) error }) (LocalPush, error) {
 	var p LocalPush
 	var at string
 	if err := sc.Scan(&p.VaultID, &p.PushID, &p.FileID, &p.HubFile, &p.Base,
-		&p.Path, &p.Hash, &at, &p.Status, &p.Reason, &p.Conflict); err != nil {
+		&p.Path, &p.Hash, &at, &p.Status, &p.Reason, &p.Conflict, &p.BaseHash); err != nil {
 		return LocalPush{}, hubReadError("read local push", err)
 	}
 	var err error

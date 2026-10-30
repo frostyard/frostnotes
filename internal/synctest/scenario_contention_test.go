@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"maps"
 	"testing"
+
+	"github.com/frostyard/frostnotes/api"
 )
 
 func TestScenarioEditDeleteMove(t *testing.T) {
@@ -87,5 +89,46 @@ func TestScenarioContentionProfile(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// A stale write on a device that conflicts keeps the writer's content as a
+// local conflict version. When the device deletes the file before it ever
+// agreed the file with the hub, here a file the hub never had, no hub file
+// can take that version as a conflict item (docs/specs/sync-protocol.md,
+// Pending changes): it stays in the device's history, and the check does
+// not count its token lost.
+func TestScenarioAConflictOfAFileTheHubNeverHadStaysOnItsDevice(t *testing.T) {
+	w := NewWorld(t, Options{Seed: 5})
+	defer w.Close()
+	d := w.Devices[0]
+	w.Offline(d)
+	first := w.Token()
+	if err := w.Write(d, "n.md", "# n\n\n"+first+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	base, err := d.C.Note().Read(t.Context(), &api.NoteReadParams{VaultID: d.Vault, Path: "n.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Write(d, "n.md", "# n\n\n"+w.Token()+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	stale := w.Token()
+	if err := w.WriteFrom(d, "n.md", base.Hash, "# n\n\n"+stale+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := w.oracle.conflicted[stale]; !ok {
+		t.Fatal("the stale write did not conflict")
+	}
+	if err := w.Delete(d, "n.md"); err != nil {
+		t.Fatal(err)
+	}
+	w.Online(d)
+	if err := w.Settle(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Check(); err != nil {
+		t.Fatal(err)
 	}
 }

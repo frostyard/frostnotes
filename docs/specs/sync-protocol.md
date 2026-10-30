@@ -307,7 +307,19 @@ A device has a change to push for a file when, comparing its index
   [vault.md](../design/vault.md#writes)) that no push has carried is
   pushed as a `conflict` item: base the agreed revision, path the agreed
   path, hash the version's. So every device's history keeps it, and the
-  file is flagged on the hub too.
+  file is flagged on the hub too. A delete that drops the agreed row (a
+  pulled head, an answer, or a copy dropped for another local file)
+  first records, in its `Tx`, each such version that no push has carried
+  as an unanswered `conflict` push from the row: its hub file, revision,
+  the revision's hash and path. Its unanswered conflict pushes take the
+  row as their base too. They are sent as every unanswered push is, also
+  after a restart, with that base while the file has no agreed row (the
+  hub keeps a conflict item for a deleted file), or from the agreed row
+  a later pull of the file makes. No delete is pushed for it: the device
+  deleted nothing itself, and the hub's file may come back meanwhile. A
+  file the device never agreed (the hub never had it, or it changed
+  before the answer to its create applied) has no agreed row: its
+  conflict versions stay in the device's history.
 
 ### A push, on the hub
 
@@ -424,8 +436,9 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
 - In one `Tx` with the file's index rows: a version with `source: sync`
   and author `author@deviceName` (or `deviceName` when the author is
   empty, `hub` for the hub's own writers), and the agreed row set to the
-  head (dropped for a delete). The cursor advances to a page's `next` once
-  every file in the page is agreed or skipped.
+  head (dropped for a delete, its unpushed conflict versions recorded as
+  pushes first, [Pending changes](#pending-changes)). The cursor advances
+  to a page's `next` once every file in the page is agreed or skipped.
 - The answers to one push apply in order. An answer that moves a file
   onto the path of a file a later item of the same push carried, still as
   pushed, parks that file first; its own answer moves it on from there. An
@@ -486,7 +499,7 @@ joins again with a new replica.
 | Artifact | Derivation |
 | --- | --- |
 | `api/zz_generated.go`, `app/src/rpc/gen/api.ts`, [rpc-api.md](rpc-api.md) | `make gen` from `schema/rpc/hub.yaml`, `sync.yaml` and `log.yaml` |
-| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql` | the hub's and devices' state in this spec |
+| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql`, `0005_sync_push_base_hash.sql` | the hub's and devices' state in this spec |
 
 ## References
 
