@@ -65,7 +65,9 @@ ignores. A file over 10 MB syncs but does not merge.
 - **Device, per synced vault:** the hub's URL and ID, the hub vault's sync
   ID, the cursor (the highest sequence number whose heads it has applied),
   and per file its agreed state: the hub's file ID, the agreed revision,
-  path and hash, and the conflict flag. The device token is in the Secret
+  path and hash, and the conflict flag. While it applies a head, a record
+  of it (`sync_applying`), until the `Tx` that agrees it
+  ([ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)). The device token is in the Secret
   Service, keyed by the hub's ID.
 
 A file whose path, hash or existence differs from its agreed state has a
@@ -115,6 +117,18 @@ is written. It streams the content from `blobs/` into the temporary file
 at any size, guards the path as every write does, so a hub cannot write
 outside the vault, and records a `sync` version with the revision's
 author.
+
+Apply renames first and records after, so a crash can come between the
+disk's change and the `Tx` that agrees the head. The scan then sees the
+change as another program's, and the agreed row still names the old
+revision: pushed from it, the change would undo what the hub did
+meanwhile, such as deleting again a file another device brought back. So
+the loop records each head before it applies it, the agreeing `Tx`
+deletes the record, and each session settles what a crash left before
+it pushes: a file that holds the head is agreed, and anything else waits
+for its own push or the next pull
+([sync-protocol.md](../specs/sync-protocol.md#pulling-and-applying),
+[ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)).
 
 ### Hub
 
@@ -278,7 +292,13 @@ inserts a unique token. At each quiet point, the checks are:
 - every device's agreed state is the hub's heads, and its index equals a
   rebuild.
 
-Stepwise runs replay a seed exactly; concurrent runs find races.
+Stepwise runs replay a seed exactly; concurrent runs find races. The
+seeded runs did not find a crash while a head applies followed by a
+change on the hub: `internal/syncer`'s
+`TestACrashWhileApplyingAHeadPushesNothingBack` stops a device at that
+point, for each kind of head and for an answer, changes the hub while it
+is down, and restarts it on its data
+([ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)).
 Concurrent runs edit on disk only files they create: another program's
 edit of a file a pull is writing loses whichever renames first, a
 window the comparison before each rename narrows but cannot close. A
@@ -318,7 +338,7 @@ revocations and rejoins from an older copy (`profile.go`)
 
 ## References
 
-- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the default keyring, a withdrawn pairing)
+- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the default keyring, a withdrawn pairing), [ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md) (a crash while a head applies)
 - Related: [overview.md](overview.md), [vault.md](vault.md), [app.md](app.md#history-and-merges) (conflicts in the merge view), [hub.md](hub.md) (the hub behind lodge, moving devices)
 - Contracts: [specs/sync-protocol.md](../specs/sync-protocol.md), [specs/merge.md](../specs/merge.md)
 - Built in: [plan 0004](../plans/0004-m2-sync.md) ([roadmap — M2](../plans/0002-roadmap.md)); joining a hub from the desktop app is G1 of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)

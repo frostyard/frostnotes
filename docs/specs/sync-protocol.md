@@ -10,7 +10,8 @@ sync` drive them through the local `hub` and `sync` domains
 [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md),
 [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md),
 [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md),
-[ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md);
+[ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md),
+[ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md);
 where it fits: [design/sync.md](../design/sync.md). Merges follow
 [merge.md](merge.md). Built in [plan 0004](../plans/0004-m2-sync.md).
 
@@ -439,6 +440,33 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   head (dropped for a delete, its unpushed conflict versions recorded as
   pushes first, [Pending changes](#pending-changes)). The cursor advances
   to a page's `next` once every file in the page is agreed or skipped.
+- Before `vault.Apply` changes the disk for a head (a pulled head, an
+  answer, or a copy dropped for another local file), the device records
+  the head in a `Tx` of its own (`sync_applying`): the hub file; the
+  local file, path and hash it replaces; the agreed row's `seq` then
+  (none: 0); the head's `seq`, revision, path, hash, deletion and flag;
+  the path the change puts the file at; and, for an answer, the push and
+  the answer's status and reason. The `Tx` that agrees the head deletes
+  the record; so does a change that wrote nothing (the file changed, or
+  the device cannot hold the path). Each sync session first settles the
+  records a crash left, after the vault's open scan and before any push
+  ([ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)):
+  1. A record whose agreed row's `seq` is no longer the recorded one is
+     discarded.
+  2. If the file is the head (at the head's path with its hash; for a
+     delete, nothing at the old path and the local file gone from the
+     index), the head is agreed, and its push answered, as the change's
+     `Tx` would have done (a delete drops the row, its unpushed conflict
+     versions recorded as pushes first). A head that moves and rewrites
+     its file, found at the head's path with the old content, is applied
+     there first.
+  3. Otherwise the record is discarded: the agreed row stays, so the
+     file's own change is pushed first, or the next pull, from the cursor
+     still below the head, applies the head again.
+
+  So a device never pushes back, as its own change, a head it only
+  applied: a crash between the rename and the `Tx` leaves no change to
+  push from the old base.
 - The answers to one push apply in order. An answer that moves a file
   onto the path of a file a later item of the same push carried, still as
   pushed, parks that file first; its own answer moves it on from there. An
@@ -499,11 +527,11 @@ joins again with a new replica.
 | Artifact | Derivation |
 | --- | --- |
 | `api/zz_generated.go`, `app/src/rpc/gen/api.ts`, [rpc-api.md](rpc-api.md) | `make gen` from `schema/rpc/hub.yaml`, `sync.yaml` and `log.yaml` |
-| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql`, `0005_sync_push_base_hash.sql` | the hub's and devices' state in this spec |
+| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql`, `0005_sync_push_base_hash.sql`, `0006_sync_applying.sql` | the hub's and devices' state in this spec |
 
 ## References
 
-- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (from M4, the hub behind lodge and relocation), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the probe and a withdrawn pairing, from the Flatpak's test on Snow)
+- Rationale: [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0016](../adr/0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0018](../adr/0018-move-blobs-over-http-named-by-their-hash.md), [ADR-0019](../adr/0019-keep-every-revisions-record-and-thin-the-content-by-age.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (from M4, the hub behind lodge and relocation), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md) (the probe and a withdrawn pairing, from the Flatpak's test on Snow), [ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md) (the head a device is applying)
 - Context: [design/sync.md](../design/sync.md), [design/vault.md](../design/vault.md#writes), [design/hub.md](../design/hub.md) (the hub behind lodge, moving devices)
 - Related: [rpc-protocol.md](rpc-protocol.md), [merge.md](merge.md), [lodge-app.md](lodge-app.md) (from M4, these routes under `/device/` on lodge's app socket, and relocation)
 - Built in: [plan 0004](../plans/0004-m2-sync.md)

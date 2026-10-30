@@ -294,7 +294,12 @@ its last path. A file deleted by another program is recorded the same way,
 as an outside deletion.
 
 A crash after the rename and before the `Tx` loses only the attribution:
-the next scan indexes the new bytes as an outside version.
+the next scan indexes the new bytes as an outside version. For a head that
+sync applies (`vault.Apply`), the device's sync loop also records the head
+before the rename, and settles it after the restart, once the open scan
+has finished (`Vault.Scanned`): so the head is agreed, not pushed back as
+the device's own change
+([ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)).
 
 ### Daily notes
 
@@ -371,7 +376,7 @@ long-term history ([sync.md](sync.md)).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope), [ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md) (a crash while sync applies a head)
 - Related: [overview.md](overview.md), [sync.md](sync.md), [app.md](app.md) (the editor as a writer)
 - Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/render.md](../specs/render.md)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md); written settings in [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))

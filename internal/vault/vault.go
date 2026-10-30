@@ -110,6 +110,9 @@ type Vault struct {
 	reindex atomic.Bool   // the next scan reads every file again
 	cancel  context.CancelFunc
 	done    chan struct{}
+
+	scanned     chan struct{} // closed when the open scan has finished
+	scannedOnce sync.Once
 }
 
 func newVault(cfg *Config, v store.Vault) *Vault {
@@ -118,6 +121,7 @@ func newVault(cfg *Config, v store.Vault) *Vault {
 		status:  api.ScanStatus{VaultID: v.ID, State: api.ScanStateIdle},
 		scanReq: make(chan struct{}, 1),
 		done:    make(chan struct{}),
+		scanned: make(chan struct{}),
 	}
 }
 
@@ -159,6 +163,20 @@ func (v *Vault) setRemoved(removed bool) {
 // open returns an os.Root of the vault's folder: every file operation
 // goes through one, so no path escapes the vault.
 func (v *Vault) open() (*os.Root, error) { return os.OpenRoot(v.root) }
+
+// Scanned waits until the vault's open scan has finished, done or
+// failed: the index then holds what the disk held when notesd started, a
+// file a crash left behind or took away included.
+func (v *Vault) Scanned(ctx context.Context) error {
+	select {
+	case <-v.scanned:
+		return nil
+	case <-v.done:
+		return api.NotFound("vault %d stopped", v.id)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // Status is the state of the vault's index and scans.
 func (v *Vault) Status(ctx context.Context) (api.ScanStatus, error) {
