@@ -7,66 +7,68 @@ import (
 	"github.com/frostyard/frostnotes/api"
 )
 
-// DropAgreed keeps a file's agreed row while a conflict version of the
-// file waits for an answered push, and drops it as DeleteAgreed does
-// otherwise.
-func TestDropAgreedWaitsForConflictVersions(t *testing.T) {
+// DropAgreed drops a file's agreed row at once, as DeleteAgreed does, and
+// first carries the file's conflict versions that no push has carried as
+// unanswered conflict pushes from the row, with its base hash; unanswered
+// conflict pushes of the file take the row as their base.
+func TestDropAgreedCarriesConflictVersions(t *testing.T) {
 	dt := newDeviceTest(t)
 	ctx := t.Context()
 	var kept, plain File
-	dt.tx(func(tx *Tx) {
-		kept, plain = dt.file(tx, "a.md", "h1"), dt.file(tx, "b.md", "h2")
-		dt.agree(tx, Agreed{HubFile: 7, FileID: kept.ID, Seq: 2, Revision: 2, Path: "a.md", Hash: "h1"})
-		dt.agree(tx, Agreed{HubFile: 8, FileID: plain.ID, Seq: 3, Revision: 3, Path: "b.md", Hash: "h2"})
-		if _, err := tx.AddVersion(ctx, Version{VaultID: dt.vault, FileID: kept.ID, Path: "a.md", Hash: "lost", Size: 1,
+	conflict := func(tx *Tx, f File, hash string) {
+		t.Helper()
+		if _, err := tx.AddVersion(ctx, Version{VaultID: dt.vault, FileID: f.ID, Path: f.Path, Hash: hash, Size: 1,
 			Source: api.VersionSourceEditor, Conflict: true}); err != nil {
 			t.Fatal(err)
 		}
+	}
+	var sent, answered LocalPush
+	dt.tx(func(tx *Tx) {
+		kept, plain = dt.file(tx, "a.md", "h1"), dt.file(tx, "b.md", "h2")
+		dt.agree(tx, Agreed{HubFile: 7, FileID: kept.ID, Seq: 5, Revision: 5, Path: "a.md", Hash: "h1"})
+		dt.agree(tx, Agreed{HubFile: 8, FileID: plain.ID, Seq: 3, Revision: 3, Path: "b.md", Hash: "h2"})
+		conflict(tx, kept, "lost")
+		conflict(tx, kept, "lost") // one push for one content
+		conflict(tx, kept, "sent")
+		conflict(tx, kept, "answered")
+		var err error
+		if sent, err = tx.AddPush(ctx, LocalPush{VaultID: dt.vault, FileID: kept.ID, HubFile: 7, Base: 2, Path: "a.md",
+			Hash: "sent", Conflict: true}); err != nil {
+			t.Fatal(err)
+		}
+		if answered, err = tx.AddPush(ctx, LocalPush{VaultID: dt.vault, FileID: kept.ID, HubFile: 7, Base: 2, Path: "a.md",
+			Hash: "answered", Conflict: true}); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.AnswerPush(ctx, dt.vault, answered.PushID, api.PushStatusAccepted, ""); err != nil {
+			t.Fatal(err)
+		}
 	})
-	drop := func(hubFile int64) {
-		t.Helper()
+	for range 2 { // a missing row is not an error, and adds nothing
 		dt.tx(func(tx *Tx) {
-			if err := tx.DropAgreed(ctx, dt.vault, hubFile); err != nil {
-				t.Fatal(err)
+			for _, hub := range []int64{7, 8} {
+				if err := tx.DropAgreed(ctx, dt.vault, hub); err != nil {
+					t.Fatal(err)
+				}
 			}
 		})
 	}
-	agreed := func(hubFile int64) bool {
-		t.Helper()
-		_, err := dt.d.AgreedByHubFile(ctx, dt.vault, hubFile)
-		if err != nil && !errors.Is(err, ErrNotFound) {
-			t.Fatal(err)
+	for _, hub := range []int64{7, 8} {
+		if _, err := dt.d.AgreedByHubFile(ctx, dt.vault, hub); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("hub file %d's agreed row after DropAgreed: %v; want none", hub, err)
 		}
-		return err == nil
 	}
-	drop(8)
-	drop(8) // a missing row is not an error
-	if agreed(8) {
-		t.Fatal("DropAgreed kept the row of a file without conflict versions")
+	if lost, err := dt.d.PendingConflicts(ctx, dt.vault); err != nil || len(lost) != 0 {
+		t.Fatalf("PendingConflicts = %+v, %v; want none: the pushes carry them", lost, err)
 	}
-	drop(7)
-	if !agreed(7) {
-		t.Fatal("DropAgreed dropped the row of a file whose conflict version no push carried")
+	un, err := dt.d.Unanswered(ctx, dt.vault)
+	if err != nil {
+		t.Fatal(err)
 	}
-	var p LocalPush
-	dt.tx(func(tx *Tx) {
-		var err error
-		if p, err = tx.AddPush(ctx, LocalPush{VaultID: dt.vault, FileID: kept.ID, HubFile: 7, Base: 2, Path: "a.md", Hash: "lost",
-			Conflict: true}); err != nil {
-			t.Fatal(err)
-		}
-	})
-	drop(7)
-	if !agreed(7) {
-		t.Fatal("DropAgreed dropped the row of a file whose conflict version's push has no answer")
-	}
-	dt.tx(func(tx *Tx) {
-		if err := tx.AnswerPush(ctx, dt.vault, p.PushID, api.PushStatusAccepted, ""); err != nil {
-			t.Fatal(err)
-		}
-	})
-	drop(7)
-	if agreed(7) {
-		t.Fatal("DropAgreed kept the row of a file whose conflict version the hub has")
+	sent.Base, sent.BaseHash = 5, "h1"
+	want := []LocalPush{sent, {VaultID: dt.vault, PushID: answered.PushID + 1, FileID: kept.ID, HubFile: 7, Base: 5,
+		BaseHash: "h1", Path: "a.md", Hash: "lost", At: testNow, Conflict: true}}
+	if len(un) != len(want) || un[0] != want[0] || un[1] != want[1] {
+		t.Fatalf("Unanswered = %+v; want %+v", un, want)
 	}
 }

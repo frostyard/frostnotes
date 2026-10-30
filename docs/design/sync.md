@@ -89,8 +89,9 @@ else records pending changes, so a crash or an outage loses none
    two creates of one file in flight would make two files on the hub. A
    writer's content that lost a merge on the device goes too, as a
    conflict item, so the hub's log keeps it, even when a delete of its
-   file applies first: the file's agreed row stays until the item has
-   gone ([Pending changes](../specs/sync-protocol.md#pending-changes)).
+   file applies first: the delete records the item as a push from the
+   agreed row it drops
+   ([Pending changes](../specs/sync-protocol.md#pending-changes)).
 4. **Apply the answer.** The device writes the head (the merged content,
    or the head that refused its delete), expecting the state it pushed,
    and records the head as agreed. If the file changed meanwhile, nothing
