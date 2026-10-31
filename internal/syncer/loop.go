@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"math/rand/v2"
 	"slices"
@@ -144,11 +145,17 @@ func (l *loop) run(ctx context.Context) {
 		l.mu.Lock()
 		l.hub = remote.Hub
 		l.mu.Unlock()
-		sess, err := l.s.dial(ctx, remote.Hub)
+		// The heads a crash interrupted are settled before a session
+		// starts; while they cannot be (no scan has succeeded), the loop
+		// waits with its backoff, without dialing the hub.
+		err = l.finishApplying(ctx)
 		if err == nil {
-			backoff = l.s.cfg.Backoff
-			err = l.serve(ctx, sess)
-			_ = sess.client.Close()
+			var sess *session
+			if sess, err = l.s.dial(ctx, remote.Hub); err == nil {
+				backoff = l.s.cfg.Backoff
+				err = l.serve(ctx, sess)
+				_ = sess.client.Close()
+			}
 		}
 		if ctx.Err() != nil {
 			return
@@ -724,20 +731,8 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 			return err
 		}
 	}
-	rec := func(ctx context.Context, tx *store.Tx, file store.File) error {
-		if err := tx.AnswerPush(ctx, l.vaultID, p.PushID, a.Status, reason); err != nil {
-			return err
-		}
-		if f.Deleted {
-			// The file's unpushed conflict versions go on as pushes.
-			return tx.DropAgreed(ctx, l.vaultID, f.File)
-		}
-		id := file.ID
-		if id == 0 {
-			id = p.FileID
-		}
-		return tx.PutAgreed(ctx, agreedOf(l.vaultID, f, id))
-	}
+	in := applyingOf(f, p.FileID)
+	in.PushID, in.Status, in.Reason = p.PushID, a.Status, reason
 	v, err := l.s.cfg.Vaults.Vault(l.vaultID)
 	if err != nil {
 		return err
@@ -746,7 +741,7 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		exp.Path = pk.to
 	}
 	if exp.Path == head.Path && exp.Hash == head.Hash {
-		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return rec(ctx, tx, store.File{}) })
+		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return l.agree(in)(ctx, tx, store.File{}) })
 	}
 	if !head.Deleted && head.Path != exp.Path {
 		if err := l.makeRoom(ctx, v, b, head.Path); err != nil {
@@ -756,7 +751,7 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 			return err
 		}
 	}
-	_, err = v.Apply(ctx, exp, head, fromHub(f.Author, f.DeviceName), rec)
+	_, err = l.applying(ctx, v, in, exp, fromHub(f.Author, f.DeviceName))
 	var ae *api.Error
 	if vault.Unholdable(err) || (errors.As(err, &ae) && ae.Code == api.CodeInvalidParams) {
 		return l.refuseHere(ctx, p, f.Path, api.RefuseReasonInvalid)
@@ -770,8 +765,9 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		// next. Without an agreed state, it would be pushed as a second
 		// create.
 		if local, lerr := db.FileByID(ctx, p.FileID); lerr == nil && local.Hash == p.Hash && local.Path != p.Path {
-			_, err = v.Apply(ctx, vault.Expect{Path: local.Path, Hash: p.Hash}, vault.Head{Path: local.Path, Hash: f.Hash},
-				fromHub(f.Author, f.DeviceName), rec)
+			moved := in
+			moved.At = local.Path
+			_, err = l.applying(ctx, v, moved, vault.Expect{Path: local.Path, Hash: p.Hash}, fromHub(f.Author, f.DeviceName))
 		}
 	}
 	if errors.Is(err, vault.ErrChanged) {
@@ -808,15 +804,238 @@ func (l *loop) dropOther(ctx context.Context, prev store.Agreed) error {
 	if err != nil {
 		return err
 	}
-	rec := func(ctx context.Context, tx *store.Tx, _ store.File) error {
-		return tx.DropAgreed(ctx, l.vaultID, prev.HubFile)
-	}
-	_, err = v.Apply(ctx, vault.Expect{Path: prev.Path, Hash: prev.Hash}, vault.Head{Path: prev.Path, Deleted: true},
-		vault.Author{Source: api.VersionSourceSync, Name: "sync"}, rec)
+	in := store.Applying{HubFile: prev.HubFile, FileID: prev.FileID, Seq: prev.Seq, Revision: prev.Revision,
+		Path: prev.Path, Deleted: true}
+	_, err = l.applying(ctx, v, in, vault.Expect{Path: prev.Path, Hash: prev.Hash},
+		vault.Author{Source: api.VersionSourceSync, Name: "sync"})
 	if errors.Is(err, vault.ErrChanged) {
-		return l.s.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return rec(ctx, tx, store.File{}) })
+		return l.s.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return l.agree(in)(ctx, tx, store.File{}) })
 	}
 	return err
+}
+
+// applyingOf is the head f as it applies to local file fileID (0 for a
+// new file).
+func applyingOf(f api.LogFile, fileID int64) store.Applying {
+	return store.Applying{HubFile: f.File, FileID: fileID, Seq: f.Seq, Revision: f.Revision, Path: f.Path, Hash: f.Hash,
+		Deleted: f.Deleted, Conflicted: f.Conflicted}
+}
+
+// agree records the head in in a transaction: the answer to its push, if
+// it is one, and the file's agreed row, set to the head for local file
+// file (in.FileID when file has no ID), or dropped for a delete, whose
+// unpushed conflict versions then go on as pushes.
+func (l *loop) agree(in store.Applying) vault.Record {
+	in.VaultID = l.vaultID
+	return func(ctx context.Context, tx *store.Tx, file store.File) error {
+		if in.PushID != 0 {
+			if err := tx.AnswerPush(ctx, l.vaultID, in.PushID, in.Status, in.Reason); err != nil {
+				return err
+			}
+		}
+		if in.Deleted {
+			return tx.DropAgreed(ctx, l.vaultID, in.HubFile)
+		}
+		id := file.ID
+		if id == 0 {
+			id = in.FileID
+		}
+		return tx.PutAgreed(ctx, in.Agreed(id))
+	}
+}
+
+// applying makes the vault hold the head in where it holds exp, as
+// vault.Apply does, and agrees it (agree) in the transaction of the
+// change. It records in first, in a transaction of its own, and the
+// change's transaction deletes it (ADR-0034): a crash after the disk
+// changed and before that transaction leaves the record, and
+// finishApplying settles it, so the device never pushes back a head it
+// only applied as a change of its own. When nothing reached the disk
+// (ErrChanged, or a path the vault cannot hold), the record goes; after
+// any other error the session ends, and the next one settles it.
+func (l *loop) applying(ctx context.Context, v *vault.Vault, in store.Applying, exp vault.Expect, who vault.Author) (store.File, error) {
+	db := l.s.cfg.DB
+	in.VaultID, in.From, in.FromHash = l.vaultID, exp.Path, exp.Hash
+	if in.At == "" {
+		in.At = in.Path
+	}
+	if err := db.Tx(ctx, func(tx *store.Tx) error {
+		_, err := tx.PutApplying(ctx, in)
+		return err
+	}); err != nil {
+		return store.File{}, err
+	}
+	agree := l.agree(in)
+	f, err := v.Apply(ctx, exp, vault.Head{Path: in.At, Hash: in.Hash, Deleted: in.Deleted}, who,
+		func(ctx context.Context, tx *store.Tx, f store.File) error {
+			if err := agree(ctx, tx, f); err != nil {
+				return err
+			}
+			return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
+		})
+	if notApplied(err) {
+		if derr := db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
+			return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
+		}); derr != nil {
+			return f, derr
+		}
+	}
+	return f, err
+}
+
+// notApplied reports whether err, from vault.Apply, means the head did not
+// reach the disk: the file was not as expected, or the vault cannot hold
+// the head's path.
+func notApplied(err error) bool {
+	var ae *api.Error
+	return errors.Is(err, vault.ErrChanged) || vault.Unholdable(err) || (errors.As(err, &ae) && ae.Code == api.CodeInvalidParams)
+}
+
+// errNotGone stops finishing a delete whose local file is still indexed.
+var errNotGone = errors.New("the file is still in the index")
+
+// finishApplying settles the heads that a crash left half applied, before
+// a session starts, so before it pushes anything (ADR-0034,
+// docs/specs/sync-protocol.md, Pulling and applying). It waits for the
+// vault's first scan, and needs a scan that succeeded, which has indexed
+// what the crash left on disk: while none has (vault.ErrNotScanned), it
+// returns the error, and the loop tries again after its backoff, a later
+// rescan perhaps succeeding. One exception: the delete records settle
+// without that scan when their files are all the index holds
+// (deletesExplain), since the delete of a vault's last files leaves an
+// empty folder over an index that still holds them, which every scan
+// refuses until the deletes settle. A head the file now holds (its
+// path and hash, or, for a delete, no file where it was, and the local
+// file gone) is agreed, and its push answered, as the change's own
+// transaction would have done. Otherwise the record goes: the disk did
+// not change, or changed again since, and the file is what it was before
+// the head (its change is pushed first) or the cursor, still below the
+// head, makes the next pull apply it again.
+func (l *loop) finishApplying(ctx context.Context) error {
+	db := l.s.cfg.DB
+	rows, err := db.Applying(ctx, l.vaultID)
+	if err != nil || len(rows) == 0 {
+		return err
+	}
+	v, err := l.s.cfg.Vaults.Vault(l.vaultID)
+	if err != nil {
+		return err
+	}
+	scanned := v.Scanned(ctx)
+	if scanned != nil && !errors.Is(scanned, vault.ErrNotScanned) {
+		return scanned
+	}
+	if scanned != nil {
+		explained, err := l.deletesExplain(ctx, rows)
+		if err != nil {
+			return err
+		}
+		if !explained {
+			return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", len(rows), scanned)
+		}
+	}
+	waiting := 0
+	for _, in := range rows {
+		if scanned != nil && !in.Deleted {
+			waiting++
+			continue
+		}
+		agreed, err := l.finishOne(ctx, v, in)
+		if err != nil {
+			return err
+		}
+		l.s.cfg.Log.Info("settled a head a crash interrupted", "vault", l.vaultID, "file", in.HubFile, "path", in.Path,
+			"deleted", in.Deleted, "agreed", agreed)
+	}
+	if waiting > 0 {
+		return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", waiting, scanned)
+	}
+	return nil
+}
+
+// deletesExplain reports whether the delete records in rows account for
+// every file of the vault's index: each indexed file is the local file of
+// a delete record, at the path the delete removes it from. Only then can
+// a failed scan be the delete's doing (the last files removed, an empty
+// folder over an index that still holds them), and the deletes settle
+// without a scan that succeeded. A record proves the intent, not the
+// removal: with any other file indexed, the folder may be a share that is
+// not mounted, and settling a delete whose removal never came would drop
+// the agreed row of a file that comes back with the share.
+func (l *loop) deletesExplain(ctx context.Context, rows []store.Applying) (bool, error) {
+	from := map[int64]string{}
+	for _, in := range rows {
+		if in.Deleted && in.FileID != 0 {
+			from[in.FileID] = in.From
+		}
+	}
+	if len(from) == 0 {
+		return false, nil
+	}
+	files, err := l.s.cfg.DB.Files(ctx, l.vaultID)
+	if err != nil {
+		return false, err
+	}
+	for _, f := range files {
+		if p, ok := from[f.ID]; !ok || p != f.Path {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// finishOne settles record in; it reports whether the head was agreed.
+func (l *loop) finishOne(ctx context.Context, v *vault.Vault, in store.Applying) (bool, error) {
+	db := l.s.cfg.DB
+	discard := func() (bool, error) {
+		return false, db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
+			return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
+		})
+	}
+	seq := int64(0)
+	if a, err := db.AgreedByHubFile(ctx, l.vaultID, in.HubFile); err == nil {
+		seq = a.Seq
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return false, err
+	}
+	if seq != in.BaseSeq {
+		return discard() // the agreed row moved on: it is not the row the head replaced
+	}
+	agree := l.agree(in)
+	rec := func(ctx context.Context, tx *store.Tx, f store.File) error {
+		if in.Deleted && in.FileID != 0 {
+			if ok, err := tx.FileExists(ctx, in.FileID); err != nil {
+				return err
+			} else if ok {
+				return errNotGone
+			}
+		}
+		if err := agree(ctx, tx, f); err != nil {
+			return err
+		}
+		return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
+	}
+	who := vault.Author{Source: api.VersionSourceSync, Name: "sync"}
+	// Expecting the state the head makes changes nothing on disk: Apply
+	// brings the index up to date with the path, compares, and runs rec.
+	exp, head := vault.Expect{Path: in.At, Hash: in.Hash}, vault.Head{Path: in.At, Hash: in.Hash}
+	if in.Deleted {
+		exp, head = vault.Expect{Path: in.From}, vault.Head{Path: in.From, Deleted: true}
+	}
+	_, err := v.Apply(ctx, exp, head, who, rec)
+	if errors.Is(err, vault.ErrChanged) && !in.Deleted && in.At != in.From && in.FromHash != "" && in.FromHash != in.Hash {
+		// A head that moves and rewrites its file stopped between the
+		// two: the file is at the head's path with its old content. The
+		// rest is the change the next pull would make.
+		_, err = v.Apply(ctx, vault.Expect{Path: in.At, Hash: in.FromHash}, head, who, rec)
+	}
+	switch {
+	case err == nil:
+		return true, nil
+	case notApplied(err), errors.Is(err, errNotGone), errors.Is(err, store.ErrConflict), errors.Is(err, fs.ErrNotExist):
+		return discard() // fs.ErrNotExist: the head's content is no longer in the blob store
+	}
+	return false, err
 }
 
 func agreedOf(vaultID int64, f api.LogFile, fileID int64) store.Agreed {
@@ -967,14 +1186,11 @@ func (l *loop) applyHead(ctx context.Context, sess *session, f api.LogFile, pend
 			return false, false, err
 		}
 	}
-	rec := func(ctx context.Context, tx *store.Tx, file store.File) error {
-		if f.Deleted {
-			// The file's unpushed conflict versions go on as pushes.
-			return tx.DropAgreed(ctx, l.vaultID, f.File)
-		}
-		return tx.PutAgreed(ctx, agreedOf(l.vaultID, f, file.ID))
+	in := applyingOf(f, 0)
+	if agreed {
+		in.FileID = a.FileID
 	}
-	_, err = v.Apply(ctx, exp, vault.Head{Path: f.Path, Hash: f.Hash, Deleted: f.Deleted}, fromHub(f.Author, f.DeviceName), rec)
+	_, err = l.applying(ctx, v, in, exp, fromHub(f.Author, f.DeviceName))
 	var ae *api.Error
 	switch {
 	case errors.Is(err, vault.ErrChanged):

@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -347,5 +348,73 @@ func TestScanOfAnEmptyFolderRemovesNothing(t *testing.T) {
 	}
 	if tv.row("A.md").ID == 0 || tv.row("sub/B.md").ID == 0 {
 		t.Error("a scan of an empty folder removed notes")
+	}
+}
+
+// Scanned reports a vault scanned only once a scan has succeeded since it
+// opened: a scan that fails as a whole changes nothing, and the index may
+// still hold files a crash took away (ADR-0034).
+func TestScannedWaitsForAScanThatSucceeded(t *testing.T) {
+	cases := []struct {
+		name  string
+		root  bool // the case needs a user other than root
+		files map[string]string
+		fail  func(dir string) error
+		heal  func(dir string) error
+	}{{
+		name:  "an empty folder of an indexed vault",
+		files: map[string]string{"A.md": "a"},
+		fail:  func(dir string) error { return os.Remove(filepath.Join(dir, "A.md")) },
+		heal:  func(dir string) error { return os.WriteFile(filepath.Join(dir, "A.md"), []byte("a"), 0o644) },
+	}, {
+		name:  "an unreadable folder",
+		root:  true,
+		files: map[string]string{"A.md": "a", "locked/B.md": "b"},
+		fail:  func(dir string) error { return os.Chmod(filepath.Join(dir, "locked"), 0) },
+		heal:  func(dir string) error { return os.Chmod(filepath.Join(dir, "locked"), 0o755) },
+	}}
+	for _, tc := range cases {
+		t.Run(strings.ReplaceAll(tc.name, " ", "_"), func(t *testing.T) {
+			if tc.root && os.Geteuid() == 0 {
+				t.Skip("root reads every folder")
+			}
+			ctx := t.Context()
+			dir, data := makeVault(t, tc.files), t.TempDir()
+			t.Cleanup(func() { _ = tc.heal(dir) })
+			openTestVault(t, dir, data, nil).scan()
+			if err := tc.fail(dir); err != nil {
+				t.Fatal(err)
+			}
+			// notesd starts again: a new actor over the same index.
+			tv := openTestVault(t, dir, data, nil)
+			canceled, cancel := context.WithCancel(ctx)
+			cancel()
+			if err := tv.v.Scanned(canceled); !errors.Is(err, context.Canceled) {
+				t.Fatalf("Scanned before a scan, canceled = %v, want context.Canceled", err)
+			}
+			if _, err := tv.v.runScan(ctx, false); err == nil {
+				t.Fatal("the open scan succeeded")
+			}
+			if err := tv.v.Scanned(ctx); !errors.Is(err, ErrNotScanned) {
+				t.Fatalf("Scanned after a failed scan = %v, want ErrNotScanned", err)
+			}
+			if err := tc.heal(dir); err != nil {
+				t.Fatal(err)
+			}
+			tv.scan()
+			if err := tv.v.Scanned(ctx); err != nil {
+				t.Fatalf("Scanned after a scan that succeeded = %v", err)
+			}
+			// A later scan that fails does not undo it: the index caught up.
+			if err := tc.fail(dir); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tv.v.runScan(ctx, false); err == nil {
+				t.Fatal("the later scan succeeded")
+			}
+			if err := tv.v.Scanned(ctx); err != nil {
+				t.Fatalf("Scanned after a later failed scan = %v", err)
+			}
+		})
 	}
 }

@@ -29,7 +29,9 @@ type node struct {
 
 func start(t *testing.T, o rpctest.Options, dir string) *node {
 	t.Helper()
-	o.Vault.Debounce = 10 * time.Millisecond
+	if o.Vault.Debounce == 0 {
+		o.Vault.Debounce = 10 * time.Millisecond
+	}
 	if os.Getenv("SYNC_DEBUG") != "" {
 		o.Log = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}

@@ -2,6 +2,8 @@ package vault
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -35,10 +37,11 @@ type Config struct {
 	// Keep is how long versions are kept [30 days]; PruneEvery is the
 	// interval of the pass that prunes them [24h].
 	Keep, PruneEvery time.Duration
-	// Crash, when set, is asked at each point a crash could fall (only
-	// "renamed": after a change's rename, before its transaction); true
+	// Crash, when set, is asked at each point a crash could fall
+	// ("renamed": after a change's rename, before its transaction;
+	// "applying": in Apply's delete, before the file is removed); true
 	// stops the change there with ErrCrashed. The simulation sets it
-	// (ADR-0020); notesd never does.
+	// (ADR-0020), and tests (ADR-0034); notesd never does.
 	Crash func(point string) bool
 }
 
@@ -110,6 +113,10 @@ type Vault struct {
 	reindex atomic.Bool   // the next scan reads every file again
 	cancel  context.CancelFunc
 	done    chan struct{}
+
+	scanned     chan struct{} // closed when the first scan has finished, done or failed
+	scannedOnce sync.Once
+	scanOK      atomic.Bool // a scan has succeeded since the vault opened
 }
 
 func newVault(cfg *Config, v store.Vault) *Vault {
@@ -118,6 +125,7 @@ func newVault(cfg *Config, v store.Vault) *Vault {
 		status:  api.ScanStatus{VaultID: v.ID, State: api.ScanStateIdle},
 		scanReq: make(chan struct{}, 1),
 		done:    make(chan struct{}),
+		scanned: make(chan struct{}),
 	}
 }
 
@@ -159,6 +167,32 @@ func (v *Vault) setRemoved(removed bool) {
 // open returns an os.Root of the vault's folder: every file operation
 // goes through one, so no path escapes the vault.
 func (v *Vault) open() (*os.Root, error) { return os.OpenRoot(v.root) }
+
+// ErrNotScanned is what Scanned returns while no scan of the vault has
+// succeeded since it opened.
+var ErrNotScanned = errors.New("no scan of the vault has succeeded since it opened")
+
+// Scanned waits until the vault's first scan has finished. It returns nil
+// once a scan has succeeded since the vault opened: the index then holds
+// what the disk held when notesd started, a file a crash left behind or
+// took away included. While none has (a scan fails as a whole, changing
+// nothing, on a folder it cannot read or an empty folder of an indexed
+// vault), it returns ErrNotScanned at once: the index may still hold rows
+// of files that are gone. A later scan that succeeds, the next rescan
+// among them, makes it return nil.
+func (v *Vault) Scanned(ctx context.Context) error {
+	select {
+	case <-v.scanned:
+	case <-v.done:
+		return api.NotFound("vault %d stopped", v.id)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if !v.scanOK.Load() {
+		return fmt.Errorf("vault %d: %w", v.id, ErrNotScanned)
+	}
+	return nil
+}
 
 // Status is the state of the vault's index and scans.
 func (v *Vault) Status(ctx context.Context) (api.ScanStatus, error) {

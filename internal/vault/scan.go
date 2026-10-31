@@ -68,7 +68,10 @@ func (v *Vault) runScan(ctx context.Context, reindex bool) (Listing, error) {
 	}, true)
 	if err != nil {
 		v.log.Warn("scan failed", "err", err)
+	} else {
+		v.scanOK.Store(true)
 	}
+	v.scannedOnce.Do(func() { close(v.scanned) })
 	return listing, err
 }
 

@@ -52,6 +52,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0031 — The desktop app ships as a Flatpak with its own notesd](adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)
 - [0032 — A new window replaces a notesd of an older build](adr/0032-an-update-replaces-the-running-notesd.md)
 - [0033 — A setting keeps notesd running without a window](adr/0033-a-setting-keeps-notesd-running-without-a-window.md)
+- [0034 — A device records the head it applies before it changes the disk](adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)
 
 ### Design
 
