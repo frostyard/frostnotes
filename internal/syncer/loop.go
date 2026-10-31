@@ -900,7 +900,14 @@ var errNotGone = errors.New("the file is still in the index")
 // vault's first scan, and needs a scan that succeeded, which has indexed
 // what the crash left on disk: while none has (vault.ErrNotScanned), it
 // returns the error, and the loop tries again after its backoff, a later
-// rescan perhaps succeeding. A head the file now holds (its
+// rescan perhaps succeeding. A delete is settled without that scan: it
+// looks at one path, which Apply brings up to date in the index, and at
+// its local file's row, so a stale row elsewhere cannot mislead it, while
+// a head that moves or writes a file needs the whole index up to date (a
+// stale row at the path the file left would go out as a create). It must
+// not wait: the delete of a vault's last file leaves an empty folder over
+// an index that still holds the file, which every scan refuses until the
+// delete settles. A head the file now holds (its
 // path and hash, or, for a delete, no file where it was, and the local
 // file gone) is agreed, and its push answered, as the change's own
 // transaction would have done. Otherwise the record goes: the disk did
@@ -917,16 +924,25 @@ func (l *loop) finishApplying(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := v.Scanned(ctx); err != nil {
-		return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", len(rows), err)
+	scanned := v.Scanned(ctx)
+	if scanned != nil && !errors.Is(scanned, vault.ErrNotScanned) {
+		return scanned
 	}
+	waiting := 0
 	for _, in := range rows {
+		if scanned != nil && !in.Deleted {
+			waiting++
+			continue
+		}
 		agreed, err := l.finishOne(ctx, v, in)
 		if err != nil {
 			return err
 		}
 		l.s.cfg.Log.Info("settled a head a crash interrupted", "vault", l.vaultID, "file", in.HubFile, "path", in.Path,
 			"deleted", in.Deleted, "agreed", agreed)
+	}
+	if waiting > 0 {
+		return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", waiting, scanned)
 	}
 	return nil
 }

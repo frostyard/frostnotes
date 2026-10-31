@@ -12,6 +12,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/rpctest"
+	"github.com/frostyard/frostnotes/internal/vault"
 )
 
 // crashy is a device whose notesd a test stops at the vault's crash point
@@ -26,9 +27,17 @@ type crashy struct {
 
 func newCrashy(t *testing.T, h *node, name string) *crashy {
 	t.Helper()
+	return newCrashyWith(t, h, name, rpctest.Options{})
+}
+
+// newCrashyWith is newCrashy with the vaults' options of base, until the
+// first restart.
+func newCrashyWith(t *testing.T, h *node, name string, base rpctest.Options) *crashy {
+	t.Helper()
 	d := &crashy{fired: make(chan struct{}, 1)}
 	p := &partition{conns: map[net.Conn]bool{}}
 	o := deviceOptions(name)
+	o.Vault = base.Vault
 	o.Syncer.Dial = p.dial
 	o.DataDir = t.TempDir()
 	o.Crash = func(point string) bool {
@@ -386,4 +395,46 @@ func TestACrashWhileApplyingAHeadWaitsForAScanThatSucceeded(t *testing.T) {
 	if rows, err := a.srv.DB.Applying(t.Context(), a.vault); err != nil || len(rows) != 0 {
 		t.Fatalf("a's heads being applied = %+v, %v; want none", rows, err)
 	}
+}
+
+// A pulled delete of a vault's only file, interrupted by a crash, leaves
+// an empty folder over an index that still holds the file: every scan
+// refuses that (is the folder mounted?) until the delete settles. So a
+// delete settles without a scan that succeeded, and the device syncs on.
+func TestACrashWhileDeletingTheLastFileLetsTheDeviceSyncOn(t *testing.T) {
+	h := newHub(t, map[string]string{"f.md": "one\n"})
+	// The watcher must not index the removal before a stops: the index
+	// keeps f.md, as after a real crash.
+	a := newCrashyWith(t, h, "a", rpctest.Options{Vault: vault.Config{Debounce: time.Hour}})
+	settle(t, h, a.node)
+	a.net.cut()
+	h.remove("f.md")
+	a.armed.Store(true)
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	a.down()
+
+	a.start() // its open scan fails: the folder is empty, the index is not
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	settle(t, h, a.node)
+	if got := files(t, a.dir); len(got) != 0 {
+		t.Fatalf("a's vault = %q, want it empty", got)
+	}
+	if rows, err := a.srv.DB.Applying(t.Context(), a.vault); err != nil || len(rows) != 0 {
+		t.Fatalf("a's heads being applied = %+v, %v; want none", rows, err)
+	}
+	if rows, err := a.srv.DB.AgreedRows(t.Context(), a.vault); err != nil || len(rows) != 0 {
+		t.Fatalf("a's agreed rows = %+v, %v; want none", rows, err)
+	}
+	noPushes(t, a.node)
+	// The index is empty now, as the folder is: a scan succeeds again.
+	a.rescan()
+
+	h.write("n.md", "new\n")
+	settle(t, h, a.node)
+	if got := same(t, h, a.node); !equalFiles(got, map[string]string{"n.md": "new\n"}) {
+		t.Fatalf("the vaults = %q, want the hub's new n.md", got)
+	}
+	noPushes(t, a.node)
 }

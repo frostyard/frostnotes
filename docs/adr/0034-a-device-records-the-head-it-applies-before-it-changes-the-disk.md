@@ -60,8 +60,17 @@ crashes at this point, but it did not find these orderings.
   hold a file the crash took away, which would go out as a create. While
   no scan has succeeded since the vault opened, the loop does not start
   the session: it reports the error and tries again after its backoff,
-  without dialing the hub, until a rescan succeeds. A record whose file is now the head (at its path with its hash,
-  or, for a delete, nothing at the old path and the local file gone from
+  without dialing the hub, until a rescan succeeds.
+- **A delete record settles without a scan that succeeded.** It looks at
+  one path, which the settle brings up to date in the index, and at its
+  local file's row; a stale row at another path cannot mislead it. It
+  must not wait: the interrupted delete of a vault's last file leaves an
+  empty folder over an index that still holds the file, which every scan
+  refuses, so the vault would never sync again. A move, put or create
+  record still waits: a stale row at the path a moved file left would go
+  out as a create.
+- **Settling** works so. A record whose file is now the head (at its path
+  with its hash, or, for a delete, nothing at the old path and the local file gone from
   the index) is agreed, and its push answered, as the lost `Tx` would have
   done. A head that moves and rewrites its file and stopped between the
   two is finished: the file at the head's path with its old content takes
@@ -75,11 +84,11 @@ crashes at this point, but it did not find these orderings.
 - A device never pushes back as its own a change it only applied: what
   the hub did meanwhile stands.
 - Each head a device applies costs one more small `Tx`.
-- After a crash that left records, a vault whose scans keep failing does
-  not sync at all, pulls included, until a scan succeeds: `sync.status`
-  shows the vault offline with the error.
+- After a crash that left records of a move, put or create, a vault whose
+  scans keep failing does not sync at all, pulls included, until a scan
+  succeeds: `sync.status` shows the vault offline with the error.
 - A delete settled after a crash is indexed as an outside deletion (the
-  scan found it), not as a `sync` version: its attribution is lost, as it
+  scan or the settle found it), not as a `sync` version: its attribution is lost, as it
   is for a local write that crashes in the same place.
 - The moves that park a file aside for another head, and move it back
   ([sync-protocol.md](../specs/sync-protocol.md#pulling-and-applying),
