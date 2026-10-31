@@ -27,12 +27,12 @@ type crashy struct {
 
 func newCrashy(t *testing.T, h *node, name string) *crashy {
 	t.Helper()
-	return newCrashyWith(t, h, name, rpctest.Options{})
+	return newCrashyWith(t, h, name, "renamed", rpctest.Options{})
 }
 
-// newCrashyWith is newCrashy with the vaults' options of base, until the
-// first restart.
-func newCrashyWith(t *testing.T, h *node, name string, base rpctest.Options) *crashy {
+// newCrashyWith is newCrashy stopping at the vault's crash point point,
+// with the vaults' options of base until the first restart.
+func newCrashyWith(t *testing.T, h *node, name, point string, base rpctest.Options) *crashy {
 	t.Helper()
 	d := &crashy{fired: make(chan struct{}, 1)}
 	p := &partition{conns: map[net.Conn]bool{}}
@@ -40,8 +40,8 @@ func newCrashyWith(t *testing.T, h *node, name string, base rpctest.Options) *cr
 	o.Vault = base.Vault
 	o.Syncer.Dial = p.dial
 	o.DataDir = t.TempDir()
-	o.Crash = func(point string) bool {
-		if point != "renamed" || !d.armed.CompareAndSwap(true, false) {
+	o.Crash = func(at string) bool {
+		if at != point || !d.armed.CompareAndSwap(true, false) {
 			return false
 		}
 		p.cut() // the device is down: nothing more of it reaches the hub
@@ -84,8 +84,9 @@ func (d *crashy) start() {
 }
 
 // waitSyncError waits, by the device's sync.changed events, until its sync
-// reports an error that holds text, or it has pushed something.
-func (d *crashy) waitSyncError(text string) {
+// reports an error that holds text, or it has pushed something, or, with
+// orIdle, it is idle.
+func (d *crashy) waitSyncError(text string, orIdle bool) {
 	d.t.Helper()
 	ctx, cancel := context.WithTimeout(d.t.Context(), settleWait)
 	defer cancel()
@@ -98,7 +99,7 @@ func (d *crashy) waitSyncError(text string) {
 		d.t.Fatal(err)
 	}
 	has := func(st api.SyncStatus) bool {
-		if st.Error != nil && strings.Contains(*st.Error, text) {
+		if (st.Error != nil && strings.Contains(*st.Error, text)) || (orIdle && st.State == api.SyncStateIdle) {
 			return true
 		}
 		ps, err := d.srv.DB.Pushes(ctx, d.vault)
@@ -372,7 +373,7 @@ func TestACrashWhileApplyingAHeadWaitsForAScanThatSucceeded(t *testing.T) {
 	a.start()
 	a.net.heal()
 	a.srv.Syncer.Kick(a.vault)
-	a.waitSyncError("no scan of the vault has succeeded")
+	a.waitSyncError("no scan of the vault has succeeded", false)
 	noPushes(t, a.node)
 	want := map[string]string{"g.md": "one\n", "locked/x.md": "x\n"}
 	if got := files(t, h.dir); !equalFiles(got, want) {
@@ -405,7 +406,7 @@ func TestACrashWhileDeletingTheLastFileLetsTheDeviceSyncOn(t *testing.T) {
 	h := newHub(t, map[string]string{"f.md": "one\n"})
 	// The watcher must not index the removal before a stops: the index
 	// keeps f.md, as after a real crash.
-	a := newCrashyWith(t, h, "a", rpctest.Options{Vault: vault.Config{Debounce: time.Hour}})
+	a := newCrashyWith(t, h, "a", "renamed", rpctest.Options{Vault: vault.Config{Debounce: time.Hour}})
 	settle(t, h, a.node)
 	a.net.cut()
 	h.remove("f.md")
@@ -437,4 +438,58 @@ func TestACrashWhileDeletingTheLastFileLetsTheDeviceSyncOn(t *testing.T) {
 		t.Fatalf("the vaults = %q, want the hub's new n.md", got)
 	}
 	noPushes(t, a.node)
+}
+
+// A delete record proves the intent, not the removal: a crash may come
+// before the file is removed. If the folder is then a share that is not
+// mounted, the scan fails on an empty folder over an index that holds
+// other files too, and the delete must not settle: the file would lose
+// its agreed row and, back with the share, be pushed as a create.
+func TestADeleteInterruptedBeforeTheRemovalWaitsForTheShare(t *testing.T) {
+	h := newHub(t, map[string]string{"f.md": "f\n", "g.md": "g\n"})
+	a := newCrashyWith(t, h, "a", "applying", rpctest.Options{})
+	settle(t, h, a.node)
+	a.net.cut()
+	h.remove("f.md")
+	a.armed.Store(true)
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	a.down()
+	if got := files(t, a.dir); !equalFiles(got, map[string]string{"f.md": "f\n", "g.md": "g\n"}) {
+		t.Fatalf("a's vault after the crash = %q, want f.md not yet removed", got)
+	}
+
+	// The share is not mounted: its mountpoint is an empty folder.
+	away := t.TempDir()
+	for _, p := range []string{"f.md", "g.md"} {
+		if err := os.Rename(filepath.Join(a.dir, p), filepath.Join(away, p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.start()
+	a.net.heal()
+	a.srv.Syncer.Kick(a.vault)
+	a.waitSyncError("no scan of the vault has succeeded", true)
+	if rows, err := a.srv.DB.Applying(t.Context(), a.vault); err != nil || len(rows) != 1 || !rows[0].Deleted {
+		t.Errorf("a's heads being applied while the share is away = %+v, %v; want the delete of f.md", rows, err)
+	}
+	noPushes(t, a.node)
+
+	// The share comes back, and a scan succeeds.
+	for _, p := range []string{"f.md", "g.md"} {
+		if err := os.Rename(filepath.Join(away, p), filepath.Join(a.dir, p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.rescan()
+	a.srv.Syncer.Kick(a.vault)
+	settle(t, h, a.node)
+	want := map[string]string{"g.md": "g\n"}
+	if got := same(t, h, a.node); !equalFiles(got, want) {
+		t.Fatalf("the vaults after the share came back = %q, want %q", got, want)
+	}
+	noPushes(t, a.node)
+	if rows, err := a.srv.DB.Applying(t.Context(), a.vault); err != nil || len(rows) != 0 {
+		t.Fatalf("a's heads being applied = %+v, %v; want none", rows, err)
+	}
 }

@@ -449,16 +449,21 @@ what a scan finds on disk (as the same ops, `source: outside`). Their
   the answer's status and reason. The `Tx` that agrees the head deletes
   the record; so does a change that wrote nothing (the file changed, or
   the device cannot hold the path). Before each sync session starts, the
-  loop settles the records a crash left, so before any push, and, but
-  for a delete's, only after a scan of the vault that succeeded since
-  notesd started. While none has (a scan fails as a whole, changing
-  nothing, on a folder it cannot read or an empty folder of an indexed
-  vault), the delete records settle, since each looks only at its own path
-  and local file, and the interrupted delete of a vault's last file leaves
-  an empty folder that every scan refuses until it settles; if any other
-  record remains, the session does not start: `sync.status` reports the
-  vault `offline` with the error, and the loop tries again after its
-  reconnect backoff, without dialing the hub, until a rescan succeeds
+  loop settles the records a crash left, so before any push, and only
+  after a scan of the vault that succeeded since notesd started. While
+  none has (a scan fails as a whole, changing nothing, on a folder it
+  cannot read or an empty folder of an indexed vault), the session does
+  not start: `sync.status` reports the vault `offline` with the error,
+  and the loop tries again after its reconnect backoff, without dialing
+  the hub, until a rescan succeeds. One exception: when every file the
+  index holds is the local file of a delete record, at the path the
+  delete removes it from, the delete records settle without that scan
+  (the interrupted delete of a vault's last files leaves an empty folder
+  that every scan refuses until they settle), and the session starts if
+  no other record remains. A record proves the intent, not the removal:
+  with any other file indexed, the empty folder may be a share that is
+  not mounted, and a delete settled before its removal would push the
+  file as a create once the share is back
   ([ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)):
   1. A record whose agreed row's `seq` is no longer the recorded one is
      discarded.

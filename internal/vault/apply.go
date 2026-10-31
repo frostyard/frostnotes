@@ -279,6 +279,9 @@ func (v *Vault) removeFile(ctx context.Context, r *os.Root, p, want string, who 
 	if now, err := read(r, p); err != nil || now.hash != want {
 		return store.File{}, fmt.Errorf("%s changed while it was deleted: %w", p, ErrChanged)
 	}
+	if v.crashed("applying") {
+		return store.File{}, ErrCrashed
+	}
 	if err := v.settled(remove(r, p)); err != nil {
 		return store.File{}, err
 	}

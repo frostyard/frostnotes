@@ -61,14 +61,20 @@ crashes at this point, but it did not find these orderings.
   no scan has succeeded since the vault opened, the loop does not start
   the session: it reports the error and tries again after its backoff,
   without dialing the hub, until a rescan succeeds.
-- **A delete record settles without a scan that succeeded.** It looks at
-  one path, which the settle brings up to date in the index, and at its
-  local file's row; a stale row at another path cannot mislead it. It
-  must not wait: the interrupted delete of a vault's last file leaves an
-  empty folder over an index that still holds the file, which every scan
-  refuses, so the vault would never sync again. A move, put or create
-  record still waits: a stale row at the path a moved file left would go
-  out as a create.
+- **Delete records settle without a scan that succeeded only when they
+  explain the whole index:** every file the vault's index holds is the
+  local file of a delete record, at the path the delete removes it from.
+  Only then can the scan's failure be the deletes' doing: the interrupted
+  delete of a vault's last files leaves an empty folder over an index
+  that still holds them, which every scan refuses, so without this the
+  vault would never sync again. A record proves the intent, not the
+  removal: a crash can come before the file is removed. With any other
+  file indexed, the empty folder may be a share that is not mounted, and
+  a settled delete whose removal never came would drop the agreed row of
+  a file that comes back with the share and goes out as a create. So
+  then every record waits, deletes included; so do move, put and create
+  records always, since a stale row at the path a moved file left would
+  go out as a create.
 - **Settling** works so. A record whose file is now the head (at its path
   with its hash, or, for a delete, nothing at the old path and the local file gone from
   the index) is agreed, and its push answered, as the lost `Tx` would have
@@ -87,6 +93,13 @@ crashes at this point, but it did not find these orderings.
 - After a crash that left records of a move, put or create, a vault whose
   scans keep failing does not sync at all, pulls included, until a scan
   succeeds: `sync.status` shows the vault offline with the error.
+- A residual risk is accepted: a share that is not mounted, whose
+  indexed files are all files the hub deleted, with a crash before their
+  removal. Their deletes settle, and the files, back with the share, go
+  out as creates: nothing is lost, and a deleted file comes back.
+- On a share that is not mounted, `vault.Apply` (its `refresh` of a
+  path) already records a missing file as deleted, for any pulled head,
+  before this decision; this decision does not widen that.
 - A delete settled after a crash is indexed as an outside deletion (the
   scan or the settle found it), not as a `sync` version: its attribution is lost, as it
   is for a local write that crashes in the same place.

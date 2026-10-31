@@ -900,14 +900,11 @@ var errNotGone = errors.New("the file is still in the index")
 // vault's first scan, and needs a scan that succeeded, which has indexed
 // what the crash left on disk: while none has (vault.ErrNotScanned), it
 // returns the error, and the loop tries again after its backoff, a later
-// rescan perhaps succeeding. A delete is settled without that scan: it
-// looks at one path, which Apply brings up to date in the index, and at
-// its local file's row, so a stale row elsewhere cannot mislead it, while
-// a head that moves or writes a file needs the whole index up to date (a
-// stale row at the path the file left would go out as a create). It must
-// not wait: the delete of a vault's last file leaves an empty folder over
-// an index that still holds the file, which every scan refuses until the
-// delete settles. A head the file now holds (its
+// rescan perhaps succeeding. One exception: the delete records settle
+// without that scan when their files are all the index holds
+// (deletesExplain), since the delete of a vault's last files leaves an
+// empty folder over an index that still holds them, which every scan
+// refuses until the deletes settle. A head the file now holds (its
 // path and hash, or, for a delete, no file where it was, and the local
 // file gone) is agreed, and its push answered, as the change's own
 // transaction would have done. Otherwise the record goes: the disk did
@@ -928,6 +925,15 @@ func (l *loop) finishApplying(ctx context.Context) error {
 	if scanned != nil && !errors.Is(scanned, vault.ErrNotScanned) {
 		return scanned
 	}
+	if scanned != nil {
+		explained, err := l.deletesExplain(ctx, rows)
+		if err != nil {
+			return err
+		}
+		if !explained {
+			return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", len(rows), scanned)
+		}
+	}
 	waiting := 0
 	for _, in := range rows {
 		if scanned != nil && !in.Deleted {
@@ -945,6 +951,37 @@ func (l *loop) finishApplying(ctx context.Context) error {
 		return fmt.Errorf("%d heads a crash interrupted wait for a scan that succeeds: %w", waiting, scanned)
 	}
 	return nil
+}
+
+// deletesExplain reports whether the delete records in rows account for
+// every file of the vault's index: each indexed file is the local file of
+// a delete record, at the path the delete removes it from. Only then can
+// a failed scan be the delete's doing (the last files removed, an empty
+// folder over an index that still holds them), and the deletes settle
+// without a scan that succeeded. A record proves the intent, not the
+// removal: with any other file indexed, the folder may be a share that is
+// not mounted, and settling a delete whose removal never came would drop
+// the agreed row of a file that comes back with the share.
+func (l *loop) deletesExplain(ctx context.Context, rows []store.Applying) (bool, error) {
+	from := map[int64]string{}
+	for _, in := range rows {
+		if in.Deleted && in.FileID != 0 {
+			from[in.FileID] = in.From
+		}
+	}
+	if len(from) == 0 {
+		return false, nil
+	}
+	files, err := l.s.cfg.DB.Files(ctx, l.vaultID)
+	if err != nil {
+		return false, err
+	}
+	for _, f := range files {
+		if p, ok := from[f.ID]; !ok || p != f.Path {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // finishOne settles record in; it reports whether the head was agreed.
