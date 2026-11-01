@@ -367,7 +367,7 @@ from Duncan's Snow test VM `frostmail-desktop` at its snapshot `clean`,
 which has no frostnotes; that VM and its snapshot did not change. The
 copy ran on selfie, where that image is, not on minideb as in Runs 1
 and 2, and it was deleted after the run. Snow `20261028172907` (image
-`sha256:59927ae4…b3d4`), GNOME Shell 48.7 on Wayland, xdg-desktop-portal
+`sha256:59927ae4…b3d4`), GNOME Shell 48.7, xdg-desktop-portal
 1.20.3, xdg-desktop-portal-gnome 48.0, Flatpak 1.16.6, kernel 7.2.12,
 6 vCPU, 8 GiB, user `tester` with a password login. A newer Snow was
 staged by the OS during the run and did not apply: the run had no
@@ -392,35 +392,42 @@ search at 00:08, the launcher started notesd 0.3.0 (`hello --build`
 (`notesctl vault add --create`), and Journal, a folder of Markdown with
 a subfolder and a PNG image (`vault add`). Notes were written and edited
 with `notesctl write`, each write naming its base, and one line was
-typed in the app. In all: 5 notes, 6 files and 11 versions. The window
+typed in the app. In all: 5 notes, 6 files and 11 version records. The window
 was open on vault Field Notes with 2 tabs (Harbor, and Lighthouse
 active).
 
 | Item | Result | What happened |
 | --- | --- | --- |
-| 5. Update, with G3 | Pass | `flatpak update --user -y org.frostyard.Frostnotes` at 00:10:18, with the window open: about 2 s, no error, no dialog. The open window and notesd 0.3.0 ran on, and `hello` said `notesd 0.3.0 (protocol 1)`. Closed with Alt+F4 at 00:10:27: only notesd's instance stayed. Opened again from the overview's search at 00:10:31: the 0.3.1 launcher stopped notesd 0.3.0 (`notesd.log`: "rpc.shutdown: stopping" `caller=local`, then "notesd stopped", at 00:10:36.646) and started notesd 0.3.1 ("notesd started" `version=0.3.1` at 00:10:36.900), with the same socket and database paths. `flatpak ps` showed both instances at commit `4f2b2c00cf2c`, `hello` said `notesd 0.3.1 (protocol 1)`, and `hello --build` gave `4f2b2c00…`. The graphical session (`loginctl`: session 4 on seat0) was the same before and after: no logout. The window restored both tabs. The new notesd applied the migration `0005_sync_push_base_hash.sql` at 00:10:36.871 (`schema_migrations`, read only). The loss check after the reopen: `vault list`, `ls` of both vaults, `versions` of all 5 notes, and each file's `sha256sum`, size and mode were the same as before the update (`diff` empty). A line typed in the app after the reopen saved as version 13 through notesd 0.3.1. Then a logout at 00:11:24 wrote "notesd stopped"; at login the autostart entry started notesd 0.3.1 (00:11:50), the loss check against the state just before the logout was the same again, and the window showed both tabs |
+| 5. Update, with G3 | Pass | `flatpak update --user -y org.frostyard.Frostnotes` at 00:10:18, with the window open: about 2 s, no error, no dialog. The open window and notesd 0.3.0 ran on, and `hello` said `notesd 0.3.0 (protocol 1)`. Closed with Alt+F4 at 00:10:27: only notesd's instance stayed. Opened again from the overview's search at 00:10:31: the 0.3.1 launcher stopped notesd 0.3.0 (`notesd.log`: "rpc.shutdown: stopping" `caller=local`, then "notesd stopped", at 00:10:36.646) and started notesd 0.3.1 ("notesd started" `version=0.3.1` at 00:10:36.900), with the same socket and database paths. `flatpak ps` showed both instances at commit `4f2b2c00cf2c`, `hello` said `notesd 0.3.1 (protocol 1)`, and `hello --build` gave `4f2b2c00…`. The graphical session (`loginctl`: session 4 on seat0) was the same before and after: no logout. The window restored both tabs. The new notesd applied the migration `0005_sync_push_base_hash.sql` at 00:10:36.871 (`schema_migrations`, read only). The loss check after the reopen: `vault list`, `ls` of both vaults, `versions` of all 5 notes (the 11 version records), and each file's `sha256sum`, size and mode were the same as before the update (`diff` empty). A line typed in the app after the reopen saved as version 13 through notesd 0.3.1. Then a logout at 00:11:24 wrote "notesd stopped"; at login the autostart entry started notesd 0.3.1 (00:11:50), the loss check against the state just before the logout was the same again, and the window showed both tabs |
 
 **What it shows:**
 - G3's replacement works on a real desktop: after `flatpak update`, a
   new window replaced notesd 0.3.0 with 0.3.1, with no logout, as
   [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) says.
-  No vault, note, file or version was lost, and the workspace came back.
-  G3's Done when (Phase 4) is met.
+  No vault, note or file was lost, no version record was lost or
+  changed, and the workspace came back. G3's Done when (Phase 4) is
+  met.
+- The version check compared `notesctl versions`, which lists the
+  database's records; it did not read the content of earlier versions
+  back.
 - This update also ran a database migration (`0005`), which Run 2 did
   not have; it lost nothing.
 - Not tested: a window that stays open while a new window replaces
   notesd (ADR-0032 says that it reconnects), and a save that the stop
   cuts. As item 5 says, the old window was closed before the new one
-  opened.
+  opened. Also not tested: reading an earlier version's content back
+  (`notesctl revert` or the app's history) after the update, and the
+  session type (Wayland or X11), which the run did not record.
 
 **Other findings,** none a gate failure:
 - At login, Bazaar (Snow's) opened its window, and Snow showed "System
   update ready" for its staged image. They are not the app's.
 - Screenshots were checked and are kept out of the repository, as in
   Runs 1 and 2. Before the update the window showed vault Field Notes
-  with the 2 tabs; after the reopen and after the login, the same 2
-  tabs, Lighthouse rendered with the lines typed before and after the
-  update, no dialog and no error.
+  with the 2 tabs. After the reopen, the same 2 tabs, with Lighthouse
+  rendered and the line typed before the update. After the login, the
+  same 2 tabs, with Lighthouse showing that line and the line typed
+  after the reopen. No dialog and no error.
 
 ## Phase 4 — Gaps found by the review
 
