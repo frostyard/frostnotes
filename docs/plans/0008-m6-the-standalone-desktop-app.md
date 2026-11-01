@@ -23,7 +23,7 @@ vault's files and its own index, and the hub reconciles them
 [design/sync.md](../design/sync.md)). A device that leaves a hub keeps its
 files (`notesctl sync leave`).
 
-Status (2026-10-29):
+Status (2026-11-01):
 - **Phase 1 is done:** the review below.
 - **Phase 2 is built** in PR #103. `v0.2.0` was tagged and published
   on 2026-10-27, and the package is public. The remote's entry
@@ -34,10 +34,13 @@ Status (2026-10-29):
   2026-10-27, passed items 1, 3, 4 and 7, and item 2 from a staged
   catalogue ("Record" below). Item 6 passed in part, with a loopback hub
   and no lodge. Item 5 passed on 2026-10-29, on the update from `v0.2.0`
-  to `v0.3.0` (Run 2). Still to run: item 2, an install from the
+  to `v0.3.0` (Run 2), and again on 2026-11-01, on the update from
+  `v0.3.0` to `v0.3.1`, where a new window replaced the old notesd with
+  no logout (Run 3, G3). Still to run: item 2, an install from the
   public remote, and item 6 with a hub over HTTPS and lodge's web app.
 - **Phase 4** lists what the review found: G3 (PR #106) and G5 (PR #107)
-  are done, merged on 2026-10-28, G2 is built on 2026-10-28 and waits
+  are done, merged on 2026-10-28, and G3 passed on a real desktop on
+  2026-11-01 (Run 3); G2 is built on 2026-10-28 and waits
   for its run on a real desktop, G1 is built in PR #111, merged on
   2026-10-28, and G4 is built in this change.
 
@@ -329,7 +332,7 @@ images) and 19 versions.
   no logout, is still to test. It needs an update from `v0.3.0` to a
   later release, and G3's Done when (Phase 4) stays open until then.
   This VM is deleted after the run (Brian's decision T329a), so that run
-  needs a new VM.
+  needs a new VM. Run 3 below ran it on 2026-11-01.
 
 **Other findings,** none a gate failure:
 - The public catalogue publishes no version string: `remote-ls` showed
@@ -342,6 +345,82 @@ images) and 19 versions.
   Run 1. Before the update the window showed vault Journal with the 2
   tabs; after the reopen and after the login, the same 2 tabs, readme
   rendered ("Plain old note."), no dialog and no error.
+
+#### Run 3: item 5 with G3, the update from `v0.3.0` to `v0.3.1` on Snow, 2026-11-01 (pass)
+
+**The releases.** From: `v0.3.0` as Run 2 tested it, the image
+`sha256:46e19029…6145`, Flatpak commit `b531eccf…`, subject "Built from
+2d807343…". To: `v0.3.1`, commit
+`189ae2f7f435439943b0dfb62d3b4f9221724bf5`, Flatpak run 41144557740, the
+tag run. The tested image is
+`ghcr.io/frostyard/frostnotes@sha256:7c11c024d1d07bb9bb41abd70d93e6bdc224faeb0267a1580556b82f6b101219`,
+which `v0.3.1` and `latest` named on the day. Installed, it is Flatpak
+commit `4f2b2c00…`, Version 0.3.1, subject "Built from 189ae2f7…",
+Alt-id the digest above. `gh attestation verify` passed for both
+digests, with `--repo frostyard/frostnotes --signer-workflow
+github.com/frostyard/frostnotes/.github/workflows/flatpak.yml`: SLSA
+provenance v1, signers `flatpak.yml@refs/tags/v0.3.0` and
+`flatpak.yml@refs/tags/v0.3.1`, source digests `2d80734` and `189ae2f`.
+
+**The machine.** A new disposable incus VM, `frostnotes-update`, copied
+from Duncan's Snow test VM `frostmail-desktop` at its snapshot `clean`,
+which has no frostnotes; that VM and its snapshot did not change. The
+copy ran on selfie, where that image is, not on minideb as in Runs 1
+and 2, and it was deleted after the run. Snow `20261028172907` (image
+`sha256:59927ae4…b3d4`), GNOME Shell 48.7 on Wayland, xdg-desktop-portal
+1.20.3, xdg-desktop-portal-gnome 48.0, Flatpak 1.16.6, kernel 7.2.12,
+6 vCPU, 8 GiB, user `tester` with a password login. A newer Snow was
+staged by the OS during the run and did not apply: the run had no
+reboot. Input came from a uinput keyboard and pointer, and evidence
+from GNOME Shell's screenshot interface; checks ran over SSH as
+`tester`.
+
+**The sources.** `v0.3.0` came from a staged catalogue with its digest
+as the only tag, since the public catalogue lists only `latest`:
+flatpak-index's `scripts/build-index.py` at `3b5a946`, which verified
+the attestation, served on `127.0.0.1:8765` in the VM as the user remote
+`frostyard-staged`. For the update, as in Run 2, that remote's URL moved
+to the public index (`flatpak remote-modify --user
+--url=oci+https://frostyard.github.io/flatpak-index frostyard-staged`):
+`remote-ls` showed Frostnotes at `7c11c024d1d0`, and the journal says
+"Pulled app/org.frostyard.Frostnotes/x86_64/master from
+https://ghcr.io/". No hub.
+
+**Before the update.** All times are EDT. Started from the overview's
+search at 00:08, the launcher started notesd 0.3.0 (`hello --build`
+`b531eccf…`). The VM held 2 vaults: Field Notes, new
+(`notesctl vault add --create`), and Journal, a folder of Markdown with
+a subfolder and a PNG image (`vault add`). Notes were written and edited
+with `notesctl write`, each write naming its base, and one line was
+typed in the app. In all: 5 notes, 6 files and 11 versions. The window
+was open on vault Field Notes with 2 tabs (Harbor, and Lighthouse
+active).
+
+| Item | Result | What happened |
+| --- | --- | --- |
+| 5. Update, with G3 | Pass | `flatpak update --user -y org.frostyard.Frostnotes` at 00:10:18, with the window open: about 2 s, no error, no dialog. The open window and notesd 0.3.0 ran on, and `hello` said `notesd 0.3.0 (protocol 1)`. Closed with Alt+F4 at 00:10:27: only notesd's instance stayed. Opened again from the overview's search at 00:10:31: the 0.3.1 launcher stopped notesd 0.3.0 (`notesd.log`: "rpc.shutdown: stopping" `caller=local`, then "notesd stopped", at 00:10:36.646) and started notesd 0.3.1 ("notesd started" `version=0.3.1` at 00:10:36.900), with the same socket and database paths. `flatpak ps` showed both instances at commit `4f2b2c00cf2c`, `hello` said `notesd 0.3.1 (protocol 1)`, and `hello --build` gave `4f2b2c00…`. The graphical session (`loginctl`: session 4 on seat0) was the same before and after: no logout. The window restored both tabs. The new notesd applied the migration `0005_sync_push_base_hash.sql` at 00:10:36.871 (`schema_migrations`, read only). The loss check after the reopen: `vault list`, `ls` of both vaults, `versions` of all 5 notes, and each file's `sha256sum`, size and mode were the same as before the update (`diff` empty). A line typed in the app after the reopen saved as version 13 through notesd 0.3.1. Then a logout at 00:11:24 wrote "notesd stopped"; at login the autostart entry started notesd 0.3.1 (00:11:50), the loss check against the state just before the logout was the same again, and the window showed both tabs |
+
+**What it shows:**
+- G3's replacement works on a real desktop: after `flatpak update`, a
+  new window replaced notesd 0.3.0 with 0.3.1, with no logout, as
+  [ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) says.
+  No vault, note, file or version was lost, and the workspace came back.
+  G3's Done when (Phase 4) is met.
+- This update also ran a database migration (`0005`), which Run 2 did
+  not have; it lost nothing.
+- Not tested: a window that stays open while a new window replaces
+  notesd (ADR-0032 says that it reconnects), and a save that the stop
+  cuts. As item 5 says, the old window was closed before the new one
+  opened.
+
+**Other findings,** none a gate failure:
+- At login, Bazaar (Snow's) opened its window, and Snow showed "System
+  update ready" for its staged image. They are not the app's.
+- Screenshots were checked and are kept out of the repository, as in
+  Runs 1 and 2. Before the update the window showed vault Field Notes
+  with the 2 tabs; after the reopen and after the login, the same 2
+  tabs, Lighthouse rendered with the lines typed before and after the
+  update, no dialog and no error.
 
 ## Phase 4 — Gaps found by the review
 
@@ -394,7 +473,9 @@ blocks Phase 2.
   covers the replacement. Phase 3's item 5 ran on 2026-10-29 (Run 2)
   and confirmed that the update that brings G3 keeps the old notesd
   until logout, since that notesd has no `rpc.shutdown`; the replacement
-  itself still needs a run on the update after `v0.3.0`.
+  itself ran on 2026-11-01 (Phase 3, Run 3), on the update from
+  `v0.3.0` to `v0.3.1`: a new window replaced notesd 0.3.0 with 0.3.1
+  with no logout, and no write was lost. So the Done when is met.
 - **G4 — Moving from a host notesd.** A desktop that ran notesd from a
   build or the `.deb` has another data directory
   (`~/.local/share/frostnotes`) and socket, so both daemons can run and
