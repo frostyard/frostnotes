@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Provision the nsl `frostnotes` machine (Debian 13) with the Tauri, WebKitGTK,
-# Node, Rust and Go toolchains the app build needs, Xvfb, xdotool and vim for
-# the built app's evidence runs (make m3-evidence), and Firefox ESR with
-# geckodriver for the web app's (make m4-evidence). The host is atomic and
-# cannot install -dev packages; the engine itself builds and tests on the host.
+# Node, Rust (with rustfmt and clippy) and Go toolchains the app build needs,
+# Xvfb, xdotool and vim for the built app's evidence runs (make m3-evidence),
+# and Firefox ESR with geckodriver for the web app's (make m4-evidence). The
+# host is atomic and cannot install -dev packages; the engine itself builds
+# and tests on the host.
 #
 # Run from the repository root on the host (idempotent; safe to re-run):
 #   nsl create frostnotes --distro debian:13
@@ -96,6 +97,11 @@ if [[ ! -x /opt/cargo/bin/rustup ]]; then
 fi
 runuser -u "$TARGET_USER" -- env RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo \
 	/opt/cargo/bin/rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+# rustfmt and clippy, which the minimal profile leaves out: frostread's
+# `make app-check` runs `cargo fmt --check` and `cargo clippy` in this machine
+# (frostread plan 0002, step 3.2). component add is a no-op when they are there.
+runuser -u "$TARGET_USER" -- env RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo \
+	/opt/cargo/bin/rustup component add --toolchain "$RUST_TOOLCHAIN" rustfmt clippy
 
 # Build output and package stores stay machine-local: virtiofs is slow for them
 # and SQLite WAL must not live on /mnt/host (docs/adr/0009-development-environment-and-gates.md).
