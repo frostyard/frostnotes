@@ -14,14 +14,14 @@ const titleOf = (p: string) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i,
 
 /** taskGroups groups tasks by path in the order note.tasks gives. */
 export function taskGroups(tasks: readonly TaskEntry[]): TaskGroup[] {
-  const groups = new Map<string, TaskGroup>();
+  const groups = new Map<string, { path: string; title: string; tasks: { line: number; text: string }[] }>();
   for (const task of tasks) {
     let group = groups.get(task.path);
     if (!group) {
       group = { path: task.path, title: task.title || titleOf(task.path), tasks: [] };
       groups.set(task.path, group);
     }
-    (group.tasks as { line: number; text: string }[]).push({ line: task.line, text: task.text });
+    group.tasks.push({ line: task.line, text: task.text });
   }
   return [...groups.values()];
 }

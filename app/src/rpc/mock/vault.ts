@@ -664,19 +664,29 @@ export class MockVault {
       if (kindOf(n.path) !== "note") continue;
       const text = this.text(n.path) ?? "";
       let frontmatter = text.startsWith("---\n") || text.startsWith("---\r\n");
-      let fence = "";
+      let fenceChar = "";
+      let fenceLength = 0;
       text.split("\n").forEach((line, i) => {
         if (frontmatter) {
           if (i > 0 && /^---\s*$/.test(line)) frontmatter = false;
           return;
         }
-        const fenceMatch = /^\s*(```+|~~~+)/.exec(line);
-        if (fenceMatch) {
-          const marker = fenceMatch[1]?.[0] ?? "";
-          fence = fence === marker ? "" : fence === "" ? marker : fence;
+        if (fenceChar !== "") {
+          const close = /^ {0,3}(`+|~+) *$/.exec(line);
+          if (close && close[1]?.[0] === fenceChar && (close[1]?.length ?? 0) >= fenceLength) {
+            fenceChar = "";
+            fenceLength = 0;
+          }
           return;
         }
-        if (fence !== "") return;
+        const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+        if (open) {
+          const marker = open[1] ?? "";
+          if (marker[0] === "`" && (open[2] ?? "").includes("`")) return;
+          fenceChar = marker[0] ?? "";
+          fenceLength = marker.length;
+          return;
+        }
         const match = /^\s*(?:[-*+]|\d+[.)])\s+\[ \][ \t]+(.*)$/.exec(line);
         if (match) out.push({ path: n.path, title: title(n.path), line: i + 1, text: (match[1] ?? "").trim() });
       });

@@ -50,6 +50,15 @@ describe("the mock's note domain", () => {
     ]);
   });
 
+  it("uses CommonMark fence lengths and characters", async () => {
+    const { note } = await connected({
+      "Fences.md": "````md\n```\n- [ ] Hidden\n````\n- [ ] Visible\n",
+    });
+    await expect(note.tasks({ vaultId: 1 })).resolves.toEqual([
+      { path: "Fences.md", title: "Fences", line: 5, text: "Visible" },
+    ]);
+  });
+
   it("lists files and folders, with hashes", async () => {
     const { note } = await connected({ "a.md": "a\n", "Deep/b/c.png": "png", "Empty/": "" });
     const listing = await note.files({ vaultId: 1 });

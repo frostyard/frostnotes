@@ -124,7 +124,11 @@ subfolders, with a tag (nested tags such as tag/sub included), or with a
 property, and with value, that value (for a list property, one of its
 items). Filters combine. Returns at most limit notes and how many match.
 ` + Notice}, t.listNotes)
-	sdk.AddTool(s, &sdk.Tool{Name: "list_tasks", Annotations: reads, Description: `List the open tasks (unchecked checkboxes, - [ ]) in the user's notes: all of them, or only those in notes in a folder and its subfolders. Each has its note's path and title, its line, and its text. Returns at most limit tasks, by path and line, and how many there are. ` + Notice}, t.listTasks)
+	sdk.AddTool(s, &sdk.Tool{Name: "list_tasks", Annotations: reads, Description: `List the open tasks (unchecked
+checkboxes, - [ ]) in the user's notes: all of them, or only those in
+notes in a folder and its subfolders. Each has its note's path and title,
+its line, and its text. Returns at most limit tasks, by path and line, and
+how many there are. ` + Notice}, t.listTasks)
 	sdk.AddTool(s, &sdk.Tool{Name: "get_backlinks", Annotations: reads, Description: `List the links to a note
 or attachment from the vault's other notes: for each, the linking note's
 path, the link's line, its target as written, its alias, and whether it

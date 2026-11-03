@@ -192,7 +192,7 @@ more than one, is an error.
   or receive: edits are applied to the content `note.read` returned.
 - A tool calls only notesd's `note` domain and `rpc.hello`; it never reads
   or writes the vault's files itself.
-- A read-only server's tool list is exactly the four read tools, and so
+- A read-only server's tool list is exactly the five read tools, and so
   is the list of a session under a read scope. A session's other tools
   are those its scope allows, and no more.
 - A tool result never carries the content of a note the tool was not asked

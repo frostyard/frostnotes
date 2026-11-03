@@ -214,6 +214,14 @@ describe("the link panes", () => {
 });
 
 describe("the Tasks pane", () => {
+  it("reads again when a file changes", async () => {
+    const { mock, user } = await start();
+    await user.click(pane("Tasks"));
+    await screen.findByRole("button", { name: "Prune the old pear" });
+    act(() => mock.vault(3).outside("Quince.md", "# Quince\n\n- [ ] Water at dawn\n"));
+    await screen.findByRole("button", { name: "Water at dawn" });
+  });
+
   it("opens a task's note at the task's line", async () => {
     const { user } = await start();
     await user.click(pane("Tasks"));

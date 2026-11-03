@@ -1,3 +1,5 @@
+// The Tasks pane groups open tasks and opens a task or its note.
+// It uses the mock callbacks for both task and title clicks.
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -22,7 +24,7 @@ function setup(over: Partial<TasksPaneProps> = {}) {
 }
 
 describe("TasksPane", () => {
-  it("groups tasks by note, shows counts, and shows loading as nothing", () => {
+  it("groups tasks by note with their counts", () => {
     setup();
     const list = screen.getByRole("list", { name: "Tasks" });
     expect(within(list).getByRole("button", { name: "Orchard plan" }).parentElement?.textContent).toBe("Orchard plan2");
