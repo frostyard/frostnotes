@@ -36,6 +36,7 @@ func noteParams(id int64) map[string]map[string]any {
 		"note.readVersion":  {"vaultId": id, "version": 1},
 		"note.tags":         {"vaultId": id},
 		"note.properties":   {"vaultId": id},
+		"note.tasks":        {"vaultId": id},
 		"note.template":     {"vaultId": id, "template": "Plan.md"},
 		"note.mkdir":        {"vaultId": id, "path": "Folder"},
 		"note.moveFolder":   {"vaultId": id, "path": "Folder", "to": "Other"},

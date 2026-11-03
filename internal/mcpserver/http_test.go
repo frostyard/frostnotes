@@ -138,12 +138,12 @@ func call(t *testing.T, cs *sdk.ClientSession, tool string, args map[string]any)
 	return res, text.String()
 }
 
-// A read scope's session lists the four read tools and reads its vault.
+// A read scope's session lists the five read tools and reads its vault.
 func TestAReadScopeServesTheReadTools(t *testing.T) {
 	n := startLodge(t)
 	cs := n.connect(t, "claude-laptop", scope(n.vault, false))
-	if got := toolNames(t, cs); !slices.Equal(got, []string{"get_backlinks", "list_notes", "read_note", "search_notes"}) {
-		t.Fatalf("tools = %v, want the four read tools", got)
+	if got := toolNames(t, cs); !slices.Equal(got, []string{"get_backlinks", "list_notes", "list_tasks", "read_note", "search_notes"}) {
+		t.Fatalf("tools = %v, want the five read tools", got)
 	}
 	if res, text := call(t, cs, "read_note", map[string]any{"path": "Plan.md"}); res.IsError || !strings.Contains(text, "Plant the beds.") {
 		t.Fatalf("read_note = %v %s", res.IsError, text)
@@ -162,8 +162,8 @@ func TestAReadScopeServesTheReadTools(t *testing.T) {
 func TestAWriteScopeWritesAsItsToken(t *testing.T) {
 	n := startLodge(t)
 	cs := n.connect(t, "claude-laptop", scope(n.vault, true))
-	if got := toolNames(t, cs); len(got) != 7 {
-		t.Fatalf("tools = %v, want seven", got)
+	if got := toolNames(t, cs); len(got) != 8 {
+		t.Fatalf("tools = %v, want eight", got)
 	}
 	if res, text := call(t, cs, "edit_note", map[string]any{"path": "Plan.md", "append": "Water them.\n"}); res.IsError {
 		t.Fatalf("edit_note: %s", text)
@@ -206,8 +206,8 @@ func TestTheEngineHoldsTheAgentToItsScope(t *testing.T) {
 func TestAFolderScopeHoldsThroughLodge(t *testing.T) {
 	n := startLodge(t)
 	cs := n.connect(t, "porter", "vault="+strconv.FormatInt(n.vault, 10)+";write=Porter/;except=Porter/Routines/;daily")
-	if got := toolNames(t, cs); len(got) != 7 {
-		t.Fatalf("tools = %v, want seven", got)
+	if got := toolNames(t, cs); len(got) != 8 {
+		t.Fatalf("tools = %v, want eight", got)
 	}
 	if res, text := call(t, cs, "create_note", map[string]any{"path": "Porter/Memory.md", "content": "memory\n"}); res.IsError {
 		t.Fatalf("create_note in Porter/: %s", text)
@@ -233,7 +233,7 @@ func TestAFolderScopeHoldsThroughLodge(t *testing.T) {
 func TestToolsFollowTheScope(t *testing.T) {
 	n := startLodge(t)
 	id := "vault=" + strconv.FormatInt(n.vault, 10)
-	reads := []string{"get_backlinks", "list_notes", "read_note", "search_notes"}
+	reads := []string{"get_backlinks", "list_notes", "list_tasks", "read_note", "search_notes"}
 	for _, tc := range []struct {
 		scope  string
 		extra  []string
@@ -394,7 +394,7 @@ func TestResultsCarryTheNotesURL(t *testing.T) {
 	ctx := t.Context()
 	odd := "Projects/Q3 plan #2?/Ünïcode & 100%.md"
 	linker := "Notes/50% off & more.md"
-	for p, c := range map[string]string{odd: "quince harvest\n", linker: "see [[Plan]]\n"} {
+	for p, c := range map[string]string{odd: "quince harvest\n- [ ] Harvest the quince\n", linker: "see [[Plan]]\n"} {
 		if _, err := n.local.Note().Create(ctx, &api.NoteCreateParams{VaultID: n.vault, Path: p, Content: c}); err != nil {
 			t.Fatal(err)
 		}
@@ -428,6 +428,10 @@ func TestResultsCarryTheNotesURL(t *testing.T) {
 		Notes []named `json:"notes"`
 	}
 	result("list_notes", map[string]any{"folder": "Projects"}, &list)
+	var tasks struct {
+		Tasks []named `json:"tasks"`
+	}
+	result("list_tasks", map[string]any{}, &tasks)
 	var back struct {
 		Backlinks []struct {
 			Source string `json:"source"`
@@ -443,6 +447,11 @@ func TestResultsCarryTheNotesURL(t *testing.T) {
 		t.Fatalf("search_notes = %+v, list_notes = %+v; want the odd note in each", search.Hits, list.Notes)
 	}
 	got := []named{note, search.Hits[0], list.Notes[0], made, edited, daily}
+	if len(tasks.Tasks) == 1 {
+		got = append(got, tasks.Tasks[0])
+	} else {
+		t.Errorf("tasks = %+v", tasks.Tasks)
+	}
 	if len(back.Backlinks) == 1 {
 		got = append(got, named{back.Backlinks[0].Source, back.Backlinks[0].URL})
 	} else {
@@ -489,7 +498,7 @@ func TestASessionBelongsToItsToken(t *testing.T) {
 		}
 	}
 	// The session still works for its own token.
-	if got := toolNames(t, cs); len(got) != 4 {
+	if got := toolNames(t, cs); len(got) != 5 {
 		t.Errorf("tools after the refusals = %v", got)
 	}
 }
@@ -500,7 +509,7 @@ func TestANinthSessionEvictsTheLeastRecentlyUsed(t *testing.T) {
 	var sessions []*sdk.ClientSession
 	for i := range 8 {
 		cs := n.connect(t, "claude-laptop", scope(n.vault, false))
-		if got := toolNames(t, cs); len(got) != 4 {
+		if got := toolNames(t, cs); len(got) != 5 {
 			t.Fatalf("session %d: tools = %v", i, got)
 		}
 		sessions = append(sessions, cs)

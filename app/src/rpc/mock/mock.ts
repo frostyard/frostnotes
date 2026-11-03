@@ -464,6 +464,8 @@ export class MockTransport implements Transport {
       }
       case "note.tags":
         return v.tagCounts();
+      case "note.tasks":
+        return v.tasks(p as { folder?: string });
       case "note.properties":
         return v.propertyCounts();
       case "note.daily":

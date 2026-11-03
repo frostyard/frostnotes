@@ -33,6 +33,32 @@ describe("sha256", () => {
 });
 
 describe("the mock's note domain", () => {
+  it("lists open tasks in path and line order, excluding done and fenced tasks", async () => {
+    const { note } = await connected({
+      "Inbox.md": "- [ ] Inbox task\n",
+      "Projects/Plan.md":
+        "---\ntags: [work]\n---\n- [ ] First\n- [x] Done\n  - [ ] Nested\n\n```md\n- [ ] Fenced\n```\n",
+    });
+    await expect(note.tasks({ vaultId: 1 })).resolves.toEqual([
+      { path: "Inbox.md", title: "Inbox", line: 1, text: "Inbox task" },
+      { path: "Projects/Plan.md", title: "Plan", line: 4, text: "First" },
+      { path: "Projects/Plan.md", title: "Plan", line: 6, text: "Nested" },
+    ]);
+    await expect(note.tasks({ vaultId: 1, folder: "Projects" })).resolves.toEqual([
+      { path: "Projects/Plan.md", title: "Plan", line: 4, text: "First" },
+      { path: "Projects/Plan.md", title: "Plan", line: 6, text: "Nested" },
+    ]);
+  });
+
+  it("uses CommonMark fence lengths and characters", async () => {
+    const { note } = await connected({
+      "Fences.md": "````md\n```\n- [ ] Hidden\n````\n- [ ] Visible\n",
+    });
+    await expect(note.tasks({ vaultId: 1 })).resolves.toEqual([
+      { path: "Fences.md", title: "Fences", line: 5, text: "Visible" },
+    ]);
+  });
+
   it("lists files and folders, with hashes", async () => {
     const { note } = await connected({ "a.md": "a\n", "Deep/b/c.png": "png", "Empty/": "" });
     const listing = await note.files({ vaultId: 1 });

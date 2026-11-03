@@ -62,6 +62,25 @@ type listOut struct {
 	Notice string      `json:"notice"`
 }
 
+type tasksIn struct {
+	Folder string `json:"folder,omitzero" jsonschema:"only tasks in notes in this folder or below it; / is the whole vault"`
+	Limit  int    `json:"limit,omitzero" jsonschema:"at most this many tasks, 1 to 1000; default 200"`
+}
+
+type taskEntry struct {
+	Path  string `json:"path"`
+	Title string `json:"title"`
+	URL   string `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
+	Line  int    `json:"line"`
+	Text  string `json:"text"`
+}
+
+type tasksOut struct {
+	Tasks  []taskEntry `json:"tasks"`
+	Total  int         `json:"total" jsonschema:"how many open tasks match, beyond limit included"`
+	Notice string      `json:"notice"`
+}
+
 type backlinksIn struct {
 	Path string `json:"path" jsonschema:"the path of the note or attachment linked to"`
 }

@@ -21,6 +21,7 @@ import {
   type Resolution,
   type SearchHit,
   type TagCount,
+  type TaskEntry,
   type VaultFiles,
   type VaultSettings,
   type Version,
@@ -652,6 +653,45 @@ export class MockVault {
       }
     }
     return [...counts.values()].sort((a, b) => cmp(a.tag, b.tag));
+  }
+
+  // tasks are note.tasks: open list items, in path and line order.
+  tasks(p: { folder?: string }): TaskEntry[] {
+    const folder = (p.folder ?? "").replace(/^\/+|\/+$/g, "");
+    const out: TaskEntry[] = [];
+    for (const n of this.entries()) {
+      if (folder !== "" && folder !== "." && !n.path.startsWith(`${folder}/`)) continue;
+      if (kindOf(n.path) !== "note") continue;
+      const text = this.text(n.path) ?? "";
+      let frontmatter = text.startsWith("---\n") || text.startsWith("---\r\n");
+      let fenceChar = "";
+      let fenceLength = 0;
+      text.split("\n").forEach((line, i) => {
+        if (frontmatter) {
+          if (i > 0 && /^---\s*$/.test(line)) frontmatter = false;
+          return;
+        }
+        if (fenceChar !== "") {
+          const close = /^ {0,3}(`+|~+) *$/.exec(line);
+          if (close && close[1]?.[0] === fenceChar && (close[1]?.length ?? 0) >= fenceLength) {
+            fenceChar = "";
+            fenceLength = 0;
+          }
+          return;
+        }
+        const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+        if (open) {
+          const marker = open[1] ?? "";
+          if (marker[0] === "`" && (open[2] ?? "").includes("`")) return;
+          fenceChar = marker[0] ?? "";
+          fenceLength = marker.length;
+          return;
+        }
+        const match = /^\s*(?:[-*+]|\d+[.)])\s+\[ \][ \t]+(.*)$/.exec(line);
+        if (match) out.push({ path: n.path, title: title(n.path), line: i + 1, text: (match[1] ?? "").trim() });
+      });
+    }
+    return out;
   }
 
   propertyCounts(): PropertyCount[] {

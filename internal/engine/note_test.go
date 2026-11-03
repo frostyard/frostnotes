@@ -134,6 +134,12 @@ func TestNoteAPI(t *testing.T) {
 	if _, err := note.List(ctx, &api.NoteListParams{VaultID: 999}); !errors.Is(err, api.ErrNotFound) {
 		t.Errorf("List of an unknown vault = %v, want notFound", err)
 	}
+	if _, err := note.Tasks(ctx, &api.NoteTasksParams{VaultID: av.id, Folder: &bad}); !errors.Is(err, api.ErrInvalidParams) {
+		t.Errorf("Tasks(folder ../up) = %v, want invalidParams", err)
+	}
+	if _, err := note.Tasks(ctx, &api.NoteTasksParams{VaultID: 999}); !errors.Is(err, api.ErrNotFound) {
+		t.Errorf("Tasks of an unknown vault = %v, want notFound", err)
+	}
 
 	n, err := note.Read(ctx, &api.NoteReadParams{VaultID: av.id, Path: "Inbox.md"})
 	if err != nil || fmt.Sprint(n.Tags) != "[work]" || n.Title != "Inbox" || string(n.Props) != `{"tags":["work"]}` {

@@ -39,7 +39,8 @@ afterEach(() => {
 
 const FILES = {
   3: {
-    "Orchard.md": "---\nstatus: active\ntags: [garden]\n---\n# Orchard\n\nPlant the [[Quince]] soon, and a [[Pear]].\n",
+    "Orchard.md":
+      "---\nstatus: active\ntags: [garden]\n---\n# Orchard\n\nPlant the [[Quince]] soon, and a [[Pear]].\n- [ ] Prune the old pear\n",
     "Quince.md": "# Quince\n\n## Pruning\n\nCut in winter. #garden/fruit\n",
     "Notes.md": "Ask about quince prices.\n",
     "Deep/Seeds.md": "Beans.\n",
@@ -209,6 +210,28 @@ describe("the link panes", () => {
     await user.click(within(list).getByRole("button", { name: "Pear" }));
     await waitFor(() => expect(mock.vault(3).text("Pear.md")).toBe(""));
     expect(tabs()).toEqual(["Pear"]);
+  });
+});
+
+describe("the Tasks pane", () => {
+  it("reads again when a file changes", async () => {
+    const { mock, user } = await start();
+    await user.click(pane("Tasks"));
+    await screen.findByRole("button", { name: "Prune the old pear" });
+    act(() => mock.vault(3).outside("Quince.md", "# Quince\n\n- [ ] Water at dawn\n"));
+    await screen.findByRole("button", { name: "Water at dawn" });
+  });
+
+  it("opens a task's note at the task's line", async () => {
+    const { user } = await start();
+    await user.click(pane("Tasks"));
+    const task = await screen.findByRole("button", { name: "Prune the old pear" });
+    await user.click(task);
+    expect(tabs()).toEqual(["Orchard"]);
+    await waitFor(() => expect(editor()).not.toBeNull());
+    expect(editor()?.state.selection.main.head).toBe(
+      "---\nstatus: active\ntags: [garden]\n---\n# Orchard\n\nPlant the [[Quince]] soon, and a [[Pear]].\n".length,
+    );
   });
 });
 

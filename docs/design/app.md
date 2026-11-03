@@ -189,7 +189,9 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   note at the line. Outgoing links: `note.links` through
   `lib/outgoing.ts`; an unresolved one is created where new notes go.
   Tags and All properties: `note.tags` and `note.properties`, sorted by
-  name or count. Outline: the active editor's headings from its syntax
+  name or count. Tasks: `note.tasks` lists open tasks in path and line
+  order, grouped by note, and opens a task's note at its line. Outline:
+  the active editor's headings from its syntax
   tree (`editor/outline.ts`), read again 150 ms after the text changes,
   the heading under the cursor marked; the editors map tells its
   subscribers about every change. Each pane reads again when the vault's

@@ -58,7 +58,7 @@ export interface Split {
 export type WorkspaceNode = Split | TabGroup;
 
 /** PaneId names a sidebar pane. */
-export type PaneId = "files" | "search" | "backlinks" | "outgoing" | "tags" | "properties" | "outline";
+export type PaneId = "files" | "search" | "backlinks" | "outgoing" | "tags" | "properties" | "outline" | "tasks";
 
 /** Side is a sidebar. */
 export type Side = "left" | "right";
@@ -116,7 +116,7 @@ export const RIGHT_WIDTH = 300;
 /** PANES are each sidebar's panes, in order (docs/specs/ui.md#sidebars-and-panes). */
 export const PANES: Record<Side, readonly PaneId[]> = {
   left: ["files", "search"],
-  right: ["backlinks", "outgoing", "tags", "properties", "outline"],
+  right: ["backlinks", "outgoing", "tags", "properties", "outline", "tasks"],
 };
 
 /** emptyWorkspace is a vault's first layout: one empty tab, both sidebars open on their first pane. */

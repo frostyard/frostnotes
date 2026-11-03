@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	readTools  = []string{"get_backlinks", "list_notes", "read_note", "search_notes"}
+	readTools  = []string{"get_backlinks", "list_notes", "list_tasks", "read_note", "search_notes"}
 	writeTools = []string{"append_to_daily_note", "create_note", "edit_note"}
 )
 

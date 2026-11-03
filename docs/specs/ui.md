@@ -197,7 +197,7 @@ ribbon preference off (it is on) hides it.
   selected pane's button is `--selection-sidebar`. The left sidebar's
   panes: Files (`folder-closed`), Search (`search`). The right's:
   Backlinks (`arrow-down-left`), Outgoing links (`arrow-up-right`), Tags
-  (`tags`), All properties (`archive`), Outline (`list`).
+  (`tags`), All properties (`archive`), Outline (`list`), Tasks (`list-todo`).
 - **A pane** fills its sidebar under the title bar row, `--bg-sidebar`.
   Most panes start with a 32-high toolbar of 24 × 24 buttons with 16px
   icons, centered, 4 apart.
@@ -287,6 +287,10 @@ holds a space.
   left padding 8 + 16 × depth, a chevron where a heading has children.
   A click scrolls the editor to the heading and focuses it. "No
   headings" when there are none.
+- **Tasks:** the vault's open tasks from `note.tasks`, grouped by note
+  with a count. Each task shows its text; a task opens its note at the
+  task's line, and a title opens the note. The pane reads again when the
+  vault's files change. "No open tasks." when none.
 
 ### Workspace
 

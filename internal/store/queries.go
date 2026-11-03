@@ -56,6 +56,32 @@ func (d *DB) ListNotes(ctx context.Context, vaultID int64, f NoteFilter) ([]api.
 	return entries, nil
 }
 
+// ListOpenTasks returns the open tasks in a vault's notes, by path and line.
+func (d *DB) ListOpenTasks(ctx context.Context, vaultID int64, folder string) ([]api.TaskEntry, error) {
+	where, args := noteConditions(vaultID, NoteFilter{Folder: folder})
+	rows, err := d.db.QueryContext(ctx, `SELECT files.path, notes.title, tasks.line, tasks.text
+		FROM tasks JOIN notes ON notes.file_id = tasks.file_id
+		JOIN files ON files.id = tasks.file_id
+		WHERE tasks.status = ' ' AND `+where+`
+		ORDER BY files.path, tasks.line, tasks.ord`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list open tasks: %w", err)
+	}
+	defer rows.Close()
+	entries := []api.TaskEntry{}
+	for rows.Next() {
+		var entry api.TaskEntry
+		if err := rows.Scan(&entry.Path, &entry.Title, &entry.Line, &entry.Text); err != nil {
+			return nil, fmt.Errorf("scan task entry: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read task entries: %w", err)
+	}
+	return entries, nil
+}
+
 func noteConditions(vaultID int64, f NoteFilter) (string, []any) {
 	where := "files.vault_id = ?"
 	args := []any{vaultID}
