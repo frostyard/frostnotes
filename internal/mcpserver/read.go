@@ -102,6 +102,30 @@ func (t *tools) listNotes(ctx context.Context, _ *sdk.CallToolRequest, in listIn
 	return nil, out, nil
 }
 
+func (t *tools) listTasks(ctx context.Context, _ *sdk.CallToolRequest, in tasksIn) (*sdk.CallToolResult, tasksOut, error) {
+	if in.Limit == 0 {
+		in.Limit = 200
+	}
+	if in.Limit < 1 || in.Limit > 1000 {
+		return nil, tasksOut{}, fmt.Errorf("limit must be between 1 and 1000")
+	}
+	params := &api.NoteTasksParams{VaultID: t.o.VaultID}
+	if in.Folder != "" {
+		params.Folder = &in.Folder
+	}
+	tasks, err := t.o.Client.Note().Tasks(ctx, params)
+	if err != nil {
+		return nil, tasksOut{}, err
+	}
+	out := tasksOut{Tasks: []taskEntry{}, Total: len(tasks), Notice: Notice}
+	for _, task := range tasks[:min(in.Limit, len(tasks))] {
+		out.Tasks = append(out.Tasks, taskEntry{
+			Path: task.Path, Title: task.Title, URL: t.url(task.Path), Line: int(task.Line), Text: task.Text,
+		})
+	}
+	return nil, out, nil
+}
+
 func (t *tools) getBacklinks(ctx context.Context, _ *sdk.CallToolRequest, in backlinksIn) (*sdk.CallToolResult, backlinksOut, error) {
 	links, err := t.o.Client.Note().Backlinks(ctx, &api.NoteBacklinksParams{VaultID: t.o.VaultID, Path: in.Path})
 	if err != nil {

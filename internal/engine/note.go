@@ -86,6 +86,21 @@ func (n notes) List(ctx context.Context, p *api.NoteListParams) ([]api.NoteEntry
 	return n.db.ListNotes(ctx, p.VaultID, f)
 }
 
+func (n notes) Tasks(ctx context.Context, p *api.NoteTasksParams) ([]api.TaskEntry, error) {
+	if _, err := n.m.Vault(p.VaultID); err != nil {
+		return nil, err
+	}
+	folder := "/"
+	if p.Folder != nil {
+		checked, err := vault.CheckFolder(*p.Folder)
+		if err != nil {
+			return nil, api.InvalidParams("%v", err)
+		}
+		folder = checked
+	}
+	return n.db.ListOpenTasks(ctx, p.VaultID, folder)
+}
+
 func (n notes) Read(ctx context.Context, p *api.NoteReadParams) (*api.Note, error) {
 	v, err := n.m.Vault(p.VaultID)
 	if err != nil {

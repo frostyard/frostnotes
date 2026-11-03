@@ -790,6 +790,18 @@ Every frontmatter key in the vault's notes, its type and how many notes have it,
 Result: `[]PropertyCount`.
 Errors: `notFound`.
 
+### `note.tasks`
+
+The open tasks (list items that start with [ ], docs/specs/markdown.md#tasks) in the vault's notes, by path and then line, from the index.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `folder` | `string` (optional) | Only tasks in notes in this folder or below it; "/" is the whole vault. |
+
+Result: `[]TaskEntry`.
+Errors: `notFound`, `invalidParams`.
+
 ### `note.template`
 
 A template note's content with {{title}}, {{date}}, {{time}} and their formats and offsets expanded, as Obsidian's Insert template does (docs/design/vault.md#daily-notes).
@@ -1065,6 +1077,17 @@ A tag and how many notes have it.
 | --- | --- | --- |
 | `tag` | `string` | As first spelled, without '#'; nested tags are listed whole (a/b), and their parents only when a note has the parent itself. |
 | `count` | `int` | Notes with the tag, ignoring case. |
+
+### Type `TaskEntry`
+
+An open task in a note.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `title` | `string` | The note's title: the file name without .md. |
+| `line` | `int` | 1-based line in the note. |
+| `text` | `string` | The rest of the task's first line after '[ ] ', trimmed, as written. |
 
 ### Type `PropertyCount`
 

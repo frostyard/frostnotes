@@ -117,6 +117,10 @@ func (f *fakeNotes) Tags(_ context.Context, p *api.NoteTagsParams) ([]api.TagCou
 	return nil, f.record(p)
 }
 
+func (f *fakeNotes) Tasks(_ context.Context, p *api.NoteTasksParams) ([]api.TaskEntry, error) {
+	return nil, f.record(p)
+}
+
 func (f *fakeNotes) Properties(_ context.Context, p *api.NotePropertiesParams) ([]api.PropertyCount, error) {
 	return nil, f.record(p)
 }

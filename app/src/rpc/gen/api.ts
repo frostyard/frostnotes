@@ -799,6 +799,17 @@ export interface TagCount {
   count: number;
 }
 
+/** An open task in a note. */
+export interface TaskEntry {
+  path: string;
+  /** The note's title: the file name without .md. */
+  title: string;
+  /** 1-based line in the note. */
+  line: number;
+  /** The rest of the task's first line after '[ ] ', trimmed, as written. */
+  text: string;
+}
+
 /** A frontmatter key and how many notes have it. */
 export interface PropertyCount {
   /** As first spelled. */
@@ -1057,6 +1068,15 @@ export interface NotePropertiesParams {
   vaultId: number;
 }
 
+/** Params of note.tasks. */
+export interface NoteTasksParams {
+  vaultId: number;
+  /**
+   * Only tasks in notes in this folder or below it; "/" is the whole vault.
+   */
+  folder?: string;
+}
+
 /** Params of note.template. */
 export interface NoteTemplateParams {
   vaultId: number;
@@ -1238,6 +1258,12 @@ export interface NoteClient {
    */
   properties(params: NotePropertiesParams): Promise<PropertyCount[]>;
   /**
+   * The open tasks (list items that start with [ ],
+   * docs/specs/markdown.md#tasks) in the vault's notes, by path and then
+   * line, from the index.
+   */
+  tasks(params: NoteTasksParams): Promise<TaskEntry[]>;
+  /**
    * A template note's content with {{title}}, {{date}}, {{time}} and their
    * formats and offsets expanded, as Obsidian's Insert template does
    * (docs/design/vault.md#daily-notes).
@@ -1285,6 +1311,7 @@ function noteClient(t: Transport): NoteClient {
     readVersion: (params) => t.call<VersionContent>("note.readVersion", params),
     tags: (params) => t.call<TagCount[]>("note.tags", params),
     properties: (params) => t.call<PropertyCount[]>("note.properties", params),
+    tasks: (params) => t.call<TaskEntry[]>("note.tasks", params),
     template: (params) => t.call<ExpandedTemplate>("note.template", params),
     mkdir: (params) => t.call<null>("note.mkdir", params).then(() => undefined),
     moveFolder: (params) => t.call<FolderMoveResult>("note.moveFolder", params),
@@ -1920,6 +1947,7 @@ export const METHODS = [
   "note.readVersion",
   "note.tags",
   "note.properties",
+  "note.tasks",
   "note.template",
   "note.mkdir",
   "note.moveFolder",
@@ -1997,6 +2025,7 @@ export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {
   "note.readVersion": ["local", "session", "agent"],
   "note.tags": ["local", "session", "agent"],
   "note.properties": ["local", "session", "agent"],
+  "note.tasks": ["local", "session", "agent"],
   "note.template": ["local", "session", "agent"],
   "note.mkdir": ["local", "session", "agent"],
   "note.moveFolder": ["local", "session", "agent"],

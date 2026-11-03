@@ -187,6 +187,44 @@ func TestListNotes(t *testing.T) {
 	}
 }
 
+func TestListTasks(t *testing.T) {
+	h := newHarness(t, map[string]string{
+		"Projects/Plan.md":      "---\ntitle: Plan\n---\n- [ ] First task\n- [x] Done task\n  - [ ] Nested task\n\n```md\n- [ ] Code task\n```\n",
+		"Projects/Deep/Spec.md": "# Spec\n- [ ] Deep task\n",
+		"Inbox.md":              "- [ ] Inbox task\n",
+	}, false)
+	var out tasksOut
+	h.ok("list_tasks", map[string]any{}, &out)
+	var got []string
+	for _, task := range out.Tasks {
+		got = append(got, fmt.Sprintf("%s:%d:%s", task.Path, task.Line, task.Text))
+		if task.Title == "" {
+			t.Errorf("task %+v lacks its title", task)
+		}
+	}
+	want := []string{"Inbox.md:1:Inbox task", "Projects/Deep/Spec.md:2:Deep task", "Projects/Plan.md:4:First task", "Projects/Plan.md:6:Nested task"}
+	if fmt.Sprint(got) != fmt.Sprint(want) || out.Total != 4 || out.Notice != Notice {
+		t.Errorf("list_tasks = %v (total %d, notice %q), want %v", got, out.Total, out.Notice, want)
+	}
+
+	h.ok("list_tasks", map[string]any{"folder": "Projects", "limit": 1}, &out)
+	if len(out.Tasks) != 1 || out.Tasks[0].Path != "Projects/Deep/Spec.md" || out.Total != 3 {
+		t.Errorf("list_tasks in Projects with limit 1 = %+v", out)
+	}
+	h.ok("list_tasks", map[string]any{"limit": 0}, &out)
+	if len(out.Tasks) != 4 || out.Total != 4 {
+		t.Errorf("list_tasks limit 0 means default: %+v", out)
+	}
+	for _, limit := range []int{1001, -1} {
+		if msg := h.fails("list_tasks", map[string]any{"limit": limit}); !strings.Contains(msg, "limit") {
+			t.Errorf("list_tasks limit %d = %q, want an error about limit", limit, msg)
+		}
+	}
+	if msg := h.fails("list_tasks", map[string]any{"folder": "../up"}); !strings.Contains(msg, "invalidParams") {
+		t.Errorf("list_tasks folder ../up = %q, want invalidParams", msg)
+	}
+}
+
 func TestGetBacklinks(t *testing.T) {
 	h := newHarness(t, map[string]string{
 		"A.md":    "see [[Plan]]\nand ![[Plan#Goals|the goals]]\n",

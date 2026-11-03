@@ -146,6 +146,13 @@ types:
     fields:
       - {name: tag, type: string, doc: "As first spelled, without '#'; nested tags are listed whole (a/b), and their parents only when a note has the parent itself."}
       - {name: count, type: int, doc: "Notes with the tag, ignoring case."}
+  - name: TaskEntry
+    doc: "An open task in a note."
+    fields:
+      - {name: path, type: string}
+      - {name: title, type: string, doc: "The note's title: the file name without .md."}
+      - {name: line, type: int, doc: "1-based line in the note."}
+      - {name: text, type: string, doc: "The rest of the task's first line after '[ ] ', trimmed, as written."}
   - name: PropertyCount
     doc: A frontmatter key and how many notes have it.
     fields:
@@ -398,6 +405,13 @@ methods:
       - {name: vaultId, type: int}
     result: "[]PropertyCount"
     errors: [notFound]
+  - name: tasks
+    doc: "The open tasks (list items that start with [ ], docs/specs/markdown.md#tasks) in the vault's notes, by path and then line, from the index."
+    params:
+      - {name: vaultId, type: int}
+      - {name: folder, type: string, optional: true, doc: "Only tasks in notes in this folder or below it; \"/\" is the whole vault."}
+    result: "[]TaskEntry"
+    errors: [notFound, invalidParams]
   - name: template
     doc: >-
       A template note's content with {{title}}, {{date}}, {{time}} and their

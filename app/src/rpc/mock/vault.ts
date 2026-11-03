@@ -21,6 +21,7 @@ import {
   type Resolution,
   type SearchHit,
   type TagCount,
+  type TaskEntry,
   type VaultFiles,
   type VaultSettings,
   type Version,
@@ -652,6 +653,35 @@ export class MockVault {
       }
     }
     return [...counts.values()].sort((a, b) => cmp(a.tag, b.tag));
+  }
+
+  // tasks are note.tasks: open list items, in path and line order.
+  tasks(p: { folder?: string }): TaskEntry[] {
+    const folder = (p.folder ?? "").replace(/^\/+|\/+$/g, "");
+    const out: TaskEntry[] = [];
+    for (const n of this.entries()) {
+      if (folder !== "" && folder !== "." && !n.path.startsWith(`${folder}/`)) continue;
+      if (kindOf(n.path) !== "note") continue;
+      const text = this.text(n.path) ?? "";
+      let frontmatter = text.startsWith("---\n") || text.startsWith("---\r\n");
+      let fence = "";
+      text.split("\n").forEach((line, i) => {
+        if (frontmatter) {
+          if (i > 0 && /^---\s*$/.test(line)) frontmatter = false;
+          return;
+        }
+        const fenceMatch = /^\s*(```+|~~~+)/.exec(line);
+        if (fenceMatch) {
+          const marker = fenceMatch[1]?.[0] ?? "";
+          fence = fence === marker ? "" : fence === "" ? marker : fence;
+          return;
+        }
+        if (fence !== "") return;
+        const match = /^\s*(?:[-*+]|\d+[.)])\s+\[ \][ \t]+(.*)$/.exec(line);
+        if (match) out.push({ path: n.path, title: title(n.path), line: i + 1, text: (match[1] ?? "").trim() });
+      });
+    }
+    return out;
   }
 
   propertyCounts(): PropertyCount[] {

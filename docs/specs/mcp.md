@@ -119,6 +119,7 @@ linking note's address.
 | `search_notes` | `query` (string, required); `limit` (integer 1–100, default 20) | `hits`: `[{path, title, url, snippet}]`, best first; `notice` |
 | `read_note` | `path` (required) | `path`, `title`, `url`, `hash`, `modified`, `properties` (object), `tags`, `aliases`, `content`; `writable` under a limited scope; `notice` |
 | `list_notes` | `folder`, `tag`, `property`, `value` (strings, optional); `limit` (integer 1–1000, default 200) | `notes`: `[{path, title, url, modified, writable}]` by path, `writable` under a limited scope; `total`; `notice` |
+| `list_tasks` | `folder` (string, optional); `limit` (integer 1–1000, default 200) | `tasks`: `[{path, title, url, line, text}]` by path and line; `total`; `notice` |
 | `get_backlinks` | `path` (required) | `backlinks`: `[{source, url, line, target, alias, embed}]`, `url` the source's; `notice` |
 
 - `search_notes` calls `note.search`. A snippet is its parts' text joined,
@@ -127,6 +128,8 @@ linking note's address.
   the base a write names.
 - `list_notes` calls `note.list` with the filters given, and returns the
   first `limit` notes; `total` counts them all.
+- `list_tasks` calls `note.tasks`; it returns the first `limit` open tasks,
+  and `total` counts all tasks that match the folder.
 - `get_backlinks` calls `note.backlinks`; `line` is the link's line in its
   source, `target` its target as written, `embed` true for `![[…]]` and
   images.

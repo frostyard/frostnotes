@@ -116,6 +116,55 @@ func TestListNotes(t *testing.T) {
 	}
 }
 
+func TestListOpenTasks(t *testing.T) {
+	ft := newFileTest(t)
+	ctx := t.Context()
+	queryVault(t, ft, map[string]*markdown.Doc{
+		"Inbox.md": {Tasks: []markdown.Task{
+			{Status: " ", Text: "First open", Line: 4},
+			{Status: "x", Text: "Done", Line: 5},
+		}},
+		"Orchard/Plan.md": {Tasks: []markdown.Task{
+			{Status: " ", Text: "Parent", Line: 8},
+			{Status: " ", Text: "Nested", Line: 9},
+		}},
+		"Orchard/Deep/Spec.md": {Tasks: []markdown.Task{
+			{Status: " ", Text: "Deep task", Line: 12},
+		}},
+	}, "Inbox.md", "Orchard/Plan.md", "Orchard/Deep/Spec.md")
+
+	got, err := ft.d.ListOpenTasks(ctx, ft.vault, "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"Inbox.md:4:Inbox:First open",
+		"Orchard/Deep/Spec.md:12:Spec:Deep task",
+		"Orchard/Plan.md:8:Plan:Parent",
+		"Orchard/Plan.md:9:Plan:Nested",
+	}
+	var names []string
+	for _, task := range got {
+		names = append(names, fmt.Sprintf("%s:%d:%s:%s", task.Path, task.Line, task.Title, task.Text))
+	}
+	if fmt.Sprint(names) != fmt.Sprint(want) {
+		t.Errorf("ListOpenTasks = %v, want %v", names, want)
+	}
+
+	got, err = ft.d.ListOpenTasks(ctx, ft.vault, "Orchard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].Path != "Orchard/Deep/Spec.md" || got[2].Text != "Nested" {
+		t.Errorf("ListOpenTasks(Orchard) = %+v", got)
+	}
+
+	got, err = ft.d.ListOpenTasks(ctx, ft.vault+1, "/")
+	if err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("another vault = %#v, %v; want an empty slice", got, err)
+	}
+}
+
 func TestNoteInfo(t *testing.T) {
 	ft := newFileTest(t)
 	ctx := t.Context()

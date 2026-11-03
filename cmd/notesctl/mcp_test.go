@@ -41,7 +41,7 @@ func TestMCPServesTheVault(t *testing.T) {
 	for _, tc := range []struct {
 		args  []string
 		tools int
-	}{{nil, 7}, {[]string{"--read-only"}, 4}} {
+	}{{nil, 8}, {[]string{"--read-only"}, 5}} {
 		cs, done := mcpSession(t, srv, tc.args...)
 		res, err := cs.ListTools(t.Context(), nil)
 		if err != nil {

@@ -1254,6 +1254,17 @@ type TagCount struct {
 	Count int64 `json:"count"`
 }
 
+// TaskEntry: An open task in a note.
+type TaskEntry struct {
+	Path string `json:"path"`
+	// The note's title: the file name without .md.
+	Title string `json:"title"`
+	// 1-based line in the note.
+	Line int64 `json:"line"`
+	// The rest of the task's first line after '[ ] ', trimmed, as written.
+	Text string `json:"text"`
+}
+
 // PropertyCount: A frontmatter key and how many notes have it.
 type PropertyCount struct {
 	// As first spelled.
@@ -1482,6 +1493,13 @@ type NotePropertiesParams struct {
 	VaultID int64 `json:"vaultId"`
 }
 
+// NoteTasksParams holds the params of note.tasks.
+type NoteTasksParams struct {
+	VaultID int64 `json:"vaultId"`
+	// Only tasks in notes in this folder or below it; "/" is the whole vault.
+	Folder *string `json:"folder,omitzero"`
+}
+
 // NoteTemplateParams holds the params of note.template.
 type NoteTemplateParams struct {
 	VaultID int64 `json:"vaultId"`
@@ -1607,6 +1625,10 @@ type NoteService interface {
 	// Properties implements note.properties. Every frontmatter key in the vault's
 	// notes, its type and how many notes have it, by key ignoring case.
 	Properties(ctx context.Context, p *NotePropertiesParams) ([]PropertyCount, error)
+	// Tasks implements note.tasks. The open tasks (list items that start with [
+	// ], docs/specs/markdown.md#tasks) in the vault's notes, by path and then
+	// line, from the index.
+	Tasks(ctx context.Context, p *NoteTasksParams) ([]TaskEntry, error)
 	// Template implements note.template. A template note's content with
 	// {{title}}, {{date}}, {{time}} and their formats and offsets expanded, as
 	// Obsidian's Insert template does (docs/design/vault.md#daily-notes).
@@ -1828,6 +1850,16 @@ func registerNote(r *Router, s NoteService) {
 		}
 		return s.Properties(ctx, &p)
 	})
+	r.handle("note.tasks", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteTasksParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
+		return s.Tasks(ctx, &p)
+	})
 	r.handle("note.template", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteTemplateParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "template"}); err != nil {
@@ -2046,6 +2078,13 @@ func (x NoteClient) Tags(ctx context.Context, p *NoteTagsParams) ([]TagCount, er
 func (x NoteClient) Properties(ctx context.Context, p *NotePropertiesParams) ([]PropertyCount, error) {
 	var r []PropertyCount
 	err := x.c.Call(ctx, "note.properties", p, &r)
+	return r, err
+}
+
+// Tasks calls note.tasks.
+func (x NoteClient) Tasks(ctx context.Context, p *NoteTasksParams) ([]TaskEntry, error) {
+	var r []TaskEntry
+	err := x.c.Call(ctx, "note.tasks", p, &r)
 	return r, err
 }
 
@@ -3225,6 +3264,7 @@ var Methods = []string{
 	"note.readVersion",
 	"note.tags",
 	"note.properties",
+	"note.tasks",
 	"note.template",
 	"note.mkdir",
 	"note.moveFolder",
