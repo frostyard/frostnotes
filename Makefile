@@ -118,7 +118,7 @@ clean: ## Remove build output
 # The app (M0 Phase 4). Its toolchain runs in the nsl machine
 # (docs/adr/0009-development-environment-and-gates.md); CI, whose runner has
 # the toolchain, runs the same targets with IN_NSL='sh -c'.
-.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl web-build lodge-app lodge-package
+.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev screenshots app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl web-build lodge-app lodge-package
 
 NSL_MACHINE ?= frostnotes
 IN_NSL := nsl run -m $(NSL_MACHINE) sh -lc
@@ -236,6 +236,9 @@ app-dev: build ## Run notesd and tauri dev in the nsl machine
 
 app-run: build app-build ## Run notesd and the built app in the nsl machine
 	$(IN_NSL) 'APP_BINARY=build/frostnotes-app scripts/dev-app.sh'
+
+screenshots: build ## Retake the Flatpak metainfo's screenshots (docs/images) on the made-up vault in dev/screenshots, headless (nsl)
+	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && cd .. && dev/screenshots/run.sh'
 
 # M0 spike 1 (docs/plans/0001-m0-foundations.md, Phase 5): the release app
 # runs the CodeMirror spike, prints its results as one JSON line and exits.
