@@ -63,6 +63,7 @@ planner: card + _given tests ──▶ make task T=NNNN ──▶ executor ─�
 6. `make task-finish T=NNNN` re-verifies, moves the card to `done/` and
    commits the work. The human reviews and merges the branch; the planner
    reviews all of a milestone's merged cards.
+   Unit and race gates filter no test names, as [ADR-0035](../adr/0035-unit-runs-filter-no-test-names.md) decides.
 
 ### Batching cards
 

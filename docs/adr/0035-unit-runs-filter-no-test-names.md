@@ -39,6 +39,7 @@ unit or race commands.
 
 - Shapes: `Makefile` (`test`, `ci`), `.github/workflows/ci.yml` (the race
   job), `internal/repocheck/testfilter_test.go`, `AGENTS.md` (Gates),
-  [docs/tasks/EXECUTOR.md](../tasks/EXECUTOR.md)
+  [docs/tasks/EXECUTOR.md](../tasks/EXECUTOR.md),
+  [agent workflow: a card's life](../design/agent-workflow.md#a-cards-life)
 - Supersedes in part: [ADR-0009](0009-development-environment-and-gates.md)
 - Builds on: [core ADR-0038](https://github.com/frostyard/core/blob/main/docs/adr/0038-scope-the-test-name-filter-to-chairlift.md)
