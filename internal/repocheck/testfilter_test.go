@@ -121,28 +121,45 @@ func isGo(word string) bool {
 
 // goTests returns the arguments after "test" of every go test run in shell
 // text. A run counts only where a command starts: after its VAR=value
-// words and wrapper variables such as $(XVFB), so "echo go test" is no
-// run. A word that holds a space, such as the script of sh -lc or of
-// $(IN_NSL), is searched as shell text again.
+// words and wrapper variables such as $(XVFB), so echo go test is no run.
+// Only a script that is run is searched again: the word after a wrapper
+// variable (the script of $(IN_NSL) '...') and the script of sh -c or
+// bash -lc. Any other quoted word, such as echo's, is text.
 func goTests(text string) [][]string {
 	var out [][]string
 	for _, command := range splitCommands(text) {
 		ws := words(command)
-		for _, w := range ws {
-			if strings.ContainsFunc(w, unicode.IsSpace) {
-				out = append(out, goTests(w)...)
-			}
-		}
 		i := 0
 		for i < len(ws) && (assignment.MatchString(ws[i]) || (makeVar.MatchString(ws[i]) && !isGo(ws[i]))) {
+			if makeVar.MatchString(ws[i]) && i+1 < len(ws) && strings.ContainsFunc(ws[i+1], unicode.IsSpace) {
+				out = append(out, goTests(ws[i+1])...)
+			}
 			i++
 		}
-		if i+1 < len(ws) && isGo(ws[i]) && ws[i+1] == "test" {
+		if i >= len(ws) {
+			continue
+		}
+		switch {
+		case i+1 < len(ws) && isGo(ws[i]) && ws[i+1] == "test":
 			out = append(out, ws[i+2:])
+		case shells[ws[i]]:
+			for j := i + 1; j+1 < len(ws); j++ {
+				if shellScriptFlag.MatchString(ws[j]) {
+					out = append(out, goTests(ws[j+1])...)
+					break
+				}
+			}
 		}
 	}
 	return out
 }
+
+// shells are the shells whose -c script goTests reads.
+var shells = map[string]bool{"sh": true, "bash": true, "dash": true}
+
+// shellScriptFlag matches a shell's short flags that end with c (-c, -lc,
+// -ec): the next word is the script.
+var shellScriptFlag = regexp.MustCompile(`^-[a-z]*c$`)
 
 // integrationRun reports whether the last -tags flag of args names the
 // integration tag; its value lists tags split by commas or spaces.
@@ -203,7 +220,10 @@ func TestFiltersTestNames(t *testing.T) {
 		{name: "multiline continuation", cmd: "go test \\\n  -run '^Test[^I]' ./...", want: true},
 		{name: "tagged then untagged", cmd: "go test -tags=integration ./... && go test -run '^Test' ./...", want: true},
 		{name: "go variable", cmd: "$(GO) test -run X ./...", want: true},
-		{name: "leading quote", cmd: "\"go test -run X ./...\"", want: true},
+		{name: "a quoted whole command is 1 word, no run", cmd: "\"go test -run X ./...\"", want: false},
+		{name: "quoted echo text", cmd: "echo 'go test -run X ./...'", want: false},
+		{name: "sh -lc script", cmd: "sh -lc 'cd x && go test -run X ./...'", want: true},
+		{name: "bash -c script", cmd: "bash -c \"go test -skip Y ./...\"", want: true},
 		{name: "last tag wins", cmd: "go test -tags integration -tags foo -run X ./...", want: true},
 		{name: "no filter", cmd: "go test ./...", want: false},
 		{name: "race no filter", cmd: "go test -race -timeout 25m ./...", want: false},
@@ -382,5 +402,22 @@ func TestUnitRunsFilterNoTestNames(t *testing.T) {
 
 	if goTestCommands == 0 {
 		t.Fatal("zero go test commands found")
+	}
+}
+
+// Inert text counts as no go test run, so it cannot keep the guard from
+// failing on input with no run at all.
+func TestCountGoTestCommands(t *testing.T) {
+	for text, want := range map[string]int{
+		"go test ./...":                           1,
+		"echo go test ./...":                      0,
+		"echo 'go test ./...'":                    0,
+		"# go test ./...":                         0,
+		"$(IN_NSL) 'FOO=1 $(XVFB) go test ./...'": 1,
+		"go vet ./... && go test ./...":           1,
+	} {
+		if got := countGoTestCommands(text); got != want {
+			t.Errorf("countGoTestCommands(%q) = %d, want %d", text, got, want)
+		}
 	}
 }
