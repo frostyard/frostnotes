@@ -3,6 +3,8 @@ package repocheck
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"unicode"
@@ -10,79 +12,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-func normalizeToken(token string) string {
-	return strings.Trim(strings.TrimSpace(token), "'\"")
-}
-
-func splitTagValue(value string) []string {
-	value = strings.Trim(value, "'\"")
-	return strings.FieldsFunc(value, func(r rune) bool {
-		return r == ',' || unicode.IsSpace(r)
-	})
-}
-
-func tagValueAt(fields []string, start int) (string, int) {
-	if start >= len(fields) {
-		return "", start
-	}
-
-	raw := fields[start]
-	if len(raw) >= 1 && (raw[0] == '\'' || raw[0] == '"') {
-		quote := raw[0]
-		if len(raw) > 1 && raw[len(raw)-1] == byte(quote) {
-			return strings.Trim(raw, string(quote)), start
-		}
-
-		value := strings.TrimPrefix(raw, string(quote))
-		for i := start + 1; i < len(fields); i++ {
-			part := fields[i]
-			if strings.HasSuffix(part, string(quote)) {
-				value += " " + strings.TrimSuffix(part, string(quote))
-				return value, i
-			}
-			value += " " + part
-		}
-	}
-	return strings.Trim(raw, "'\""), start
-}
-
-func integrationTagSet(fields []string) bool {
-	var tags []string
-	for i := 0; i < len(fields); i++ {
-		token := normalizeToken(fields[i])
-		if token == "-tags" || token == "--tags" {
-			value, end := tagValueAt(fields, i+1)
-			tags = splitTagValue(value)
-			i = end
-			continue
-		}
-		for _, prefix := range []string{"-tags=", "--tags="} {
-			if strings.HasPrefix(token, prefix) {
-				value := strings.TrimPrefix(token, prefix)
-				tags = splitTagValue(value)
-				break
-			}
-		}
-	}
-	for _, tag := range tags {
-		if tag == "integration" {
-			return true
-		}
-	}
-	return false
-}
-
+// joinBackslashContinuations joins each line that ends with a backslash to
+// the next, as the shell does.
 func joinBackslashContinuations(text string) string {
 	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	var joined strings.Builder
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimRight(lines[i], " \t")
 		if strings.HasSuffix(line, "\\") {
-			line = strings.TrimSuffix(line, "\\")
-			joined.WriteString(line)
-			if i+1 < len(lines) {
-				joined.WriteByte(' ')
-			}
+			joined.WriteString(strings.TrimSuffix(line, "\\"))
+			joined.WriteByte(' ')
 			continue
 		}
 		joined.WriteString(line)
@@ -94,73 +33,156 @@ func joinBackslashContinuations(text string) string {
 }
 
 // splitCommands splits shell text into commands at newlines, &, | and ;
-// outside quotes, after joining backslash continuations. A | inside a
-// quoted -run pattern stays in its command.
+// outside quotes, after joining backslash continuations. A # that starts a
+// word outside quotes starts a comment, to the end of its line. A | inside
+// a quoted -run pattern stays in its command.
 func splitCommands(text string) []string {
 	text = joinBackslashContinuations(text)
 	var out []string
 	var cur strings.Builder
 	var quote rune
+	comment := false
+	flush := func() {
+		if strings.TrimSpace(cur.String()) != "" {
+			out = append(out, cur.String())
+		}
+		cur.Reset()
+	}
 	for _, r := range text {
 		switch {
+		case comment:
+			if r == '\n' {
+				comment = false
+				flush()
+			}
+			continue
 		case quote != 0:
 			if r == quote {
 				quote = 0
 			}
 		case r == '\'' || r == '"':
 			quote = r
+		case r == '#' && (cur.Len() == 0 || unicode.IsSpace(rune(cur.String()[cur.Len()-1]))):
+			comment = true
+			continue
 		case r == '\n' || r == '\r' || r == '&' || r == '|' || r == ';':
-			if cur.Len() > 0 {
-				out = append(out, cur.String())
-				cur.Reset()
-			}
+			flush()
 			continue
 		}
 		cur.WriteRune(r)
 	}
-	if cur.Len() > 0 {
+	flush()
+	return out
+}
+
+// words splits one command into words: whitespace outside quotes ends a
+// word, and the quotes go.
+func words(command string) []string {
+	var out []string
+	var cur strings.Builder
+	var quote rune
+	inWord := false
+	for _, r := range command {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+				continue
+			}
+		case r == '\'' || r == '"':
+			quote, inWord = r, true
+			continue
+		case unicode.IsSpace(r):
+			if inWord {
+				out = append(out, cur.String())
+				cur.Reset()
+				inWord = false
+			}
+			continue
+		}
+		cur.WriteRune(r)
+		inWord = true
+	}
+	if inWord {
 		out = append(out, cur.String())
 	}
 	return out
 }
 
-func isGoTestCommand(fields []string) bool {
-	for i := 0; i+1 < len(fields); i++ {
-		first := normalizeToken(fields[i])
-		second := normalizeToken(fields[i+1])
-		if second != "test" {
-			continue
-		}
-		if first == "go" || first == "$(GO)" || first == "${GO}" || first == "$GO" {
-			return true
-		}
-	}
-	return false
+var (
+	assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=\S*$`)
+	makeVar    = regexp.MustCompile(`^\$[({][A-Za-z_][A-Za-z0-9_]*[)}]$`)
+)
+
+// isGo reports whether word names the go command.
+func isGo(word string) bool {
+	return word == "go" || word == "$(GO)" || word == "${GO}" || word == "$GO"
 }
 
-func hasNameFlag(fields []string) bool {
-	for _, token := range fields {
-		token = normalizeToken(token)
-		if token == "-run" || token == "-skip" || token == "--run" || token == "--skip" {
-			return true
-		}
-		for _, prefix := range []string{"-run=", "-skip=", "--run=", "--skip="} {
-			if strings.HasPrefix(token, prefix) {
-				return true
+// goTests returns the arguments after "test" of every go test run in shell
+// text. A run counts only where a command starts: after its VAR=value
+// words and wrapper variables such as $(XVFB), so "echo go test" is no
+// run. A word that holds a space, such as the script of sh -lc or of
+// $(IN_NSL), is searched as shell text again.
+func goTests(text string) [][]string {
+	var out [][]string
+	for _, command := range splitCommands(text) {
+		ws := words(command)
+		for _, w := range ws {
+			if strings.ContainsFunc(w, unicode.IsSpace) {
+				out = append(out, goTests(w)...)
 			}
 		}
+		i := 0
+		for i < len(ws) && (assignment.MatchString(ws[i]) || (makeVar.MatchString(ws[i]) && !isGo(ws[i]))) {
+			i++
+		}
+		if i+1 < len(ws) && isGo(ws[i]) && ws[i+1] == "test" {
+			out = append(out, ws[i+2:])
+		}
+	}
+	return out
+}
+
+// integrationRun reports whether the last -tags flag of args names the
+// integration tag; its value lists tags split by commas or spaces.
+func integrationRun(args []string) bool {
+	var tags []string
+	for i := 0; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		if !strings.HasPrefix(args[i], "-") || name != "tags" {
+			continue
+		}
+		if !hasValue && i+1 < len(args) {
+			i++
+			value = args[i]
+		}
+		tags = strings.FieldsFunc(value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	}
+	return slices.Contains(tags, "integration")
+}
+
+// selectsNames reports whether args select tests by name.
+func selectsNames(args []string) bool {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if name == "run" || name == "skip" {
+			return true
+		}
 	}
 	return false
 }
 
-func filtersTestNames(cmd string) bool {
-	for _, command := range splitCommands(cmd) {
-		command = strings.TrimSpace(command)
-		if command == "" || strings.HasPrefix(command, "#") {
-			continue
-		}
-		fields := strings.Fields(command)
-		if isGoTestCommand(fields) && !integrationTagSet(fields) && hasNameFlag(fields) {
+// filtersTestNames reports whether text holds a go test run without the
+// integration tag that selects tests by name (-run or -skip). Such a run
+// skips fuzz seeds and examples as well as tests, so a unit run must not
+// have one (frostyard/core ADR-0038, docs/adr/0035).
+func filtersTestNames(text string) bool {
+	for _, args := range goTests(text) {
+		if !integrationRun(args) && selectsNames(args) {
 			return true
 		}
 	}
@@ -193,6 +215,11 @@ func TestFiltersTestNames(t *testing.T) {
 		{name: "pipe inside a quoted pattern", cmd: "go test -run 'A|B' -tags integration ./...", want: false},
 		{name: "skip after a quoted pipe", cmd: "go test -run 'A|B' ./...", want: true},
 		{name: "no go test", cmd: "make test", want: false},
+		{name: "inline comment names the tag", cmd: "go test -run X ./... # -tags integration", want: true},
+		{name: "echo is no run", cmd: "echo go test -run X ./...", want: false},
+		{name: "quoted equals tags with a space", cmd: "go test -tags=\"foo integration\" -run X ./...", want: false},
+		{name: "wrapper script", cmd: "$(IN_NSL) 'FOO=1 $(XVFB) go test -run X ./...'", want: true},
+		{name: "wrapper script, integration", cmd: "$(IN_NSL) 'FOO=$$PWD/x $(XVFB) go test -tags integration -count=1 -run \"^TestI\" ./internal/appevidence'", want: false},
 	}
 
 	for _, tt := range tests {
@@ -285,18 +312,9 @@ func TestWorkflowRunValues(t *testing.T) {
 	}
 }
 
+// countGoTestCommands counts the go test runs in shell text.
 func countGoTestCommands(text string) int {
-	count := 0
-	for _, command := range splitCommands(text) {
-		command = strings.TrimSpace(command)
-		if command == "" || strings.HasPrefix(command, "#") {
-			continue
-		}
-		if isGoTestCommand(strings.Fields(command)) {
-			count++
-		}
-	}
-	return count
+	return len(goTests(text))
 }
 
 // Every go test line of the Makefile and the workflows that is not an
