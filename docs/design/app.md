@@ -710,7 +710,10 @@ Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-ow
 and [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md);
 built in [M6](../plans/0002-roadmap.md) (core's
 [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)).
-The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/`:
+The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/`.
+The metainfo lists 4 screenshots in `docs/images`, taken by `make screenshots`
+(`dev/screenshots`: a made-up vault, the real UI in WebKitGTK in the nsl
+machine), and `internal/packagecheck` checks them.
 
 - **What is inside.** `/app/bin/frostnotes` is the launcher, `/app/bin/notesd`
   and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`

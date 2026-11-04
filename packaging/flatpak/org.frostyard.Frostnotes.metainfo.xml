@@ -32,6 +32,27 @@
     </p>
   </description>
   <launchable type="desktop-id">org.frostyard.Frostnotes.desktop</launchable>
+  <!-- Taken by make screenshots (dev/screenshots) of the real UI on a
+       made-up vault, served from main of the public repository.
+       internal/packagecheck checks them. -->
+  <screenshots>
+    <screenshot type="default">
+      <caption>A note in the editor, with its properties, tasks and backlinks</caption>
+      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/editor.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Search across the vault, with a recipe open</caption>
+      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/search.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Every open task in the vault, beside the note</caption>
+      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/tasks.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The dark theme, with a note's outline</caption>
+      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/dark.png</image>
+    </screenshot>
+  </screenshots>
   <url type="homepage">https://github.com/frostyard/frostnotes</url>
   <url type="bugtracker">https://github.com/frostyard/frostnotes/issues</url>
   <content_rating type="oars-1.1"/>
