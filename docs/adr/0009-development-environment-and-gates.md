@@ -1,6 +1,6 @@
 # 0009 — Development environment and gates
 
-- **Status:** Accepted
+- **Status:** Accepted; its test-name filter is superseded by [ADR-0035](0035-unit-runs-filter-no-test-names.md)
 - **Date:** 2026-10-16
 
 ## Context
@@ -53,4 +53,5 @@ outside test server: sync's other end is another notesd.
 
 - Shapes: [M0 plan](../plans/0001-m0-foundations.md); `Makefile`, `dev/nsl/` (M0)
 - Builds on: frostmail ADR-0006; frostyard/core ADR-0022, ADR-0023, ADR-0043, ADR-0044
+- Superseded in part by: [ADR-0035](0035-unit-runs-filter-no-test-names.md)
 - Extended by: [ADR-0025](0025-patch-what-costs-the-editor-its-frames.md) (pnpm patches of dependencies)

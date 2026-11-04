@@ -26,8 +26,7 @@ You are implementing one task card. The card is the whole job.
    assertions.
 7. After five failed attempts at the same failure, stop and write what you
    tried and what you think is wrong in your final message.
-8. Never name a unit test `TestI…` (`TestIndex…`, `TestInit…`): `make test`
-   skips them (frostyard/core ADR-0022) and `internal/repocheck` fails.
+8. Put an integration test in a file with the `integration` build tag. Unit runs filter no test names (frostyard/core ADR-0038, [ADR-0035](../adr/0035-unit-runs-filter-no-test-names.md)); `internal/repocheck` fails if one does.
 
 ## Notes are the user's files
 

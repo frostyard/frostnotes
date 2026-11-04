@@ -58,7 +58,7 @@ jobs:
           go-version-file: go.mod
       # internal/synctest alone takes about 9.5 minutes under the race
       # detector here, so go test's default 10-minute timeout is too tight.
-      - run: go test -race -timeout 25m -run '^Test[^I]' ./...
+      - run: go test -race -timeout 25m ./...
 
   vulncheck:
     name: Vulnerabilities (make vulncheck)

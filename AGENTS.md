@@ -118,7 +118,7 @@ file a step names before writing its frostnotes counterpart.
   only package that imports the MCP SDK.
 - `internal/merge`: three-way merges (planner-owned; never a card's).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
-  (SHA-pinned actions; no unit test named `TestI…`).
+  (SHA-pinned actions; no test-name filter on a unit run).
 - `app/`: Tauri v2 + React + TypeScript. `app/src-tauri/src/bridge.rs` only
   moves lines to notesd's socket; JSON-RPC multiplexing is in
   `app/src/rpc/transport.ts`, with Tauri, WebSocket (`transport/ws.ts`) and
@@ -163,8 +163,7 @@ file a step names before writing its frostnotes counterpart.
   network). It is not part of `check`, `verify` or `ci`; the CI job
   "Vulnerabilities (make vulncheck)" runs it.
 
-- Unit tests run with `-run '^Test[^I]'` (frostyard/core ADR-0022): never
-  name a unit test `TestI…`; `internal/repocheck` fails if you do.
+- Unit and race runs filter no test names (frostyard/core ADR-0038, [ADR-0035](docs/adr/0035-unit-runs-filter-no-test-names.md)): integration tests carry the `integration` build tag instead; `internal/repocheck` fails if a unit run in the Makefile or a workflow gets `-run` or `-skip`.
 - Fix a lint finding rather than loosening `.golangci.yml`.
 
 ## Releases and dependencies

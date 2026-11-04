@@ -41,10 +41,10 @@ lint-version-check:
 		echo "expected golangci-lint $(GOLANGCI_LINT_VERSION), found $$installed (install with: mise install)"; exit 1; \
 	fi
 
-# Unit runs skip TestI*, which frostyard/core ADR-0022 reserves for
-# integration tests.
+# Every hermetic test runs with no name filter (frostyard/core ADR-0038).
+# Integration tests carry the integration build tag, so unit runs do not compile them.
 test: ## Run the Go unit tests
-	go test -run '^Test[^I]' ./...
+	go test ./...
 
 # M1's check of link resolution against Obsidian's own answers for a real
 # vault (docs/plans/0003-m1-headless-vault.md, Phase 2). The dump and the
@@ -107,7 +107,7 @@ verify: ## Tidy, generated files, vet, format, lint and unit tests
 check: fmt verify ## Format, then verify (the developer gate)
 
 ci: verify ui-check app-build app-test ## verify plus race tests and the app checks (nsl)
-	go test -race -timeout 25m -run '^Test[^I]' ./...
+	go test -race -timeout 25m ./...
 
 vulncheck: ## Report reachable vulnerabilities (govulncheck; needs the network)
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
