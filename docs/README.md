@@ -53,6 +53,7 @@ Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 - [0032 — A new window replaces a notesd of an older build](adr/0032-an-update-replaces-the-running-notesd.md)
 - [0033 — A setting keeps notesd running without a window](adr/0033-a-setting-keeps-notesd-running-without-a-window.md)
 - [0034 — A device records the head it applies before it changes the disk](adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)
+- [0035 — Unit runs filter no test names](adr/0035-unit-runs-filter-no-test-names.md)
 
 ### Design
 
