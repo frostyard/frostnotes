@@ -93,6 +93,11 @@ func TestFileRefusesReadableFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"a":"1"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// WriteFile applies the umask: under umask 077 the file would be 0600,
+	// and the test would check nothing. Set the mode itself.
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	ctx := t.Context()
 	_, err := f.Get(ctx, "a")
 	if err == nil || errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), path) {
