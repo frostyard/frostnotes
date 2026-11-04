@@ -18,8 +18,6 @@ URL = "http://127.0.0.1:5173/"
 D = "http://127.0.0.1:4445"
 EL = "element-6066-11e4-a52e-4f735466cecf"
 
-drv = subprocess.Popen(["WebKitWebDriver", "--port=4445"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
 
 def req(method, path, body=None):
     data = None if body is None else json.dumps(body).encode()
@@ -29,23 +27,6 @@ def req(method, path, body=None):
             return json.load(resp)["value"]
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"{method} {path}: {e.read().decode()}") from None
-
-
-for _ in range(50):
-    try:
-        req("GET", "/status")
-        break
-    except Exception:
-        time.sleep(0.2)
-
-sid = req("POST", "/session", {"capabilities": {"alwaysMatch": {
-    "browserName": "MiniBrowser",
-    "webkitgtk:browserOptions": {
-        "binary": "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/MiniBrowser",
-        "args": ["--automation"],
-    },
-}}})["sessionId"]
-S = f"/session/{sid}"
 
 
 def js(script, *args):
@@ -95,7 +76,28 @@ def shot(name):
     print("saved", name, len(png), flush=True)
 
 
+def start_session():
+    for _ in range(50):
+        try:
+            req("GET", "/status")
+            break
+        except (OSError, RuntimeError):
+            time.sleep(0.2)
+    sid = req("POST", "/session", {"capabilities": {"alwaysMatch": {
+        "browserName": "MiniBrowser",
+        "webkitgtk:browserOptions": {
+            "binary": "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/MiniBrowser",
+            "args": ["--automation"],
+        },
+    }}})["sessionId"]
+    return f"/session/{sid}"
+
+
+# The driver stops on every exit, and the session ends when it began.
+drv = subprocess.Popen(["WebKitWebDriver", "--port=4445"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+S = None
 try:
+    S = start_session()
     # A viewport of 1280x800: size the window, then correct for the toolbar.
     req("POST", S + "/window/rect", {"x": 0, "y": 0, "width": 1280, "height": 800})
     for _ in range(3):
@@ -151,6 +153,8 @@ s.dispatchEvent(new Event('change', {bubbles: true}));""", sel)
     shot("dark.png")
 finally:
     try:
-        req("DELETE", S)
+        if S is not None:
+            req("DELETE", S)
     finally:
         drv.terminate()
+        drv.wait(timeout=10)
