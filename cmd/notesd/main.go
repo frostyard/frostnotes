@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -12,7 +13,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
+
+	"github.com/frostyard/std/problems"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
@@ -23,6 +27,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/events"
 	"github.com/frostyard/frostnotes/internal/hub"
 	"github.com/frostyard/frostnotes/internal/lodgeapp"
+	"github.com/frostyard/frostnotes/internal/problem"
 	"github.com/frostyard/frostnotes/internal/rpcserver"
 	"github.com/frostyard/frostnotes/internal/secrets"
 	"github.com/frostyard/frostnotes/internal/store"
@@ -45,17 +50,45 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, args []string) error { return runWith(ctx, args, nil) }
+func run(ctx context.Context, args []string) error {
+	return runWith(ctx, args, runOptions{})
+}
 
-// runWith is run; serving, when set, is called once the socket is open and
-// just before notesd accepts on it, for tests.
+// runOptions are what tests give runWith.
+type runOptions struct {
+	// serving, when set, is called once the socket is open and just before
+	// notesd accepts on it.
+	serving func()
+	// version is the version notesd reports and records problems with;
+	// empty means the ldflags' version.
+	version string
+	// problems are options of the problem recorder, such as a test's
+	// journal socket (problems.WithSocket).
+	problems []problems.Option
+}
+
+// releaseVersion is the version of notesd's problem records: v, without
+// the leading v of a tag (make build's git describe gives v0.5.0). The
+// recorder takes only a release semver, so a development build (dev,
+// flatpak, v0.5.0-3-gabc, 0.0.0-abc-snapshot) records nothing (ADR-0036).
+func releaseVersion(v string) string {
+	if rest, ok := strings.CutPrefix(v, "v"); ok {
+		return rest
+	}
+	return v
+}
+
+// runWith is run, with the options of a test.
 //
 // notesd stops in this order, from the deferred calls below, whether SIGTERM
 // or rpc.shutdown ended ctx: Serve returns once the requests in hand have
 // returned (a write that has reached the disk is indexed even when its
 // caller has gone); the sync loops stop, then the vault actors; the store
 // closes; the data directory's lock is released.
-func runWith(ctx context.Context, args []string, serving func()) error {
+func runWith(ctx context.Context, args []string, o runOptions) error {
+	if o.version == "" {
+		o.version = version
+	}
 	// rpc.shutdown, like SIGTERM, ends ctx.
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
@@ -76,7 +109,7 @@ func runWith(ctx context.Context, args []string, serving func()) error {
 		return err
 	}
 	if *showVersion {
-		fmt.Printf("notesd %s (%s)\n", version, commit)
+		fmt.Printf("notesd %s (%s)\n", o.version, commit)
 		return nil
 	}
 	if *showBuild {
@@ -116,8 +149,22 @@ func runWith(ctx context.Context, args []string, serving func()) error {
 			return fmt.Errorf("-log %s: %w", *logPath, err)
 		}
 	}
+	// Problem records: panics and coded errors go to the local journal, and
+	// nowhere else (docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md).
+	// After the lock, so that only the notesd that owns the data directory
+	// turns a crash file of the one before into a record.
+	rec := problems.New(config.AppID, releaseVersion(o.version), problems.ComponentDaemon, o.problems...)
+	if err := rec.Err(); err != nil {
+		logger.Debug("problem records are off", "err", err)
+	} else if err := rec.CrashOutput(); err != nil {
+		logger.Warn("a crash will not be recorded", "err", err)
+	}
+	defer rec.RecoverPanic()
 	db, err := store.Open(ctx, paths.DB)
 	if err != nil {
+		if me := (*store.MigrateError)(nil); errors.As(err, &me) && ctx.Err() == nil {
+			problem.Record(rec, problem.StoreMigrateFailed, err)
+		}
 		return err
 	}
 	defer func() { _ = db.Close() }()
@@ -126,15 +173,16 @@ func runWith(ctx context.Context, args []string, serving func()) error {
 
 	// One actor per vault scans and watches it and makes its writes; the
 	// manager also prunes versions daily (docs/design/vault.md).
-	vaults := vault.NewManager(vault.Config{DB: db, Blobs: blobs.New(paths.Blobs), Log: logger, Publish: broker.Publish})
+	vaults := vault.NewManager(vault.Config{DB: db, Blobs: blobs.New(paths.Blobs), Log: logger, Publish: broker.Publish,
+		Problems: rec})
 	vctx, stopVaults := context.WithCancel(ctx)
 	defer func() { stopVaults(); vaults.Wait() }()
 	if err := vaults.Start(vctx); err != nil {
 		return err
 	}
 
-	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + version, Broker: broker, Logger: logger,
-		Build: serverBuild(logger), Shutdown: stop})
+	srv := rpcserver.New(rpcserver.Options{Name: "notesd " + o.version, Broker: broker, Logger: logger,
+		Build: serverBuild(logger), Shutdown: stop, Panics: rec})
 	ln, err := srv.Listen(paths.Socket)
 	if err != nil {
 		return err
@@ -152,7 +200,7 @@ func runWith(ctx context.Context, args []string, serving func()) error {
 	blobStore := blobs.New(paths.Blobs)
 	h := hub.New(hub.Config{DB: db, Blobs: blobStore, Vaults: vaults, RPC: srv, Log: logger, Listen: *hubAddr, MaxBlob: *maxBlob})
 	syncs := syncer.New(syncer.Config{DB: db, Blobs: blobStore, Vaults: vaults, Secrets: keys, Broker: broker,
-		Publish: broker.Publish, Log: logger, PartDir: parts, Client: "notesd " + version})
+		Publish: broker.Publish, Log: logger, PartDir: parts, Client: "notesd " + o.version, Problems: rec})
 	eng := engine.New(db, vaults, h, syncs)
 	router, err := api.NewRouter(api.Services{RPC: srv, Events: srv, Vault: eng.Vaults(), Note: eng.Notes(),
 		Hub: eng.Hub(), Sync: eng.Sync(), Log: eng.Log()})
@@ -181,7 +229,7 @@ func runWith(ctx context.Context, args []string, serving func()) error {
 		if err != nil {
 			return err
 		}
-		cfg := lodgeapp.Config{RPC: srv, Router: router, Blobs: blobStore, Hub: h, Version: version, ContentKey: key, Log: logger}
+		cfg := lodgeapp.Config{RPC: srv, Router: router, Blobs: blobStore, Hub: h, Version: o.version, ContentKey: key, Log: logger}
 		go func() {
 			if err := lodgeapp.Serve(ctx, cfg); err != nil {
 				logger.Error("lodge app socket stopped", "err", err)
@@ -199,10 +247,10 @@ func runWith(ctx context.Context, args []string, serving func()) error {
 			}
 		}()
 	}
-	logger.Info("notesd started", "version", version, "socket", paths.Socket, "db", paths.DB)
+	logger.Info("notesd started", "version", o.version, "socket", paths.Socket, "db", paths.DB)
 
-	if serving != nil {
-		serving()
+	if o.serving != nil {
+		o.serving()
 	}
 	err = srv.Serve(ctx, ln, router)
 	logger.Info("notesd stopped")

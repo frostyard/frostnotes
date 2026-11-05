@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -15,6 +16,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/markdown"
 	"github.com/frostyard/frostnotes/internal/merge"
+	"github.com/frostyard/frostnotes/internal/problem"
 	"github.com/frostyard/frostnotes/internal/store"
 )
 
@@ -76,24 +78,53 @@ func showText(data []byte) string { return strings.ToValidUTF8(string(data), "ï¿
 // as they were (ADR-0014). It merges by word, with the writer's text as
 // the side that wins: base as shown is the base, and base's bytes the
 // other side, which differs from it only where showText replaced bytes.
-func restore(base, text []byte) []byte {
+func (v *Vault) restore(base, text []byte) []byte {
 	if utf8.Valid(base) {
 		return text
 	}
-	return merge.Text([]byte(showText(base)), text, base).Text
+	return guardMerge(v.cfg.Problems, func() merge.Result { return merge.Text([]byte(showText(base)), text, base) }).Text
 }
 
 // mergeFile merges a write into a file that changed since its base: a note
 // by frontmatter key, then body (merge.Note), other text by line; a file
 // that is not text does not merge.
-func mergeFile(p string, base, head, incoming []byte) (merge.Result, error) {
+func (v *Vault) mergeFile(p string, base, head, incoming []byte) (merge.Result, error) {
 	if kindOf(p) == store.FileNote {
-		return merge.Note(base, head, incoming), nil
+		return guardMerge(v.cfg.Problems, func() merge.Result { return merge.Note(base, head, incoming) }), nil
 	}
 	if utf8.Valid(base) && utf8.Valid(head) && utf8.Valid(incoming) {
-		return merge.Text(base, head, incoming), nil
+		return guardMerge(v.cfg.Problems, func() merge.Result { return merge.Text(base, head, incoming) }), nil
 	}
 	return merge.Result{}, api.Conflict("%s changed since the base, and a file that is not text does not merge: read it again", p)
+}
+
+// guardMerge runs a merge of the merge library. The library returns no
+// error, so a panic is its only failure: guardMerge records it as
+// merge.failed and panics again with the same value, so what follows is
+// what follows any panic (ADR-0036).
+func guardMerge(rec problem.Recorder, run func() merge.Result) merge.Result {
+	defer func() {
+		if x := recover(); x != nil {
+			problem.Record(rec, problem.MergeFailed, fmt.Errorf("merge panicked: %v", x))
+			panic(x)
+		}
+	}()
+	return run()
+}
+
+// writeFailed records err as vault.write_failed and returns it, unless err
+// is the client's (an *api.Error), the end of the request's context, or a
+// simulated crash (ADR-0036). Its callers are the steps of a write that
+// put content on disk: the blob store, the staged file, its rename and the
+// index transaction that follows.
+func (v *Vault) writeFailed(err error) error {
+	var ae *api.Error
+	if err == nil || errors.As(err, &ae) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrCrashed) {
+		return err
+	}
+	problem.Record(v.cfg.Problems, problem.VaultWriteFailed, err)
+	return err
 }
 
 // Read returns a note or attachment as the API shows it, after bringing
@@ -182,16 +213,16 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 	}
 	hash, err := v.cfg.Blobs.Put(ctx, bytes.NewReader(content))
 	if err != nil {
-		return nil, err
+		return nil, v.writeFailed(err)
 	}
 	st, err := stage(r, v.root, p, content, nil)
 	if err != nil {
-		return nil, err
+		return nil, v.writeFailed(err)
 	}
 	if err := v.settled(st.commit(true)); errors.Is(err, fs.ErrExist) {
 		return nil, api.Conflict("%s exists", p)
 	} else if err != nil {
-		return nil, err
+		return nil, v.writeFailed(err)
 	}
 	if v.crashed("renamed") {
 		return nil, ErrCrashed
@@ -215,7 +246,7 @@ func (v *Vault) create(ctx context.Context, r *os.Root, p string, content []byte
 		return nil, api.Conflict("%s: its file ID is taken", p) // a scan's move won the race
 	}
 	if err != nil {
-		return nil, err
+		return nil, v.writeFailed(err)
 	}
 	return &api.WriteResult{Path: p, Hash: hash}, nil
 }
@@ -302,11 +333,11 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 		}
 		in := incoming
 		if isText {
-			in = restore(baseData, incoming)
+			in = v.restore(baseData, incoming)
 		}
 		result, conflicts, merged := in, 0, false
 		if base != row.Hash {
-			res, err := mergeFile(p, baseData, head, in)
+			res, err := v.mergeFile(p, baseData, head, in)
 			if err != nil {
 				return nil, err
 			}
@@ -337,11 +368,11 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 			return wr, nil // the file's side stood everywhere
 		}
 		if _, err := v.cfg.Blobs.Put(ctx, bytes.NewReader(result)); err != nil {
-			return nil, err
+			return nil, v.writeFailed(err)
 		}
 		st, err := stage(r, v.root, p, result, cur.info)
 		if err != nil {
-			return nil, err
+			return nil, v.writeFailed(err)
 		}
 		if v.staged != nil {
 			v.staged(p)
@@ -354,7 +385,7 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 			continue
 		}
 		if err := v.settled(st.commit(false)); err != nil {
-			return nil, err
+			return nil, v.writeFailed(err)
 		}
 		if v.crashed("renamed") {
 			return nil, ErrCrashed
@@ -370,7 +401,7 @@ func (v *Vault) write(ctx context.Context, r *os.Root, p, base string, incoming 
 			return v.indexWrite(ctx, tx, f, result, who)
 		})
 		if err != nil {
-			return nil, err
+			return nil, v.writeFailed(err)
 		}
 		return wr, nil
 	}

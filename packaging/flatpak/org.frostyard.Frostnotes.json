@@ -67,12 +67,13 @@
           "CARGO_HOME": "/run/build/frostnotes/cargo",
           "CARGO_NET_OFFLINE": "true",
           "XDG_CACHE_HOME": "/run/build/frostnotes/flatpak-node/cache",
-          "CI": "true"
+          "CI": "true",
+          "FROSTNOTES_VERSION": "0.0.0"
         }
       },
       "build-commands": [
         "export PATH=\"$PWD/pnpm-bin:$PATH\" && pnpm install --offline --frozen-lockfile --trust-lockfile",
-        "export PATH=\"$PWD/pnpm-bin:$PATH\" && pnpm tauri build",
+        "export PATH=\"$PWD/pnpm-bin:$PATH\" && pnpm tauri build --config \"{\\\"version\\\": \\\"$FROSTNOTES_VERSION\\\"}\"",
         "install -Dm755 src-tauri/target/release/frostnotes /app/libexec/frostnotes-app",
         "install -Dm755 flatpak/frostnotes.sh /app/bin/frostnotes",
         "install -Dm755 flatpak/request-background.py /app/libexec/frostnotes-request-background",

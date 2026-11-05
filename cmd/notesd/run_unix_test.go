@@ -35,6 +35,8 @@ func newSandbox(t *testing.T) sandbox {
 		"FROSTNOTES_DATA_DIR": sb.data, "FROSTNOTES_SOCKET": sb.socket, "FLATPAK_ID": config.AppID,
 		"FROSTNOTES_FLATPAK_INFO": info, "FROSTNOTES_SECRETS": "file",
 		"DBUS_SESSION_BUS_ADDRESS": "unix:path=" + filepath.Join(root, "no-bus"),
+		// A recorder's crash files (problems.CrashOutput).
+		"STATE_DIRECTORY": filepath.Join(root, "state"),
 	} {
 		t.Setenv(k, v)
 	}
@@ -45,7 +47,7 @@ func newSandbox(t *testing.T) sandbox {
 func (sb sandbox) start(t *testing.T) (c *api.Client, hello *api.Hello, done <-chan error) {
 	t.Helper()
 	ready, d := make(chan struct{}), make(chan error, 1)
-	go func() { d <- runWith(t.Context(), nil, func() { close(ready) }) }()
+	go func() { d <- runWith(t.Context(), nil, runOptions{serving: func() { close(ready) }}) }()
 	select {
 	case <-ready:
 	case err := <-d:

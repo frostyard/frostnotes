@@ -134,6 +134,7 @@ func (l *loop) announce(st api.SyncStatus) {
 func (l *loop) run(ctx context.Context) {
 	go l.watchLocal(ctx)
 	backoff := l.s.cfg.Backoff
+	var faults faultRecord
 	for ctx.Err() == nil {
 		remote, err := l.s.cfg.DB.Remote(ctx, l.vaultID)
 		if err != nil {
@@ -161,6 +162,7 @@ func (l *loop) run(ctx context.Context) {
 			return
 		}
 		l.s.cfg.Log.Info("sync session ended", "vault", l.vaultID, "err", err)
+		faults.ended(l.s.cfg.Problems, err)
 		var wait <-chan time.Time
 		switch {
 		case errors.Is(err, errRevoked):

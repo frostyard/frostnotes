@@ -39,6 +39,25 @@ claude mcp add frostnotes -- "$PWD/build/notesctl" mcp   # or: mcp --read-only
 Every write, an agent's included, is kept as a version for 30 days:
 `notesctl versions PATH` lists them and `notesctl revert` undoes one.
 
+## Problem records
+
+notesd and the desktop app write their panics, and a few coded errors of
+notesd (a database that does not migrate, a write that does not reach the
+disk, a failed merge, a lost watch event, a sync protocol fault), to the
+local systemd journal. They send nothing over a network. A record holds the
+app ID (`org.frostyard.Frostnotes`), its release version, the runtime (Go
+or Rust), the part (`daemon` or `gui`), the class (`panic` or `error`), the
+error's code or the panic's frames or place in the source, and a message
+that can name a note's path and stays on your machine. A development build
+records nothing. Only chairlift can send a record off the machine, and only
+with your consent
+([ADR-0036](docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
+To see them:
+
+```sh
+journalctl MESSAGE_ID=8915bdd215c84cbab0c31c05a1a33e7e
+```
+
 ## Develop
 
 Requirements: Go 1.27 and `mise install` (golangci-lint) on the host;

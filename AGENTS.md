@@ -117,6 +117,12 @@ file a step names before writing its frostnotes counterpart.
   ([docs/specs/mcp.md](docs/specs/mcp.md)), a client of notesd's API; the
   only package that imports the MCP SDK.
 - `internal/merge`: three-way merges (planner-owned; never a card's).
+- `internal/problem`: the codes notesd records in the local journal and the
+  `Recorder` interface the packages get in their configs; `problemtest`
+  holds a fake and a test journal socket. notesd's recorder
+  (`github.com/frostyard/std/problems`) is made in `cmd/notesd`, and the
+  shell's in `app/src-tauri/src/problems.rs`
+  ([ADR-0036](docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
   (SHA-pinned actions; no test-name filter on a unit run).
 - `app/`: Tauri v2 + React + TypeScript. `app/src-tauri/src/bridge.rs` only
@@ -179,8 +185,13 @@ file a step names before writing its frostnotes counterpart.
   `make check`, tags `svu next` and pushes the tag.
 - **Go modules** (`go.mod`): `github.com/frostyard/clix` v0.5.0 (the CLI shell of
   `notesctl`), `github.com/frostyard/lodge/kit` v0.3.1 (the RPC and app runtime),
-  and `github.com/frostyard/std` v0.3.0 (indirect, from clix). Run
-  `make flatpak-sources` after a bump: it rewrites `packaging/flatpak/go-sources.json`.
+  and `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
+  also clix's). Run `make flatpak-sources` after a bump: it rewrites
+  `packaging/flatpak/go-sources.json`.
+- **Rust crates** (`app/src-tauri/Cargo.toml`): `frostyard-problems` as a git
+  dependency on std's tag `v0.5.0` (the shell's problem records). Run
+  `make flatpak-sources` after a change: it rewrites
+  `packaging/flatpak/cargo-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as
   `github:frostyard/lodge#client/v0.3.2&path:client` and `@frostyard/lodge-ui` as
   `github:frostyard/lodge#ui/v0.6.0&path:ui`.
