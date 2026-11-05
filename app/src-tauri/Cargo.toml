@@ -17,6 +17,8 @@ serde_json = "1"
 tokio = { version = "1.53", features = ["net", "io-util", "sync", "time"] }
 tauri-plugin-single-instance = "2.5.2"
 tauri-plugin-dialog = "2.8.1"
+# Problem records in the local journal (ADR-0036); only the standard library.
+frostyard-problems = { git = "https://github.com/frostyard/std", tag = "v0.5.0" }
 
 [profile.release]
 lto = true

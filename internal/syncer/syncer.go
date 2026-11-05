@@ -21,6 +21,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/events"
+	"github.com/frostyard/frostnotes/internal/problem"
 	"github.com/frostyard/frostnotes/internal/secrets"
 	"github.com/frostyard/frostnotes/internal/store"
 	"github.com/frostyard/frostnotes/internal/vault"
@@ -65,6 +66,11 @@ type Config struct {
 	// the hub's answers, before they are applied); true ends the session
 	// with ErrCrashed. The simulation sets it (ADR-0020).
 	Crash func(point string) bool
+	// Problems records sync.protocol_error in the journal when a session
+	// with a hub ends on a protocol fault (protocolFault;
+	// docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md).
+	// Nil records nothing.
+	Problems problem.Recorder
 }
 
 func (c Config) withDefaults() Config {

@@ -3,8 +3,9 @@
 //! content hash (ADR-0023), the two checked ways to open things outside
 //! the app (open.rs), why notesd is not running in the Flatpak
 //! (notesd_log.rs), the Flatpak's setting for background activity
-//! (background.rs), and the system's folder picker, through which a
-//! person names a folder to open or create a vault in (ADR-0024). All
+//! (background.rs), the system's folder picker, through which a person
+//! names a folder to open or create a vault in (ADR-0024), and the record
+//! of a panic in the local journal (problems.rs, ADR-0036). All
 //! notes logic lives in notesd; see docs/design/overview.md and
 //! docs/specs/rpc-protocol.md.
 
@@ -13,6 +14,7 @@ mod bridge;
 mod notesd_log;
 mod open;
 mod paths;
+mod problems;
 mod protocol;
 mod spike;
 
@@ -21,6 +23,10 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 fn main() {
     apply_webkit_workarounds();
+    // The context first: its version is the release's on a tagged build,
+    // and the panics from here on are recorded (problems.rs).
+    let context = tauri::generate_context!();
+    let _problems = problems::install(&context.package_info().version.to_string());
     let spike = spike::Spike::from_env();
     let spiking = spike.active();
     let timed = spiking && !spike.manual();
@@ -80,7 +86,7 @@ fn main() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("frostnotes failed to start")
         .run(|_app, event| {
             // With the Flatpak's setting Off, the last window stops notesd

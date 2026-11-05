@@ -6,12 +6,14 @@ package rpcserver
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"log/slog"
 	"net"
 	"sync"
 
 	"github.com/frostyard/lodge/kit/jsonrpc"
+	"github.com/frostyard/std/problems"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/events"
@@ -31,6 +33,11 @@ type Options struct {
 	// request's own goroutine, which Serve waits for. Nil means a call cannot
 	// stop this server, and rpc.shutdown answers unavailable.
 	Shutdown func()
+	// Panics records a panic of a request's handler in the journal before
+	// the kit answers internal, as it does without it
+	// (docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md).
+	// Nil records nothing.
+	Panics *problems.Recorder
 }
 
 // Server implements api.RPCService and api.EventsService, which need the
@@ -62,7 +69,7 @@ func (s *Server) Listen(path string) (net.Listener, error) {
 // Serve accepts connections on notesd's socket until ctx ends, then waits
 // for them to finish. Each serves api.CallerLocal.
 func (s *Server) Serve(ctx context.Context, ln net.Listener, r *api.Router) error {
-	return s.rpc.Serve(ctx, ln, r, func(ctx context.Context) context.Context {
+	return s.rpc.Serve(ctx, ln, s.dispatcher(r), func(ctx context.Context) context.Context {
 		return withState(ctx, api.Identity{Caller: api.CallerLocal})
 	})
 }
@@ -71,7 +78,31 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener, r *api.Router) erro
 // authenticated as id (the development gateway, and lodge's sessions and
 // agents) until it ends or ctx does.
 func (s *Server) ServeConn(ctx context.Context, nc net.Conn, r *api.Router, id api.Identity) {
-	s.rpc.ServeConn(withState(ctx, id), nc, r)
+	s.rpc.ServeConn(withState(ctx, id), nc, s.dispatcher(r))
+}
+
+// dispatcher is what the kit runs each request with: r, and with
+// Options.Panics a recorder of a handler's panic. Every connection of
+// notesd (its socket, the hub's devices, lodge's sessions and agents, the
+// development gateway) comes through Serve or ServeConn.
+func (s *Server) dispatcher(r *api.Router) jsonrpc.Dispatcher {
+	if s.opts.Panics == nil {
+		return r
+	}
+	return recording{r: r, rec: s.opts.Panics}
+}
+
+// recording records a panic of a request: RecoverPanic records it and
+// panics again with the same value, so the kit's own recovery
+// (jsonrpc.Conn's call) still answers internal and logs it.
+type recording struct {
+	r   *api.Router
+	rec *problems.Recorder
+}
+
+func (d recording) Dispatch(ctx context.Context, method string, params jsontext.Value) (any, error) {
+	defer d.rec.RecoverPanic()
+	return d.r.Dispatch(ctx, method, params)
 }
 
 // state is a connection's own: whether it has subscribed.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
+	"github.com/frostyard/frostnotes/internal/problem"
 	"github.com/frostyard/frostnotes/internal/store"
 )
 
@@ -43,6 +44,11 @@ type Config struct {
 	// stops the change there with ErrCrashed. The simulation sets it
 	// (ADR-0020), and tests (ADR-0034); notesd never does.
 	Crash func(point string) bool
+	// Problems records the vaults' coded errors in the journal:
+	// vault.write_failed, merge.failed and watch.overflow_rescan
+	// (docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md).
+	// Nil records nothing.
+	Problems problem.Recorder
 }
 
 func (c Config) withDefaults() Config {

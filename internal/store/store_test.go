@@ -45,8 +45,25 @@ func TestOpenRefusesNewerSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = d.Close()
-	if _, err := Open(t.Context(), path); err == nil || !strings.Contains(err.Error(), "newer") {
+	_, err = Open(t.Context(), path)
+	if err == nil || !strings.Contains(err.Error(), "newer") {
 		t.Fatalf("Open = %v, want a newer-schema error", err)
+	}
+	// notesd records a failed migration as store.migrate_failed (ADR-0036).
+	if me := (*MigrateError)(nil); !errors.As(err, &me) {
+		t.Fatalf("Open = %v (%T), want a *MigrateError", err, err)
+	}
+}
+
+// An error before the migrations (here, a path Open refuses) is not a
+// *MigrateError: notesd records only a failed migration.
+func TestOnlyAFailedMigrationIsAMigrateError(t *testing.T) {
+	_, err := Open(t.Context(), filepath.Join(t.TempDir(), "bad?.db"))
+	if err == nil {
+		t.Fatal("Open accepted a path with ?")
+	}
+	if me := (*MigrateError)(nil); errors.As(err, &me) {
+		t.Fatalf("Open = %v is a *MigrateError", err)
 	}
 }
 

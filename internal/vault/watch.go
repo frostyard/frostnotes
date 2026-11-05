@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/frostyard/frostnotes/internal/problem"
 )
 
 // run is the vault's actor loop: the open scan, then the watcher's paths
@@ -155,11 +157,20 @@ func (w *watcher) read(ctx context.Context) {
 			if !ok {
 				return
 			}
-			// An overflow lost events: only a scan finds what they said.
-			w.v.log.Warn("watcher error; rescanning", "err", err)
-			w.v.requestScan()
+			w.watchError(err)
 		}
 	}
+}
+
+// watchError handles an error of fsnotify: it rescans. An overflow lost
+// events, and only a scan finds what they said: it is also recorded as
+// watch.overflow_rescan (ADR-0036).
+func (w *watcher) watchError(err error) {
+	if errors.Is(err, fsnotify.ErrEventOverflow) {
+		problem.Record(w.v.cfg.Problems, problem.WatchOverflowRescan, err)
+	}
+	w.v.log.Warn("watcher error; rescanning", "err", err)
+	w.v.requestScan()
 }
 
 func (w *watcher) event(ev fsnotify.Event) {

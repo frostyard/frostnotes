@@ -70,10 +70,22 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	d := &DB{db: sqlDB, Now: time.Now}
 	if err := d.migrate(ctx); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("open database %s: %w", path, err)
+		return nil, fmt.Errorf("open database %s: %w", path, &MigrateError{Err: err})
 	}
 	return d, nil
 }
+
+// MigrateError is Open's error when the database cannot be opened and
+// migrated: its first transaction fails (the file cannot be opened, or is
+// not a database), a migration fails, or the database is newer than this
+// notesd or applied another migration. notesd records it as store.migrate_failed
+// (docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md). Its
+// text is that of Err.
+type MigrateError struct{ Err error }
+
+func (e *MigrateError) Error() string { return e.Err.Error() }
+
+func (e *MigrateError) Unwrap() error { return e.Err }
 
 // Close closes the database.
 func (d *DB) Close() error { return d.db.Close() }

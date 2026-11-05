@@ -299,7 +299,7 @@ func (v *Vault) mergeInto(ctx context.Context, r *os.Root, row store.File, head,
 		}
 		return out, nil
 	}
-	res := merge.Create(head, incoming)
+	res := guardMerge(v.cfg.Problems, func() merge.Result { return merge.Create(head, incoming) })
 	if len(res.Conflicts) > 0 {
 		if _, err := v.keepConflict(ctx, row, incoming, who); err != nil {
 			return PushOutcome{}, err

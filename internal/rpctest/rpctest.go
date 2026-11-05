@@ -15,6 +15,7 @@ import (
 	"time"
 
 	kitrpctest "github.com/frostyard/lodge/kit/rpctest"
+	"github.com/frostyard/std/problems"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/blobs"
@@ -60,6 +61,8 @@ type Options struct {
 	Syncer syncer.Config
 	// Build is what rpc.hello reports as build (rpcserver.Options.Build).
 	Build string
+	// Panics records the panics of handlers (rpcserver.Options.Panics).
+	Panics *problems.Recorder
 }
 
 // Server is a running test server; it stops when the test ends.
@@ -129,7 +132,7 @@ func StartWith(t testing.TB, o Options) *Server {
 
 	// rpc.shutdown ends Serve, as it does notesd's. Run.Stop waits for Serve,
 	// which waits for the request that calls this, so it runs on its own.
-	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log, Build: o.Build,
+	rpc := rpcserver.New(rpcserver.Options{Name: Name, Broker: broker, Logger: log, Build: o.Build, Panics: o.Panics,
 		Shutdown: func() { go srv.Run.Stop() }})
 	srv.RPC = rpc
 	srv.Secrets = secrets.NewFile(filepath.Join(data, "secrets.json"))

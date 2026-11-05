@@ -61,7 +61,8 @@ func indent(line string) string {
 }
 
 // A v* tag stamps its version into the manifest and the metainfo, so that
-// the Flatpak's notesd reports the release and software centres show it.
+// the Flatpak's notesd reports the release, the app shell's problem records
+// carry it (ADR-0036), and software centres show it.
 func TestStampVersionWritesTheTagIntoTheFlatpak(t *testing.T) {
 	dir, script := stampInputs(t)
 	out, err := stamp(t, dir, script, "1.2.3", "0123456789ab")
@@ -75,6 +76,12 @@ func TestStampVersionWritesTheTagIntoTheFlatpak(t *testing.T) {
 	}
 	if strings.Contains(manifest, "-X main.version=flatpak") {
 		t.Error("the manifest still names flatpak")
+	}
+	if want := `"FROSTNOTES_VERSION": "1.2.3"`; strings.Count(manifest, want) != 1 {
+		t.Errorf("the manifest does not hold %s once:\n%s", want, manifest)
+	}
+	if strings.Contains(manifest, `"FROSTNOTES_VERSION": "0.0.0"`) {
+		t.Error("the shell's version is still 0.0.0")
 	}
 
 	meta := readString(t, filepath.Join(dir, flatpakMetainfo))
@@ -122,7 +129,7 @@ func TestStampVersionRefusesBadArguments(t *testing.T) {
 				t.Errorf("no message for %q %q:\n%s", tc.version, tc.commit, out)
 			}
 			manifest := readString(t, filepath.Join(dir, flatpakManifest))
-			if !strings.Contains(manifest, "-X main.version=flatpak") {
+			if !strings.Contains(manifest, "-X main.version=flatpak") || !strings.Contains(manifest, shellUnstamped) {
 				t.Error("the manifest changed under bad arguments")
 			}
 		})
@@ -160,5 +167,46 @@ func TestStampVersionRefusesAVersionAlreadyListed(t *testing.T) {
 	}
 	if !strings.Contains(out, "already lists version 1.2.3") {
 		t.Errorf("the message does not name the listed version:\n%s", out)
+	}
+}
+
+// shellUnstamped is the app shell's version in the committed manifest: an
+// unstamped build, which records no problems (ADR-0036).
+const shellUnstamped = `"FROSTNOTES_VERSION": "0.0.0"`
+
+// The committed manifest gives the shell its version from
+// FROSTNOTES_VERSION, 0.0.0 until a tag stamps it, through tauri build's
+// --config.
+func TestTheShellsVersionComesFromTheManifest(t *testing.T) {
+	dir, _ := stampInputs(t)
+	manifest := readString(t, filepath.Join(dir, flatpakManifest))
+	if n := strings.Count(manifest, shellUnstamped); n != 1 {
+		t.Errorf("the manifest holds %s %d times, want once", shellUnstamped, n)
+	}
+	if want := `pnpm tauri build --config \"{\\\"version\\\": \\\"$FROSTNOTES_VERSION\\\"}\"`; !strings.Contains(manifest, want) {
+		t.Errorf("the manifest does not build the shell with %s", want)
+	}
+}
+
+// A manifest whose shell version is not there exactly once is refused, and
+// left as it was.
+func TestStampVersionRefusesAManifestWithoutOneShellVersion(t *testing.T) {
+	for _, tc := range []struct{ name, with string }{
+		{"none", ""},
+		{"twice", shellUnstamped + ", " + shellUnstamped},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, script := stampInputs(t)
+			path := filepath.Join(dir, flatpakManifest)
+			manifest := strings.Replace(readString(t, path), shellUnstamped, tc.with, 1)
+			write(t, path, manifest)
+			out, err := stamp(t, dir, script, "1.2.3", "0123456789ab")
+			if err == nil || !strings.Contains(out, "FROSTNOTES_VERSION") {
+				t.Fatalf("stamp succeeded or named no reason (%v):\n%s", err, out)
+			}
+			if got := readString(t, path); got != manifest {
+				t.Error("the refused manifest changed")
+			}
+		})
 	}
 }

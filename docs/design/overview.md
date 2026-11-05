@@ -81,6 +81,21 @@ a thin client.
   tools mark note text as data, and its writes name their base and are
   attributed to the MCP client ([specs/mcp.md](../specs/mcp.md)).
 
+### Problem records
+
+notesd writes its panics and 5 coded errors (`store.migrate_failed`,
+`merge.failed`, `vault.write_failed`, `watch.overflow_rescan`,
+`sync.protocol_error`) to the local systemd journal, with
+`github.com/frostyard/std/problems`, and sends nothing over a network
+([ADR-0036](../adr/0036-notesd-and-the-app-record-problems-in-the-journal.md),
+core's [problem-report.md](https://github.com/frostyard/core/blob/main/docs/specs/problem-report.md)).
+`runWith` makes 1 recorder at the release version, after the data
+directory's lock; a development build's recorder is inert. It reaches the
+packages through their configs as `internal/problem.Recorder`, and
+`rpcserver` records a handler's panic before the JSON-RPC kit answers
+internal. The app shell records its own panics
+([app.md](app.md#problem-records)).
+
 ### notesd as a lodge app
 
 From M4, on lodge's machine, notesd is lodge's `notes` app
@@ -142,6 +157,7 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/markdown` | frontmatter, links, tags, headings, blocks and tasks from a note |
 | `internal/merge` | diff3 by line and word, frontmatter by key (planner-owned) |
 | `internal/blobs` | the content-addressed blob store |
+| `internal/problem` | the codes notesd records in the local journal and the `Recorder` the packages get in their configs ([problem records](#problem-records)) |
 | `internal/render` | goldmark rendering and the HTML sanitizer |
 | `internal/syncer`, `internal/hub` | the device's sync loops; the hub's device routes, pairing, the token check, relocation, and its `log` and `hub` domains |
 | `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub` |
@@ -183,7 +199,7 @@ for tests) is in [hub.md](hub.md#operational-notes).
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md); notesd as a lodge app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) and lodge's [ADR-0003](https://github.com/frostyard/lodge/blob/main/docs/adr/0003-lodge-is-the-only-process-on-the-network.md)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md) through [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md); problem records, [ADR-0036](../adr/0036-notesd-and-the-app-record-problems-in-the-journal.md); notesd as a lodge app, [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) and lodge's [ADR-0003](https://github.com/frostyard/lodge/blob/main/docs/adr/0003-lodge-is-the-only-process-on-the-network.md)
 - Details: [vault.md](vault.md), [sync.md](sync.md), [app.md](app.md), [hub.md](hub.md)
 - Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/lodge-app.md](../specs/lodge-app.md)
 - Built in: [roadmap](../plans/0002-roadmap.md), starting with [M0](../plans/0001-m0-foundations.md); notesd inside lodge in [M4](../plans/0006-m4-notes-inside-lodge.md)
