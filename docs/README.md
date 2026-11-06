@@ -15,6 +15,9 @@ Task cards for the executor live in [tasks/](tasks/), with their
 
 Org-wide decisions that bind this repository: [org-adrs.md](org-adrs.md).
 
+Building from source, the nsl machine for the app and the gates:
+[development.md](development.md).
+
 ## Index
 
 ### Decisions (ADRs)

@@ -251,7 +251,7 @@ them rather than improvising, whichever agent you are:
 ## Repository baseline
 
 The repository follows core's baseline (frostyard/core ADR-0071, its spec
-`docs/specs/repository-baseline.md`, rows B1 to B16; [org-adrs.md](docs/org-adrs.md)).
+`docs/specs/repository-baseline.md`, rows B1 to B17; [org-adrs.md](docs/org-adrs.md)).
 `internal/workflowcheck` fails `make verify` when one of these files breaks:
 
 - The instruction symlinks above (B1). Edit `AGENTS.md`, never a link.
@@ -273,6 +273,11 @@ The repository follows core's baseline (frostyard/core ADR-0071, its spec
 are reported privately ([SECURITY.md](SECURITY.md), B14). No `CODEOWNERS`
 file (B15), and no other agent framework's tree (B16): the task-card loop
 (`docs/tasks/`, ADR-0010) and `opencode.json` are this repository's own.
+The root `README.md` (B17, core ADR-0072) follows core's README spec as
+the `app` kind: a short front page that links into `docs/`. Build and
+development detail goes in [docs/development.md](docs/development.md), not
+the README. No test here checks it: core's
+`.agents/skills/frostyard-readme/scripts/check-readme.mjs` must print `ok`.
 
 ## Repository boundary
 
