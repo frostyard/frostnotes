@@ -6,6 +6,12 @@
 # `make flatpak-sources` (nsl) is run on its branch. The repository-hygiene
 # line does that.
 #
+# frostyard-problems (app/src-tauri) is a cargo git dependency on a tag of
+# frostyard/std. Dependabot cannot resolve it: its update job tried std's tag
+# v0.3.0, which holds no crate, and failed. It is bumped by hand, so the
+# cargo entry ignores it; internal/workflowcheck requires an ignore entry for
+# each frostyard git crate.
+#
 # The commit prefix is build (or ci): svu reads it as a patch, not a feature.
 version: 2
 updates:
@@ -49,6 +55,8 @@ updates:
     commit-message:
       prefix: build
       include: scope
+    ignore:
+      - dependency-name: frostyard-problems
     groups:
       app-cargo:
         patterns: ["*"]
