@@ -273,6 +273,26 @@ type riskPathFile struct {
 	Paths         []riskPath `json:"paths"`
 }
 
+// riskCategories are the categories of frostyard/core docs/specs/risk-paths.md
+// (section B); each why starts with 1 of them and a colon.
+var riskCategories = []string{
+	"boot chain",
+	"signing and keys",
+	"update verification",
+	"auth",
+	"publication",
+	"secrets and credentials",
+	"rulesets and settings",
+	"destructive operations",
+	"governance",
+}
+
+// whyCategory reports whether why starts with 1 of riskCategories and a colon.
+func whyCategory(why string) bool {
+	category, _, ok := strings.Cut(why, ":")
+	return ok && slices.Contains(riskCategories, category)
+}
+
 // governedPaths are the release, secrets and governance paths of this
 // repository; .github/risk-paths.json must list each of them.
 var governedPaths = []string{
@@ -291,8 +311,20 @@ var governedPaths = []string{
 	"packaging/sysusers.d/frostnotes.conf",
 	"packaging/lodge/app.json",
 	"scripts/move-hub-behind-lodge.sh",
+	"dev/nsl/provision.sh",
 	"internal/secrets/secretservice.go",
+	"internal/hub/hub.go",
 	"internal/hub/pair.go",
+	"internal/hub/withdraw.go",
+	"internal/hub/relocate.go",
+	"internal/syncer/relocate.go",
+	"api/api.go",
+	"api/conn.go",
+	"internal/mcpserver/http.go",
+	"internal/devgw/devgw.go",
+	"internal/devgw/blobs.go",
+	"internal/blobhttp/blobhttp.go",
+	"app/src-tauri/src/open.rs",
 	"internal/vault/path.go",
 	"internal/vault/guard.go",
 	"api/scope.go",
@@ -334,6 +366,9 @@ func TestRiskPaths(t *testing.T) {
 		globs = append(globs, p.Glob)
 		if strings.TrimSpace(p.Why) == "" {
 			t.Errorf("entry %d: glob %q has no why", i, p.Glob)
+		}
+		if !whyCategory(p.Why) {
+			t.Errorf("entry %d: glob %q has the why %q; it must start with 1 of the categories %q and a colon", i, p.Glob, p.Why, riskCategories)
 		}
 		if n := utf8.RuneCountInString(p.Why); n > 200 {
 			t.Errorf("entry %d: glob %q has a why of %d characters, want 200 at most", i, p.Glob, n)
@@ -593,6 +628,24 @@ func TestValidGlob(t *testing.T) {
 	}
 }
 
+// TestWhyCategory checks that a why names 1 category of frostyard/core
+// docs/specs/risk-paths.md, before a colon.
+func TestWhyCategory(t *testing.T) {
+	for why, want := range map[string]bool{
+		"auth: the hub's token check":    true,
+		"destructive operations: a wipe": true,
+		"security: the sanitizer":        false,
+		"auth the hub's token check":     false,
+		"Auth: the hub's token check":    false,
+		"governance":                     false,
+		" governance: the list":          false,
+	} {
+		if got := whyCategory(why); got != want {
+			t.Errorf("whyCategory(%q) = %v, want %v", why, got, want)
+		}
+	}
+}
+
 // TestMatchGlob checks the glob rules of frostyard/core
 // docs/specs/risk-paths.md on its own cases and the ones this repository's
 // list holds.
@@ -628,8 +681,8 @@ func TestMatchGlob(t *testing.T) {
 		{"packaging/lodge/**", "packaging/lodge/a/b.sh", true},
 		{"packaging/flatpak/{org.frostyard.Frostnotes.json,frostnotes.sh}", "packaging/flatpak/frostnotes.sh", true},
 		{"packaging/flatpak/{org.frostyard.Frostnotes.json,frostnotes.sh}", "packaging/flatpak/smoke-test.sh", false},
-		{"internal/hub/{hub,pair}.go", "internal/hub/pair.go", true},
-		{"internal/hub/{hub,pair}.go", "internal/hub/pair_test.go", false},
+		{"internal/hub/{hub,pair,withdraw,relocate}.go", "internal/hub/relocate.go", true},
+		{"internal/hub/{hub,pair,withdraw,relocate}.go", "internal/hub/relocate_test.go", false},
 		{"a/**/x", "a/x", true},
 		{"a/**/x", "a/b/x", true},
 		{"{app/src-tauri/tauri.conf.json,app/src-tauri/capabilities/**}", "app/src-tauri/capabilities/default.json", true},
