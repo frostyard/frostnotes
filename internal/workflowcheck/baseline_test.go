@@ -293,7 +293,7 @@ func whyCategory(why string) bool {
 	return ok && slices.Contains(riskCategories, category)
 }
 
-// governedPaths are the release, secrets and governance paths of this
+// governedPaths are the release, secrets, auth and governance paths of this
 // repository; .github/risk-paths.json must list each of them.
 var governedPaths = []string{
 	".github/risk-paths.json",
@@ -385,7 +385,7 @@ func TestRiskPaths(t *testing.T) {
 	}
 	for _, p := range want {
 		if !matchAny(globs, p) {
-			t.Errorf("%s is a release, secrets or governance path; .github/risk-paths.json must list it", p)
+			t.Errorf("%s is a release, secrets, auth or governance path; .github/risk-paths.json must list it", p)
 		}
 	}
 
