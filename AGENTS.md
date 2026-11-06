@@ -267,7 +267,11 @@ The repository follows core's baseline (frostyard/core ADR-0071, its spec
   file fails.
 - `.github/dependabot.yml` (B13): 1 entry for each manifest (`go.mod`,
   `app/package.json`, `app/src-tauri/Cargo.toml`). A new manifest gets an
-  entry.
+  entry. A cargo git dependency on a frostyard repository
+  (`frostyard-problems`) gets an `ignore` entry: Dependabot cannot resolve
+  it, and it is bumped by hand. The test reads these crates from the
+  `Cargo.lock` beside each `Cargo.toml`, so each `Cargo.toml` keeps its
+  lock file.
 
 `.github/pull_request_template.md` (B7) holds the risk tier. Vulnerabilities
 are reported privately ([SECURITY.md](SECURITY.md), B14). No `CODEOWNERS`
