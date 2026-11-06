@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "paths": [
+    {
+      "glob": ".github/risk-paths.json",
+      "why": "governance: the high-risk path list"
+    },
+    {
+      "glob": ".github/workflows/**",
+      "why": "governance: CI, the risk-paths caller and token permissions"
+    },
+    {
+      "glob": ".github/workflows/{release,flatpak}.yml",
+      "why": "publication: the .deb release and its attestation, and the Flatpak image on GHCR"
+    },
+    {
+      "glob": "Makefile",
+      "why": "governance: the verify, check and ci gate, and make bump, which tags a release"
+    },
+    {
+      "glob": "{mise.toml,mise.lock}",
+      "why": "governance: the checksummed pins of golangci-lint, svu and nFPM"
+    },
+    {
+      "glob": ".svu.yml",
+      "why": "publication: the version rule of every tag"
+    },
+    {
+      "glob": "internal/{workflowcheck,repocheck}/**",
+      "why": "governance: the tests that hold the workflows (ADR-0021), unit runs with no test-name filter, and the repository baseline files"
+    },
+    {
+      "glob": "packaging/flatpak/{org.frostyard.Frostnotes.json,frostnotes.sh,stamp-version.sh,request-background.py}",
+      "why": "publication: the Flatpak manifest and its sandbox permissions, the launcher, the version stamp and the Background-portal helper"
+    },
+    {
+      "glob": "packaging/{nfpm.yaml,deb-check.py}",
+      "why": "publication: the contents of the .deb and its check"
+    },
+    {
+      "glob": "packaging/{systemd,sysusers.d}/**",
+      "why": "publication: the system service, its socket and the system user that the .deb installs"
+    },
+    {
+      "glob": "packaging/lodge/**",
+      "why": "publication: lodge's app manifest (its user, content, device and MCP grants) and the /usr tree it stages"
+    },
+    {
+      "glob": "scripts/move-hub-behind-lodge.sh",
+      "why": "destructive operations: a root script that moves the hub's data and device records, edits /etc/fstab and restarts the services"
+    },
+    {
+      "glob": "internal/secrets/**",
+      "why": "secrets and credentials: the device tokens in the Secret Service or a file"
+    },
+    {
+      "glob": "internal/hub/{hub,pair}.go",
+      "why": "auth: the hub's token check and device pairing"
+    },
+    {
+      "glob": "{api/scope.go,internal/lodgeapp/lodgeapp.go}",
+      "why": "auth: an agent's folder scope and the identity and MCP token on lodge's socket"
+    },
+    {
+      "glob": "{internal/render/sanitize.go,app/src/reading/sanitize.ts,app/src-tauri/tauri.conf.json,app/src-tauri/capabilities/**}",
+      "why": "security: the sanitizers of rendered notes, the CSP that forbids inline script (ADR-0007) and the app shell's permissions"
+    },
+    {
+      "glob": "internal/vault/{path,guard}.go",
+      "why": "security: the path check that keeps the API's paths inside a vault, and the folder-scope guard of an agent's writes (ADR-0028)"
+    },
+    {
+      "glob": "internal/store/migrations/**",
+      "why": "destructive operations: schema migrations of the index, the versions and the sync state"
+    }
+  ]
+}

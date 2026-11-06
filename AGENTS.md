@@ -8,8 +8,8 @@ server for agents. A Go daemon, `notesd`, owns every vault; the apps,
 the architecture entry point is [docs/design/overview.md](docs/design/overview.md).
 
 This file (`AGENTS.md`) is the CANONICAL agent instructions — `CLAUDE.md`,
-`GEMINI.md`, and `.github/copilot-instructions.md` are symlinks to it, and
-`.claude/skills` symlinks to `.agents/skills/`
+`GEMINI.md`, `.cursorrules` and `.github/copilot-instructions.md` are
+relative symlinks to it, and `.claude/skills` symlinks to `.agents/skills/`
 ([ADR-0002](docs/adr/0002-agent-portable-instruction-surface.md)). Edit only
 the canonical paths; keep content tool-agnostic.
 
@@ -124,7 +124,8 @@ file a step names before writing its frostnotes counterpart.
   shell's in `app/src-tauri/src/problems.rs`
   ([ADR-0036](docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
-  (SHA-pinned actions; no test-name filter on a unit run).
+  (SHA-pinned actions; no test-name filter on a unit run; the baseline
+  files, below).
 - `app/`: Tauri v2 + React + TypeScript. `app/src-tauri/src/bridge.rs` only
   moves lines to notesd's socket; JSON-RPC multiplexing is in
   `app/src/rpc/transport.ts`, with Tauri, WebSocket (`transport/ws.ts`) and
@@ -246,6 +247,32 @@ them rather than improvising, whichever agent you are:
 - SQLite databases never live on a network file system or `/mnt/host`.
 - Downloads in scripts are version-pinned and checksum-verified
   (frostyard/core ADR-0023).
+
+## Repository baseline
+
+The repository follows core's baseline (frostyard/core ADR-0071, its spec
+`docs/specs/repository-baseline.md`, rows B1 to B16; [org-adrs.md](docs/org-adrs.md)).
+`internal/workflowcheck` fails `make verify` when one of these files breaks:
+
+- The instruction symlinks above (B1). Edit `AGENTS.md`, never a link.
+- `.memory/corrections.jsonl` (B2): 1 JSON object per line with exactly
+  `date`, `scope`, `correction`, `evidence` and `promoted_to`. Append only:
+  never edit or remove a line (no test checks this). A fix of a blocking
+  review point adds its guard and 1 line.
+- `.github/risk-paths.json` (B6, core ADR-0068): a PR that touches a listed
+  path gets `risk:high` from `.github/workflows/risk-paths.yml`. Its PR body
+  names each matched path and why the change is safe. A new release
+  workflow, install script, privileged helper, secrets store, auth check or
+  sanitizer joins the list in the PR that adds it; a glob that matches no
+  file fails.
+- `.github/dependabot.yml` (B13): 1 entry for each manifest (`go.mod`,
+  `app/package.json`, `app/src-tauri/Cargo.toml`). A new manifest gets an
+  entry.
+
+`.github/pull_request_template.md` (B7) holds the risk tier. Vulnerabilities
+are reported privately ([SECURITY.md](SECURITY.md), B14). No `CODEOWNERS`
+file (B15), and no other agent framework's tree (B16): the task-card loop
+(`docs/tasks/`, ADR-0010) and `opencode.json` are this repository's own.
 
 ## Repository boundary
 

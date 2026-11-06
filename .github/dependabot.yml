@@ -1,0 +1,54 @@
+# Dependabot (frostyard/core ADR-0071, baseline row B13): 1 entry for each
+# ecosystem with a manifest here. internal/workflowcheck checks the list.
+#
+# A gomod, npm or cargo update also changes the Flatpak's offline sources:
+# its PR fails the Flatpak workflow's sources check until
+# `make flatpak-sources` (nsl) is run on its branch. The repository-hygiene
+# line does that.
+#
+# The commit prefix is build (or ci): svu reads it as a patch, not a feature.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      go:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      app-npm:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /app/src-tauri
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      app-cargo:
+        patterns: ["*"]
