@@ -2,7 +2,7 @@
 
 Decisions from [frostyard/core](https://github.com/frostyard/core/tree/main/docs/adr) this repository follows:
 
-- ADR-0071: the repository baseline (core's `docs/specs/repository-baseline.md`, rows B1 to B16); `internal/workflowcheck` checks the files of rows B1, B2, B6 and B13.
+- ADR-0071: the repository baseline (core's `docs/specs/repository-baseline.md`, rows B1 to B17); `internal/workflowcheck` checks the files of rows B1, B2, B6 and B13.
 - ADR-0002, ADR-0018, ADR-0029: `AGENTS.md` is canonical; `CLAUDE.md`, `GEMINI.md`, `.cursorrules` and `.github/copilot-instructions.md` are relative symlinks to it, and `.claude/skills` is a symlink to `.agents/skills/`. `.memory/corrections.jsonl` is the corrections inbox.
 - ADR-0012, ADR-0053: svu versions with `.svu.yml`; `make bump` tags `svu next`.
 - ADR-0016: reverse-DNS identifiers; the app ID is `org.frostyard.Frostnotes`.
@@ -14,3 +14,4 @@ Decisions from [frostyard/core](https://github.com/frostyard/core/tree/main/docs
 - ADR-0043, ADR-0044: tools pinned in `mise.toml` with `mise.lock`; the `make verify` / `check` / `ci` gate triad.
 - ADR-0058: the desktop app ships as a Flatpak, notesd for lodge as a package that stages under `usr/`.
 - ADR-0070: a tool documentation site in `site/` on GitHub Pages (not built yet).
+- ADR-0072: the root `README.md` follows core's README spec (`docs/specs/readme.md`, baseline row B17) as the `app` kind; until the site exists, its documentation line links `docs/README.md`.
