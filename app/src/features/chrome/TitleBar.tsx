@@ -6,7 +6,6 @@
 // each command does.
 import { IconButton, WindowControls } from "@frostyard/lodge-ui/react";
 import { PanelLeft } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
 
 /** WindowCommand is what a title bar control asks for. */
 export type WindowCommand =
