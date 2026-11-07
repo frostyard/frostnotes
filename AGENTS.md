@@ -185,7 +185,7 @@ file a step names before writing its frostnotes counterpart.
   only sanctioned path: from a clean `main` equal to `origin/main` it runs
   `make check`, tags `svu next` and pushes the tag.
 - **Go modules** (`go.mod`): `github.com/frostyard/clix` v0.5.0 (the CLI shell of
-  `notesctl`), `github.com/frostyard/lodge/kit` v0.3.1 (the RPC and app runtime),
+  `notesctl`), `github.com/frostyard/lodge/kit` v0.4.0 (the RPC and app runtime),
   and `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
   also clix's). Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
