@@ -16,10 +16,13 @@ configure({ asyncUtilTimeout: 5000 });
 // it reaches CodeMirror while the view is inside an update and starts a second
 // one, which CodeMirror refuses. The test DOM queues it, as a browser does,
 // and leaves out a selection that has not moved since the last one it fired.
+// happy-dom's own dispatch calls `dispatchEvent` again on each target of the
+// event's path, so the event that is being delivered passes straight through.
 if (typeof document !== "undefined") {
   const dispatchEvent = document.dispatchEvent.bind(document);
   let fired = "";
   let queued = false;
+  let delivering: Event | null = null;
   const nodes = new WeakMap<Node, number>();
   let next = 0;
   const id = (n: Node | null) => {
@@ -38,7 +41,7 @@ if (typeof document !== "undefined") {
     return `${id(s.anchorNode)}:${s.anchorOffset}:${id(s.focusNode)}:${s.focusOffset}`;
   };
   document.dispatchEvent = (event: Event): boolean => {
-    if (event.type !== "selectionchange") return dispatchEvent(event);
+    if (event.type !== "selectionchange" || event === delivering) return dispatchEvent(event);
     if (queued) return true;
     queued = true;
     queueMicrotask(() => {
@@ -46,7 +49,12 @@ if (typeof document !== "undefined") {
       const now = key();
       if (now === fired) return;
       fired = now;
-      dispatchEvent(event);
+      delivering = event;
+      try {
+        dispatchEvent(event);
+      } finally {
+        delivering = null;
+      }
     });
     return true;
   };
