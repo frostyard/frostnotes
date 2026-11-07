@@ -7,7 +7,7 @@ import { IconButton, Splitter } from "@frostyard/lodge-ui/react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CalendarDays, FileSearch, Files, type LucideIcon, PanelLeft, Terminal } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";

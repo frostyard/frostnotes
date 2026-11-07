@@ -1,8 +1,8 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 224fb11..cc61322 100644
+index a75cdaf..eb3f3c4 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -5987,11 +5987,11 @@ class HeightMapBranch extends HeightMap {
+@@ -6014,11 +6014,11 @@ class HeightMapBranch extends HeightMap {
          let { left, right } = this, rightStart = offset + left.length + this.break, rebalance = null;
          if (measured && measured.from <= offset + left.length && measured.more)
              rebalance = left = left.updateHeight(oracle, offset, force, measured);
@@ -17,10 +17,10 @@ index 224fb11..cc61322 100644
          if (rebalance)
              return this.balanced(left, right);
 diff --git a/dist/index.js b/dist/index.js
-index 522f3b6..9624526 100644
+index bda68ef..89972c8 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -5982,11 +5982,11 @@ class HeightMapBranch extends HeightMap {
+@@ -6009,11 +6009,11 @@ class HeightMapBranch extends HeightMap {
          let { left, right } = this, rightStart = offset + left.length + this.break, rebalance = null;
          if (measured && measured.from <= offset + left.length && measured.more)
              rebalance = left = left.updateHeight(oracle, offset, force, measured);

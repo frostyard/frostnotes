@@ -52,7 +52,7 @@ export async function frames(n: number): Promise<void> {
 export function editors(): EditorView[] {
   return [...document.querySelectorAll<HTMLElement>(".cm-editor")]
     .map((el) => EditorView.findFromDOM(el))
-    .filter((v): v is EditorView => v !== null && v.dom.isConnected);
+    .filter((v): v is EditorView => v?.dom.isConnected === true);
 }
 
 /** showApp draws the app as main.tsx does. */
