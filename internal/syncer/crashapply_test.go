@@ -46,6 +46,12 @@ func newCrashyWith(t *testing.T, h *node, name, point string, base rpctest.Optio
 		}
 		p.cut() // the device is down: nothing more of it reaches the hub
 		d.fired <- struct{}{}
+		// The crashed goroutine holds here until the stop has ended the
+		// loop's context, so nothing of it runs after the crash, as with
+		// a real crash: the loop then finds its context ended and
+		// returns, instead of settling the record the crash left
+		// (finishApplying) before the stop.
+		<-d.srv.Done()
 		return true
 	}
 	d.opts = o
@@ -53,7 +59,9 @@ func newCrashyWith(t *testing.T, h *node, name, point string, base rpctest.Optio
 	return d
 }
 
-// down waits for the armed crash point and stops the device's notesd.
+// down waits for the armed crash point and stops the device's notesd. The
+// crashed goroutine holds at the crash point until the stop has ended the
+// loop's context, so nothing of it runs after the stop.
 func (d *crashy) down() {
 	d.t.Helper()
 	select {

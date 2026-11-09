@@ -86,11 +86,26 @@ type Server struct {
 
 	stop    func()
 	stopped chan struct{} // closed when Serve has returned
+	// ctx is the server's context; the package's own tests derive from it.
+	ctx context.Context
+	// halted is closed after Stop's cancel has cancelled ctx and every
+	// context derived from it.
+	halted chan struct{}
 }
 
 // Stopped is closed when the server has stopped serving, which rpc.shutdown
 // (or Stop) causes: the socket is closed and answers no more.
 func (s *Server) Stopped() <-chan struct{} { return s.stopped }
+
+// Done is closed when Stop has cancelled the server's context and every
+// context derived from it (the vault actors', the hub's, the sync loops'),
+// before Stop waits for them to return. A crash point that runs in such a
+// background goroutine (a sync loop's apply) can wait for it, so that the
+// notesd it stops does nothing more after the crash, as a real crash would.
+// A crash point inside an RPC handler must not wait for it: Stop first
+// stops serving, which waits for the handlers. Done does not mean the
+// goroutines have returned: Stop waits for that.
+func (s *Server) Done() <-chan struct{} { return s.halted }
 
 // Start runs a server with default options.
 func Start(t testing.TB) *Server { return StartWith(t, Options{}) }
@@ -125,6 +140,7 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	srv.Vaults = vault.NewManager(vc)
 	ctx, cancel := context.WithCancel(context.Background())
+	srv.ctx, srv.halted = ctx, make(chan struct{})
 	if err := srv.Vaults.Start(ctx); err != nil {
 		cancel()
 		t.Fatal(err)
@@ -191,6 +207,9 @@ func StartWith(t testing.TB, o Options) *Server {
 	srv.stop = sync.OnceFunc(func() {
 		srv.Run.Stop()
 		cancel()
+		// cancel has cancelled every context derived from ctx now, so a
+		// crash point woken here sees its own context ended.
+		close(srv.halted)
 		select {
 		case err := <-hubDone:
 			if err != nil {
