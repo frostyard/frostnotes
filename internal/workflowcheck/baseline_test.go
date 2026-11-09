@@ -265,14 +265,70 @@ func TestCorrectionProblems(t *testing.T) {
 
 // riskPath is 1 entry of .github/risk-paths.json.
 type riskPath struct {
-	Glob string `json:"glob"`
-	Why  string `json:"why"`
+	Glob  string `json:"glob"`
+	Level string `json:"level"`
+	Why   string `json:"why"`
 }
 
 // riskPathFile is the whole of .github/risk-paths.json.
 type riskPathFile struct {
 	SchemaVersion int        `json:"schema_version"`
+	DefaultLevel  string     `json:"default_level"`
 	Paths         []riskPath `json:"paths"`
+}
+
+// riskSchemaVersion is the version of the list this repository holds
+// (frostyard/core docs/specs/risk-paths.md, ADR-0078).
+const riskSchemaVersion = 2
+
+// riskListPath is the list itself, which rule C of frostyard/core
+// docs/specs/risk-paths.md requires a glob for.
+const riskListPath = ".github/risk-paths.json"
+
+// riskCaller is the caller workflow, which rule C requires a glob for.
+const riskCaller = ".github/workflows/risk-paths.yml"
+
+// riskLevels are the levels of frostyard/core docs/specs/risk-paths.md, from
+// the strictest to the loosest (ADR-0078).
+var riskLevels = []string{"L1", "L2", "L3", "L4"}
+
+// levelRank returns the rank of level, 1 for the strictest L1, or 0 when level
+// is not 1 of riskLevels.
+func levelRank(level string) int {
+	for i, l := range riskLevels {
+		if l == level {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// strictLevel reports whether level is 1 of the 2 strict levels, L1 or L2: the
+// levels at which a why names a category (rule B) and a governed path is
+// listed.
+func strictLevel(level string) bool {
+	rank := levelRank(level)
+	return rank == 1 || rank == 2
+}
+
+// strictestLevel returns the strictest level of the globs of entries that
+// match p, and whether 1 glob matched. A level that riskLevels does not hold
+// counts as the strictest, so a bad entry fails closed.
+func strictestLevel(entries []riskPath, p string) (string, bool) {
+	best, bestRank, found := "", 0, false
+	for _, e := range entries {
+		if !matchGlob(e.Glob, p) {
+			continue
+		}
+		rank := levelRank(e.Level)
+		if rank == 0 {
+			rank = 1
+		}
+		if !found || rank < bestRank {
+			best, bestRank, found = e.Level, rank, true
+		}
+	}
+	return best, found
 }
 
 // riskCategories are the categories of frostyard/core docs/specs/risk-paths.md
@@ -337,9 +393,72 @@ var governedPaths = []string{
 	"internal/store/migrations/0001_init.sql",
 }
 
+// riskRuleProblems returns each problem of rule C of frostyard/core
+// docs/specs/risk-paths.md: a glob must cover the list and the caller
+// workflow, and each glob that matches 1 of the 2 is at L1 or L2.
+func riskRuleProblems(entries []riskPath) []string {
+	var problems []string
+	for _, required := range []string{riskListPath, riskCaller} {
+		if _, ok := strictestLevel(entries, required); !ok {
+			problems = append(problems, fmt.Sprintf("no glob matches %s, which rule C requires", required))
+		}
+		for i, p := range entries {
+			if matchGlob(p.Glob, required) && !strictLevel(p.Level) {
+				problems = append(problems, fmt.Sprintf("entry %d: glob %q matches %s, so its level must be L1 or L2, not %q (rule C)", i, p.Glob, required, p.Level))
+			}
+		}
+	}
+	return problems
+}
+
+// riskPathProblems returns each problem of the risk list cfg, and no problem
+// for a valid version 2 list (frostyard/core docs/specs/risk-paths.md): the
+// schema version, the default level, every entry's glob, level and why, and
+// rule C. The paths of the repository are not read here:
+// TestRiskPaths checks those.
+func riskPathProblems(cfg riskPathFile) []string {
+	var problems []string
+	add := func(format string, args ...any) {
+		problems = append(problems, fmt.Sprintf(format, args...))
+	}
+	if cfg.SchemaVersion != riskSchemaVersion {
+		add("schema_version = %d, want %d", cfg.SchemaVersion, riskSchemaVersion)
+	}
+	if levelRank(cfg.DefaultLevel) == 0 {
+		add("default_level = %q, want 1 of %q", cfg.DefaultLevel, riskLevels)
+	}
+	if len(cfg.Paths) == 0 {
+		add("the list holds no path")
+	}
+	seen := make(map[string]bool, len(cfg.Paths))
+	for i, p := range cfg.Paths {
+		for _, problem := range validGlob(p.Glob) {
+			add("entry %d: glob %q: %s", i, p.Glob, problem)
+		}
+		if seen[p.Glob] {
+			add("entry %d: glob %q appears twice", i, p.Glob)
+		}
+		seen[p.Glob] = true
+		if strings.TrimSpace(p.Why) == "" {
+			add("entry %d: glob %q has no why", i, p.Glob)
+		}
+		if n := utf8.RuneCountInString(p.Why); n > 200 {
+			add("entry %d: glob %q has a why of %d characters, want 200 at most", i, p.Glob, n)
+		}
+		switch {
+		case levelRank(p.Level) == 0:
+			add("entry %d: glob %q has the level %q, want 1 of %q", i, p.Glob, p.Level, riskLevels)
+		case strictLevel(p.Level) && !whyCategory(p.Why):
+			add("entry %d: glob %q is at %s, so its why %q must start with 1 of the categories %q and a colon", i, p.Glob, p.Level, p.Why, riskCategories)
+		}
+	}
+	return append(problems, riskRuleProblems(cfg.Paths)...)
+}
+
 // TestRiskPaths guards row B6 of frostyard/core
-// docs/specs/repository-baseline.md: .github/risk-paths.json lists every
-// governed path of the repository, with a reason, and no stale glob.
+// docs/specs/repository-baseline.md: .github/risk-paths.json is a valid
+// version 2 list that holds every governed path of the repository at L1 or
+// L2, with a reason, and no stale glob.
 func TestRiskPaths(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "risk-paths.json"))
 	if err != nil {
@@ -349,34 +468,14 @@ func TestRiskPaths(t *testing.T) {
 	if err := json.Unmarshal(data, &cfg, json.RejectUnknownMembers(true)); err != nil {
 		t.Fatalf(".github/risk-paths.json: %v", err)
 	}
-	if cfg.SchemaVersion != 1 {
-		t.Errorf("schema_version = %d, want 1", cfg.SchemaVersion)
-	}
-	if len(cfg.Paths) == 0 {
-		t.Fatal(".github/risk-paths.json lists no path")
-	}
-	globs := make([]string, 0, len(cfg.Paths))
-	seen := make(map[string]bool, len(cfg.Paths))
-	for i, p := range cfg.Paths {
-		for _, problem := range validGlob(p.Glob) {
-			t.Errorf("entry %d: glob %q: %s", i, p.Glob, problem)
-		}
-		if seen[p.Glob] {
-			t.Errorf("entry %d: glob %q appears twice", i, p.Glob)
-		}
-		seen[p.Glob] = true
-		globs = append(globs, p.Glob)
-		if strings.TrimSpace(p.Why) == "" {
-			t.Errorf("entry %d: glob %q has no why", i, p.Glob)
-		}
-		if !whyCategory(p.Why) {
-			t.Errorf("entry %d: glob %q has the why %q; it must start with 1 of the categories %q and a colon", i, p.Glob, p.Why, riskCategories)
-		}
-		if n := utf8.RuneCountInString(p.Why); n > 200 {
-			t.Errorf("entry %d: glob %q has a why of %d characters, want 200 at most", i, p.Glob, n)
-		}
+	for _, problem := range riskPathProblems(cfg) {
+		t.Errorf(".github/risk-paths.json: %s", problem)
 	}
 
+	globs := make([]string, 0, len(cfg.Paths))
+	for _, p := range cfg.Paths {
+		globs = append(globs, p.Glob)
+	}
 	want := append([]string{}, governedPaths...)
 	workflows, err := filepath.Glob(filepath.Join("..", "..", ".github", "workflows", "*"))
 	if err != nil {
@@ -386,8 +485,12 @@ func TestRiskPaths(t *testing.T) {
 		want = append(want, path.Join(".github/workflows", filepath.Base(p)))
 	}
 	for _, p := range want {
-		if !matchAny(globs, p) {
+		level, ok := strictestLevel(cfg.Paths, p)
+		switch {
+		case !ok:
 			t.Errorf("%s is a release, secrets, auth or governance path; .github/risk-paths.json must list it", p)
+		case !strictLevel(level):
+			t.Errorf("%s is a release, secrets, auth or governance path; its globs put it at %s, want L1 or L2", p, level)
 		}
 	}
 
@@ -398,16 +501,6 @@ func TestRiskPaths(t *testing.T) {
 		}
 	}
 	t.Logf("%d globs; %d required paths listed; %d files searched", len(globs), len(want), len(files))
-}
-
-// matchAny reports whether p matches 1 of globs.
-func matchAny(globs []string, p string) bool {
-	for _, g := range globs {
-		if matchGlob(g, p) {
-			return true
-		}
-	}
-	return false
 }
 
 // anyMatch reports whether glob matches 1 of paths.
@@ -626,6 +719,83 @@ func TestValidGlob(t *testing.T) {
 	} {
 		if problems := validGlob(glob); len(problems) == 0 {
 			t.Errorf("validGlob(%q) = no problem, want at least 1", glob)
+		}
+	}
+}
+
+// TestStrictestLevel checks the strictest level of the globs that match a
+// path.
+func TestStrictestLevel(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		entries []riskPath
+		path    string
+		want    string
+		found   bool
+	}{
+		{"no match", []riskPath{{Glob: "auth/**", Level: "L1"}}, "src/a.go", "", false},
+		{"1 match", []riskPath{{Glob: "auth/**", Level: "L2"}}, "auth/a.go", "L2", true},
+		{"2 matches, the strictest wins", []riskPath{{Glob: "auth/**", Level: "L2"}, {Glob: "**", Level: "L1"}}, "auth/a.go", "L1", true},
+		{"a looser glob listed first", []riskPath{{Glob: "**", Level: "L3"}, {Glob: "auth/**", Level: "L2"}}, "auth/a.go", "L2", true},
+		{"an unknown level counts as the strictest", []riskPath{{Glob: "auth/**", Level: "L2"}, {Glob: "auth/*.go", Level: "L5"}}, "auth/a.go", "L5", true},
+	} {
+		got, found := strictestLevel(tc.entries, tc.path)
+		if got != tc.want || found != tc.found {
+			t.Errorf("%s: strictestLevel(%v, %q) = %q, %v, want %q, %v", tc.name, tc.entries, tc.path, got, found, tc.want, tc.found)
+		}
+	}
+}
+
+// TestLevelRank checks the rank of a level, from the strictest.
+func TestLevelRank(t *testing.T) {
+	for level, want := range map[string]int{"L1": 1, "L2": 2, "L3": 3, "L4": 4, "L5": 0, "": 0, "l1": 0} {
+		if got := levelRank(level); got != want {
+			t.Errorf("levelRank(%q) = %d, want %d", level, got, want)
+		}
+	}
+	for level, want := range map[string]bool{"L1": true, "L2": true, "L3": false, "L4": false, "": false} {
+		if got := strictLevel(level); got != want {
+			t.Errorf("strictLevel(%q) = %v, want %v", level, got, want)
+		}
+	}
+}
+
+// TestRiskPathProblems checks the validation of the risk list, and rule C, on
+// lists held in memory. Each case has 1 cause: a valid list gives no problem,
+// and each other case gives exactly 1 problem, which holds want.
+func TestRiskPathProblems(t *testing.T) {
+	governance := []riskPath{
+		{Glob: ".github/risk-paths.json", Level: "L2", Why: "governance: the high-risk path list"},
+		{Glob: ".github/workflows/**", Level: "L2", Why: "governance: CI and the caller"},
+	}
+	with := func(extra ...riskPath) []riskPath {
+		return append(slices.Clone(governance), extra...)
+	}
+	valid := riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: governance}
+	for _, tc := range []struct {
+		name string
+		cfg  riskPathFile
+		want string
+	}{
+		{"valid v2", valid, ""},
+		{"a level outside the 4", riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: with(riskPath{Glob: "auth/**", Level: "L5", Why: "auth: a token check"})}, `has the level "L5"`},
+		{"no default_level", riskPathFile{SchemaVersion: 2, Paths: governance}, `default_level = ""`},
+		{"a bad default_level", riskPathFile{SchemaVersion: 2, DefaultLevel: "L0", Paths: governance}, `default_level = "L0"`},
+		{"schema_version 1", riskPathFile{SchemaVersion: 1, DefaultLevel: "L3", Paths: governance}, "schema_version = 1, want 2"},
+		{"an L3 entry with free text", riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: with(riskPath{Glob: "docs/how-to/**", Level: "L3", Why: "how-to documentation"})}, ""},
+		{"an L1 entry with free text", riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: with(riskPath{Glob: "signing/**", Level: "L1", Why: "the signing keys"})}, "must start with 1 of the categories"},
+		{"an L3 glob for the list itself", riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: []riskPath{{Glob: ".github/risk-paths.json", Level: "L3", Why: "governance: the list"}, {Glob: ".github/workflows/**", Level: "L2", Why: "governance: CI"}}}, "must be L1 or L2"},
+		{"no glob for the caller", riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: []riskPath{{Glob: ".github/risk-paths.json", Level: "L2", Why: "governance: the list"}}}, "no glob matches .github/workflows/risk-paths.yml"},
+		{"a why of 201 characters", riskPathFile{SchemaVersion: 2, DefaultLevel: "L3", Paths: with(riskPath{Glob: "auth/**", Level: "L1", Why: "auth: " + strings.Repeat("x", 195)})}, "has a why of 201 characters"},
+	} {
+		problems := riskPathProblems(tc.cfg)
+		switch {
+		case tc.want == "" && len(problems) > 0:
+			t.Errorf("%s: riskPathProblems = %v, want none", tc.name, problems)
+		case tc.want != "" && len(problems) != 1:
+			t.Errorf("%s: riskPathProblems = %v, want exactly 1 problem", tc.name, problems)
+		case tc.want != "" && !slices.ContainsFunc(problems, func(problem string) bool { return strings.Contains(problem, tc.want) }):
+			t.Errorf("%s: riskPathProblems = %v, want 1 problem that holds %q", tc.name, problems, tc.want)
 		}
 	}
 }

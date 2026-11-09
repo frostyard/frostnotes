@@ -6,7 +6,9 @@ Decisions from [frostyard/core](https://github.com/frostyard/core/tree/main/docs
 - ADR-0002, ADR-0018, ADR-0029: `AGENTS.md` is canonical; `CLAUDE.md`, `GEMINI.md`, `.cursorrules` and `.github/copilot-instructions.md` are relative symlinks to it, and `.claude/skills` is a symlink to `.agents/skills/`. `.memory/corrections.jsonl` is the corrections inbox.
 - ADR-0012, ADR-0053: svu versions with `.svu.yml`; `make bump` tags `svu next`.
 - ADR-0016: reverse-DNS identifiers; the app ID is `org.frostyard.Frostnotes`.
-- ADR-0019, ADR-0068: risk tiers in the PR template; `.github/risk-paths.json` and its caller `.github/workflows/risk-paths.yml` label a PR that touches a high-risk path `risk:high`.
+- ADR-0019, ADR-0068, ADR-0078: risk tiers in the PR template; `.github/risk-paths.json` (schema version 2: each glob has a level `L1` to `L4`, and the default is `L3`) and the PR triage caller `.github/workflows/risk-paths.yml` label a PR with `level:L1` to `level:L4` and with `risk:high` at L1 and L2. ADR-0078 amends ADR-0068 in part.
+- ADR-0076: every default branch requires status checks.
+- ADR-0077: `ready-for-human` is bound to the head commit; the PR triage caller removes the label when the head moves after the label, or when CI is not green at it.
 - ADR-0021: CI actions pinned to full commit SHAs; least-privilege workflow permissions; `persist-credentials: false` (`internal/workflowcheck`).
 - ADR-0038 (supersedes ADR-0022): unit and race runs filter no test names ([ADR-0035](adr/0035-unit-runs-filter-no-test-names.md)).
 - ADR-0023: downloads are version-pinned and checksum-verified (`dev/nsl/provision.sh`).
