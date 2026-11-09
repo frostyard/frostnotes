@@ -85,12 +85,19 @@ type Server struct {
 	HubURL  string
 
 	stop    func()
-	stopped chan struct{} // closed when Serve has returned
+	stopped chan struct{}   // closed when Serve has returned
+	done    <-chan struct{} // closed when the server's context ends
 }
 
 // Stopped is closed when the server has stopped serving, which rpc.shutdown
 // (or Stop) causes: the socket is closed and answers no more.
 func (s *Server) Stopped() <-chan struct{} { return s.stopped }
+
+// Done is closed when Stop has ended the context of the server's vault
+// actors, hub and sync loops. A test's crash point can wait for it, so
+// that a notesd it stops does nothing more after the crash, as a real
+// crash would.
+func (s *Server) Done() <-chan struct{} { return s.done }
 
 // Start runs a server with default options.
 func Start(t testing.TB) *Server { return StartWith(t, Options{}) }
@@ -125,6 +132,7 @@ func StartWith(t testing.TB, o Options) *Server {
 	}
 	srv.Vaults = vault.NewManager(vc)
 	ctx, cancel := context.WithCancel(context.Background())
+	srv.done = ctx.Done()
 	if err := srv.Vaults.Start(ctx); err != nil {
 		cancel()
 		t.Fatal(err)
