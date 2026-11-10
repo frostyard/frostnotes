@@ -136,6 +136,10 @@ types:
     doc: A note rendered for the reading view (docs/design/app.md#reading-view).
     fields:
       - {name: html, type: string, doc: "Sanitized HTML: no script, event handler, form, frame, style or javascript: URL. Vault files appear as data-blob attributes, never as URLs (ADR-0023)."}
+  - name: RenderedMarkdown
+    doc: A note rendered as Markdown for a native view (docs/specs/render.md#markdown-for-native-views).
+    fields:
+      - {name: markdown, type: string, doc: "CommonMark with GitHub's extensions: Obsidian's links as note: and tag: links, attachments as blob: images, highlights as <mark>, callouts and note embeds as fenced blocks of the frostnotes-callout and frostnotes-embed languages, comments and block IDs gone, the rest as written."}
   - name: VersionContent
     doc: A version's content.
     fields:
@@ -371,6 +375,19 @@ methods:
       - {name: path, type: string}
       - {name: content, type: string, optional: true}
     result: RenderedNote
+    errors: [notFound, invalidParams]
+  - name: renderMarkdown
+    doc: >-
+      A note rendered as Markdown that a native view reads with CommonMark
+      and GitHub's extensions, for the desktop app's reading view and
+      embeds (ADR-0038): note.render's links, embeds and limits, with
+      Obsidian's syntax written as links, <mark> and fenced blocks. With
+      content, that text is rendered as if it were the note at path.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string}
+      - {name: content, type: string, optional: true}
+    result: RenderedMarkdown
     errors: [notFound, invalidParams]
   - name: upload
     writes: true

@@ -739,6 +739,19 @@ A note rendered to sanitized HTML for the reading view and embeds (ADR-0007): Ob
 Result: `RenderedNote`.
 Errors: `notFound`, `invalidParams`.
 
+### `note.renderMarkdown`
+
+A note rendered as Markdown that a native view reads with CommonMark and GitHub's extensions, for the desktop app's reading view and embeds (ADR-0038): note.render's links, embeds and limits, with Obsidian's syntax written as links, <mark> and fenced blocks. With content, that text is rendered as if it were the note at path.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` |  |
+| `content` | `string` (optional) |  |
+
+Result: `RenderedMarkdown`.
+Errors: `notFound`, `invalidParams`.
+
 ### `note.upload`
 
 Create an attachment from bytes, as note.create creates a note: it fails with conflict if the path exists (ADR-0023). data is base64, at most 10 MB decoded.
@@ -1059,6 +1072,14 @@ A note rendered for the reading view (docs/design/app.md#reading-view).
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `html` | `string` | Sanitized HTML: no script, event handler, form, frame, style or javascript: URL. Vault files appear as data-blob attributes, never as URLs (ADR-0023). |
+
+### Type `RenderedMarkdown`
+
+A note rendered as Markdown for a native view (docs/specs/render.md#markdown-for-native-views).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `markdown` | `string` | CommonMark with GitHub's extensions: Obsidian's links as note: and tag: links, attachments as blob: images, highlights as <mark>, callouts and note embeds as fenced blocks of the frostnotes-callout and frostnotes-embed languages, comments and block IDs gone, the rest as written. |
 
 ### Type `VersionContent`
 

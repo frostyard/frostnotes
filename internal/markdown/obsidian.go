@@ -73,7 +73,8 @@ func (wikilinkParser) Parse(_ ast.Node, block text.Reader, _ parser.Context) ast
 
 type tagNode struct {
 	ast.BaseInline
-	name string
+	name       string
+	start, end int // where "#name" is in the source parsed
 }
 
 func (*tagNode) Kind() ast.NodeKind { return kindTag }
@@ -88,7 +89,7 @@ func (tagParser) Parse(_ ast.Node, block text.Reader, _ parser.Context) ast.Node
 	if !unicode.IsSpace(block.PrecendingCharacter()) {
 		return nil
 	}
-	line, _ := block.PeekLine()
+	line, seg := block.PeekLine()
 	match := inlineTagRE.Find(line)
 	if len(match) == 0 {
 		return nil
@@ -98,7 +99,7 @@ func (tagParser) Parse(_ ast.Node, block text.Reader, _ parser.Context) ast.Node
 		return nil
 	}
 	block.Advance(len(match))
-	return &tagNode{name: name}
+	return &tagNode{name: name, start: seg.Start, end: seg.Start + len(match)}
 }
 
 type inlineMathNode struct {

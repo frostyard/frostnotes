@@ -57,11 +57,31 @@ func (v *Vault) Folders(ctx context.Context) ([]string, error) {
 // holds for it, to sanitized HTML (docs/specs/render.md). Links resolve
 // over the index, and embedded notes and files are what the index holds.
 func (v *Vault) Render(ctx context.Context, p string, note []byte) (string, error) {
-	if err := checkNotePath(p); err != nil {
+	opts, err := v.renderOptions(ctx, p)
+	if err != nil {
 		return "", err
 	}
+	return render.Render(note, opts), nil
+}
+
+// RenderMarkdown renders note, the content of the note at p, as Markdown
+// for a native view (docs/specs/render.md#markdown-for-native-views).
+func (v *Vault) RenderMarkdown(ctx context.Context, p string, note []byte) (string, error) {
+	opts, err := v.renderOptions(ctx, p)
+	if err != nil {
+		return "", err
+	}
+	return render.Markdown(note, opts), nil
+}
+
+// renderOptions are how the note at p reaches what it links to and
+// embeds.
+func (v *Vault) renderOptions(ctx context.Context, p string) (render.Options, error) {
+	if err := checkNotePath(p); err != nil {
+		return render.Options{}, err
+	}
 	if kindOf(p) != store.FileNote {
-		return "", api.InvalidParams("%s is not a note: only notes render", p)
+		return render.Options{}, api.InvalidParams("%s is not a note: only notes render", p)
 	}
 	lookup := v.lookup(ctx)
 	file := func(p string) (store.File, bool) {
@@ -71,7 +91,7 @@ func (v *Vault) Render(ctx context.Context, p string, note []byte) (string, erro
 		}
 		return f, err == nil
 	}
-	return render.Render(note, render.Options{
+	return render.Options{
 		Path:    p,
 		Resolve: func(from, target string) string { return markdown.Resolve(from, target, lookup) },
 		File: func(p string) (string, bool) {
@@ -90,7 +110,7 @@ func (v *Vault) Render(ctx context.Context, p string, note []byte) (string, erro
 			}
 			return []byte(showText(data)), true
 		},
-	}), nil
+	}, nil
 }
 
 // ReadVersion returns one of the vault's versions and its content, as

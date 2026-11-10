@@ -177,6 +177,66 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
 - Every fixture's HTML below sanitizes to itself, but R02's `class`
   and `onclick`.
 
+## Markdown for native views
+
+`note.renderMarkdown` (`render.Markdown`) renders a note as Markdown for
+the desktop app's native reading view and embeds, which MyGo's Markdown
+view draws: CommonMark with GitHub's tables, task lists, strikethrough,
+autolinks, footnotes and math
+([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)).
+It takes the same `Options` and limits as `HTML`, and rewrites only
+Obsidian's syntax, so everything else reaches the view as written. A
+native view shows raw HTML as text, so nothing is sanitized.
+
+```go
+func Markdown(note []byte, opts Options) string // note.renderMarkdown's markdown
+
+const (
+	EmbedLanguage   = "frostnotes-embed"   // a note embed's fenced block
+	CalloutLanguage = "frostnotes-callout" // a callout's fenced block
+	NoteScheme = "note:" // a vault file by path, with its subpath
+	TagScheme  = "tag:"  // a tag, without '#'
+	BlobScheme = "blob:" // a vault file's content: blob:<sha256>.<ext>
+)
+
+func NoteLink(href string) (path, subpath, tag string, ok bool) // reads note: and tag: links
+```
+
+Rules, over `RenderSource`'s body (no frontmatter, comments gone):
+
+- **Destinations** are written in angle brackets, so paths keep their
+  spaces; `%`, `<`, `>` and newlines are percent-encoded.
+- **Wikilinks** become `[label](<note:path#subpath>)`, the label as
+  `HTML` draws it (the alias, else the target with ` > ` before a
+  subpath). An unresolved target keeps its text as the path
+  (`note:Nowhere`); a link to a heading of the note itself has no path
+  (`note:#Top`).
+- **Markdown links and images to vault files** keep their text and get
+  the resolved destination: `note:` for a link, `blob:` for an image.
+  Web links, references and links with no text stay as written.
+- **Embeds:** an image becomes `![name](<blob:hash.ext>)` (an alias
+  that is a size is dropped); another file becomes a `note:` link to
+  it. Note embeds alone in a paragraph become fenced blocks, each
+  ```` ```frostnotes-embed <path><subpath> ```` holding the embedded
+  note's (or heading section's) Markdown, rewritten by these rules; a
+  fence is one backtick longer than any run inside. A note embed within
+  a line, or one too deep, a loop or past the budget (as for `HTML`), is
+  a `note:` link.
+- **Callouts** (a quote whose first line is `[!type]`) become fenced
+  blocks ```` ```frostnotes-callout <type><fold> <title> ````, the type
+  lowercased, the fold `+`, `-` or nothing, holding the quote's text with
+  one `>` taken off each line, rewritten by these rules. Other quotes
+  stay quotes.
+- **Tags** become `[#name](<tag:name>)`; **highlights** become
+  `<mark>…</mark>`; **block IDs** are removed, as the reading view hides
+  them. **Math** stays as written (`$…$`, `$$…$$`).
+- Nothing inside code spans, fenced or indented code, HTML or math
+  changes.
+
+`internal/render`'s `markdown_test.go` pins these rules, and
+`internal/engine`'s tests run every link of the generated vault's
+manifest through `note.renderMarkdown`.
+
 ## Fixture vault
 
 Every fixture renders `Notes/Today.md` in this vault. Notes have no hash
@@ -620,4 +680,4 @@ Text
 - Rationale: [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md) (notesd renders, both sides sanitize), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (files by hash), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) (comments)
 - Context: [design/app.md](../design/app.md#reading-view), [design/vault.md](../design/vault.md#index) (what `note.render` reads); [markdown.md](markdown.md) (the syntax), [rpc-api.md](rpc-api.md) (`note.render`)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md), Phases 3 and 4
-- Proposed change: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) adds a Markdown format of `note.render` for the native desktop app, specified here in [plan 0009](../plans/0009-mygo-desktop.md)'s Phase 4
+- Rationale of the Markdown for native views: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md); built in [plan 0009](../plans/0009-mygo-desktop.md)'s Phase 2

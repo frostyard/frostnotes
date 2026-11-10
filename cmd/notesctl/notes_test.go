@@ -105,6 +105,10 @@ func (f *fakeNotes) Render(_ context.Context, p *api.NoteRenderParams) (*api.Ren
 	return nil, f.record(p)
 }
 
+func (f *fakeNotes) RenderMarkdown(_ context.Context, p *api.NoteRenderMarkdownParams) (*api.RenderedMarkdown, error) {
+	return nil, f.record(p)
+}
+
 func (f *fakeNotes) Upload(_ context.Context, p *api.NoteUploadParams) (*api.WriteResult, error) {
 	return nil, f.record(p)
 }

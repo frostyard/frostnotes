@@ -778,6 +778,21 @@ export interface RenderedNote {
   html: string;
 }
 
+/**
+ * A note rendered as Markdown for a native view
+ * (docs/specs/render.md#markdown-for-native-views).
+ */
+export interface RenderedMarkdown {
+  /**
+   * CommonMark with GitHub's extensions: Obsidian's links as note: and tag:
+   * links, attachments as blob: images, highlights as <mark>, callouts and
+   * note embeds as fenced blocks of the frostnotes-callout and
+   * frostnotes-embed languages, comments and block IDs gone, the rest as
+   * written.
+   */
+  markdown: string;
+}
+
 /** A version's content. */
 export interface VersionContent {
   version: Version;
@@ -1033,6 +1048,13 @@ export interface NoteRenderParams {
   content?: string;
 }
 
+/** Params of note.renderMarkdown. */
+export interface NoteRenderMarkdownParams {
+  vaultId: number;
+  path: string;
+  content?: string;
+}
+
 /** Params of note.upload. */
 export interface NoteUploadParams {
   vaultId: number;
@@ -1240,6 +1262,14 @@ export interface NoteClient {
    */
   render(params: NoteRenderParams): Promise<RenderedNote>;
   /**
+   * A note rendered as Markdown that a native view reads with CommonMark and
+   * GitHub's extensions, for the desktop app's reading view and embeds
+   * (ADR-0038): note.render's links, embeds and limits, with Obsidian's
+   * syntax written as links, <mark> and fenced blocks. With content, that
+   * text is rendered as if it were the note at path.
+   */
+  renderMarkdown(params: NoteRenderMarkdownParams): Promise<RenderedMarkdown>;
+  /**
    * Create an attachment from bytes, as note.create creates a note: it fails
    * with conflict if the path exists (ADR-0023). data is base64, at most 10
    * MB decoded.
@@ -1307,6 +1337,7 @@ function noteClient(t: Transport): NoteClient {
     files: (params) => t.call<VaultFiles>("note.files", params),
     resolve: (params) => t.call<Resolution[]>("note.resolve", params),
     render: (params) => t.call<RenderedNote>("note.render", params),
+    renderMarkdown: (params) => t.call<RenderedMarkdown>("note.renderMarkdown", params),
     upload: (params) => t.call<WriteResult>("note.upload", params),
     readVersion: (params) => t.call<VersionContent>("note.readVersion", params),
     tags: (params) => t.call<TagCount[]>("note.tags", params),
@@ -1943,6 +1974,7 @@ export const METHODS = [
   "note.files",
   "note.resolve",
   "note.render",
+  "note.renderMarkdown",
   "note.upload",
   "note.readVersion",
   "note.tags",
@@ -2021,6 +2053,7 @@ export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {
   "note.files": ["local", "session", "agent"],
   "note.resolve": ["local", "session", "agent"],
   "note.render": ["local", "session", "agent"],
+  "note.renderMarkdown": ["local", "session", "agent"],
   "note.upload": ["local", "session", "agent"],
   "note.readVersion": ["local", "session", "agent"],
   "note.tags": ["local", "session", "agent"],
