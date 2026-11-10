@@ -30,15 +30,16 @@ var (
 // tabContent is what a tab's view draws with, kept while the tab shows
 // the same thing.
 type tabContent struct {
-	view workspace.View
-	doc  *notes.Document
-	ed   *editor.NoteView
-	read *reading.View
-	hist *history.View
-	merg *history.Merge
-	held string // a merge's other text
-	img  ui.ImageSource
-	err  string
+	view     workspace.View
+	doc      *notes.Document
+	ed       *editor.NoteView
+	read     *reading.View
+	hist     *history.View
+	merg     *history.Merge
+	held     string // a merge's other text
+	img      ui.ImageSource
+	fileRead bool
+	err      string
 }
 
 func sameContent(a, b workspace.View) bool {
@@ -50,6 +51,9 @@ func sameContent(a, b workspace.View) bool {
 func (a *App) content(tab *workspace.Tab) *tabContent {
 	if tc := a.tabs[tab.ID]; tc != nil && sameContent(tc.view, tab.View) {
 		tc.view = tab.View
+		if tc.view.Type == workspace.ViewFile && !tc.fileRead {
+			a.loadFile(tc)
+		}
 		return tc
 	}
 	if tc := a.tabs[tab.ID]; tc != nil {
@@ -264,7 +268,13 @@ func (a *App) mergeDone(tc *tabContent, tabID string) {
 	a.Store.Update(func(w *workspace.Workspace) { w.Close(tabID) })
 }
 
+// loadFile reads an image tab's bytes, once the catalog knows its hash: a
+// tab the workspace restored draws before the files are read.
 func (a *App) loadFile(tc *tabContent) {
+	if !a.Catalog.Loaded() {
+		return
+	}
+	tc.fileRead = true
 	if panes.FileType(tc.view.Path) != "image" {
 		return
 	}

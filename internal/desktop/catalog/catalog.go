@@ -61,6 +61,7 @@ type Catalog struct {
 	Wikilinks        bool
 	changed          []func()
 	reloading        bool
+	loaded           bool
 }
 
 // New makes the catalog of a vault; Reload reads it.
@@ -77,6 +78,9 @@ func (c *Catalog) notify() {
 		fn()
 	}
 }
+
+// Loaded reports whether the files have been read once.
+func (c *Catalog) Loaded() bool { return c.loaded }
 
 // Files are the vault's files, by path.
 func (c *Catalog) Files() []api.VaultFile { return c.files }
@@ -119,7 +123,7 @@ func (c *Catalog) Reload() {
 		if err != nil {
 			return
 		}
-		c.files, c.folders = got.Files, got.Folders
+		c.files, c.folders, c.loaded = got.Files, got.Folders, true
 		slices.SortFunc(c.files, func(a, b api.VaultFile) int { return strings.Compare(a.Path, b.Path) })
 		c.notify()
 		c.readAliases()

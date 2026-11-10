@@ -1,7 +1,10 @@
 package window
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -363,5 +366,58 @@ func TestEveryScreenDraws(t *testing.T) {
 		f.a.sets.layout.Open = false
 		f.tt.Frame()
 		f.a.Session.Close()
+	}
+}
+
+func TestTheSidebarsFollowTheWorkspaceAndTheToggle(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.tt.Frame()
+	if !f.a.panes.Shown(paneRight) || !f.a.panes.Shown(paneLeft) {
+		t.Fatal("a sidebar starts hidden")
+	}
+	f.a.run("app:toggle-right-sidebar")
+	f.tt.Frame()
+	f.tt.Frame()
+	if f.a.panes.Shown(paneRight) || f.a.Store.Workspace().Right.Open {
+		t.Fatal("the right sidebar did not hide")
+	}
+	if err := f.tt.Click("Sidebar"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	f.tt.Frame()
+	if f.a.Store.Workspace().Left.Open {
+		t.Fatal("the bar's toggle did not reach the workspace")
+	}
+	f.a.run("app:toggle-left-sidebar")
+	f.tt.Frame()
+	f.tt.Frame()
+	if !f.a.panes.Shown(paneLeft) {
+		t.Fatal("the left sidebar did not come back")
+	}
+}
+
+func TestARestoredImageTabShowsOnceTheFilesAreRead(t *testing.T) {
+	f := start(t)
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Other.Note().Upload(t.Context(), &api.NoteUploadParams{VaultID: f.Vault, Path: "a.png", Data: base64.StdEncoding.EncodeToString(data.Bytes())}); err != nil {
+		t.Fatal(err)
+	}
+	f.a.Store.Load(f.Dir)
+	f.a.Store.Update(func(w *workspace.Workspace) {
+		w.Open(workspace.View{Type: workspace.ViewFile, Path: "a.png"}, workspace.Here)
+	})
+	f.a.Store.Flush()
+	f.openVault()
+	f.until("the image", func() bool {
+		tc := f.a.activeContent()
+		return tc != nil && tc.img != nil
+	})
+	if f.has("This file is not in the vault.") {
+		t.Fatalf("%q", f.tt.Texts())
 	}
 }
