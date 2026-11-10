@@ -68,7 +68,9 @@ endpoint and OAuth 2.1 (moved from M4 on 2026-10-18; lodge's
   [ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md)).
 - **Query format:** Obsidian Bases (`.base` YAML and `base` code blocks) or
   a Frostnotes condition language. Leaning Bases. By M5, as an ADR.
-  Proposed in [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md): a subset of Bases that notesd compiles to SQL.
+  Proposed in
+  [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md):
+  a subset of Bases that notesd compiles to SQL.
 
 ## References
 

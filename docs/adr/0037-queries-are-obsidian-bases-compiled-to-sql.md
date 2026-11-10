@@ -75,9 +75,11 @@ answer. M5 adds `note.query` to the `note` domain, additively in protocol
   `!=`, `>`, `<`, `>=`, `<=`, `&&`, `||`, `!` and parentheses.
 - **File functions:** `file.hasTag(...)` matches any of the tags, including
   nested tags, ignoring case, as `ListNotes` does. `file.inFolder(f)`
-  matches the folder or below it. `file.hasLink(x)` takes a path or
-  `this`/`this.file`, using the existing link resolution.
-  `file.hasProperty(name)` tests whether the property exists.
+  matches the folder or below it. `file.hasLink(x)` takes a name, a path
+  or `this`/`this.file`. Resolve its argument with `markdown.Resolve`, as
+  a link written in the base file. For a code block or embed, use the
+  embedding note instead. `file.hasProperty(name)` tests whether the
+  property exists.
 - **Value functions:** on text, `contains`, `startsWith` and `endsWith`;
   on lists, `contains`, `containsAny` and `containsAll`; and `isEmpty()`.
   Dates have `date("…")`, `today()` and `now()`, and a date plus or minus
@@ -86,9 +88,9 @@ answer. M5 adds `note.query` to the `note` domain, additively in protocol
   `order` (the columns), `sort`, `limit` and `groupBy` (`property`,
   `direction`). Cards show the view's image property. The other card
   settings (size, fit and aspect ratio) go to the app as display settings.
-  `sort` and the cards' `image` key are the keys Obsidian writes. The spec
-  pins the exact view keys from files Obsidian writes: the syntax page
-  lists only some of them.
+  `sort` and the cards' `image` key are assumptions, not keys the docs
+  show. The spec must confirm them and pin the exact view keys from files
+  Obsidian writes: the syntax page lists only some of them.
 - **Rendering:** `![[File.base]]`, `![[File.base#View]]` and `base` code
   blocks render in reading view and live preview. The app runs the query
   again on the vault's `note.*` events.
@@ -98,17 +100,29 @@ index keeps no property types. Obsidian keeps them in
 `.obsidian/types.json`, and notesd already loads them for
 `note.properties` (`vault.LoadTypes`: `.frostnotes/types.yaml`, else
 Obsidian's file). A property with a type there (`number`, `checkbox`,
-`date`, `datetime`, `text`, `multitext`) compares as that type. For a
-property with no type, the comparison's other side sets it:
+`date`, `datetime`, `text`, `multitext`, `tags`, `aliases`) compares as
+that type. `multitext`, `tags` and `aliases` are lists; `text` is text.
+For a property with no type, the comparison's other side sets it:
 
 - A number literal compares numbers.
 - A text literal compares text exactly; case counts.
 - `date(…)`, `today()` or `now()` compares dates. A property's text is
   read as an ISO 8601 date: `YYYY-MM-DD`, with an optional time.
 
-A value that does not convert does not match; it is not an error. Missing
-values sort last. Where Obsidian's docs say nothing, the spec pins its
-behavior with fixtures checked against Obsidian's answers.
+Every statement is true or false, never unknown. `!=` is exactly
+`!(==)`. A missing value, or a value that does not convert, makes `==`,
+`<`, `>`, `<=` and `>=` false and `!=` true. This follows Obsidian's
+JavaScript semantics: `undefined != 5` is true. Attachment rows have no
+note properties; every note property is missing for them.
+
+For an untyped property, `x.contains("a")` tests a list item when the
+row's value is a list, and a substring when it is text. Choose per row
+with `json_type`; substrings use `instr()`, with case kept.
+
+Frontmatter dates with no zone, `today()` and `now()` use notesd's local
+time zone, the one its daily notes use. Missing values sort last. Where
+Obsidian's docs say nothing, the spec pins its behavior with fixtures
+checked against Obsidian's answers.
 
 **Compile to SQL over the existing index.** A new package, `internal/query`,
 parses the YAML and checks the subset. It folds constants in Go:
@@ -116,23 +130,51 @@ parses the YAML and checks the subset. It folds constants in Go:
 It compiles the filters into one SQL condition over `files LEFT JOIN
 notes`, with bound parameters:
 
+- `file.path`: `files.path`.
+- `file.name`: the last segment of `files.path`, with case kept.
+  `files.name` is lower-cased, so it is not used.
+- `file.basename`: `file.name` without its last extension.
+- `file.ext`: the text after the last `.` of `file.name`, or empty.
+- `file.folder`: the path before the last `/`.
+- `file.size` and `file.mtime`: `files.size` and `files.mtime`.
+- `file.tags` reads `tags`; `file.links` reads `links`.
 - `file.hasTag`: an `EXISTS` over `tags`, as in `ListNotes`.
 - `file.inFolder`: a path range, as in `ListNotes`.
-- `file.hasLink`: an `EXISTS` over `links` by `dest_id`, or by the
-  target's name when unresolved.
+- `file.hasLink`: an `EXISTS` over `links`. When the argument resolves,
+  match `links.dest_id`. Otherwise match `dest_id IS NULL` and the same
+  `links.name`.
 - `file.hasProperty`: `json_each(notes.props)`.
 - List `contains`: `props` rows.
 - Scalar comparisons: `notes.props` through SQLite's JSON functions,
   with `props.num` for numbers.
-- Text functions: case-sensitive SQL, never `LIKE`, which ignores ASCII
-  case.
+- Text functions: case-sensitive SQL, including `instr()` for substrings,
+  never `LIKE`, which ignores ASCII case.
 
-SQL supplies `sort`, `limit` and the total. `files.path` is the last sort
-key. Go reads groups and column values from the rows' `notes.props`, tags
-and links. No text from a base is spliced into SQL: property keys and
-literals are always bound parameters. M5 adds no table; a migration comes
-only if a measurement asks for one. The store (`store.DB`) runs the query;
-the engine serves `note.query`.
+Match property keys with `json_each(notes.props)` and `key = ?`, never a
+JSON path built from the key. A key matches as written in `notes.props`;
+case counts. Look up its type lower-cased, as `LoadTypes` stores types.
+The Obsidian fixtures confirm the key case rule. The spec also pins the
+exact text of `file.folder` at the vault root and of `file.tags` items
+(with or without `#`) from Obsidian's answers.
+
+The compiler writes each statement so SQL never gives NULL, for example
+with `COALESCE(…, 0)` and `IS` / `IS NOT`. Thus `!`, `not` and `||` never
+lose a row without warning.
+
+SQL supplies `sort`, `limit` and the total. With `groupBy`, rows order by
+the group key first, then by `sort`, then by `files.path`. Without groups,
+`files.path` is still the last sort key. `limit` counts rows across all
+groups; `total` counts every matching row. Go reads groups and column
+values from the rows' `notes.props`, tags and links. No text from a base
+is spliced into SQL: property keys and literals are always bound
+parameters. M5 adds no table; a migration comes only if a measurement
+asks for one. The store (`store.DB`) runs the query; the engine serves
+`note.query`.
+
+**Ignore keys outside the subset.** A key outside the subset in
+`properties` or `views`, or at the top level, is ignored. This includes
+`formulas`, `summaries` and a plugin view's keys, so a base Obsidian writes
+still opens. A formula used as a column stays empty.
 
 **Refuse a filter that cannot translate exactly.** The compiler's error
 names the expression and its location, for example `views[0].filters`.
@@ -163,13 +205,19 @@ A later ADR or the spec grows the subset.
   object), or `path` of a `.base` file with an optional `view`;
   `properties` (the property names to return, default none); `sort`;
   and `limit` (1–1000, default 200).
-- Output: `notes: [{path, title, url, properties}]`, `total` and `notice`.
+- Output: `files: [{path, title, url, properties, writable}]`, `total` and
+  `notice`. For an attachment, `title` is `file.basename`. `writable`
+  appears under a limited scope, as in `list_notes`.
 
-It calls `note.query`. It returns the named properties, never a note's
-body. Through lodge its vault is the scope's vault, under
+It calls `note.query`. With only `filters` and no `path`, there is no
+`this`; a filter that uses `this` is refused. It returns the named
+properties, never a note's body. Through lodge its vault is the scope's
+vault, under
 [ADR-0028](0028-an-agents-scope-can-limit-writes-to-folders.md) and the
 [MCP rules](../specs/mcp.md#rules). `docs/specs/mcp.md` changes with M5's
-code: the read tool list grows from 5 to 6.
+code: the read tool list grows from 5 to 6. Its rule that a result never
+carries the content of a note not asked about gains a clause:
+`query_notes` returns the frontmatter values the call names, never a body.
 
 ## Consequences
 
@@ -204,8 +252,8 @@ code: the read tool list grows from 5 to 6.
    copy), and compare them with Frostnotes' rows.
 4. Add a fuzz test that no base text reaches SQL text, only parameters.
 5. Add a refusal test for each feature outside the subset: an error
-   names it, never a partial result. Test the empty-column and view-notice
-   cases where those rules apply instead.
+   names it, never a partial result. Test ignored keys, empty columns and
+   view notices where those rules apply instead.
 6. Benchmark a `tools/vaultgen` vault with `b.Loop`, against a time budget
    the plan names.
 7. Test `query_notes` in the MCP read tool list and under a read scope,
@@ -214,6 +262,8 @@ code: the read tool list grows from 5 to 6.
    sanitizer, never script, per
    [ADR-0007](0007-edit-in-codemirror-6-with-live-preview.md).
 9. Check that Frostnotes never rewrites a `.base` file in M5, byte for byte.
+10. Test each operator, `!` and `not` on a missing property, on a value
+    that does not convert, and on an attachment row.
 
 ## Alternatives considered
 
