@@ -123,6 +123,8 @@ type Notesd struct {
 	Dir   string
 	// Blobs is notesd's blob store, which the app reads by hash.
 	Blobs string
+	// Data is notesd's data directory, which Restart keeps.
+	Data string
 	// Down, while true, makes AppNotes return nil, as a lost connection.
 	Down bool
 }
@@ -132,13 +134,22 @@ func StartNotesd(t testing.TB) *Notesd {
 	t.Helper()
 	data := t.TempDir()
 	srv := rpctest.StartWith(t, rpctest.Options{DataDir: data})
-	n := &Notesd{T: t, Srv: srv, App: srv.Dial(t), Other: srv.Dial(t), Dir: t.TempDir(), Blobs: filepath.Join(data, "blobs")}
+	n := &Notesd{T: t, Srv: srv, App: srv.Dial(t), Other: srv.Dial(t), Dir: t.TempDir(), Blobs: filepath.Join(data, "blobs"), Data: data}
 	v, err := n.App.Vault().Add(t.Context(), &api.VaultAddParams{Path: n.Dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	n.Vault = v.ID
 	return n
+}
+
+// Restart stops notesd and starts it again on the same data, on a new
+// socket; the connections are made again.
+func (n *Notesd) Restart() {
+	n.T.Helper()
+	n.Srv.Stop()
+	n.Srv = rpctest.StartWith(n.T, rpctest.Options{DataDir: n.Data})
+	n.App, n.Other = n.Srv.Dial(n.T), n.Srv.Dial(n.T)
 }
 
 // AppNotes is the app's note domain, nil while Down.
