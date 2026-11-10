@@ -255,6 +255,56 @@ func TestFlatpakWorkflowSplitsBuildFromPublish(t *testing.T) {
 	})
 }
 
+// The image installs the GNOME SDK and Platform in /var/lib/flatpak in a
+// lower layer, and flatpak-builder updates those runtimes in place: the
+// update renames directories. On an overlayfs mounted without
+// redirect_dir=on, as on some hosted runners, such a rename fails with
+// EXDEV, "Invalid cross-device link", and the build stops
+// (https://github.com/frostyard/frostnotes/issues/129). The step that
+// re-creates the installation in the container's own layer must therefore
+// run before the build step, and on every event, so it takes no if.
+func TestFlatpakJobMovesTheInstallationBeforeTheBuild(t *testing.T) {
+	steps := get(get(get(workflows(t)["flatpak.yml"], "jobs"), "flatpak"), "steps")
+	if steps == nil || steps.Kind != yaml.SequenceNode {
+		t.Fatal("flatpak.yml has no jobs.flatpak.steps sequence")
+	}
+	build := -1
+	for i, s := range steps.Content {
+		if u := get(s, "uses"); u != nil && strings.HasPrefix(u.Value, "flatpak/flatpak-github-actions/flatpak-builder@") {
+			build = i
+			break
+		}
+	}
+	if build < 0 {
+		t.Fatal("the flatpak job has no step that uses flatpak/flatpak-github-actions/flatpak-builder")
+	}
+	want := []string{
+		"cp -a /var/lib/flatpak /var/lib/flatpak.copy",
+		"rm -rf /var/lib/flatpak",
+		"mv /var/lib/flatpak.copy /var/lib/flatpak",
+	}
+	for _, s := range steps.Content[:build] {
+		r := get(s, "run")
+		if r == nil {
+			continue
+		}
+		var got []string
+		for _, line := range strings.Split(r.Value, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				got = append(got, line)
+			}
+		}
+		if !slices.Equal(got, want) {
+			continue
+		}
+		if cond := get(s, "if"); cond != nil {
+			t.Errorf("flatpak.yml:%d: the step that re-creates /var/lib/flatpak runs only if %q; every event needs it", cond.Line, cond.Value)
+		}
+		return
+	}
+	t.Fatalf("flatpak.yml:%d: no step before the build re-creates /var/lib/flatpak in the container's layer: the build would update the image's runtimes in a lower overlayfs layer, which fails with EXDEV on some runners", steps.Content[build].Line)
+}
+
 // CI gains the snapshot .deb job without renaming another (the
 // required-checks ruleset matches job names exactly).
 func TestCIHasTheSnapshotDebJob(t *testing.T) {
