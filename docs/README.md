@@ -58,6 +58,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0034 — A device records the head it applies before it changes the disk](adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md)
 - [0035 — Unit runs filter no test names](adr/0035-unit-runs-filter-no-test-names.md)
 - [0036 — notesd and the app record problems in the journal](adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)
+- [0037 — Queries are Obsidian Bases, a subset that notesd compiles to SQL](adr/0037-queries-are-obsidian-bases-compiled-to-sql.md)
 
 ### Design
 
