@@ -78,7 +78,10 @@ answer. M5 adds `note.query` to the `note` domain, additively in protocol
   matches the folder or below it. `file.hasLink(x)` takes a name, a path
   or `this`/`this.file`. Resolve its argument with `markdown.Resolve`, as
   a link written in the base file. For a code block or embed, use the
-  embedding note instead. `file.hasProperty(name)` tests whether the
+  embedding note instead. With neither (`query_notes` with only
+  `filters`), resolve from the vault root. The Obsidian fixtures confirm
+  whether an embedded `.base` file resolves from itself or from the
+  embedding note. `file.hasProperty(name)` tests whether the
   property exists.
 - **Value functions:** on text, `contains`, `startsWith` and `endsWith`;
   on lists, `contains`, `containsAny` and `containsAll`; and `isEmpty()`.
@@ -174,7 +177,10 @@ asks for one. The store (`store.DB`) runs the query; the engine serves
 **Ignore keys outside the subset.** A key outside the subset in
 `properties` or `views`, or at the top level, is ignored. This includes
 `formulas`, `summaries` and a plugin view's keys, so a base Obsidian writes
-still opens. A formula used as a column stays empty.
+still opens. A formula used as a column stays empty. `groupOrder` is the
+exception: it hides the groups it does not list, so to ignore it would
+show more rows than Obsidian. A view with `groupOrder` shows a notice in
+place of its rows, as a view type outside the subset does.
 
 **Refuse a filter that cannot translate exactly.** The compiler's error
 names the expression and its location, for example `views[0].filters`.
