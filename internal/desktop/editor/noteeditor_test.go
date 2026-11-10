@@ -170,6 +170,14 @@ func (s fakeSources) LinkTargets(query string, limit int) []Target {
 
 func (fakeSources) Tags() []string { return []string{"project", "garden"} }
 
+func (fakeSources) Subpaths(_ string, blocks bool, done func([]Target)) {
+	if blocks {
+		done([]Target{{Insert: "abc", Label: "abc", Detail: "a line"}})
+		return
+	}
+	done([]Target{{Insert: "Goals", Label: "Goals"}})
+}
+
 func TestCompletingALink(t *testing.T) {
 	f := openEditor(t, "a.md", "")
 	f.ed.Sources = fakeSources{targets: []Target{{Insert: "Garden plan", Label: "Garden plan"}, {Insert: "Journal/2026-11-10", Label: "2026-11-10", Detail: "Journal"}}}
@@ -195,5 +203,21 @@ func TestAMixedLineEndingNoteIsReadOnly(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(filepath.Join(f.Dir, "a.md")); string(raw) != "one\r\ntwo\n" {
 		t.Fatalf("the file changed: %q", raw)
+	}
+}
+
+func TestCompletingAHeading(t *testing.T) {
+	f := openEditor(t, "a.md", "")
+	f.ed.Sources = fakeSources{}
+	for _, k := range []string{"[", "[", "P", "#"} {
+		f.tt.Type(k)
+	}
+	f.tt.Frame()
+	if !f.tt.HasText("Goals") {
+		t.Fatalf("no completion of a heading: %q", f.tt.Texts())
+	}
+	f.tt.Key(0, ui.KeyEnter)
+	if f.text() != "[[P#Goals]]" {
+		t.Fatalf("the completion made %q", f.text())
 	}
 }

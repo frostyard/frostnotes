@@ -53,6 +53,10 @@ type Sources interface {
 	LinkTargets(query string, limit int) []Target
 	// Tags lists the vault's tags, by how many notes have them.
 	Tags() []string
+	// Subpaths lists the headings, or the block IDs, of the note target
+	// leads to ("" is the note being edited), through done on the UI
+	// thread; done is not called when it leads to no note.
+	Subpaths(target string, blocks bool, done func([]Target))
 }
 
 // NoteEditor is one tab's editor of a note: MyGo's code editor on the
@@ -203,7 +207,7 @@ func (e *NoteEditor) input(ev ui.InputEvent) bool {
 				return true
 			}
 		}
-		if strings.HasSuffix(ev.Text, "[") || strings.HasSuffix(ev.Text, "#") {
+		if strings.HasSuffix(ev.Text, "[") || strings.HasSuffix(ev.Text, "#") || strings.HasSuffix(ev.Text, "^") {
 			e.completeNext = true // after the editor has typed it
 		}
 	}
@@ -284,6 +288,7 @@ func (e *NoteEditor) hover(r code.HoverRequest) {
 
 var (
 	openLinkRe = regexp.MustCompile(`!?\[\[([^\[\]|#\n]*)$`)
+	openSubRe  = regexp.MustCompile(`!?\[\[([^\[\]|#\n]*)#(\^?)([^\[\]|\n]*)$`)
 	openTagRe  = regexp.MustCompile(`(?:^|\s)#([\p{L}\p{N}_/-]*)$`)
 )
 
@@ -298,6 +303,10 @@ func (e *NoteEditor) openCompletions(at int) {
 	text := e.b.Buffer().String()
 	at = max(0, min(at, len(text)))
 	before := text[strings.LastIndexByte(text[:at], '\n')+1 : at]
+	if m := openSubRe.FindStringSubmatch(before); m != nil {
+		e.completeSubpath(at, m[1], m[2] != "", m[3], strings.HasPrefix(text[at:], "]]"))
+		return
+	}
 	if m := openLinkRe.FindStringSubmatchIndex(before); m != nil {
 		query := before[m[2]:m[3]]
 		start := at - len(query)
@@ -328,6 +337,26 @@ func (e *NoteEditor) openCompletions(at int) {
 		}
 		e.State.ShowCompletions(start, items)
 	}
+}
+
+// completeSubpath lists a note's headings or block IDs after [[target#.
+func (e *NoteEditor) completeSubpath(at int, target string, blocks bool, query string, closed bool) {
+	version := e.b.Buffer().Version()
+	start := at - len(query)
+	e.Sources.Subpaths(target, blocks, func(found []Target) {
+		if e.b.Buffer().Version() != version {
+			return // the text moved on; the next key asks again
+		}
+		var items []code.Completion
+		for _, t := range found {
+			insert := t.Insert
+			if !closed {
+				insert += "]]"
+			}
+			items = append(items, code.Completion{Label: t.Label, Detail: t.Detail, Insert: insert, Kind: code.CompletionField})
+		}
+		e.State.ShowCompletions(start, items)
+	})
 }
 
 // fuzzyMatch reports whether every rune of query appears in s in order.
