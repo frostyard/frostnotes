@@ -540,7 +540,6 @@ type Outline struct {
 	state       ui.OutlineState[*heading]
 	roots       []*heading
 	text        string
-	open        bool
 }
 
 type heading struct {

@@ -110,7 +110,7 @@ func (s TabStrip) tab(c *ui.Context, el ui.Element, index int, tab Tab) {
 		if tab.Pinned {
 			frostui.Icon(c, "view-pin").TextColor(t.TextMuted)
 		}
-		ui.Text(c, tab.Title).FontSize(13).SingleLine().Grow(1).Shrink(1)
+		ui.Text(c, tab.Title).FontSize(13).SingleLine().Grow(1).Shrink(1).AccessHidden(true)
 		if !tab.Pinned && s.Close != nil && frostui.IconButton(c, "window-close", "Close "+tab.Title).Clicked() {
 			s.Close(tab.ID)
 		}

@@ -55,9 +55,9 @@ func TestTheTabStrip(t *testing.T) {
 		}
 	}
 	tt := ui.NewTester(func(c *ui.Context) { strip().View(c) }, 700, 60)
-	if err := tt.Click("Beta"); err != nil {
-		t.Fatal(err)
-	}
+	beta, _ := tt.Find("Beta")
+	x, y := beta.X+16, beta.Y+beta.H/2 // on its title: its middle is its close button
+	tt.ClickAt(x, y)
 	if active != 1 {
 		t.Fatalf("active %d", active)
 	}
@@ -73,9 +73,8 @@ func TestTheTabStrip(t *testing.T) {
 	if err := tt.Click("New tab"); err != nil || added != 1 {
 		t.Fatalf("%v %d", err, added)
 	}
-	if err := tt.RightClick("Beta"); err != nil {
-		t.Fatal(err)
-	}
+	tt.PressButton(1, x, y)
+	tt.ReleaseButton(1, x, y)
 	if !slices.Contains(tt.Menu(), "Close b") {
 		t.Fatalf("%q", tt.Menu())
 	}
