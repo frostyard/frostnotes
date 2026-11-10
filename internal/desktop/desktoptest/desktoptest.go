@@ -4,6 +4,7 @@
 package desktoptest
 
 import (
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -120,6 +121,8 @@ type Notesd struct {
 	Other *api.Client
 	Vault int64
 	Dir   string
+	// Blobs is notesd's blob store, which the app reads by hash.
+	Blobs string
 	// Down, while true, makes AppNotes return nil, as a lost connection.
 	Down bool
 }
@@ -127,8 +130,9 @@ type Notesd struct {
 // StartNotesd starts a notesd with an empty vault.
 func StartNotesd(t testing.TB) *Notesd {
 	t.Helper()
-	srv := rpctest.Start(t)
-	n := &Notesd{T: t, Srv: srv, App: srv.Dial(t), Other: srv.Dial(t), Dir: t.TempDir()}
+	data := t.TempDir()
+	srv := rpctest.StartWith(t, rpctest.Options{DataDir: data})
+	n := &Notesd{T: t, Srv: srv, App: srv.Dial(t), Other: srv.Dial(t), Dir: t.TempDir(), Blobs: filepath.Join(data, "blobs")}
 	v, err := n.App.Vault().Add(t.Context(), &api.VaultAddParams{Path: n.Dir})
 	if err != nil {
 		t.Fatal(err)
