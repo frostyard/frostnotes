@@ -108,10 +108,10 @@ React app has a TypeScript client and Lezer.
   2. Live preview, a Frostnotes editor that hides the syntax away from
      the caret and draws widgets (checkboxes, images, embeds, callouts,
      tables, math), built on MyGo's text-input client and shaped text
-     over the code editor's rope. Before it is built, MyGo's author is
-     asked whether `ui/editor` will take hidden ranges, widgets and
-     per-line styles (as Zed's folds with placeholders and blocks); if it
-     will, live preview is decorations on MyGo's editor instead.
+     over the code editor's rope. Whether MyGo's author is asked for
+     hidden ranges, widgets and per-line styles in `ui/editor` (as Zed's
+     folds with placeholders and blocks) is the owner's call; if MyGo
+     takes them, live preview is decorations on MyGo's editor instead.
 - **notesd renders the reading view for native views too.** Beside the
   sanitized HTML of [specs/render.md](../specs/render.md), `note.render`
   gains an additive format that MyGo's Markdown view reads: CommonMark
@@ -128,14 +128,23 @@ React app has a TypeScript client and Lezer.
   sidebar (backlinks, outgoing links, tags, properties, outline, tasks).
   ChairLift's page rail, console and job queue are not used. Obsidian's
   default shortcuts stay
-  ([plan 0005](../plans/0005-m3-desktop-app.md)'s exit criterion): the
-  palette opens on Ctrl + P for commands and Ctrl + O for notes, and on
-  Ctrl + K outside the editor, where Ctrl + K stays Insert Markdown
-  link.
-- **Generic pieces wait in one app-local package** that imports only the
-  standard library, MyGo, purego and frostui, enforced by a test, so
-  that they move into frostui by changing an import path. Frostnotes
-  edits no frostui code.
+  ([plan 0005](../plans/0005-m3-desktop-app.md)'s exit criterion), with
+  the rules Frostnotes and Frostmail share: Ctrl + K opens the palette
+  except inside a text editor, where it is Insert Markdown link, Ctrl +
+  Shift + P opens it everywhere, and Ctrl + P (commands) and Ctrl + O
+  (notes) stay for Obsidian's users. The status bar starts with the
+  connection, always shown, then sync and conflicts, then the app's
+  items.
+- **Shared pieces are frostui's.** The frame without a rail, panes,
+  the keymap and lazy palette sources, toasts with actions, the
+  connection screen, the tree, the settings layout, the coalescing
+  waker and opening links behind allow-lists are built once in frostui
+  for Frostnotes and Frostmail, and Frostnotes pins the version it
+  uses; it edits no frostui code. What is Frostnotes' alone for now
+  (tab strips, the split tree of tab groups, pane tabs) waits in one
+  app-local package that imports only the standard library, MyGo,
+  purego and frostui, enforced by a test, so that it moves into frostui
+  by changing an import path.
 - **The Flatpak keeps its own notesd.** The Go app replaces
   `/app/libexec/frostnotes-app`. The launcher `frostnotes.sh` (notesd's
   start, and its replacement on update,
