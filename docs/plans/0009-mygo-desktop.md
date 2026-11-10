@@ -356,15 +356,16 @@ The parts that need no frostui piece, in the order the orchestrator set.
   undo history that remote changes never enter), `editor` (source mode,
   Obsidian's keys and formatting commands with the web app's test
   cases, smart lists, links, completions of `[[` and `#`), `reading`,
-  `history` (and the merge view), `session`, and `note.renderMarkdown`
-  in notesd. The evidence: three writers lose no token and the caret
+  `history` (and the merge view), `session`, `workspace` (the model and
+  its operations, with the web app's test cases), and
+  `note.renderMarkdown` in notesd. The evidence: three writers lose no token and the caret
   stays (`TestNoTokenIsLostWithThreeWriters`); a keystroke in a
   10,000-line note takes about 3 ms with a CPU-drawn frame
   (`BenchmarkTypingInALongNote`, an AMD Ryzen AI MAX+ 395); the render
   rules pass in `internal/render` and every link of the generated
   vault's manifest in `internal/engine`.
-- **Left:** the workspace model, the preferences file and the commands'
-  table; paste and drop of attachments; the inline title and the
+- **Left:** the workspace's and the preferences' files, and the
+  commands' table; paste and drop of attachments; the inline title and the
   properties panel; completion of headings and block IDs; the system
   pieces (notesd's log tail, the background setting); tab notices.
 - **Done when:** M3's writers evidence passes against the native
