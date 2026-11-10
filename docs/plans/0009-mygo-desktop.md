@@ -210,8 +210,9 @@ app-local package for the rest (below).
   but holds runs, not the file, and saves its own Markdown. So the app
   starts with source mode on the code editor and the reading view
   (Phase 2), and live preview comes in Phase 5, as decorations on MyGo's
-  editor if its author adds them, or as Frostnotes' own editor on
-  MyGo's text-input client, shaped text and the code editor's rope:
+  editor, which its author accepted ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)); Frostnotes' own editor on
+  MyGo's text-input client, shaped text and the code editor's rope stays
+  the fallback should that stall:
   laying out only the lines in view with cached heights (CodeMirror's
   height map, which [ADR-0025](../adr/0025-patch-what-costs-the-editor-its-frames.md)
   had to patch), hiding marks off the selection's lines, drawing widgets
@@ -250,13 +251,23 @@ app-local package for the rest (below).
 - A click on a task's box in the Markdown view (the reading view shows
   tasks but cannot check them; the editor's Ctrl + L does).
 
-Requests to MyGo's author (hidden ranges, widgets and per-line styles in
-`ui/editor`, as Zed's folds with placeholders and blocks; an edit outside
-the undo history that rebases it; a hook for a click on a task's box in
-the Markdown view) go through the owner, whom the
-orchestrator asks; Frostnotes does not contact the author. Until the
-second exists, the app keeps its own undo over the buffer's edits, so
-that Ctrl + Z never takes back another writer's change.
+Requests to MyGo's author go through the owner, whom the orchestrator
+asks; Frostnotes does not contact the author. Two were filed on
+2026-11-10 with the owner's approval, and the author welcomed both;
+other sessions are writing their pull requests:
+
+- [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden or replaced ranges first (Zed's folds with placeholders),
+  then elements between lines, and per-line text styles after a design
+  note. Phase 5 builds live preview on them.
+- [egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652): an edit outside the undo history that rebases it. MyGo's undo
+  will keep steps as inverse edits moved over a remote change, and drop
+  a step that overlaps one, as the app's own `notes.History` does.
+  Today MyGo's `Undo` restores a step's whole text before it, so undoing
+  any earlier step would take back a remote change made since. Until the
+  change lands, the app runs its own undo, and no key or menu reaches
+  MyGo's (on Linux, MyGo's editing menu has no Undo item).
+
+Not filed yet: a hook for a click on a task's box in the Markdown view.
 
 ## Generic pieces
 
@@ -411,8 +422,16 @@ The parts that need no frostui piece, in the order the orchestrator set.
 
 ## Phase 5 — Live preview (about 3 weeks)
 
-- Decide between MyGo's decorations and Frostnotes' own editor by the
-  answer to the asks, in an ADR.
+- Live preview on MyGo's editor, in the order its author is building
+  [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the
+  selection's lines; a checkbox, a bullet, an image, math or a link's
+  text in place of its source), then elements between lines (tables,
+  callouts, note embeds, the properties block), then per-line styles
+  (headings' sizes) once their design note settles. An ADR records the
+  shape when the phase starts; Frostnotes' own editor widget is the
+  fallback should the pull requests stall.
+- The app's undo gives way to MyGo's once [egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652) lands, with remote
+  changes applied outside the history.
 - The constructs of [design/app.md](../design/app.md#live-preview), in
   M3's order: headings, emphasis, highlights and inline code; links and
   wikilinks; tasks and bullets; quotes and rules; code fences; images;
@@ -467,8 +486,9 @@ The parts that need no frostui piece, in the order the orchestrator set.
 
 - **A trial before the switch,** as M3's 7 days? The owner decides by
   Phase 7.
-- **MyGo's answer** on hidden ranges, widgets and undo control, through
-  the owner, decides Phase 5's shape, by its start.
+- *Answered 2026-11-10:* **MyGo's answer.** Its author welcomed both
+  asks ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651), [egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652)); Phase 5 builds live preview on MyGo's editor, as
+  above.
 - *Answered 2026-11-10 by the orchestrator:* **Ctrl + K** opens the
   palette except inside a text editor, where it is Insert Markdown link;
   Ctrl + Shift + P opens it everywhere.

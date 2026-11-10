@@ -24,7 +24,10 @@ type Merge struct {
 }
 
 // undoKeys leave undo and redo to the window, which runs the note's own:
-// MyGo's buffer history would take back another writer's change.
+// MyGo's Undo restores a step's whole text before it, so it would take
+// back another writer's change made since (egoist/mygo#1652). The keys are
+// the only way to it here: on Linux MyGo's editing menu has no Undo item
+// (Windows' has, and would need a guard).
 var undoKeys = []code.Binding{
 	{Mods: ui.Ctrl, Key: ui.KeyZ, Command: code.NoCommand},
 	{Mods: ui.Ctrl | ui.Shift, Key: ui.KeyZ, Command: code.NoCommand},

@@ -99,22 +99,23 @@ React app has a TypeScript client and Lezer.
   live preview is decoration, never transformation, as in ADR-0007. The
   rich text editor is not used for notes.
 - **The editor comes in two steps.**
-  1. Source mode on MyGo's code editor, with a Markdown highlighter over
-     the shared parser (headings, emphasis, links, tags, callouts and
-     code in their own colors and weights), folding by headings and
+  1. Source mode on MyGo's code editor, with MyGo's Markdown lexer and
+     Obsidian's syntax laid over it (headings, emphasis, links, tags,
+     callouts and code in their own colors and weights), folding by headings and
      lists, completions of links, tags and properties, hovers that
      preview a linked note, Ctrl-click to follow a link, and the find
      and replace bar; and the reading view on MyGo's Markdown view.
      Until MyGo's buffer takes an edit outside its undo history, the
      app keeps its own undo, so Ctrl + Z never takes back another
      writer's change.
-  2. Live preview, a Frostnotes editor that hides the syntax away from
-     the caret and draws widgets (checkboxes, images, embeds, callouts,
-     tables, math), built on MyGo's text-input client and shaped text
-     over the code editor's rope. Whether MyGo's author is asked for
-     hidden ranges, widgets and per-line styles in `ui/editor` (as Zed's
-     folds with placeholders and blocks) is the owner's call; if MyGo
-     takes them, live preview is decorations on MyGo's editor instead.
+  2. Live preview, which hides the syntax away from the caret and draws
+     widgets (checkboxes, images, embeds, callouts, tables, math), as
+     decorations on MyGo's editor: its author accepted
+     hidden or replaced ranges, elements between lines and per-line text
+     styles ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)) and an edit outside the undo history that rebases it
+     ([egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652)), filed with the owner's approval on 2026-11-10. A Frostnotes
+     editor on MyGo's text-input client, shaped text and the code
+     editor's rope is the fallback.
 - **notesd renders the reading view for native views too.** Beside the
   sanitized HTML of [specs/render.md](../specs/render.md), `note.render`
   gains an additive sibling, `note.renderMarkdown`, that MyGo's

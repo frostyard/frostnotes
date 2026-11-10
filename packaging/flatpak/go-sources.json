@@ -193,6 +193,18 @@
   },
   {
     "type": "file",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.1.0.mod",
+    "sha256": "f010a89ad26437db81eb78fd13682faf1e44dd96f9b5040b7bb0ca835b4ee301",
+    "dest": "goproxy/github.com/frostyard/frostui/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.1.0.zip",
+    "sha256": "b3fd94028b272f8a64cdb1fac4225f10fdc81a4350d537a881321b0596127370",
+    "dest": "goproxy/github.com/frostyard/frostui/@v"
+  },
+  {
+    "type": "file",
     "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.4.0.mod",
     "sha256": "48c6227bc6996aa9882e825e848cae99b5a75edb48f99802fc9e95cf24b2ffaf",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"

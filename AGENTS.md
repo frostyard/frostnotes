@@ -192,9 +192,11 @@ file a step names before writing its frostnotes counterpart.
   `make check`, tags `svu next` and pushes the tag.
 - **Go modules** (`go.mod`): `github.com/frostyard/clix` v0.5.0 (the CLI shell of
   `notesctl`), `github.com/frostyard/lodge/kit` v0.4.0 (the RPC and app runtime),
-  and `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
-  also clix's). Run `make flatpak-sources` after a bump: it rewrites
-  `packaging/flatpak/go-sources.json`.
+  `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
+  also clix's), and for the native desktop app (plan 0009)
+  `github.com/frostyard/frostui` v0.1.0 (frostyard's desktop UI kit) over
+  `github.com/egoist/mygo` v0.8.3. Run `make flatpak-sources` after a
+  bump: it rewrites `packaging/flatpak/go-sources.json`.
 - **Rust crates** (`app/src-tauri/Cargo.toml`): `frostyard-problems` as a git
   dependency on std's tag `v0.5.0` (the shell's problem records). Run
   `make flatpak-sources` after a change: it rewrites
