@@ -89,21 +89,20 @@ type App struct {
 	dragging bool
 	wasDrag  bool
 
-	Dialogs  frostui.Dialogs
-	Palette  frostui.Palette
-	Info     frostui.Info
-	mode     string // the palette's source: "", notes, folders or templates
-	moving   *moveTarget
-	switcher switcherCache
-	pending  *pendingLine
-	held     map[string]heldMerge
-	lastMod  ui.Modifiers
-	table    []commands.Spec
-	actions  map[string]func()
-	toasts   []ui.Toast
-	counts   textCounts
-	vm       vaultManager
-	sets     settingsDialog
+	Shell   frostui.PaneShell
+	Dialogs frostui.Dialogs
+	panes   frostui.Panes
+	cmds    *frostui.CommandTable
+	moving  *moveTarget
+	pending *pendingLine
+	held    map[string]heldMerge
+	lastMod ui.Modifiers
+	table   []commands.Spec
+	actions map[string]func()
+	toasts  []ui.Toast
+	counts  textCounts
+	vm      vaultManager
+	sets    settingsDialog
 }
 
 type binding struct {
@@ -123,6 +122,9 @@ func New(cfg Config) *App {
 	a.Session.OnResync = a.reloadAll
 	a.Session.OnChange(a.connectionChanged)
 	a.actions = a.commandActions()
+	a.Shell.Dialogs = &a.Dialogs
+	a.cmds = a.commandTable()
+	a.Shell.Palette.Sources = a.paletteSources()
 	return a
 }
 

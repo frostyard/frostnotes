@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -17,21 +16,21 @@ import (
 // the system's browser (http, https and mailto only), and a vault file in
 // the system's default app. A file must be a regular, non-executable file
 // inside the vault's folder, of a type that opens as a document, never one
-// a desktop runs (a script, a .desktop entry, HTML). The system opens them
-// with xdg-open, the path or URL one argument, no shell. The extension list
-// guards a file's type, not the handler: xdg-open may pick one by the
-// file's content. A vault on a CIFS mount whose file_mode has execute bits
+// a desktop runs (a script, a .desktop entry, HTML). These are the app's
+// rules; cmd/frostnotes then opens what passes through frostui's Opener.
+// The extension list guards a file's type, not the handler: the system may
+// pick one by the file's content. A vault on a CIFS mount whose file_mode has execute bits
 // (the kernel's default, 0755) shows every file executable, so Open in
 // default app refuses them all; mount it with file_mode=0644.
 
-// openable are the extensions Open in default app opens: documents and
-// media, never anything a desktop runs or a browser scripts.
-func openable(ext string) bool {
-	return slices.Contains([]string{
-		"md", "txt", "pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "mp3", "wav", "ogg", "flac", "m4a",
-		"webm", "mp4", "mov", "mkv", "ogv", "3gp", "canvas", "base", "csv", "odt", "ods", "odp", "doc", "docx", "xls",
-		"xlsx", "ppt", "pptx", "rtf", "epub",
-	}, ext)
+// OpenableExtensions are the extensions Open in default app opens:
+// documents and media, never anything a desktop runs or a browser scripts.
+func OpenableExtensions() []string {
+	return []string{
+		".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif", ".mp3", ".wav", ".ogg", ".flac", ".m4a",
+		".webm", ".mp4", ".mov", ".mkv", ".ogv", ".3gp", ".canvas", ".base", ".csv", ".odt", ".ods", ".odp", ".doc", ".docx", ".xls",
+		".xlsx", ".ppt", ".pptx", ".rtf", ".epub",
+	}
 }
 
 // WebURL checks that raw may open in the system's browser and returns what
@@ -92,35 +91,8 @@ func VaultFile(root, p string) (string, error) {
 	if info.Mode().Perm()&fs.FileMode(0o111) != 0 {
 		return "", fmt.Errorf("%s is executable: the app does not run files", p)
 	}
-	if !openable(strings.ToLower(strings.TrimPrefix(filepath.Ext(file), "."))) {
+	if !slices.Contains(OpenableExtensions(), strings.ToLower(filepath.Ext(file))) {
 		return "", fmt.Errorf("%s: the app opens only documents and media outside itself", p)
 	}
 	return file, nil
-}
-
-// OpenURL opens a web link in the system's browser.
-func OpenURL(raw string) error {
-	u, err := WebURL(raw)
-	if err != nil {
-		return err
-	}
-	return xdgOpen(u)
-}
-
-// OpenFile opens a vault file in the system's default app.
-func OpenFile(root, p string) error {
-	file, err := VaultFile(root, p)
-	if err != nil {
-		return err
-	}
-	return xdgOpen(file)
-}
-
-func xdgOpen(arg string) error {
-	cmd := exec.Command("xdg-open", arg)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("xdg-open: %w", err)
-	}
-	go func() { _ = cmd.Wait() }() // reaped when it exits
-	return nil
 }

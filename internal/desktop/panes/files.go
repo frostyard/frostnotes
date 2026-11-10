@@ -25,8 +25,12 @@ type FileActions struct {
 	History     func(path string)
 }
 
+// section is the Files list's one section, which has no header.
+const section = "files"
+
 // Files is the Files pane (docs/specs/ui.md#files-pane-batch-2): a vault's
-// folders and files on MyGo's outline, which builds only the rows in view.
+// folders and files on frostui's source list, which builds only the rows
+// in view.
 type Files struct {
 	Env     *Env
 	Store   *workspace.Store
@@ -34,17 +38,17 @@ type Files struct {
 	// ShowUnsupported is the Show unsupported files preference.
 	ShowUnsupported bool
 
-	state    ui.OutlineState[string]
+	list     frostui.SourceList[string]
+	made     bool
 	tree     *Tree
 	builtFor int
 	files    int
 	sort     string
 	unsup    bool
 	loaded   string
-	renaming string
-	newName  string
-	focus    bool
-	theme    *ui.Theme
+	active   string
+	hovered  bool
+	ctx      *ui.Context
 }
 
 func (f *Files) rebuild() {
@@ -68,14 +72,14 @@ func (f *Files) generation() int {
 }
 
 // syncOpen loads the workspace's open folders when the vault changes, and
-// writes back what the outline opened and closed.
+// writes back what the list opened and closed.
 func (f *Files) syncOpen() {
 	if f.loaded != f.Store.Vault() {
 		f.loaded = f.Store.Vault()
 		f.setOpen(f.Store.Workspace().Files.Expanded)
 		return
 	}
-	cur := slices.Sorted(f.state.Open.All())
+	cur := slices.Sorted(slices.Values(f.list.OpenItems(section)))
 	stored := slices.Sorted(slices.Values(f.Store.Workspace().Files.Expanded))
 	if !slices.Equal(cur, stored) {
 		f.Store.Update(func(w *workspace.Workspace) { w.Files.Expanded = cur })
@@ -83,9 +87,9 @@ func (f *Files) syncOpen() {
 }
 
 func (f *Files) setOpen(paths []string) {
-	f.state.Open.Clear()
+	f.list.CollapseAll()
 	for _, p := range paths {
-		f.state.Open.Add(p)
+		f.list.SetOpen(section, p, true)
 	}
 }
 
@@ -93,28 +97,111 @@ func (f *Files) setOpen(paths []string) {
 func (f *Files) Reveal(p string) {
 	f.Store.Update(func(w *workspace.Workspace) { w.RevealPath(p) })
 	f.setOpen(f.Store.Workspace().Files.Expanded)
+	f.list.Select(section, p)
 }
 
 // Rename starts renaming p in place (F2).
-func (f *Files) Rename(p string) {
-	if f.tree == nil {
-		f.rebuild()
+func (f *Files) Rename(p string) { f.list.StartRename(section, p) }
+
+func (f *Files) isFolder(p string) bool {
+	n := f.tree.Nodes[p]
+	return n != nil && n.Type == "folder"
+}
+
+func (f *Files) rename(p, name string) {
+	if strings.Contains(name, "/") || f.Actions.Rename == nil {
+		return
 	}
-	if n := f.tree.Nodes[p]; n != nil {
-		f.renaming, f.newName, f.focus = p, n.Name, true
+	f.Actions.Rename(p, name, f.isFolder(p))
+}
+
+// choose is a click on a row: a file opens, a folder opens or closes. The
+// arrow keys only move the choice, and Enter acts on it.
+func (f *Files) choose(p string) {
+	if !f.hovered {
+		return
+	}
+	if f.isFolder(p) {
+		f.list.SetOpen(section, p, !f.list.IsOpen(section, p))
+		f.list.ClearSelection() // so that a second click closes it
+		return
+	}
+	f.Env.Actions.Open(p, f.Env.where(f.ctx))
+}
+
+func (f *Files) activate(p string, mods ui.Modifiers) {
+	if f.isFolder(p) {
+		f.list.SetOpen(section, p, !f.list.IsOpen(section, p))
+		return
+	}
+	f.Env.Actions.Open(p, workspace.WhereFor(mods&ui.Cmd != 0, mods&ui.Alt != 0, 0))
+}
+
+func (f *Files) children(p string) []string {
+	n := f.tree.Nodes[p]
+	if n == nil || n.Type != "folder" {
+		return nil
+	}
+	if n.Children == nil {
+		return []string{}
+	}
+	return n.Children
+}
+
+func (f *Files) sourceRow(p string) frostui.SourceRow {
+	n := f.tree.Nodes[p]
+	if n == nil {
+		return frostui.SourceRow{}
+	}
+	row := frostui.SourceRow{Title: n.Name}
+	switch n.Type {
+	case "folder":
+		row.Icon = "folder"
+	case "image":
+		row.Icon = "image-x-generic"
+	default:
+		row.Icon = "text-x-generic"
+	}
+	if n.Type != "folder" && n.Extension != "md" && n.Extension != "" {
+		row.Tag = strings.ToUpper(n.Extension)
+	}
+	return row
+}
+
+func (f *Files) menu(m *ui.Menu, p, _ string) {
+	if f.isFolder(p) {
+		f.folderMenu(m, p)
+	} else {
+		f.fileMenu(m, p)
 	}
 }
 
-func (f *Files) commitRename(n *Node) {
-	name := strings.TrimSpace(f.newName)
-	p := f.renaming
-	f.renaming = ""
-	if name == "" || name == n.Name || strings.Contains(name, "/") {
+// accepts says whether folder takes the dragged row.
+func (f *Files) accepts(folder, p string) bool {
+	return f.isFolder(folder) && p != folder && parentOf(p) != folder && !strings.HasPrefix(folder+"/", p+"/")
+}
+
+func (f *Files) move(p, folder string) {
+	if f.Actions.Move != nil {
+		f.Actions.Move(p, folder, f.isFolder(p))
+	}
+}
+
+// setUp fills in the list once.
+func (f *Files) setUp() {
+	if f.made {
 		return
 	}
-	if f.Actions.Rename != nil {
-		f.Actions.Rename(p, name, n.Type == "folder")
-	}
+	f.made = true
+	f.list.Label = "Files"
+	f.list.Children = f.children
+	f.list.Row = f.sourceRow
+	f.list.Menu = f.menu
+	f.list.OnSelect = f.choose
+	f.list.OnActivate = f.activate
+	f.list.Rename = f.rename
+	f.list.DragItems = func(items []string) any { return items[0] }
+	frostui.DropOn(&f.list, f.accepts, func(folder, p string, _ ui.Modifiers) { f.move(p, folder) })
 }
 
 func (f *Files) toolbar(c *ui.Context) {
@@ -127,11 +214,11 @@ func (f *Files) toolbar(c *ui.Context) {
 		}
 		uikit.ToolButton(c, "view-sort-ascending", "Change sort order").Menu(f.sortMenu)
 		label := "Expand all"
-		if f.state.Open.Len() > 0 {
+		if len(f.list.OpenItems(section)) > 0 {
 			label = "Collapse all"
 		}
-		if uikit.ToolButton(c, "view-list-tree", label).Clicked() {
-			if f.state.Open.Len() > 0 {
+		if uikit.ToolButton(c, "view-list", label).Clicked() {
+			if len(f.list.OpenItems(section)) > 0 {
 				f.setOpen(nil)
 			} else {
 				f.setOpen(f.folders())
@@ -212,83 +299,22 @@ func (f *Files) folderMenu(m *ui.Menu, p string) {
 	}
 }
 
-// drop moves a dragged row into a folder, "" being the vault's root.
-func (f *Files) drop(el ui.Element, folder string) {
-	t := el
-	if _, over := ui.DragOver[string](t); over {
-		t.Background(frostui.ToneFill(themeOf(f), frostui.Accent))
-	}
-	if p, ok := ui.Drop[string](t); ok && f.Actions.Move != nil && p != folder && parentOf(p) != folder && !strings.HasPrefix(folder+"/", p+"/") {
-		n := f.tree.Nodes[p]
-		f.Actions.Move(p, folder, n != nil && n.Type == "folder")
-	}
-}
-
-func themeOf(f *Files) *ui.Theme { return f.theme }
-
-func (f *Files) row(c *ui.Context, p string) {
-	n := f.tree.Nodes[p]
-	if n == nil {
-		return
-	}
-	if f.renaming == p {
-		in := ui.TextInput(c, &f.newName).Label("New name").Grow(1)
-		if f.focus {
-			f.focus = false
-			in.AutoFocus()
-		}
-		if in.Submitted() {
-			f.commitRename(n)
-		}
-		return
-	}
-	folder := n.Type == "folder"
-	r := ui.Row(c).Grow(1).Gap(frostui.SpaceXS).AlignItems(ui.Center).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(n.Name).Drag(p)
-	if p == f.Env.Active() {
-		r.Background(f.theme.Surface).Radius(frostui.RadiusChip)
-	}
-	if folder {
-		f.drop(r, p)
-		r.ContextMenu(func(m *ui.Menu) { f.folderMenu(m, p) })
-	} else {
-		r.ContextMenu(func(m *ui.Menu) { f.fileMenu(m, p) })
-	}
-	if r.Clicked() {
-		if folder {
-			if f.state.Open.Has(p) {
-				f.state.Open.Remove(p)
-			} else {
-				f.state.Open.Add(p)
-			}
-		} else {
-			f.Env.Actions.Open(p, f.Env.where(c))
-		}
-	}
-	r.Children(func() {
-		ui.Text(c, n.Name).SingleLine().Grow(1)
-		if !folder && n.Extension != "md" && n.Extension != "" {
-			frostui.Pill(c, strings.ToUpper(n.Extension), frostui.Neutral)
-		}
-	})
-}
-
 // View draws the pane.
 func (f *Files) View(c *ui.Context) ui.Element {
 	f.rebuild()
-	f.theme = c.Theme()
+	f.setUp()
+	f.ctx = c
 	f.syncOpen()
+	if active := f.Env.Active(); active != f.active {
+		f.active = active
+		if active != "" {
+			f.list.Select(section, active)
+		}
+	}
 	return ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		f.toolbar(c)
-		list := ui.Outline(c, &f.state, f.tree.Roots, func(p string) []string {
-			n := f.tree.Nodes[p]
-			if n == nil || n.Type != "folder" {
-				return nil
-			}
-			if n.Children == nil {
-				return []string{}
-			}
-			return n.Children
-		}, func(p string) { f.row(c, p) }).Grow(1)
+		list := f.list.View(c, []frostui.SourceSection[string]{{ID: section, Items: f.tree.Roots}}).Grow(1)
+		f.hovered = list.Hovered()
 		list.ContextMenu(func(m *ui.Menu) {
 			if m.Item("New note").Chosen() && f.Actions.NewNote != nil {
 				f.Actions.NewNote("")
@@ -297,6 +323,8 @@ func (f *Files) View(c *ui.Context) ui.Element {
 				f.Actions.NewFolder("")
 			}
 		})
-		f.drop(list, "")
+		if p, ok := ui.Drop[string](list); ok && parentOf(p) != "" {
+			f.move(p, "")
+		}
 	})
 }

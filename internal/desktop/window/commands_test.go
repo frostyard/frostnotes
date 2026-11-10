@@ -2,6 +2,7 @@ package window
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -61,24 +62,24 @@ func TestEveryCommandRunsFromThePalette(t *testing.T) {
 			t.Errorf("%s does not apply", s.ID)
 			continue
 		}
-		f.a.showPalette("")
+		f.a.Shell.Palette.ShowSource(frostui.PaletteCommands)
 		f.tt.Frame()
-		f.a.Palette.Query = s.Title
-		f.a.Palette.Selected = 0
+		f.tt.Type(s.Title)
 		f.tt.Frame()
-		rows := f.a.commandRows()
 		found := -1
-		for i, r := range frostui.Filter(rows, s.Title) {
+		for i, r := range frostui.Filter(f.a.cmds.Commands(), s.Title) {
 			if r.ID == s.ID {
 				found = i
 			}
 		}
 		if found < 0 {
 			t.Errorf("%s is not listed", s.ID)
-			f.a.Palette.Open = false
+			f.a.Shell.Palette.Open = false
 			continue
 		}
-		f.a.Palette.Selected = found
+		for range found {
+			f.tt.Key(0, ui.KeyDown)
+		}
 		f.tt.Frame()
 		f.tt.Key(0, ui.KeyEnter)
 		f.tt.Frame()
@@ -94,21 +95,39 @@ func TestEveryKeyRunsItsCommand(t *testing.T) {
 	runs := counted(f.a)
 	for _, s := range f.a.table {
 		for _, k := range s.Keys {
-			if k.Scope == commands.InEditor {
+			if k.Scope == commands.InEditor || isPaletteKey(k) {
 				continue
 			}
 			name := fmt.Sprintf("%s by %v", s.ID, keyCaps(k))
 			before := runs[s.ID]
 			f.tt.Key(k.Mods, k.Key)
 			f.tt.Frame()
-			if f.a.Palette.Open {
-				f.a.Palette.Open = false
+			if f.a.Shell.Palette.Open {
+				f.a.Shell.Palette.Open = false
 				f.tt.Frame()
 			}
 			if runs[s.ID] != before+1 {
 				t.Errorf("%s ran %d times", name, runs[s.ID]-before)
 			}
 		}
+	}
+}
+
+// isPaletteKey is a key of frostui's own palette command.
+func isPaletteKey(k commands.Key) bool {
+	return slices.ContainsFunc(frostui.PaletteBindings(), func(b frostui.KeyBinding) bool { return b.Mods == k.Mods && b.Key == k.Key })
+}
+
+func TestThePalettesOwnKeysOpenIt(t *testing.T) {
+	f := openNote(t)
+	for _, k := range frostui.PaletteBindings() {
+		f.tt.Key(k.Mods, k.Key)
+		f.tt.Frame()
+		if !f.a.Shell.Palette.Open || f.a.Shell.Palette.ShownSource() != "" {
+			t.Errorf("%s: open %v on %q", k, f.a.Shell.Palette.Open, f.a.Shell.Palette.ShownSource())
+		}
+		f.a.Shell.Palette.Open = false
+		f.tt.Frame()
 	}
 }
 
@@ -125,7 +144,7 @@ func TestCtrlKIsTheEditorsInAnEditor(t *testing.T) {
 	f.tt.Frame()
 	f.tt.Key(ui.Cmd, ui.KeyK)
 	f.tt.Frame()
-	if f.a.Palette.Open {
+	if f.a.Shell.Palette.Open {
 		t.Fatal("Ctrl K opened the palette in an editor")
 	}
 	if got := f.a.activeEditor().Binding().Buffer().String(); got != "[see]() [[b]]\n" {
@@ -133,7 +152,7 @@ func TestCtrlKIsTheEditorsInAnEditor(t *testing.T) {
 	}
 	f.tt.Key(ui.Cmd|ui.Shift, ui.KeyP)
 	f.tt.Frame()
-	if !f.a.Palette.Open {
+	if !f.a.Shell.Palette.Open {
 		t.Fatal("Ctrl Shift P did not open the palette in an editor")
 	}
 }

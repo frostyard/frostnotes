@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/egoist/mygo v0.8.3
 	github.com/frostyard/clix v0.5.0
-	github.com/frostyard/frostui v0.1.0
+	github.com/frostyard/frostui v0.2.0
 	github.com/frostyard/lodge/kit v0.4.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
@@ -34,7 +34,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
-	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect

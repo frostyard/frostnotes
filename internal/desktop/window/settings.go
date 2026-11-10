@@ -63,13 +63,12 @@ type hubView struct {
 	pending []api.PendingPairing
 }
 
-// settingsDialog is the settings dialog (docs/specs/ui.md#settings-batch-2):
-// the preferences, the vault's settings, the keyboard map, sync, the hub,
-// and in the Flatpak the background setting. Thin until frostui's settings
-// layout comes in v0.2.0.
+// settingsDialog is the settings dialog (docs/specs/ui.md#settings-batch-2)
+// on frostui's settings layout: the preferences, the vault's settings, the
+// keyboard map, sync, the hub, and in the Flatpak the background setting.
 type settingsDialog struct {
-	open       bool
-	section    string
+	layout     frostui.Settings
+	wasOpen    bool
 	wantShow   string
 	drafts     map[string]string
 	hub        *hubView
@@ -83,53 +82,21 @@ func (s *settingsDialog) show(section string) { s.wantShow = section }
 
 func (s *settingsDialog) view(c *ui.Context, a *App) {
 	if s.wantShow != "" {
-		s.open, s.section, s.wantShow = true, s.wantShow, ""
+		s.layout.Search = true
+		s.layout.Show(s.wantShow)
+		s.wantShow = ""
 		s.drafts = map[string]string{}
 		s.load(a)
 	}
-	if !s.open {
-		return
-	}
-	sections := a.settingsSections()
-	cur := 0
-	for i, sec := range sections {
-		if sec.id == s.section {
-			cur = i
+	if s.layout.Open {
+		s.wasOpen = true
+		s.layout.Dialog(c, "Settings", a.settingsPages(c))
+		if s.joining != nil {
+			s.joinDialog(c, a)
 		}
 	}
-	t := c.Theme()
-	ui.Modal(c, &s.open, func() {
-		ui.Row(c).Width(900).Height(620).AlignItems(ui.Stretch).Role(ui.RoleDialog).Label("Settings").Children(func() {
-			ui.Scroll(c).Width(200).Shrink(0).Padding(frostui.SpaceS).Background(frostui.Chrome(t)).Children(func() {
-				ui.Column(c).Gap(2).AlignItems(ui.Stretch).Role(ui.RoleNavigation).Label("Settings sections").Children(func() {
-					for i, sec := range sections {
-						row := ui.ButtonBase(c.Key(sec.id)).Row().Justify(ui.Start).Padding(6, 8).Radius(frostui.RadiusChip).Cursor(ui.CursorPointer).Label(sec.name)
-						if i == cur {
-							row.Background(t.Accent.Alpha(0.16))
-						} else if row.Hovered() {
-							row.Background(t.SurfaceHover)
-						}
-						if row.Clicked() {
-							s.section = sec.id
-						}
-						row.Children(func() { ui.Text(c, sec.name).AccessHidden(true).SingleLine() })
-					}
-				})
-			})
-			ui.Scroll(c.Key(sections[cur].id)).Grow(1).Padding(frostui.SpaceXL).Children(func() {
-				ui.Column(c).Gap(0).AlignItems(ui.Stretch).Role(ui.RoleGroup).Label(sections[cur].name).Children(func() {
-					ui.Text(c, sections[cur].name).FontSize(18).Bold()
-					for _, row := range sections[cur].rows {
-						s.row(c.Key(row.id), a, row)
-					}
-				})
-			})
-		})
-	})
-	if s.joining != nil {
-		s.joinDialog(c, a)
-	}
-	if !s.open {
+	if s.wasOpen && !s.layout.Open {
+		s.wasOpen = false
 		s.closed()
 	}
 }
@@ -190,7 +157,7 @@ func (s *settingsDialog) load(a *App) {
 
 func (s *settingsDialog) schedulePoll(a *App) {
 	s.poll = a.cfg.Env.After(BackgroundPoll, func() {
-		if !s.open {
+		if !s.layout.Open {
 			return
 		}
 		if b, ok := system.GetBackground(a.cfg.Getenv); ok {
@@ -203,63 +170,81 @@ func (s *settingsDialog) schedulePoll(a *App) {
 	})
 }
 
-func (s *settingsDialog) row(c *ui.Context, a *App, r settingRow) {
-	ui.Row(c).Gap(frostui.SpaceXL).Padding(frostui.SpaceM, 0).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).AlignItems(ui.Stretch).Children(func() {
-			frostui.Body(c, r.name)
-			if r.description != "" {
-				frostui.Caption(c, r.description).Wrap()
-			}
-		})
-		ui.Row(c).Gap(frostui.SpaceXS).Shrink(0).AlignItems(ui.Center).Children(func() { s.control(c, a, r) })
-	})
-	frostui.RowDivider(c)
-}
-
-func (s *settingsDialog) control(c *ui.Context, a *App, r settingRow) {
+// settingOf draws a row with frostui's layout.
+func (s *settingsDialog) settingOf(a *App, r settingRow) frostui.Setting {
+	out := frostui.Setting{Title: r.name, Subtitle: r.description, Disabled: r.disabled}
 	switch r.kind {
 	case toggleControl:
 		on := r.on
-		sw := ui.Switch(c, &on).Label(r.name).Disabled(r.disabled)
-		if on != r.on && !r.disabled {
-			a.settingChanged(r.id, on)
-		}
-		_ = sw
+		out.Switch = &on
+		out.OnChange = func() { a.settingChanged(r.id, on) }
 	case selectControl:
-		labels := make([]string, len(r.options))
 		selected := r.value
-		for i, o := range r.options {
-			labels[i] = o.label
+		for _, o := range r.options {
+			out.Options = append(out.Options, o.label)
 			if o.value == r.value {
 				selected = o.label
 			}
 		}
-		was := selected
-		ui.Select(c, &selected, labels).Width(240).Label(r.name).Disabled(r.disabled)
-		if selected != was && !r.disabled {
-			a.settingChanged(r.id, r.options[slices.Index(labels, selected)].value)
-		}
+		out.Choice = &selected
+		out.OnChange = func() { a.settingChanged(r.id, r.options[slices.Index(out.Options, selected)].value) }
 	case textControl:
-		s.textField(c, a, r)
+		out.Control = func(c *ui.Context) { s.textField(c, a, r) }
 	case numberControl:
 		v := float64(r.number)
-		ui.NumberInput(c, &v, float64(r.min), float64(r.max), 1).Width(100).Label(r.name).Disabled(r.disabled)
-		if int(v) != r.number && !r.disabled {
-			a.settingChanged(r.id, int(v))
-		}
+		out.Number, out.Min, out.Max, out.Step = &v, float64(r.min), float64(r.max), 1
+		out.OnChange = func() { a.settingChanged(r.id, int(v)) }
 	case keysControl:
-		frostui.Shortcut(c, r.keys...)
+		out.Control = func(c *ui.Context) { frostui.Shortcut(c, r.keys...) }
 	case infoControl:
-		frostui.Muted(c, r.text).Selectable().Wrap().MaxWidth(380)
+		out.Value = r.text
 	case buttonControl:
-		b := ui.Button(c, r.label).Label(r.label + " " + r.name).Disabled(r.disabled)
-		if r.danger {
-			b.TextColor(c.Theme().Danger)
-		}
-		if b.Clicked() && !r.disabled {
-			a.settingChanged(r.id, true)
+		out.Control = func(c *ui.Context) {
+			b := ui.Button(c, r.label).Label(r.label + " " + r.name).Disabled(r.disabled)
+			if r.danger {
+				b.TextColor(c.Theme().Danger)
+			}
+			if b.Clicked() && !r.disabled {
+				a.settingChanged(r.id, true)
+			}
 		}
 	}
+	return out
+}
+
+// settingsPages are the dialog's pages.
+func (a *App) settingsPages(*ui.Context) []frostui.SettingsPage {
+	var pages []frostui.SettingsPage
+	for _, sec := range a.settingsSections() {
+		g := frostui.SettingsGroup{}
+		for _, r := range sec.rows {
+			g.Settings = append(g.Settings, a.sets.settingOf(a, r))
+		}
+		pages = append(pages, frostui.SettingsPage{ID: sec.id, Title: sec.name, Icon: sectionIcon(sec.id), Groups: []frostui.SettingsGroup{g}})
+	}
+	return pages
+}
+
+func sectionIcon(id string) string {
+	switch id {
+	case "editor":
+		return "document-edit"
+	case "files":
+		return "folder"
+	case "appearance":
+		return "view-grid"
+	case "hotkeys":
+		return "utilities-terminal"
+	case "daily":
+		return "x-office-calendar"
+	case "templates":
+		return "text-x-generic"
+	case "sync":
+		return "view-refresh"
+	case "hub":
+		return "network-server"
+	}
+	return "go-bottom"
 }
 
 // textField keeps a draft while it has the focus, and commits it on Enter

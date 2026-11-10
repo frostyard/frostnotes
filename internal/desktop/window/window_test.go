@@ -5,11 +5,11 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
@@ -92,8 +92,8 @@ func TestOpeningAVaultRemembersIt(t *testing.T) {
 func TestTheStatusBarLeadsWithTheConnection(t *testing.T) {
 	f := start(t)
 	f.openVault()
-	if items := f.a.statusStart(); len(items) == 0 || !strings.HasSuffix(items[0].Text, "Local") {
-		t.Fatalf("status starts %+v", items)
+	if !f.has("Local") {
+		t.Fatalf("no connection in %q", f.tt.Texts())
 	}
 }
 
@@ -125,15 +125,15 @@ func TestThePaletteAndQuickSwitcher(t *testing.T) {
 	f.until("the catalog", func() bool { return f.a.hasFile("Garden plan.md") })
 	f.tt.Key(ui.Cmd, ui.KeyK)
 	f.tt.Frame()
-	if !f.a.Palette.Open || f.a.mode != "" {
-		t.Fatalf("Ctrl K: open %v, mode %q", f.a.Palette.Open, f.a.mode)
+	if !f.a.Shell.Palette.Open || f.a.Shell.Palette.ShownSource() != "" {
+		t.Fatalf("Ctrl K: open %v, source %q", f.a.Shell.Palette.Open, f.a.Shell.Palette.ShownSource())
 	}
 	f.tt.Key(0, ui.KeyEscape)
 	f.tt.Frame()
 	f.tt.Key(ui.Cmd, ui.KeyO)
 	f.tt.Frame()
-	if f.a.mode != modeNotes {
-		t.Fatalf("Ctrl O: mode %q", f.a.mode)
+	if f.a.Shell.Palette.ShownSource() != sourceNotes {
+		t.Fatalf("Ctrl O: source %q", f.a.Shell.Palette.ShownSource())
 	}
 	f.tt.Type("gard")
 	f.tt.Frame()
@@ -215,7 +215,7 @@ func TestConnectingShowsUntilNotesdAnswers(t *testing.T) {
 		return a.Session.Reason() != ""
 	})
 	tt.Frame()
-	if want := "Reconnecting to notesd… (" + errOffline.Error() + ")"; !tt.HasText(want) {
+	if !tt.HasText("Connecting to notesd…") || !tt.HasText(errOffline.Error()) {
 		t.Fatalf("after a failure: %q", tt.Texts())
 	}
 }
@@ -228,8 +228,8 @@ func TestAConnectionLostKeepsTheWorkspace(t *testing.T) {
 	if !f.has("Files") {
 		t.Fatalf("the workspace went: %q", f.tt.Texts())
 	}
-	if items := f.a.statusStart(); items[0].Tone == 0 {
-		t.Fatalf("the status bar shows no warning: %+v", items[0])
+	if conn := f.a.connection(); conn.State != frostui.Reconnecting {
+		t.Fatalf("the connection is %+v", conn)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestJoiningALoopbackHub(t *testing.T) {
 	f.openVault()
 	f.a.run("app:open-settings")
 	f.waitText("Show inline title")
-	f.a.sets.section = "sync"
+	f.a.sets.layout.Selected = "sync"
 	f.waitText("Sync with a hub")
 	f.a.settingChanged("sync:join", true)
 	f.tt.Frame()
@@ -308,8 +308,8 @@ func TestJoiningALoopbackHub(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.until("the join", func() bool { return f.a.syncInfo != nil && f.a.sets.joining == nil && f.a.syncInfo.URL == hub.HubURL })
-	if !strings.HasSuffix(f.a.statusStart()[0].Text, hostOf(hub.HubURL)) {
-		t.Fatalf("the status bar shows %+v", f.a.statusStart()[0])
+	if conn := f.a.connection(); conn.Host != hostOf(hub.HubURL) {
+		t.Fatalf("the status bar shows %+v", conn)
 	}
 }
 
@@ -320,6 +320,7 @@ func TestEveryScreenDraws(t *testing.T) {
 	if dir == "" {
 		dir = t.TempDir()
 	}
+	frostui.SetIcons(frostui.NewIcons(nil))
 	for _, dark := range []bool{false, true} {
 		mode := "light"
 		if dark {
@@ -355,11 +356,11 @@ func TestEveryScreenDraws(t *testing.T) {
 		save("reading")
 		f.a.run("command-palette:open")
 		save("palette")
-		f.a.Palette.Open = false
+		f.a.Shell.Palette.Open = false
 		f.tt.Frame()
 		f.a.run("app:open-settings")
 		save("settings")
-		f.a.sets.open = false
+		f.a.sets.layout.Open = false
 		f.tt.Frame()
 		f.a.Session.Close()
 	}

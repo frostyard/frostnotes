@@ -22,10 +22,10 @@ import (
 
 // The palette's sources besides the commands.
 const (
-	modeNotes     = "notes"
-	modeFolders   = "folders"
-	modeTemplates = "templates"
-	modeHeadings  = "headings"
+	sourceNotes     = "notes"
+	sourceFolders   = "folders"
+	sourceTemplates = "templates"
+	sourceHeadings  = "headings"
 )
 
 // moveTarget is what the folder chooser moves.
@@ -36,12 +36,6 @@ type moveTarget struct {
 
 // heldMerge is the text a merge view compares with, which no version holds.
 type heldMerge struct{ text, title string }
-
-// switcherCache is the quick switcher's rows for its query.
-type switcherCache struct {
-	query string
-	rows  []frostui.Command
-}
 
 // pendingLine is where a note opens once its editor has its text.
 type pendingLine struct {
@@ -356,7 +350,7 @@ func (a *App) moveInto(p, folder string, isFolder bool) {
 
 func (a *App) chooseFolder(p string, folder bool) {
 	a.moving = &moveTarget{p, folder}
-	a.showPalette(modeFolders)
+	a.Shell.Palette.ShowSource(sourceFolders)
 }
 
 func (a *App) confirmDelete(name, body string, run func()) {
@@ -594,7 +588,7 @@ func (a *App) insertTemplateChooser() {
 		a.notify("There are no templates in " + folder + ".")
 		return
 	}
-	a.showPalette(modeTemplates)
+	a.Shell.Palette.ShowSource(sourceTemplates)
 }
 
 func (a *App) templates(folder string) []string {
@@ -615,12 +609,6 @@ func (a *App) attachFile() {
 	if paths := a.cfg.PickFiles(); len(paths) > 0 {
 		e.AttachPaths(paths)
 	}
-}
-
-func (a *App) showPalette(mode string) {
-	a.mode = mode
-	a.switcher.rows = nil
-	a.Palette.Show()
 }
 
 // commandActions gives each command of the table what it does.
@@ -650,8 +638,8 @@ func (a *App) commandActions() map[string]func() {
 		}
 	}
 	m := map[string]func(){
-		"switcher:open":                      func() { a.showPalette(modeNotes) },
-		"command-palette:open":               func() { a.showPalette("") },
+		"switcher:open":                      func() { a.Shell.Palette.ShowSource(sourceNotes) },
+		"command-palette:open":               func() { a.Shell.Palette.ShowSource(frostui.PaletteCommands) },
 		"file-explorer:new-file":             func() { a.createNote(workspace.Here) },
 		"file-explorer:new-file-in-new-pane": func() { a.createNote(workspace.ToRight) },
 		"daily-notes":                        a.openDaily,
@@ -695,7 +683,7 @@ func (a *App) commandActions() map[string]func() {
 		"editor:toggle-checklist-status": format(editor.ToggleChecklist),
 		"editor:toggle-comments":         format(editor.ToggleComment),
 		"editor:delete-paragraph":        format(editor.DeleteParagraph),
-		"editor:set-heading":             func() { a.showPalette(modeHeadings) },
+		"editor:set-heading":             func() { a.Shell.Palette.ShowSource(sourceHeadings) },
 		"editor:insert-wikilink":         pair("[[", "]]"),
 		"editor:insert-embed":            pair("![[", "]]"),
 		"editor:insert-tag":              pair("#", ""),
@@ -793,184 +781,185 @@ func (a *App) closeWindow() {
 	}
 }
 
-// bindKeys declares every command's keys, but for those the editor binds.
-func (a *App) bindKeys(c *ui.Context) {
-	for _, s := range a.table {
-		for _, k := range s.Keys {
-			// A window's shortcut comes before the editor's own keys, so one
-			// that steps aside for the editor is not declared while it has
-			// the focus.
-			if k.Scope == commands.InEditor || (k.Scope == commands.OutsideEditors && a.inEditor()) {
-				continue
-			}
-			id := s.ID
-			c.OnWindowShortcut(k.Mods, k.Key, func() { a.run(id) })
-		}
-	}
-}
-
-func keyCaps(k commands.Key) []string {
-	var caps []string
-	if k.Mods&ui.Cmd != 0 {
-		caps = append(caps, "Ctrl")
-	}
-	if k.Mods&ui.Alt != 0 {
-		caps = append(caps, "Alt")
-	}
-	if k.Mods&ui.Shift != 0 {
-		caps = append(caps, "Shift")
-	}
-	return append(caps, keyCap(k.Key))
-}
-
-func keyCap(k ui.Key) string {
+// why says why a command does not apply.
+func (a *App) why(id string) string {
 	switch {
-	case k >= ui.KeyA && k <= ui.KeyZ:
-		return string(rune('A' + k - ui.KeyA))
-	case k >= ui.Key0 && k <= ui.Key9:
-		return string(rune('0' + k - ui.Key0))
-	case k >= ui.KeyF1 && k <= ui.KeyF12:
-		return "F" + strconv.Itoa(int(k-ui.KeyF1)+1)
-	}
-	switch k {
-	case ui.KeyEnter:
-		return "Enter"
-	case ui.KeyTab:
-		return "Tab"
-	case ui.KeyPageUp:
-		return "PageUp"
-	case ui.KeyPageDown:
-		return "PageDown"
-	case ui.KeyLeft:
-		return "←"
-	case ui.KeyRight:
-		return "→"
-	case ui.KeyMinus:
-		return "-"
-	case ui.KeyEqual:
-		return "="
-	case ui.KeyComma:
-		return ","
-	case ui.KeySlash:
-		return "/"
-	case ui.KeySemicolon:
-		return ";"
+	case a.vault == nil:
+		return "No vault is open"
+	case strings.HasPrefix(id, "editor:") || id == "insert-template" || id == "markdown:add-metadata-property":
+		return "No note is being edited"
 	}
 	return ""
 }
 
-// paletteCommands are the palette's rows for what it now lists.
-func (a *App) paletteCommands() []frostui.Command {
-	if !a.Palette.Open {
-		return nil
-	}
-	switch a.mode {
-	case modeNotes:
-		return a.switcherRows()
-	case modeFolders:
-		return a.folderRows()
-	case modeTemplates:
-		return a.templateRows()
-	case modeHeadings:
-		return a.headingRows()
-	}
-	return a.commandRows()
-}
-
-func (a *App) commandRows() []frostui.Command {
-	var recent, rest []frostui.Command
+// commandTable makes frostui's table of the app's commands. The keys the
+// palette's own command binds stay with it: Ctrl K and Ctrl Shift P open
+// the commands and the notes; Ctrl P opens the commands alone.
+func (a *App) commandTable() *frostui.CommandTable {
+	t := frostui.NewCommandTable()
+	t.Editing = func(*ui.Context) bool { return a.inEditor() }
+	palette := frostui.PaletteBindings()
 	for _, s := range a.table {
-		if s.Unlisted || !a.applies(s.ID) {
-			continue
+		cmd := frostui.Command{ID: s.ID, Title: s.Title, Group: s.Group, Icon: s.Icon, Unlisted: s.Unlisted,
+			Run: func() {
+				a.State.RanCommand(s.ID)
+				a.saveState()
+				a.actions[s.ID]()
+			},
+			Enabled: func() (bool, string) {
+				if a.applies(s.ID) {
+					return true, ""
+				}
+				return false, a.why(s.ID)
+			}}
+		for _, k := range s.Keys {
+			if len(cmd.Keys) == 0 {
+				cmd.Keys = keyCaps(k)
+			}
+			if k.Scope == commands.InEditor {
+				continue
+			}
+			if slices.ContainsFunc(palette, func(b frostui.KeyBinding) bool { return b.Mods == k.Mods && b.Key == k.Key }) {
+				continue
+			}
+			scope := frostui.OutsideEditors
+			if k.Scope == commands.Everywhere {
+				scope = frostui.Everywhere
+			}
+			cmd.Bindings = append(cmd.Bindings, frostui.KeyBinding{Mods: k.Mods, Key: k.Key, Scope: scope})
 		}
-		row := frostui.Command{ID: s.ID, Title: s.Title, Group: s.Group, Icon: s.Icon, Run: func() {
-			a.State.RanCommand(s.ID)
-			a.saveState()
-			a.run(s.ID)
-		}}
-		if len(s.Keys) > 0 {
-			row.Keys = keyCaps(s.Keys[0])
-		}
-		if slices.Contains(a.State.RecentCommands, s.ID) {
-			row.Group = "Recent"
-			recent = append(recent, row)
-			continue
-		}
-		rest = append(rest, row)
+		t.Add(cmd)
 	}
-	slices.SortStableFunc(recent, func(x, y frostui.Command) int {
-		return slices.Index(a.State.RecentCommands, x.ID) - slices.Index(a.State.RecentCommands, y.ID)
-	})
-	return append(recent, rest...)
+	return t
 }
 
-func (a *App) where() string {
-	return workspace.WhereFor(a.lastMod&ui.Cmd != 0, a.lastMod&ui.Alt != 0, 0)
+func keyCaps(k commands.Key) []string {
+	return frostui.KeyBinding{Mods: k.Mods, Key: k.Key}.Caps()
 }
 
-// switcherRows are the quick switcher's: recent files for an empty query,
-// else the best matches, and a row that creates what is typed. A query is
-// ranked once, not in every frame.
-func (a *App) switcherRows() []frostui.Command {
-	if a.Catalog == nil {
+// recentCommands head the palette's commands while nothing is typed.
+func (a *App) recentCommands() []frostui.Command {
+	if strings.TrimSpace(a.Shell.Palette.Query) != "" {
 		return nil
 	}
-	q := strings.TrimSpace(a.Palette.Query)
-	if a.switcher.rows != nil && a.switcher.query == q {
-		return a.switcher.rows
+	var rows []frostui.Command
+	for _, id := range a.State.RecentCommands {
+		cmd, ok := a.cmds.Command(id)
+		if !ok || cmd.Disabled || cmd.Unlisted {
+			continue
+		}
+		cmd.ID, cmd.Group, cmd.Bindings = "recent:"+id, "Recent", nil
+		rows = append(rows, cmd)
 	}
-	rows := []frostui.Command{}
-	add := func(p, alias string) {
-		title := strings.TrimSuffix(p, ".md")
-		rows = append(rows, frostui.Command{ID: p + "\x00" + alias, Title: title, Hint: alias, Icon: "text-x-generic", Run: func() { a.open(p, a.where()) }})
+	return rows
+}
+
+func (a *App) paletteSources() []frostui.PaletteSource {
+	return []frostui.PaletteSource{
+		{ID: sourceNotes, Title: "Notes", Placeholder: "Find a note", Limit: 8, Query: a.queryNotes},
+		{ID: sourceFolders, Title: "Folders", Placeholder: "Move to a folder", Query: a.queryFolders},
+		{ID: sourceTemplates, Title: "Templates", Placeholder: "Insert a template", Query: a.queryTemplates},
+		{ID: sourceHeadings, Title: "Headings", Placeholder: "Set the heading", Query: a.queryHeadings},
 	}
-	if q == "" {
+}
+
+func whereOfMods(mods ui.Modifiers) string {
+	return workspace.WhereFor(mods&ui.Cmd != 0, mods&ui.Alt != 0, 0)
+}
+
+// queryNotes is the quick switcher: recent files for an empty query, else
+// the best matches, and a row that creates what is typed. Shift + Enter
+// creates the note named by the query.
+func (a *App) queryNotes(q *frostui.PaletteQuery) {
+	if a.Catalog == nil {
+		q.Reply(nil)
+		return
+	}
+	var rows []frostui.PaletteItem
+	add := func(p, alias, group string) {
+		title := strings.TrimSuffix(path.Base(p), ".md")
+		detail := parentOf(p)
+		if alias != "" {
+			detail = strings.TrimSuffix(p, ".md")
+			title = alias
+		}
+		rows = append(rows, frostui.PaletteItem{ID: p + "\x00" + alias, Title: title, Detail: detail, Group: group, Icon: "text-x-generic",
+			RunWith: func(mods ui.Modifiers) {
+				if mods&ui.Shift != 0 && q.Text != "" {
+					a.openOrCreate(q.Text, workspace.Here)
+					return
+				}
+				a.open(p, whereOfMods(mods))
+			}})
+	}
+	if q.Text == "" {
 		for _, p := range a.Store.Workspace().Recent {
 			if a.hasFile(p) {
-				add(p, "")
+				add(p, "", "Recent files")
 			}
 		}
-	} else {
-		for _, m := range a.Catalog.Search(q, 50, false) {
-			add(m.Path, m.Alias)
-		}
-		rows = append(rows, frostui.Command{ID: "\x00create", Title: "Create " + q, Icon: "document-new", Run: func() { a.openOrCreate(q, a.where()) }})
+		q.Reply(rows)
+		return
 	}
-	a.switcher.query, a.switcher.rows = q, rows
-	return rows
+	for _, m := range a.Catalog.Search(q.Text, 50, false) {
+		add(m.Path, m.Alias, "")
+	}
+	if q.Alone {
+		text := q.Text
+		rows = append(rows, frostui.PaletteItem{ID: "\x00create", Title: "Create " + text, Icon: "document-new",
+			RunWith: func(mods ui.Modifiers) { a.openOrCreate(text, whereOfMods(mods)) }})
+	}
+	q.Reply(rows)
 }
 
-func (a *App) folderRows() []frostui.Command {
+// reply gives a chooser's rows, shown only on its own.
+func reply(q *frostui.PaletteQuery, rows []frostui.PaletteItem) {
+	if !q.Alone {
+		q.Reply(nil)
+		return
+	}
+	var kept []frostui.PaletteItem
+	for _, r := range rows {
+		if _, ok := frostui.Match(q.Text, r.Title); ok {
+			kept = append(kept, r)
+		}
+	}
+	q.Reply(kept)
+}
+
+func (a *App) queryFolders(q *frostui.PaletteQuery) {
 	if a.Catalog == nil || a.moving == nil {
-		return nil
+		q.Reply(nil)
+		return
 	}
 	to := *a.moving
-	rows := []frostui.Command{{ID: "/", Title: "/", Icon: "folder", Run: func() { a.moveInto(to.path, "", to.folder) }}}
+	rows := []frostui.PaletteItem{{ID: "/", Title: "/", Icon: "folder", Run: func() { a.moveInto(to.path, "", to.folder) }}}
 	for _, f := range a.Catalog.Folders() {
-		rows = append(rows, frostui.Command{ID: f, Title: f, Icon: "folder", Run: func() { a.moveInto(to.path, f, to.folder) }})
+		rows = append(rows, frostui.PaletteItem{ID: f, Title: f, Icon: "folder", Run: func() { a.moveInto(to.path, f, to.folder) }})
 	}
-	return rows
+	reply(q, rows)
 }
 
-func (a *App) templateRows() []frostui.Command {
+func (a *App) queryTemplates(q *frostui.PaletteQuery) {
 	if a.Catalog == nil || a.settings == nil {
-		return nil
+		q.Reply(nil)
+		return
 	}
 	folder := strings.Trim(a.settings.TemplateFolder, "/")
-	var rows []frostui.Command
+	var rows []frostui.PaletteItem
 	for _, p := range a.templates(folder) {
-		rows = append(rows, frostui.Command{ID: p, Title: strings.TrimSuffix(strings.TrimPrefix(p, folder+"/"), ".md"), Icon: "text-x-generic", Run: func() { a.insertTemplate(p) }})
+		rows = append(rows, frostui.PaletteItem{ID: p, Title: strings.TrimSuffix(strings.TrimPrefix(p, folder+"/"), ".md"), Icon: "text-x-generic", Run: func() { a.insertTemplate(p) }})
 	}
-	return rows
+	reply(q, rows)
 }
 
-func (a *App) headingRows() []frostui.Command {
-	var rows []frostui.Command
+func (a *App) queryHeadings(q *frostui.PaletteQuery) {
+	var rows []frostui.PaletteItem
 	for level := 1; level <= 6; level++ {
 		n := strconv.Itoa(level)
-		rows = append(rows, frostui.Command{ID: n, Title: "Heading " + n, Run: func() { a.run("editor:set-heading-" + n) }})
+		rows = append(rows, frostui.PaletteItem{ID: n, Title: "Heading " + n, Run: func() { a.run("editor:set-heading-" + n) }})
 	}
-	return append(rows, frostui.Command{ID: "0", Title: "No heading", Run: func() { a.run("editor:set-heading-0") }})
+	reply(q, append(rows, frostui.PaletteItem{ID: "0", Title: "No heading", Run: func() { a.run("editor:set-heading-0") }}))
 }
 
 func (a *App) showShortcuts() {
@@ -982,7 +971,7 @@ func (a *App) showShortcuts() {
 		entries = append(entries, frostui.ShortcutEntry{Group: s.Group, Title: s.Title, Keys: keyCaps(s.Keys[0])})
 	}
 	slices.SortStableFunc(entries, func(x, y frostui.ShortcutEntry) int { return strings.Compare(x.Group, y.Group) })
-	a.Info.Show("Keyboard shortcuts", func(c *ui.Context) {
+	a.Shell.Info.Show("Keyboard shortcuts", func(c *ui.Context) {
 		ui.Scroll(c).MaxHeight(420).Children(func() {
 			ui.Column(c).Gap(frostui.SpaceXS).AlignItems(ui.Stretch).Children(func() { frostui.ShortcutsBody(entries)(c) })
 		})
@@ -990,9 +979,9 @@ func (a *App) showShortcuts() {
 }
 
 func (a *App) showAbout() {
-	a.Info.Show("About Frostnotes", frostui.AboutBody(frostui.About{
+	a.Shell.Info.Show("About Frostnotes", frostui.AboutBody(frostui.About{
 		Name: "Frostnotes", Version: a.cfg.Version, Summary: "Plain Markdown notes that sync through your own hub.",
-		Logo: "accessories-text-editor", Website: "https://github.com/frostyard/frostnotes", Issues: "https://github.com/frostyard/frostnotes/issues",
+		Logo: "org.frostyard.Frostnotes-symbolic", Website: "https://github.com/frostyard/frostnotes", Issues: "https://github.com/frostyard/frostnotes/issues",
 		License: "See the repository",
 	}))
 }
@@ -1003,13 +992,13 @@ func (a *App) showConflicts() {
 	if a.vault == nil {
 		return
 	}
-	a.Info.Show("Conflicts", func(c *ui.Context) {
+	a.Shell.Info.Show("Conflicts", func(c *ui.Context) {
 		ui.Column(c).Gap(frostui.SpaceS).AlignItems(ui.Stretch).Children(func() {
 			for _, f := range a.conflict {
 				ui.Row(c.Key(f.Path)).Gap(frostui.SpaceM).AlignItems(ui.Center).Children(func() {
 					frostui.Body(c, f.Path).Grow(1).SingleLine()
 					if ui.Button(c, "Compare").Clicked() {
-						a.Info.Open = false
+						a.Shell.Info.Open = false
 						if n := len(f.Revisions); n > 0 {
 							a.openMergeSide(f.Path, &workspace.MergeSide{Kind: "revision", Seq: f.Revisions[n-1].Seq})
 						} else {

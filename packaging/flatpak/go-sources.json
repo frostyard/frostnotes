@@ -157,14 +157,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/ebitengine/purego/@v/v0.11.1.mod",
+    "url": "https://proxy.golang.org/github.com/ebitengine/purego/@v/v0.11.3.mod",
     "sha256": "b63c9137b0c2608c4cd43a0234cbaeb777bc0d43a29744f2058c1da82b6d358e",
     "dest": "goproxy/github.com/ebitengine/purego/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/ebitengine/purego/@v/v0.11.1.zip",
-    "sha256": "f314003767757fd3c150029496aedbae2592b2d85b0e76db0f907f77f0170f26",
+    "url": "https://proxy.golang.org/github.com/ebitengine/purego/@v/v0.11.3.zip",
+    "sha256": "794b433246c662b29a0b48f2f07b1814bfe15ca61744de88f05d18d7795f77c2",
     "dest": "goproxy/github.com/ebitengine/purego/@v"
   },
   {
@@ -193,14 +193,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.1.0.mod",
-    "sha256": "f010a89ad26437db81eb78fd13682faf1e44dd96f9b5040b7bb0ca835b4ee301",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.2.0.mod",
+    "sha256": "b8dcd9ec887082dbf5f4c2872177a2f3cde8091fb6a8dae475f5ba9a291ed523",
     "dest": "goproxy/github.com/frostyard/frostui/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.1.0.zip",
-    "sha256": "b3fd94028b272f8a64cdb1fac4225f10fdc81a4350d537a881321b0596127370",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.2.0.zip",
+    "sha256": "a917a4d3dd6d69cb7e35b6c60865154787a4e87f884fc8b905683f588671aa90",
     "dest": "goproxy/github.com/frostyard/frostui/@v"
   },
   {

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,6 +25,9 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/window"
 )
 
+//go:embed logo.svg
+var logo []byte
+
 // version and commit are stamped at build time.
 var (
 	version = "dev"
@@ -38,25 +42,39 @@ func main() {
 }
 
 // poster hands functions to the window's UI thread. It is safe from any
-// goroutine, and keeps what is posted before the window exists until
-// attach, so an early result is never lost.
+// goroutine. MyGo rebuilds the view on every Window.Update, so a burst of
+// posts, as a scan's events, runs in one; what is posted before the window
+// exists waits for attach, so an early result is never lost.
 type poster struct {
 	mu      sync.Mutex
 	win     *mygo.Window
 	pending []func()
+	queued  bool
 }
 
 // Post runs f on the UI thread.
 func (p *poster) Post(f func()) {
 	p.mu.Lock()
-	if p.win == nil {
-		p.pending = append(p.pending, f)
-		p.mu.Unlock()
-		return
-	}
+	p.pending = append(p.pending, f)
 	w := p.win
+	wake := w != nil && !p.queued
+	if wake {
+		p.queued = true
+	}
 	p.mu.Unlock()
-	w.Update(f)
+	if wake {
+		w.Update(p.drain)
+	}
+}
+
+func (p *poster) drain() {
+	p.mu.Lock()
+	pending := p.pending
+	p.pending, p.queued = nil, false
+	p.mu.Unlock()
+	for _, f := range pending {
+		f()
+	}
 }
 
 // After runs f on the UI thread after d; the function it returns stops it.
@@ -71,11 +89,13 @@ func (*poster) Now() time.Time { return time.Now() }
 func (p *poster) attach(w *mygo.Window) {
 	p.mu.Lock()
 	p.win = w
-	pending := p.pending
-	p.pending = nil
+	wake := len(p.pending) > 0 && !p.queued
+	if wake {
+		p.queued = true
+	}
 	p.mu.Unlock()
-	for _, f := range pending {
-		w.Update(f)
+	if wake {
+		w.Update(p.drain)
 	}
 }
 
@@ -112,6 +132,26 @@ func pickFiles() []string {
 	return paths
 }
 
+// openURL opens a web link in the system's browser, behind the app's
+// rules and frostui's allow-list.
+func openURL(raw string) error {
+	target, err := system.WebURL(raw)
+	if err != nil {
+		return err
+	}
+	return frostui.Opener{}.OpenURL(target)
+}
+
+// openFile opens a vault file in the system's default app, behind the
+// app's rules and frostui's allow-list.
+func openFile(root, p string) error {
+	file, err := system.VaultFile(root, p)
+	if err != nil {
+		return err
+	}
+	return frostui.Opener{Roots: []string{root}, Extensions: system.OpenableExtensions()}.OpenFile(file)
+}
+
 func run() error {
 	getenv := os.Getenv
 	paths, err := config.Resolve(getenv)
@@ -143,7 +183,7 @@ func run() error {
 		return nil // the running app was asked to show its window
 	}
 
-	frostui.SetIcons(frostui.NewIcons(nil))
+	frostui.SetIcons(frostui.NewIcons(map[string][]byte{config.AppID + "-symbolic": logo}))
 
 	var win *mygo.Window
 	mygo.App.OnSecondInstance(func([]string, string) {
@@ -179,8 +219,8 @@ func open(getenv system.Getenv, socket, blobs, configDir, stateDir string) *mygo
 		Quit:       mygo.App.Quit,
 		PickFolder: pickFolder,
 		PickFiles:  pickFiles,
-		OpenURL:    system.OpenURL,
-		OpenFile:   system.OpenFile,
+		OpenURL:    openURL,
+		OpenFile:   openFile,
 		Copy:       mygo.Clipboard.WriteText,
 		Clipboard:  clipboard{},
 	})

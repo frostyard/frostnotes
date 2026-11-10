@@ -59,7 +59,7 @@ func (s TabStrip) View(c *ui.Context) ui.Element {
 			}
 		})
 		ui.Row(c).Gap(frostui.SpaceXS).Padding(0, frostui.SpaceXS).AlignItems(ui.Center).Children(func() {
-			if s.New != nil && ToolButton(c, "tab-new", "New tab").Clicked() {
+			if s.New != nil && ToolButton(c, "list-add", "New tab").Clicked() {
 				s.New()
 			}
 			if s.List != nil {
