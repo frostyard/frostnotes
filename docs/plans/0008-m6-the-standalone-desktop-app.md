@@ -567,3 +567,4 @@ blocks Phase 2.
   [Plan 0010](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md);
   the remote: [frostyard/flatpak-index](https://github.com/frostyard/flatpak-index)
 - Roadmap: [plan 0002 — M6](0002-roadmap.md)
+- Followed by: [plan 0009](0009-mygo-desktop.md) (the Flatpak's app becomes a native Go app, [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))

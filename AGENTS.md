@@ -41,6 +41,12 @@ of lodge's app contract is
 - **Phase 7** moved the user's hub behind lodge on 2026-10-26; the 7
   days of sync through lodge run to 2026-11-02.
 
+Next, [plan 0009](docs/plans/0009-mygo-desktop.md) moves the desktop
+app to a native Go app on MyGo and frostui, and keeps the React app as
+lodge's web app ([ADR-0038](docs/adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
+proposed). Its Phase 1, the inventory and the plan, is done
+(2026-11-10); the Tauri shell stays until the native app reaches parity.
+
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail

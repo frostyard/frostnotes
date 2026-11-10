@@ -36,6 +36,12 @@ M3's design is built through its Phase 8 ([plan 0005](../plans/0005-m3-desktop-a
 ([plan 0006](../plans/0006-m4-notes-inside-lodge.md)), rewritten as each phase
 lands.
 
+**Proposed (2026-11-10):** the desktop app becomes a native Go app on
+MyGo and frostui, and the React app stays as lodge's web app
+([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
+[plan 0009](../plans/0009-mygo-desktop.md)). This document describes the
+Tauri app until that plan's Phase 6 rewrites it.
+
 ## Overview
 
 The app is a Tauri v2 window running a React UI, a thin client of notesd
@@ -1045,3 +1051,4 @@ manifest, which `pnpm tauri build --config` gives the shell
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check, its updates (gaps G2 and G3) and the move from a host notesd (G4) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
+- Proposed: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) (the desktop app on MyGo and frostui; the React app stays as lodge's web app)

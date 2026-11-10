@@ -1154,3 +1154,4 @@ as a dialog. Choosing a vault there switches the window in place
 - Cards: [T-0038 to T-0042](../tasks/done/), [T-0043 to T-0046](../tasks/done/), [T-0047 to T-0081](../tasks/done/), [T-0082 and T-0083](../tasks/done/)
 - Workflow: [design/agent-workflow.md](../design/agent-workflow.md)
 - Roadmap: [plan 0002](0002-roadmap.md)
+- Followed by: [plan 0009](0009-mygo-desktop.md) (the desktop app on MyGo and frostui, [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))

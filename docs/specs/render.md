@@ -620,3 +620,4 @@ Text
 - Rationale: [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md) (notesd renders, both sides sanitize), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md) (files by hash), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md) (comments)
 - Context: [design/app.md](../design/app.md#reading-view), [design/vault.md](../design/vault.md#index) (what `note.render` reads); [markdown.md](markdown.md) (the syntax), [rpc-api.md](rpc-api.md) (`note.render`)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md), Phases 3 and 4
+- Proposed change: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) adds a Markdown format of `note.render` for the native desktop app, specified here in [plan 0009](../plans/0009-mygo-desktop.md)'s Phase 4

@@ -103,3 +103,4 @@ the package does not carry.**
 - Shapes: [specs/ui.md](../specs/ui.md#tokens), [design/app.md](../design/app.md)
 - Builds on: [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0025](0025-patch-what-costs-the-editor-its-frames.md)
 - Lodge: [ADR-0018](https://github.com/frostyard/lodge/blob/main/docs/adr/0018-a-ui-package-beside-the-client.md), [the UI package spec](https://github.com/frostyard/lodge/blob/main/docs/specs/ui-package.md)
+- Proposed to be superseded in part by: [ADR-0038](0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) (lodge's UI package stays the web app's look)
