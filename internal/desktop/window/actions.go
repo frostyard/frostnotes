@@ -2,6 +2,7 @@ package window
 
 import (
 	"context"
+	"errors"
 	"path"
 	"slices"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
+	"github.com/egoist/mygo/ui/markdown"
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
@@ -280,7 +282,7 @@ func (a *App) linkPreview(from func() string) func(*ui.Context, editor.Link) {
 				frostui.Muted(c, "This note does not exist yet.")
 			default:
 				frostui.Strong(c, nameOf(l.Target))
-				ui.Text(c, p.text).Wrap()
+				markdown.View(c, p.text, &markdown.Options{})
 			}
 		})
 	}
@@ -297,11 +299,11 @@ func (a *App) loadPreview(p *preview, from, target string) {
 		if len(found) == 0 || found[0].Path == nil {
 			return errNoNote
 		}
-		note, err := c.Note().Read(ctx, &api.NoteReadParams{VaultID: id, Path: *found[0].Path})
+		note, err := c.Note().RenderMarkdown(ctx, &api.NoteRenderMarkdownParams{VaultID: id, Path: *found[0].Path})
 		if err != nil {
 			return err
 		}
-		text = note.Content
+		text = note.Markdown
 		return nil
 	}, func(err error) {
 		p.done, p.failed = true, err != nil
@@ -436,8 +438,28 @@ func (a *App) deleteFile(p string, folder bool) {
 				a.notify("Cannot delete " + name + ": " + err.Error())
 				return
 			}
-			a.notify("Deleted " + name + ".")
+			a.actionToasts = append(a.actionToasts, frostui.ActionToast{Title: "Deleted " + name + ".", Action: "Undo", OnAction: func() { a.restoreFile(id, p) }})
 		})
+	})
+}
+
+// restoreFile brings a deleted file back from its newest version.
+func (a *App) restoreFile(vault int64, p string) {
+	a.call(func(ctx context.Context, c *api.Client) error {
+		versions, err := c.Note().Versions(ctx, &api.NoteVersionsParams{VaultID: vault, Path: p})
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(versions, func(v api.Version) bool { return !v.Deleted })
+		if i < 0 {
+			return errors.New("it has no version to restore")
+		}
+		_, err = c.Note().Revert(ctx, &api.NoteRevertParams{VaultID: vault, Path: p, Version: versions[i].ID})
+		return err
+	}, func(err error) {
+		if err != nil {
+			a.notify("Cannot restore " + nameOf(p) + ": " + err.Error())
+		}
 	})
 }
 

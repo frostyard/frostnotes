@@ -35,10 +35,9 @@
         }
       },
       "build-commands": [
-        "go build -ldflags '-s -w -X main.version=flatpak' -o build/ ./cmd/notesd ./cmd/notesctl",
-        "go build -tags mygo_noinspector -ldflags '-s -w -X main.version=trial -X github.com/egoist/mygo.production=1' -o build/frostnotes-native ./cmd/frostnotes",
+        "go build -tags mygo_noinspector -ldflags '-s -w -X main.version=flatpak -X github.com/egoist/mygo.production=1' -o build/ ./cmd/notesd ./cmd/notesctl ./cmd/frostnotes",
         "install -Dm755 -t /app/bin build/notesd build/notesctl",
-        "install -Dm755 build/frostnotes-native /app/libexec/frostnotes-native"
+        "install -Dm755 build/frostnotes /app/libexec/frostnotes-native"
       ],
       "sources": [
         {

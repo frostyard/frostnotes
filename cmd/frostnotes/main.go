@@ -41,36 +41,34 @@ func main() {
 	}
 }
 
+// wakeEvery is how often a burst of posts runs: MyGo rebuilds the view on
+// every Window.Update, and a scan's events come by the thousand.
+const wakeEvery = 8 * time.Millisecond
+
 // poster hands functions to the window's UI thread. It is safe from any
-// goroutine. MyGo rebuilds the view on every Window.Update, so a burst of
-// posts, as a scan's events, runs in one; what is posted before the window
-// exists waits for attach, so an early result is never lost.
+// goroutine, runs them in order, and keeps what is posted before the window
+// exists until attach, so an early result is never lost.
 type poster struct {
 	mu      sync.Mutex
-	win     *mygo.Window
+	waker   *frostui.Waker
 	pending []func()
-	queued  bool
 }
 
 // Post runs f on the UI thread.
 func (p *poster) Post(f func()) {
 	p.mu.Lock()
 	p.pending = append(p.pending, f)
-	w := p.win
-	wake := w != nil && !p.queued
-	if wake {
-		p.queued = true
-	}
+	w := p.waker
 	p.mu.Unlock()
-	if wake {
-		w.Update(p.drain)
+	if w != nil {
+		w.Wake()
 	}
 }
 
 func (p *poster) drain() {
 	p.mu.Lock()
 	pending := p.pending
-	p.pending, p.queued = nil, false
+	p.pending = nil
 	p.mu.Unlock()
 	for _, f := range pending {
 		f()
@@ -87,16 +85,16 @@ func (p *poster) After(d time.Duration, f func()) func() {
 func (*poster) Now() time.Time { return time.Now() }
 
 func (p *poster) attach(w *mygo.Window) {
+	waker := frostui.NewWaker(func(wake func()) {
+		w.Update(func() {
+			p.drain()
+			wake()
+		})
+	}, wakeEvery)
 	p.mu.Lock()
-	p.win = w
-	wake := len(p.pending) > 0 && !p.queued
-	if wake {
-		p.queued = true
-	}
+	p.waker = waker
 	p.mu.Unlock()
-	if wake {
-		w.Update(p.drain)
-	}
+	waker.Wake()
 }
 
 // clipboard reads files and images from the system's clipboard.
@@ -226,7 +224,7 @@ func open(getenv system.Getenv, socket, blobs, configDir, stateDir string) *mygo
 	})
 	view := func(c *ui.Context) { app.View(c) }
 	win = mygo.NewWindow(mygo.WindowOptions{
-		Title: "Frostnotes", Width: 1200, Height: 800, MinWidth: 640, MinHeight: 480,
+		Title: "Frostnotes", Width: 1200, Height: 780, MinWidth: 640, MinHeight: 400,
 		TitleBarStyle: mygo.TitleBarHidden, Content: ui.View(view),
 	})
 	closing := false

@@ -225,6 +225,7 @@ React app has a TypeScript client and Lezer.
 
 ## References
 
+- Extended by: [ADR-0039](0039-live-preview-is-replacements-over-the-source.md) (live preview as replacements)
 - Shapes: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md),
   [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md)
 - Built in: [plan 0009](../plans/0009-mygo-desktop.md)

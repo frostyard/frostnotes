@@ -384,6 +384,10 @@ embedded note follows its edits. The framework keeps the typing budget
 with every provider on: providers are measured together in the exit
 evidence.
 
+The native app works out the same reveal rule in
+`internal/desktop/livepreview`
+([ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)).
+
 ### Properties
 
 The note's frontmatter shows in live preview as the properties block (a

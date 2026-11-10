@@ -312,7 +312,7 @@ into frostui by a change of import path:
 - `internal/desktop/editor`, `reading`, `history`, `panes`, `catalog`,
   `prefs`, `system` (paths, background, notesd's log, the open rules) and
   `window` (the frame, the vault manager, settings and their wiring);
-  `livepreview` joins them in Phase 5.
+  `livepreview` (what live preview shows, pure Go).
 
 ## Phase 1 — Inventory and plan (done 2026-11-10)
 
@@ -447,7 +447,17 @@ The parts that need no frostui piece, in the order the orchestrator set.
 [egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) (hidden and
 replaced ranges) and [egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654)
 (edits outside the undo history), both open. Until then the editing mode
-is source mode, whatever the preference says.
+is source mode, whatever the preference says. Elements between lines and
+per-line styles have no pull request yet.
+
+**Built (2026-11-10):** the logic, `internal/desktop/livepreview`, recorded in
+[ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md): the
+marks of headings, emphasis, highlights, inline code, links and wikilinks,
+footnotes, comments and block IDs; bullets, tasks, quotes and rules; the
+frontmatter while the properties panel shows; and the reveal rule. A keystroke
+in a 10,000-line note costs about 1 ms. What remains is the adapter to MyGo's
+`Replacement`s, which needs a release to compile against, and the block
+constructs.
 
 - Live preview on MyGo's editor, in the order its author is building
   [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the

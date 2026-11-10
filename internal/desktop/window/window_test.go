@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -419,5 +420,48 @@ func TestARestoredImageTabShowsOnceTheFilesAreRead(t *testing.T) {
 	})
 	if f.has("This file is not in the vault.") {
 		t.Fatalf("%q", f.tt.Texts())
+	}
+}
+
+func TestDeletingAFileCanBeUndone(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "text\n")
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("a.md") })
+	f.a.Prefs.ConfirmDelete = false
+	f.a.deleteFile("a.md", false)
+	f.waitText("Deleted a.")
+	if _, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "a.md"}); err == nil {
+		t.Fatal("the file is still there")
+	}
+	if err := f.tt.Click("Undo"); err != nil {
+		t.Fatal(err)
+	}
+	f.loop.Until(t, "the restore", func() bool {
+		f.tt.Frame()
+		_, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "a.md"})
+		f.loop.Post(func() {})
+		return err == nil
+	})
+	if got := f.Read("a.md").Content; got != "text\n" {
+		t.Fatalf("restored %q", got)
+	}
+}
+
+func TestTheBreadcrumbRevealsAFolder(t *testing.T) {
+	f := start(t)
+	f.Create("Projects/Garden/Plan.md", "x\n")
+	f.openVault()
+	f.a.open("Projects/Garden/Plan.md", workspace.Here)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil })
+	f.a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "search") })
+	f.tt.Frame()
+	if err := f.tt.Click("Reveal Garden"); err != nil {
+		t.Fatalf("%v in %q", err, f.tt.Texts())
+	}
+	f.tt.Frame()
+	w := f.a.Store.Workspace()
+	if w.Left.Panes[w.Left.Active] != "files" || !slices.Contains(w.Files.Expanded, "Projects") {
+		t.Fatalf("pane %q, expanded %q", w.Left.Panes[w.Left.Active], w.Files.Expanded)
 	}
 }

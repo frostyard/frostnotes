@@ -58,7 +58,7 @@ func Notice(c *ui.Context, d *notes.Document, a NoticeActions) {
 	case notes.NoticeDeleted:
 		closeLabel := ""
 		if a.Close != nil {
-			closeLabel = "Close tab"
+			closeLabel = "Close"
 		}
 		restore, closeTab := frostui.BannerClose(c, frostui.Neutral, "user-trash", "This note was deleted.", "Restore", closeLabel)
 		if restore {

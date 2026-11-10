@@ -89,21 +89,22 @@ type App struct {
 	dragging bool
 	wasDrag  bool
 
-	Shell    frostui.PaneShell
-	Dialogs  frostui.Dialogs
-	panes    frostui.Panes
-	cmds     *frostui.CommandTable
-	moving   *moveTarget
-	pending  *pendingLine
-	held     map[string]heldMerge
-	previews map[string]*preview
-	lastMod  ui.Modifiers
-	table    []commands.Spec
-	actions  map[string]func()
-	toasts   []ui.Toast
-	counts   textCounts
-	vm       vaultManager
-	sets     settingsDialog
+	Shell        frostui.PaneShell
+	Dialogs      frostui.Dialogs
+	panes        frostui.Panes
+	cmds         *frostui.CommandTable
+	moving       *moveTarget
+	pending      *pendingLine
+	held         map[string]heldMerge
+	previews     map[string]*preview
+	lastMod      ui.Modifiers
+	table        []commands.Spec
+	actions      map[string]func()
+	toasts       []ui.Toast
+	actionToasts []frostui.ActionToast
+	counts       textCounts
+	vm           vaultManager
+	sets         settingsDialog
 }
 
 type binding struct {
@@ -405,6 +406,10 @@ func (a *App) View(c *ui.Context) {
 		c.AddToast(t)
 	}
 	a.toasts = nil
+	for _, t := range a.actionToasts {
+		frostui.ShowActionToast(c, t)
+	}
+	a.actionToasts = nil
 	a.watchActive()
 	a.frame(c)
 }

@@ -399,7 +399,6 @@ func (a *App) tabMenu(m *ui.Menu, g *workspace.Node, id string) {
 }
 
 func (a *App) viewHeader(c *ui.Context, tab *workspace.Tab) {
-	t := c.Theme()
 	ui.Row(c).Height(32).Padding(0, frostui.SpaceS).Gap(frostui.SpaceXS).AlignItems(ui.Center).Children(func() {
 		if uikit.ToolButton(c, "go-previous", "Navigate back").Disabled(len(tab.Back) == 0).Clicked() {
 			a.Store.Update(func(w *workspace.Workspace) { w.Activate(tab.ID); w.Back() })
@@ -407,7 +406,7 @@ func (a *App) viewHeader(c *ui.Context, tab *workspace.Tab) {
 		if uikit.ToolButton(c, "go-next", "Navigate forward").Disabled(len(tab.Forward) == 0).Clicked() {
 			a.Store.Update(func(w *workspace.Workspace) { w.Activate(tab.ID); w.Forward() })
 		}
-		ui.Text(c, strings.TrimSuffix(strings.ReplaceAll(tab.View.Path, "/", " / "), ".md")).FontSize(12).TextColor(t.TextMuted).Grow(1).SingleLine().TextAlign(ui.Center)
+		ui.Row(c).Grow(1).Shrink(1).MinWidth(0).Justify(ui.Center).AlignItems(ui.Center).Gap(frostui.SpaceXS).Children(func() { a.breadcrumb(c, tab.View.Path) })
 		if tab.View.Type == workspace.ViewNote {
 			icon, label := "document-edit", "Current view: editing (Ctrl E)"
 			if tab.View.Mode == workspace.ModeRead {
@@ -422,6 +421,27 @@ func (a *App) viewHeader(c *ui.Context, tab *workspace.Tab) {
 			uikit.ToolButton(c, "view-more", "More options").Menu(func(m *ui.Menu) { a.moreOptions(m, tab) })
 		}
 	})
+}
+
+// breadcrumb is a file's folders, each a button that reveals it in the
+// Files pane, and its title.
+func (a *App) breadcrumb(c *ui.Context, p string) {
+	t := c.Theme()
+	if p == "" {
+		return
+	}
+	parts := strings.Split(strings.TrimSuffix(p, ".md"), "/")
+	for i, part := range parts[:len(parts)-1] {
+		folder := strings.Join(parts[:i+1], "/")
+		b := ui.ButtonBase(c.Key(folder)).Cursor(ui.CursorPointer).Label("Reveal " + part)
+		b.Children(func() { ui.Text(c, part).AccessHidden(true).FontSize(13).TextColor(t.TextMuted).SingleLine() })
+		if b.Clicked() {
+			a.files.Reveal(folder)
+			a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
+		}
+		ui.Text(c.Key(folder+"/"), "/").FontSize(13).TextColor(t.TextMuted)
+	}
+	ui.Text(c, parts[len(parts)-1]).FontSize(13).SingleLine()
 }
 
 func (a *App) moreOptions(m *ui.Menu, tab *workspace.Tab) {
