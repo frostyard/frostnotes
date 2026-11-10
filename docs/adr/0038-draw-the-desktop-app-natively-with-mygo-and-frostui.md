@@ -84,11 +84,14 @@ React app has a TypeScript client and Lezer.
   drawing (link resolution, rendering, embeds, templates, daily notes)
   is notesd's, added to `schema/rpc` first; the web app and the desktop
   app do not each write it.
-- **The desktop reads Markdown with notesd's parser.** Its highlighting,
-  folding, outline and live preview come from `internal/markdown`,
-  which the app runs in process; the web app keeps Lezer, and the
-  fixtures of [specs/markdown.md](../specs/markdown.md) still bind the
-  two.
+- **Source mode highlights a line at a time; structure comes from
+  notesd's parser.** The highlighting is MyGo's Markdown lexer with
+  Obsidian's syntax laid over it, which tokenizes only the lines in view,
+  as editors do; folding follows its headings and indentation. What needs
+  Markdown's structure with positions (live preview's ranges, the
+  outline) uses `internal/markdown` in process. The web app keeps Lezer,
+  and the fixtures of [specs/markdown.md](../specs/markdown.md) still
+  bind the parsers.
 - **The note stays the file's bytes.** The editor's document is the
   note's exact text, saved with its base
   ([ADR-0006](0006-every-write-names-the-version-it-changes.md),
@@ -114,12 +117,14 @@ React app has a TypeScript client and Lezer.
      takes them, live preview is decorations on MyGo's editor instead.
 - **notesd renders the reading view for native views too.** Beside the
   sanitized HTML of [specs/render.md](../specs/render.md), `note.render`
-  gains an additive format that MyGo's Markdown view reads: CommonMark
+  gains an additive sibling, `note.renderMarkdown`, that MyGo's
+  Markdown view reads: CommonMark
   with GitHub's extensions, with links resolved to vault paths, embeds
   expanded by the same rules of depth and cycles, attachments named by
-  hash, highlights as `<mark>`, comments dropped and callouts as
-  quotations that the view draws as callouts. The desktop shows no
-  HTML and has no web view.
+  hash, highlights as `<mark>`, comments dropped, and callouts and note
+  embeds as fenced blocks that the view draws itself
+  ([specs/render.md](../specs/render.md#markdown-for-native-views)). The
+  desktop shows no HTML and has no web view.
 - **The look is frostui's.** No system title bar; frostui's top bar,
   command palette, status bar, dialogs and toasts; the theme follows the
   desktop's accent, light or dark, contrast and text size. Under the top
@@ -186,10 +191,12 @@ React app has a TypeScript client and Lezer.
   ranges and widgets: the largest piece of the move, and the reason
   Tauri stays until parity.
 - MyGo has no TeX renderer, spell checker or audio and video decoders,
-  and decodes PNG, JPEG, GIF (the first frame), WebP and BMP, where
-  WebKitGTK also drew AVIF and SVG: math shows as TeX, audio and video
-  embeds open in the desktop's player (as PDFs already do), and the
-  spellcheck preference does nothing on the desktop until MyGo has one.
+  and draws PNG, JPEG, GIF (the first frame), WebP, BMP and SVG, where
+  WebKitGTK also drew AVIF: math shows as TeX, audio and video embeds
+  open in the desktop's player (as PDFs already do), and the spellcheck
+  preference does nothing on the desktop until MyGo has one. Its
+  Markdown view cannot check a task in the reading view; the editor
+  can.
 - MyGo is young, with one main author; Frostnotes pins it and keeps
   frostui between its views and MyGo, as ChairLift does. Its runtime
   needs GTK 3, libepoxy and Pango, which the GNOME runtime has.

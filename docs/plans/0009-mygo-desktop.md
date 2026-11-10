@@ -19,7 +19,10 @@ below, and ADR-0038. The orchestrator approved both on 2026-11-10 with
 the rules both apps now share (the palette's keys, the status bar's
 order, the top bar) and moved the shared pieces into frostui, built
 once for Frostnotes and Frostmail; this plan follows those notes.
-Phase 2, the parts that need no frostui piece, is in progress.
+Phase 2, the parts that need no frostui piece, is in progress: its
+documents, source mode, reading view (with notesd's
+`note.renderMarkdown`), history, merge view and session are built
+(below), and its PR is open as a draft.
 
 ## The window
 
@@ -155,7 +158,7 @@ app-local package for the rest (below).
 | --- | --- | --- |
 | One document per note shared by its tabs; saves 1 s after the last change and 10 s after the first, at once on Ctrl + S, blur, the last view closing, a move, a delete or the window closing; one write in flight; edits made meanwhile composed | one `editor.Buffer` per note shared by its tabs' editors (MyGo shares a buffer between editors); the save loop in Go | 2 |
 | A merged answer or another writer's change applied as a remote change, outside the undo history; deleted notes re-created with unsaved text; refused bases kept for the merge view; retries at 2–60 s | the same loop; MyGo's buffer puts every edit in its undo history (an ask of MyGo, below) | 2 |
-| Highlighting of Markdown in both modes; no per-language highlighting of code | a `Highlighter` over `internal/markdown`'s parse, run on a buffer snapshot off the UI thread | 2 |
+| Highlighting of Markdown in both modes; no per-language highlighting of code | MyGo's Markdown lexer with Obsidian's syntax laid over it (frontmatter, wikilinks and embeds, tags, highlights, comments, math, callouts, footnotes, block IDs), the lines in view only | 2 |
 | Live preview: the table of constructs in [design/app.md](../design/app.md#live-preview) (headings, emphasis, highlights, inline code, fences with a header and Copy, links, wikilinks with resolution, images and media, note embeds, callouts, quotes, tables, tasks, bullets, guides, rules, math, footnotes, tags, comments, block IDs, properties, inline title), revealed on the selection's lines | not possible on MyGo's editors today: Phase 5 | 5 |
 | Completion of `[[`, `[[t#`, `[[t#^`, `#tag` (fuzzy, by count) | `OnCompletion` and `ShowCompletions`, sources from notesd and the shared parser | 2 |
 | Folding of headings and by indentation (gutter only) | a `Folder` from the parser; the gutter's markers | 2 |
@@ -218,8 +221,8 @@ app-local package for the rest (below).
   panes are `ui.List`s. The notes' source of the palette ranks names off
   the UI thread and is asked only while the palette is open, where
   frostui's palette takes a slice of every command each frame. The code
-  editor lays out only the lines in view; the highlighter parses a
-  snapshot off the UI thread, so a keystroke never waits for goldmark.
+  editor lays out and highlights only the lines in view, a line at a
+  time, so a keystroke never waits for a parse of the whole note.
   Events from notesd wake the window through a coalescing waker, as
   ChairLift's console does. Images decode once and stay in a cache of
   bounded size. Tested on a `tools/vaultgen` vault of 10,000 notes.
@@ -242,12 +245,15 @@ app-local package for the rest (below).
 - An edit outside the buffer's undo history (a merge applied as a remote
   change, [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md)).
 - Showing HTML outside a web view (notesd's rendered HTML).
-- TeX (KaTeX), audio and video codecs, AVIF and SVG note images, and a
-  spell checker.
+- TeX (KaTeX), audio and video codecs, AVIF note images, and a spell
+  checker.
+- A click on a task's box in the Markdown view (the reading view shows
+  tasks but cannot check them; the editor's Ctrl + L does).
 
 Requests to MyGo's author (hidden ranges, widgets and per-line styles in
 `ui/editor`, as Zed's folds with placeholders and blocks; an edit outside
-the undo history that rebases it) go through the owner, whom the
+the undo history that rebases it; a hook for a click on a task's box in
+the Markdown view) go through the owner, whom the
 orchestrator asks; Frostnotes does not contact the author. Until the
 second exists, the app keeps its own undo over the buffer's edits, so
 that Ctrl + Z never takes back another writer's change.
@@ -345,6 +351,22 @@ The parts that need no frostui piece, in the order the orchestrator set.
   [specs/ui.md](../specs/ui.md#merge-view)); tab notices.
 - Each view tested headless with `ui.NewTester`, in `make verify`'s unit
   run.
+- **Built (2026-11-10):** `internal/desktop/notes` (a change set with
+  CodeMirror's compose, map and invert; the save loop; CRLF notes; the
+  undo history that remote changes never enter), `editor` (source mode,
+  Obsidian's keys and formatting commands with the web app's test
+  cases, smart lists, links, completions of `[[` and `#`), `reading`,
+  `history` (and the merge view), `session`, and `note.renderMarkdown`
+  in notesd. The evidence: three writers lose no token and the caret
+  stays (`TestNoTokenIsLostWithThreeWriters`); a keystroke in a
+  10,000-line note takes about 3 ms with a CPU-drawn frame
+  (`BenchmarkTypingInALongNote`, an AMD Ryzen AI MAX+ 395); the render
+  rules pass in `internal/render` and every link of the generated
+  vault's manifest in `internal/engine`.
+- **Left:** the workspace model, the preferences file and the commands'
+  table; paste and drop of attachments; the inline title and the
+  properties panel; completion of headings and block IDs; the system
+  pieces (notesd's log tail, the background setting); tab notices.
 - **Done when:** M3's writers evidence passes against the native
   document and editor in a test with a real notesd (vim, MCP and a hub
   writing while the app types lose no token, and the caret stays),
