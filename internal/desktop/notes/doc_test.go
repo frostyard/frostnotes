@@ -4,87 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"slices"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
-	"github.com/frostyard/frostnotes/internal/rpctest"
+	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
 )
-
-// testLoop stands in for the UI thread: workers Post to it from any
-// goroutine, and the test runs what they posted on its own goroutine.
-// Its clock moves only when the test advances it.
-type testLoop struct {
-	posted chan func()
-	mu     sync.Mutex
-	now    time.Duration
-	timers []*testTimer
-}
-
-type testTimer struct {
-	at      time.Duration
-	f       func()
-	stopped bool
-}
-
-func newTestLoop() *testLoop { return &testLoop{posted: make(chan func(), 64)} }
-
-var epoch = time.Date(2026, 11, 10, 9, 0, 0, 0, time.UTC)
-
-func (l *testLoop) Now() time.Time {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return epoch.Add(l.now)
-}
-
-func (l *testLoop) Post(f func()) { l.posted <- f }
-
-func (l *testLoop) After(d time.Duration, f func()) func() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	t := &testTimer{at: l.now + d, f: f}
-	l.timers = append(l.timers, t)
-	return func() { t.stopped = true }
-}
-
-// advance moves the clock by d and runs the timers due, in order.
-func (l *testLoop) advance(d time.Duration) {
-	l.mu.Lock()
-	l.now += d
-	var due []*testTimer
-	keep := l.timers[:0]
-	for _, t := range l.timers {
-		if t.at <= l.now {
-			due = append(due, t)
-		} else {
-			keep = append(keep, t)
-		}
-	}
-	l.timers = keep
-	l.mu.Unlock()
-	slices.SortStableFunc(due, func(a, b *testTimer) int { return int(a.at - b.at) })
-	for _, t := range due {
-		if !t.stopped {
-			t.f()
-		}
-	}
-}
-
-// until runs what workers post until cond holds.
-func (l *testLoop) until(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.After(10 * time.Second)
-	for !cond() {
-		select {
-		case f := <-l.posted:
-			f()
-		case <-deadline:
-			t.Fatalf("timed out waiting for %s", what)
-		}
-	}
-}
 
 // fakeBuffer is an editor's buffer: its text follows the document's.
 type fakeBuffer struct {
@@ -92,6 +17,8 @@ type fakeBuffer struct {
 	text   string
 	remote int
 }
+
+func (b *fakeBuffer) Sync() {}
 
 func (b *fakeBuffer) Apply(cs ChangeSet) {
 	b.text, _ = cs.Apply(b.text)
@@ -110,57 +37,29 @@ func (b *fakeBuffer) typeAt(t *testing.T, from, to int, insert string) {
 }
 
 type fixture struct {
-	t     *testing.T
-	srv   *rpctest.Server
-	c     *api.Client // the app's connection
-	other *api.Client // another writer's
-	vault int64
-	dir   string
-	loop  *testLoop
-	conn  bool
+	*desktoptest.Notesd
+	t    *testing.T
+	loop *desktoptest.Loop
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	srv := rpctest.Start(t)
-	f := &fixture{t: t, srv: srv, c: srv.Dial(t), other: srv.Dial(t), dir: t.TempDir(), loop: newTestLoop(), conn: true}
-	v, err := f.c.Vault().Add(t.Context(), &api.VaultAddParams{Path: f.dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.vault = v.ID
-	return f
+	return &fixture{Notesd: desktoptest.StartNotesd(t), t: t, loop: desktoptest.NewLoop()}
 }
 
-func (f *fixture) create(path, content string) string {
-	f.t.Helper()
-	res, err := f.other.Note().Create(f.t.Context(), &api.NoteCreateParams{VaultID: f.vault, Path: path, Content: content})
-	if err != nil {
-		f.t.Fatal(err)
+func (f *fixture) client() NoteAPI {
+	if c := f.AppNotes(); c != nil {
+		return c
 	}
-	return res.Hash
-}
-
-func (f *fixture) read(path string) *api.Note {
-	f.t.Helper()
-	n, err := f.other.Note().Read(f.t.Context(), &api.NoteReadParams{VaultID: f.vault, Path: path})
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	return n
+	return nil
 }
 
 // open loads a document with a buffer attached.
 func (f *fixture) open(path string) (*Document, *fakeBuffer) {
 	f.t.Helper()
-	d := NewDocument(f.loop, func() NoteAPI {
-		if !f.conn {
-			return nil
-		}
-		return f.c.Note()
-	}, f.vault, path)
+	d := NewDocument(f.loop, f.client, f.Vault, path)
 	d.Load()
-	f.loop.until(f.t, "the note to load", func() bool { return d.Loaded() || d.Status() == StatusMissing })
+	f.loop.Until(f.t, "the note to load", func() bool { return d.Loaded() || d.Status() == StatusMissing })
 	b := &fakeBuffer{doc: d, text: d.Text()}
 	d.Attach(b)
 	return d, b
@@ -168,38 +67,38 @@ func (f *fixture) open(path string) (*Document, *fakeBuffer) {
 
 func (f *fixture) settle(d *Document) {
 	f.t.Helper()
-	f.loop.until(f.t, "the save", func() bool { return d.Status() == StatusClean })
+	f.loop.Until(f.t, "the save", func() bool { return d.Status() == StatusClean })
 }
 
 func TestTypingSavesAfterTheDelay(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "hello\n")
+	f.Create("a.md", "hello\n")
 	d, b := f.open("a.md")
 	b.typeAt(t, 5, 5, " world")
 	if d.Status() != StatusDirty {
 		t.Fatalf("status %v after typing", d.Status())
 	}
-	f.loop.advance(SaveDelay - time.Millisecond)
+	f.loop.Advance(SaveDelay - time.Millisecond)
 	if d.Status() != StatusDirty {
 		t.Fatal("saved before the delay")
 	}
-	f.loop.advance(time.Millisecond)
+	f.loop.Advance(time.Millisecond)
 	f.settle(d)
-	if got := f.read("a.md").Content; got != "hello world\n" {
+	if got := f.Read("a.md").Content; got != "hello world\n" {
 		t.Fatalf("file holds %q", got)
 	}
-	if d.Base() != f.read("a.md").Hash {
+	if d.Base() != f.Read("a.md").Hash {
 		t.Fatal("the base is not the saved content's hash")
 	}
 }
 
 func TestTypingWithoutPauseSavesAtTheMaximum(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "x")
+	f.Create("a.md", "x")
 	d, b := f.open("a.md")
 	for i := range 20 {
 		b.typeAt(t, len(b.text), len(b.text), "y")
-		f.loop.advance(SaveMax / 20)
+		f.loop.Advance(SaveMax / 20)
 		if i < 19 && d.Status() == StatusSaving {
 			t.Fatalf("saved after %d keys", i+1)
 		}
@@ -212,21 +111,21 @@ func TestTypingWithoutPauseSavesAtTheMaximum(t *testing.T) {
 
 func TestAMergedAnswerKeepsWhatWasTypedMeanwhile(t *testing.T) {
 	f := newFixture(t)
-	base := f.create("a.md", "one\ntwo\nthree\n")
+	base := f.Create("a.md", "one\ntwo\nthree\n")
 	d, b := f.open("a.md")
 
 	// Another writer changes the last line.
-	if _, err := f.other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.vault, Path: "a.md", Base: base, Content: "one\ntwo\nTHREE\n"}); err != nil {
+	if _, err := f.Other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.Vault, Path: "a.md", Base: base, Content: "one\ntwo\nTHREE\n"}); err != nil {
 		t.Fatal(err)
 	}
 	// The app changes the first, saves, and types more before the answer.
 	b.typeAt(t, 0, 3, "ONE")
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	if d.Status() != StatusSaving {
 		t.Fatal("no save in flight")
 	}
 	b.typeAt(t, 7, 7, " and a half") // "ONE\ntwo and a half\n…"
-	f.loop.until(t, "the merged answer", func() bool { return d.Status() != StatusSaving })
+	f.loop.Until(t, "the merged answer", func() bool { return d.Status() != StatusSaving })
 
 	want := "ONE\ntwo and a half\nTHREE\n"
 	if d.Text() != want || b.text != want {
@@ -236,26 +135,26 @@ func TestAMergedAnswerKeepsWhatWasTypedMeanwhile(t *testing.T) {
 		t.Fatal("the merge did not reach the buffer as a remote change")
 	}
 	f.settle(d)
-	if got := f.read("a.md").Content; got != want {
+	if got := f.Read("a.md").Content; got != want {
 		t.Fatalf("file holds %q", got)
 	}
 }
 
 func TestAConflictLeavesANotice(t *testing.T) {
 	f := newFixture(t)
-	base := f.create("a.md", "line\n")
+	base := f.Create("a.md", "line\n")
 	d, b := f.open("a.md")
-	if _, err := f.other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.vault, Path: "a.md", Base: base, Content: "theirs\n"}); err != nil {
+	if _, err := f.Other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.Vault, Path: "a.md", Base: base, Content: "theirs\n"}); err != nil {
 		t.Fatal(err)
 	}
 	b.typeAt(t, 0, 4, "mine")
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	f.settle(d)
 	n := d.Notice()
 	if n == nil || n.Kind != NoticeConflict || n.Conflicts == 0 || n.Version == 0 {
 		t.Fatalf("notice %+v", n)
 	}
-	if d.Text() != f.read("a.md").Content {
+	if d.Text() != f.Read("a.md").Content {
 		t.Fatal("the document is not the file after the merge")
 	}
 	d.Dismiss()
@@ -266,14 +165,14 @@ func TestAConflictLeavesANotice(t *testing.T) {
 
 func TestAnotherWritersChangeReachesACleanDocument(t *testing.T) {
 	f := newFixture(t)
-	base := f.create("a.md", "a\n")
+	base := f.Create("a.md", "a\n")
 	d, b := f.open("a.md")
-	res, err := f.other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.vault, Path: "a.md", Base: base, Content: "a\nb\n"})
+	res, err := f.Other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.Vault, Path: "a.md", Base: base, Content: "a\nb\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	d.Changed(res.Hash)
-	f.loop.until(t, "the reload", func() bool { return d.Base() == res.Hash })
+	f.loop.Until(t, "the reload", func() bool { return d.Base() == res.Hash })
 	if d.Text() != "a\nb\n" || b.text != "a\nb\n" || b.remote != 1 {
 		t.Fatalf("document %q, buffer %q, %d remote changes", d.Text(), b.text, b.remote)
 	}
@@ -288,12 +187,12 @@ func TestAnotherWritersChangeReachesACleanDocument(t *testing.T) {
 
 func TestARefusedBaseKeepsTheTypedText(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "file\n")
+	f.Create("a.md", "file\n")
 	d, b := f.open("a.md")
 	d.base = "0000000000000000000000000000000000000000000000000000000000000000"
 	b.typeAt(t, 0, 4, "typed")
-	f.loop.advance(SaveDelay)
-	f.loop.until(t, "the refusal", func() bool { return d.Notice() != nil })
+	f.loop.Advance(SaveDelay)
+	f.loop.Until(t, "the refusal", func() bool { return d.Notice() != nil })
 	n := d.Notice()
 	if n.Kind != NoticeRefused || n.Text != "typed\n" {
 		t.Fatalf("notice %+v", n)
@@ -305,9 +204,9 @@ func TestARefusedBaseKeepsTheTypedText(t *testing.T) {
 
 func TestADeletedNote(t *testing.T) {
 	f := newFixture(t)
-	hash := f.create("a.md", "gone soon\n")
+	hash := f.Create("a.md", "gone soon\n")
 	d, b := f.open("a.md")
-	if err := f.other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.vault, Path: "a.md", Base: hash}); err != nil {
+	if err := f.Other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.Vault, Path: "a.md", Base: hash}); err != nil {
 		t.Fatal(err)
 	}
 	d.Removed()
@@ -315,89 +214,89 @@ func TestADeletedNote(t *testing.T) {
 		t.Fatalf("notice %+v", n)
 	}
 	d.Restore()
-	f.loop.until(t, "the restore", func() bool { return d.Notice() == nil })
-	if f.read("a.md").Content != "gone soon\n" || b.text != "gone soon\n" {
+	f.loop.Until(t, "the restore", func() bool { return d.Notice() == nil })
+	if f.Read("a.md").Content != "gone soon\n" || b.text != "gone soon\n" {
 		t.Fatal("the note did not come back")
 	}
 }
 
 func TestUnsavedTextCreatesADeletedNoteAgain(t *testing.T) {
 	f := newFixture(t)
-	hash := f.create("a.md", "text\n")
+	hash := f.Create("a.md", "text\n")
 	d, b := f.open("a.md")
 	b.typeAt(t, 4, 4, " more")
-	if err := f.other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.vault, Path: "a.md", Base: hash}); err != nil {
+	if err := f.Other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.Vault, Path: "a.md", Base: hash}); err != nil {
 		t.Fatal(err)
 	}
 	d.Removed()
 	f.settle(d)
-	if got := f.read("a.md").Content; got != "text more\n" {
+	if got := f.Read("a.md").Content; got != "text more\n" {
 		t.Fatalf("file holds %q", got)
 	}
 }
 
 func TestCRLFNotesKeepTheirLineEndings(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "one\r\ntwo\r\n")
+	f.Create("a.md", "one\r\ntwo\r\n")
 	d, b := f.open("a.md")
 	if d.Text() != "one\ntwo\n" || !d.CRLF() || d.ReadOnly() != "" {
 		t.Fatalf("text %q crlf %v read-only %q", d.Text(), d.CRLF(), d.ReadOnly())
 	}
 	b.typeAt(t, 3, 3, "!")
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	f.settle(d)
-	if got := f.read("a.md").Content; got != "one!\r\ntwo\r\n" {
+	if got := f.Read("a.md").Content; got != "one!\r\ntwo\r\n" {
 		t.Fatalf("file holds %q", got)
 	}
 }
 
 func TestMixedLineEndingsAreReadOnly(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "one\r\ntwo\n")
+	f.Create("a.md", "one\r\ntwo\n")
 	d, b := f.open("a.md")
 	if d.ReadOnly() == "" {
 		t.Fatal("a note with mixed line endings is editable")
 	}
 	b.typeAt(t, 0, 0, "x")
-	f.loop.advance(SaveMax)
+	f.loop.Advance(SaveMax)
 	if d.Status() != StatusClean {
 		t.Fatal("a read-only note saved")
 	}
-	if got := f.read("a.md").Content; got != "one\r\ntwo\n" {
+	if got := f.Read("a.md").Content; got != "one\r\ntwo\n" {
 		t.Fatalf("file holds %q", got)
 	}
 }
 
 func TestASaveWithoutNotesdRetries(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "a")
+	f.Create("a.md", "a")
 	d, b := f.open("a.md")
-	f.conn = false
+	f.Down = true
 	b.typeAt(t, 1, 1, "b")
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	if n := d.Notice(); n == nil || n.Kind != NoticeFailed {
 		t.Fatalf("notice %+v", n)
 	}
-	f.conn = true
-	f.loop.advance(RetryFirst)
+	f.Down = false
+	f.loop.Advance(RetryFirst)
 	f.settle(d)
 	if d.Notice() != nil {
 		t.Fatal("the failure notice stayed after the save")
 	}
-	if f.read("a.md").Content != "ab" {
+	if f.Read("a.md").Content != "ab" {
 		t.Fatal("the retry did not save")
 	}
 }
 
 func TestFlushWaitsForTheSave(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "a")
+	f.Create("a.md", "a")
 	d, b := f.open("a.md")
 	b.typeAt(t, 1, 1, "b")
 	flushed := false
 	d.Flush(func() { flushed = true })
-	f.loop.until(t, "the flush", func() bool { return flushed })
-	if d.Unsaved() || f.read("a.md").Content != "ab" {
+	f.loop.Until(t, "the flush", func() bool { return flushed })
+	if d.Unsaved() || f.Read("a.md").Content != "ab" {
 		t.Fatal("flushed before the save")
 	}
 }
@@ -412,14 +311,14 @@ func TestAMissingNote(t *testing.T) {
 
 func TestEditWithoutABufferSaves(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "- [ ] task\n")
+	f.Create("a.md", "- [ ] task\n")
 	d, _ := f.open("a.md")
 	d.Attach(nil)
 	cs, _ := ChangesOf(len(d.Text()), Change{From: 3, To: 4, Insert: "x"})
 	d.Edit(cs)
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	f.settle(d)
-	if got := f.read("a.md").Content; got != "- [x] task\n" {
+	if got := f.Read("a.md").Content; got != "- [x] task\n" {
 		t.Fatalf("file holds %q", got)
 	}
 }
@@ -428,18 +327,18 @@ func TestEditWithoutABufferSaves(t *testing.T) {
 // the document follows it through note.changed.
 func TestAnOutsideEditReachesTheDocument(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "start\n")
+	f.Create("a.md", "start\n")
 	d, b := f.open("a.md")
-	if err := os.WriteFile(filepath.Join(f.dir, "a.md.tmp"), []byte("start\nvim\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(f.Dir, "a.md.tmp"), []byte("start\nvim\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(filepath.Join(f.dir, "a.md.tmp"), filepath.Join(f.dir, "a.md")); err != nil {
+	if err := os.Rename(filepath.Join(f.Dir, "a.md.tmp"), filepath.Join(f.Dir, "a.md")); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	for {
-		n := f.read("a.md")
+		n := f.Read("a.md")
 		if n.Content == "start\nvim\n" {
 			d.Changed(n.Hash)
 			break
@@ -450,20 +349,20 @@ func TestAnOutsideEditReachesTheDocument(t *testing.T) {
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
-	f.loop.until(t, "the reload", func() bool { return b.text == "start\nvim\n" })
+	f.loop.Until(t, "the reload", func() bool { return b.text == "start\nvim\n" })
 }
 
 func TestUndoLeavesAnotherWritersChange(t *testing.T) {
 	f := newFixture(t)
-	f.create("a.md", "one\ntwo\n")
+	f.Create("a.md", "one\ntwo\n")
 	d, b := f.open("a.md")
 	// The user types a word, a pause, then another.
 	b.typeAt(t, 3, 3, " 1")
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	f.settle(d)
 	b.typeAt(t, 9, 9, " 2")
 	// Another writer adds a line at the top.
-	res, err := f.other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.vault, Path: "a.md", Base: d.Base(), Content: "zero\none 1\ntwo\n"})
+	res, err := f.Other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.Vault, Path: "a.md", Base: d.Base(), Content: "zero\none 1\ntwo\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,9 +389,9 @@ func TestUndoLeavesAnotherWritersChange(t *testing.T) {
 	if _, ok := d.Redo(); !ok || b.text != "zero\none 1\ntwo\n" {
 		t.Fatalf("redo made %q", b.text)
 	}
-	f.loop.advance(SaveDelay)
+	f.loop.Advance(SaveDelay)
 	f.settle(d)
-	if got := f.read("a.md").Content; got != "zero\none 1\ntwo\n" {
+	if got := f.Read("a.md").Content; got != "zero\none 1\ntwo\n" {
 		t.Fatalf("file holds %q", got)
 	}
 }

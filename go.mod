@@ -1,10 +1,9 @@
 module github.com/frostyard/frostnotes
 
-go 1.27.0
-
-toolchain go1.27.3
+go 1.27.3
 
 require (
+	github.com/egoist/mygo v0.8.3
 	github.com/frostyard/clix v0.5.0
 	github.com/frostyard/lodge/kit v0.4.0
 	github.com/frostyard/std v0.5.0
@@ -34,6 +33,8 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -60,6 +61,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/time v0.15.0 // indirect

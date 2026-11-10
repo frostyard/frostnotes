@@ -3,12 +3,14 @@ package notes
 import (
 	"testing"
 	"time"
+
+	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
 )
 
 func TestHistoryJoinsTyping(t *testing.T) {
 	var h History
 	text := ""
-	at := epoch
+	at := desktoptest.Epoch
 	typeAt := func(pos int, s string, after time.Duration) {
 		t.Helper()
 		cs := mustChanges(t, len(text), Change{From: pos, To: pos, Insert: s})
@@ -43,7 +45,7 @@ func TestHistoryMovesOverRemoteChanges(t *testing.T) {
 	var h History
 	text := "abc"
 	cs := mustChanges(t, 3, Change{From: 3, To: 3, Insert: "X"})
-	h.Record(cs, text, epoch)
+	h.Record(cs, text, desktoptest.Epoch)
 	text = mustApply(t, cs, text) // abcX
 	remote := mustChanges(t, 4, Change{From: 0, To: 0, Insert: "123"})
 	h.Remote(remote)
@@ -57,7 +59,7 @@ func TestHistoryMovesOverRemoteChanges(t *testing.T) {
 	}
 	// A new edit clears redo.
 	cs = mustChanges(t, len(text), Change{From: 0, To: 1})
-	h.Record(cs, text, epoch.Add(time.Hour))
+	h.Record(cs, text, desktoptest.Epoch.Add(time.Hour))
 	if h.CanRedo() {
 		t.Fatal("redo survived a new edit")
 	}

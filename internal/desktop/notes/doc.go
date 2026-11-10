@@ -56,6 +56,10 @@ type Buffer interface {
 	// an undo, an edit from outside the editor) in the editor's text. The
 	// buffer does not report it back as the user's edit.
 	Apply(cs ChangeSet)
+	// Sync reports what the user typed since the last report, through
+	// Document.Local. The document calls it before it changes or sends
+	// the text, so its changes apply to the text the user sees.
+	Sync()
 }
 
 // Status is where a document stands.
@@ -256,8 +260,18 @@ func (d *Document) call(f func(ctx context.Context, c NoteAPI) error, done func(
 		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 		defer cancel()
 		err := f(ctx, c)
-		d.env.Post(func() { done(err) })
+		d.env.Post(func() {
+			d.syncBuffer()
+			done(err)
+		})
 	}()
+}
+
+// syncBuffer has the buffer report what was typed since its last report.
+func (d *Document) syncBuffer() {
+	if d.buf != nil {
+		d.buf.Sync()
+	}
 }
 
 var errNotConnected = errors.New("not connected to notesd")
@@ -324,6 +338,7 @@ func (d *Document) change(cs ChangeSet, record bool) bool {
 // Edit makes a user's change from outside the editor, as a checkbox in the
 // reading view: undo takes it back, and the buffer shows it.
 func (d *Document) Edit(cs ChangeSet) {
+	d.syncBuffer()
 	if d.change(cs, true) {
 		if d.buf != nil {
 			d.buf.Apply(cs)
@@ -351,6 +366,7 @@ func (d *Document) step(take func(string) (ChangeSet, bool)) (ChangeSet, bool) {
 	if !d.loaded || d.readOnly != "" {
 		return ChangeSet{}, false
 	}
+	d.syncBuffer()
 	cs, ok := take(d.text)
 	if !ok || !d.change(cs, false) {
 		return ChangeSet{}, false
@@ -398,6 +414,7 @@ func (d *Document) applyRemote(cs ChangeSet) {
 // Save writes the text now, unless nothing is unsaved or a write is in
 // flight.
 func (d *Document) Save() {
+	d.syncBuffer()
 	if !d.loaded || !d.dirty || d.disposed || d.flight != nil || d.readOnly != "" {
 		d.settle()
 		return
@@ -558,6 +575,7 @@ func (d *Document) refused() {
 // Changed handles note.changed: another writer's content, unless it is
 // the base.
 func (d *Document) Changed(hash string) {
+	d.syncBuffer()
 	if !d.loaded || hash == d.base {
 		return
 	}
