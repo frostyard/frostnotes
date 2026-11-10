@@ -89,7 +89,13 @@ func (l *Loop) Advance(d time.Duration) {
 // Until runs what workers post until cond holds, for at most 10 s.
 func (l *Loop) Until(t testing.TB, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.After(10 * time.Second)
+	l.UntilWithin(t, what, 10*time.Second, cond)
+}
+
+// UntilWithin is Until with its own limit.
+func (l *Loop) UntilWithin(t testing.TB, what string, limit time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.After(limit)
 	for !cond() {
 		select {
 		case f := <-l.posted:

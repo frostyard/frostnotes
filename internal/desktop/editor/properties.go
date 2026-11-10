@@ -392,3 +392,42 @@ func listItems(v any) []string {
 	}
 	return nil
 }
+
+// frontEnd is the offset just after the frontmatter, 0 without one.
+func frontEnd(text string) int {
+	bom := 0
+	if strings.HasPrefix(text, "\uFEFF") {
+		bom = len("\uFEFF")
+	}
+	m := frontRe.FindString(text[bom:])
+	if m == "" {
+		return 0
+	}
+	return bom + len(m)
+}
+
+// FrontmatterStart is where a note's frontmatter starts or would start:
+// after a byte order mark.
+func FrontmatterStart(text string) int {
+	if f := splitFront(text); !f.exists {
+		return f.start
+	}
+	return len(text) - len(strings.TrimPrefix(text, "\uFEFF"))
+}
+
+// Body is a note's text after its frontmatter.
+func Body(text string) string { return text[frontEnd(text):] }
+
+// FrontmatterLastLine is the line of the frontmatter's closing "---", from
+// 0; it is 0 without frontmatter.
+func FrontmatterLastLine(text string) int {
+	end := frontEnd(text)
+	if end == 0 {
+		return 0
+	}
+	line := strings.Count(text[:end], "\n")
+	if !strings.HasSuffix(text[:end], "\n") {
+		return line
+	}
+	return line - 1
+}

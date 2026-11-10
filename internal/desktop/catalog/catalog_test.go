@@ -70,6 +70,8 @@ func TestTheCatalogFollowsTheVault(t *testing.T) {
 
 	hash := n.Create("New.md", "new")
 	c.Event(api.NoteChanged{VaultID: n.Vault, Path: "New.md", Hash: hash})
+	c.Event(api.NoteChanged{VaultID: n.Vault, Path: "Another.md", Hash: hash}) // a burst reads once
+	loop.Advance(ReloadDelay)
 	loop.Until(t, "the new file", func() bool { return len(c.Files()) == 3 })
 	updated := n.Write("Other.md", n.Read("Other.md").Hash, "changed")
 	c.Event(api.NoteChanged{VaultID: n.Vault, Path: "Other.md", Hash: updated})

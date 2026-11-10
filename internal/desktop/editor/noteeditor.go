@@ -20,13 +20,15 @@ type Prefs struct {
 	FoldHeadings     bool
 	FoldIndent       bool
 	IndentWithTabs   bool
+	IndentGuides     bool
 	TabSize          int
+	FontSize         int // 0 is the editor's own
 }
 
 // DefaultPrefs are the web app's defaults (app/src/data/prefs.ts).
 func DefaultPrefs() Prefs {
 	return Prefs{SmartLists: true, AutoPairMarkdown: true, AutoPairBrackets: true,
-		FoldHeadings: true, FoldIndent: true, IndentWithTabs: true, TabSize: 4}
+		FoldHeadings: true, FoldIndent: true, IndentWithTabs: true, IndentGuides: true, TabSize: 4}
 }
 
 // Where a link opens.
@@ -125,6 +127,10 @@ func (e *NoteEditor) View(c *ui.Context) ui.Element {
 	st.NoAutoClose = !e.Prefs.AutoPairBrackets
 	st.NoFolding = !e.Prefs.FoldHeadings && !e.Prefs.FoldIndent
 	st.TabSize = max(1, e.Prefs.TabSize)
+	st.NoIndentGuides = !e.Prefs.IndentGuides
+	if e.Prefs.FontSize > 0 {
+		st.Font = ui.Font{Family: "monospace", Size: float32(e.Prefs.FontSize)}
+	}
 	st.Indent = code.IndentSpaces
 	if e.Prefs.IndentWithTabs {
 		st.Indent = code.IndentTabs

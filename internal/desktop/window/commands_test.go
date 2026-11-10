@@ -1,0 +1,139 @@
+package window
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/frostyard/frostui"
+
+	"github.com/frostyard/frostnotes/internal/desktop/commands"
+	"github.com/frostyard/frostnotes/internal/desktop/workspace"
+)
+
+// openNote leaves a note with a link under the caret and two tabs, so that
+// every command applies.
+func openNote(t *testing.T) *fixture {
+	t.Helper()
+	f := start(t)
+	f.Create("a.md", "see [[b]]\n")
+	f.Create("b.md", "b\n")
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("a.md") })
+	f.a.open("b.md", workspace.NewTab)
+	f.a.open("a.md", workspace.NewTab)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil && f.a.activeEditor().Binding().Document().Loaded() })
+	f.a.activeEditor().State.Select(6, 6)
+	f.tt.Frame()
+	return f
+}
+
+// counted replaces every action with a counter.
+func counted(a *App) map[string]int {
+	runs := map[string]int{}
+	for id := range a.actions {
+		a.actions[id] = func() { runs[id]++ }
+	}
+	return runs
+}
+
+// a state in which even the commands that need a history apply.
+func makeApply(f *fixture) {
+	f.a.Store.Update(func(w *workspace.Workspace) {
+		w.Closed = append(w.Closed, workspace.ClosedTab{Tab: workspace.Tab{ID: "closed", View: workspace.Note("b.md", workspace.ModeEdit)}})
+		t := w.ActiveTab()
+		t.Back = append(t.Back, workspace.Note("b.md", workspace.ModeEdit))
+		t.Forward = append(t.Forward, workspace.Note("b.md", workspace.ModeEdit))
+	})
+	f.tt.Frame()
+}
+
+func TestEveryCommandRunsFromThePalette(t *testing.T) {
+	f := openNote(t)
+	makeApply(f)
+	listed := f.a.table
+	runs := counted(f.a)
+	for _, s := range listed {
+		if s.Unlisted {
+			continue
+		}
+		if !f.a.applies(s.ID) {
+			t.Errorf("%s does not apply", s.ID)
+			continue
+		}
+		f.a.showPalette("")
+		f.tt.Frame()
+		f.a.Palette.Query = s.Title
+		f.a.Palette.Selected = 0
+		f.tt.Frame()
+		rows := f.a.commandRows()
+		found := -1
+		for i, r := range frostui.Filter(rows, s.Title) {
+			if r.ID == s.ID {
+				found = i
+			}
+		}
+		if found < 0 {
+			t.Errorf("%s is not listed", s.ID)
+			f.a.Palette.Open = false
+			continue
+		}
+		f.a.Palette.Selected = found
+		f.tt.Frame()
+		f.tt.Key(0, ui.KeyEnter)
+		f.tt.Frame()
+		if runs[s.ID] != 1 {
+			t.Errorf("%s ran %d times from the palette", s.ID, runs[s.ID])
+		}
+	}
+}
+
+func TestEveryKeyRunsItsCommand(t *testing.T) {
+	f := openNote(t)
+	makeApply(f)
+	runs := counted(f.a)
+	for _, s := range f.a.table {
+		for _, k := range s.Keys {
+			if k.Scope == commands.InEditor {
+				continue
+			}
+			name := fmt.Sprintf("%s by %v", s.ID, keyCaps(k))
+			before := runs[s.ID]
+			f.tt.Key(k.Mods, k.Key)
+			f.tt.Frame()
+			if f.a.Palette.Open {
+				f.a.Palette.Open = false
+				f.tt.Frame()
+			}
+			if runs[s.ID] != before+1 {
+				t.Errorf("%s ran %d times", name, runs[s.ID]-before)
+			}
+		}
+	}
+}
+
+func TestCtrlKIsTheEditorsInAnEditor(t *testing.T) {
+	f := openNote(t)
+	if err := f.tt.Click("Note"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	if !f.a.inEditor() {
+		t.Fatal("the editor has no focus")
+	}
+	f.a.activeEditor().State.Select(0, 3)
+	f.tt.Frame()
+	f.tt.Key(ui.Cmd, ui.KeyK)
+	f.tt.Frame()
+	if f.a.Palette.Open {
+		t.Fatal("Ctrl K opened the palette in an editor")
+	}
+	if got := f.a.activeEditor().Binding().Buffer().String(); got != "[see]() [[b]]\n" {
+		t.Fatalf("Ctrl K made %q", got)
+	}
+	f.tt.Key(ui.Cmd|ui.Shift, ui.KeyP)
+	f.tt.Frame()
+	if !f.a.Palette.Open {
+		t.Fatal("Ctrl Shift P did not open the palette in an editor")
+	}
+}

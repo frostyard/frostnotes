@@ -28,6 +28,8 @@ const (
 	AliasesDelay = time.Second
 	// TagsTTL is how long the tags are kept before they are read again.
 	TagsTTL = 10 * time.Second
+	// ReloadDelay is how long after a new file the files are read again.
+	ReloadDelay = 250 * time.Millisecond
 )
 
 // API is what the catalog needs of notesd; api.NoteClient has it.
@@ -58,6 +60,7 @@ type Catalog struct {
 	AttachmentFolder string
 	Wikilinks        bool
 	changed          []func()
+	reloading        bool
 }
 
 // New makes the catalog of a vault; Reload reads it.
@@ -77,6 +80,15 @@ func (c *Catalog) notify() {
 
 // Files are the vault's files, by path.
 func (c *Catalog) Files() []api.VaultFile { return c.files }
+
+// File is the file at p.
+func (c *Catalog) File(p string) (api.VaultFile, bool) {
+	i, ok := slices.BinarySearchFunc(c.files, p, func(f api.VaultFile, p string) int { return strings.Compare(f.Path, p) })
+	if !ok {
+		return api.VaultFile{}, false
+	}
+	return c.files[i], true
+}
 
 // Folders are its folders, by path.
 func (c *Catalog) Folders() []string { return c.folders }
@@ -148,6 +160,19 @@ func (c *Catalog) readTags() {
 	})
 }
 
+// reloadSoon reads the files once after a burst of new ones: a scan
+// reports thousands.
+func (c *Catalog) reloadSoon() {
+	if c.reloading {
+		return
+	}
+	c.reloading = true
+	c.env.After(ReloadDelay, func() {
+		c.reloading = false
+		c.Reload()
+	})
+}
+
 func (c *Catalog) soon() {
 	if c.stop != nil {
 		c.stop()
@@ -171,7 +196,7 @@ func (c *Catalog) Event(ev api.Event) {
 			c.soon()
 			return
 		}
-		c.Reload()
+		c.reloadSoon()
 	case api.NoteMoved:
 		if e.VaultID == c.vault {
 			c.Reload()

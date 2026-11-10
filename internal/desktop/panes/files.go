@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/frostyard/frostui"
 
+	"github.com/frostyard/frostnotes/internal/desktop/uikit"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 )
 
@@ -118,20 +119,18 @@ func (f *Files) commitRename(n *Node) {
 
 func (f *Files) toolbar(c *ui.Context) {
 	ui.Row(c).Gap(frostui.SpaceXS).Padding(frostui.SpaceXS, frostui.SpaceS).AlignItems(ui.Center).Children(func() {
-		if frostui.IconButton(c, "document-new", "New note").Clicked() && f.Actions.NewNote != nil {
+		if uikit.ToolButton(c, "document-new", "New note").Clicked() && f.Actions.NewNote != nil {
 			f.Actions.NewNote("")
 		}
-		if frostui.IconButton(c, "folder-new", "New folder").Clicked() && f.Actions.NewFolder != nil {
+		if uikit.ToolButton(c, "folder-new", "New folder").Clicked() && f.Actions.NewFolder != nil {
 			f.Actions.NewFolder("")
 		}
-		ui.MenuButton(c, "", f.sortMenu).Label("Change sort order").Tooltip("Change sort order").Children(func() {
-			frostui.Icon(c, "view-sort-ascending")
-		})
+		uikit.ToolButton(c, "view-sort-ascending", "Change sort order").Menu(f.sortMenu)
 		label := "Expand all"
 		if f.state.Open.Len() > 0 {
 			label = "Collapse all"
 		}
-		if frostui.IconButton(c, "view-list-tree", label).Clicked() {
+		if uikit.ToolButton(c, "view-list-tree", label).Clicked() {
 			if f.state.Open.Len() > 0 {
 				f.setOpen(nil)
 			} else {

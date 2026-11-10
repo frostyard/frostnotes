@@ -1,4 +1,4 @@
-.PHONY: help build fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
+.PHONY: help build desktop-build desktop-run fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -20,6 +20,12 @@ help: ## List targets
 
 build: ## Build notesd and notesctl into build/
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/...
+
+desktop-build: ## Build the native desktop app into build/frostnotes, as a release builds it
+	CGO_ENABLED=0 go build -trimpath -tags mygo_noinspector -ldflags '$(LDFLAGS) -X github.com/egoist/mygo.production=1' -o build/frostnotes ./cmd/frostnotes
+
+desktop-run: ## Run the native desktop app against the running notesd
+	go run ./cmd/frostnotes
 
 fmt: ## Format Go code
 	gofmt -w $(GO_FILES)

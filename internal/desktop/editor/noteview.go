@@ -11,6 +11,9 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
+// ReadableWidth is a note's width under Readable line length.
+const ReadableWidth = 700
+
 // NoteView is a tab's note in edit mode: its inline title, its properties
 // and its editor (docs/specs/ui.md#editor-and-reading-view).
 type NoteView struct {
@@ -19,6 +22,8 @@ type NoteView struct {
 	// ShowTitle and ShowProperties are the Show inline title and
 	// Properties in document preferences.
 	ShowTitle, ShowProperties bool
+	// Readable limits the note's width (Readable line length).
+	Readable bool
 	// Rename moves the note: its new name, without ".md".
 	Rename func(title string)
 
@@ -42,15 +47,21 @@ func noteTitle(p string) string {
 
 // View draws the note.
 func (v *NoteView) View(c *ui.Context) ui.Element {
-	return ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		if v.ShowTitle {
-			v.inlineTitle(c)
+	return ui.Column(c).Fill().AlignItems(ui.Center).Children(func() {
+		col := ui.Column(c).Grow(1).MinHeight(0).FillWidth().AlignItems(ui.Stretch)
+		if v.Readable {
+			col.MaxWidth(ReadableWidth)
 		}
-		if v.ShowProperties {
-			v.Properties.View(c)
-			v.foldFrontmatter()
-		}
-		v.Editor.View(c).Grow(1).FillWidth()
+		col.Children(func() {
+			if v.ShowTitle {
+				v.inlineTitle(c)
+			}
+			if v.ShowProperties {
+				v.Properties.View(c)
+				v.foldFrontmatter()
+			}
+			v.Editor.View(c).Grow(1).FillWidth()
+		})
 	})
 }
 

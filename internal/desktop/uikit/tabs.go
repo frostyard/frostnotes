@@ -59,13 +59,11 @@ func (s TabStrip) View(c *ui.Context) ui.Element {
 			}
 		})
 		ui.Row(c).Gap(frostui.SpaceXS).Padding(0, frostui.SpaceXS).AlignItems(ui.Center).Children(func() {
-			if s.New != nil && frostui.IconButton(c, "tab-new", "New tab").Clicked() {
+			if s.New != nil && ToolButton(c, "tab-new", "New tab").Clicked() {
 				s.New()
 			}
 			if s.List != nil {
-				ui.MenuButton(c, "", s.List).Label("Tab list").Tooltip("Tab list").Children(func() {
-					frostui.Icon(c, "pan-down")
-				})
+				ToolButton(c, "pan-down", "Tab list").Menu(s.List)
 			}
 		})
 	})
@@ -111,7 +109,7 @@ func (s TabStrip) tab(c *ui.Context, el ui.Element, index int, tab Tab) {
 			frostui.Icon(c, "view-pin").TextColor(t.TextMuted)
 		}
 		ui.Text(c, tab.Title).FontSize(13).SingleLine().Grow(1).Shrink(1).AccessHidden(true)
-		if !tab.Pinned && s.Close != nil && frostui.IconButton(c, "window-close", "Close "+tab.Title).Clicked() {
+		if !tab.Pinned && s.Close != nil && ToolButton(c, "window-close", "Close "+tab.Title).Size(20, 20).Clicked() {
 			s.Close(tab.ID)
 		}
 	})
@@ -172,4 +170,15 @@ func PaneTabs(c *ui.Context, label string, panes []PaneTab, active int, choose f
 		choose(panes[selected].ID)
 	}
 	return el
+}
+
+// ToolButton is a flat icon button for the dense rows of a pane or a tab
+// strip: frostui's IconButton keeps the padding of a form's.
+func ToolButton(c *ui.Context, icon, label string) ui.Element {
+	t := c.Theme()
+	b := ui.ButtonBase(c).Size(26, 26).Center().Radius(frostui.RadiusChip).Cursor(ui.CursorPointer).Label(label).Tooltip(label)
+	if b.Hovered() {
+		b.Background(t.SurfaceHover)
+	}
+	return b.Children(func() { frostui.Icon(c, icon).TextColor(t.TextMuted) })
 }
