@@ -28,6 +28,22 @@ Every write, an agent's included, is kept as a version for 30 days:
 `notesctl versions PATH` lists them and `notesctl revert` undoes one
 ([design/vault.md](design/vault.md#versions)).
 
+## Run the native desktop app
+
+The native app ([plan 0009](plans/0009-mygo-desktop.md)) is pure Go, and needs
+GTK 3, Pango and cairo at run time, not at build time. Its tests draw headless
+and need only Pango, cairo and a font.
+
+```bash
+make desktop-run
+```
+
+`make desktop-build` makes the release binary, `make desktop-smoke` starts it
+under Xvfb against a real notesd, and `make desktop-evidence` records the
+10,000-note and phone-to-desktop evidence. `FROSTNOTES_SCREENS=DIR go test
+-run TestEveryScreenDraws ./internal/desktop/window` writes each screen's
+picture to `DIR`.
+
 ## Set up the nsl machine
 
 ```sh

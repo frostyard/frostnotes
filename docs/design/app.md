@@ -42,6 +42,10 @@ MyGo and frostui, and the React app stays as lodge's web app
 [plan 0009](../plans/0009-mygo-desktop.md)). This document describes the
 Tauri app until that plan's Phase 6 rewrites it.
 
+The native app's code is `cmd/frostnotes` and `internal/desktop/`
+([plan 0009](../plans/0009-mygo-desktop.md#packages)); how its screens differ
+is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
+
 ## Overview
 
 The app is a Tauri v2 window running a React UI, a thin client of notesd

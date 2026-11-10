@@ -9,6 +9,7 @@ import (
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/internal/desktop/commands"
+	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 )
 
@@ -154,5 +155,73 @@ func TestCtrlKIsTheEditorsInAnEditor(t *testing.T) {
 	f.tt.Frame()
 	if !f.a.Shell.Palette.Open {
 		t.Fatal("Ctrl Shift P did not open the palette in an editor")
+	}
+}
+
+func TestFollowingATagSearchesForIt(t *testing.T) {
+	f := openNote(t)
+	e := f.a.activeEditor()
+	e.Binding().Document().Edit(mustInsert(t, e.Binding().Document().Text(), "\n#garden\n"))
+	f.tt.Frame()
+	at := len("see [[b]]\n\n#gar")
+	e.State.Select(at, at)
+	f.tt.Frame()
+	if err := f.tt.Click("Note"); err != nil {
+		t.Fatal(err)
+	}
+	e.State.Select(at, at)
+	f.tt.Frame()
+	f.tt.Key(ui.Alt, ui.KeyEnter)
+	f.tt.Frame()
+	if f.a.search.Query != "tag:#garden" {
+		t.Fatalf("the search is %q", f.a.search.Query)
+	}
+}
+
+func mustInsert(t *testing.T, text, add string) notes.ChangeSet {
+	t.Helper()
+	cs, err := notes.ChangesOf(len(text), notes.Change{From: len(text), To: len(text), Insert: add})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cs
+}
+
+func TestInsertingATemplateReachesTheFile(t *testing.T) {
+	f := start(t)
+	f.Create("Templates/Day.md", "---\nmood: good\n---\nBody of {{title}}\n")
+	f.Create("a.md", "start\n")
+	f.openVault()
+	f.a.settingChanged("vault:templateFolder", "Templates")
+	f.until("the setting", func() bool { return f.a.settings.TemplateFolder == "Templates" })
+	f.a.open("a.md", workspace.Here)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil && f.a.activeEditor().Binding().Document().Loaded() })
+	e := f.a.activeEditor()
+	e.State.Select(len("start\n"), len("start\n"))
+	f.tt.Frame()
+	f.a.insertTemplate("Templates/Day.md")
+	want := "---\nmood: good\n---\nstart\nBody of a\n"
+	d := e.Binding().Document()
+	f.until("the template", func() bool {
+		e.Binding().Sync()
+		return d.Text() == want
+	})
+	f.loop.Advance(notes.SaveDelay)
+	f.until("the save", func() bool { return d.Status() == notes.StatusClean && !d.Unsaved() })
+	if got := f.Read("a.md").Content; got != want {
+		t.Fatalf("the file holds %q", got)
+	}
+}
+
+func TestAddingAFilePropertyMakesFrontmatter(t *testing.T) {
+	f := openNote(t)
+	f.a.addFileProperty()
+	f.tt.Frame()
+	d := f.a.activeEditor().Binding().Document()
+	if got := d.Text(); got != "---\n---\nsee [[b]]\n" {
+		t.Fatalf("the note is %q", got)
+	}
+	if got := f.a.activeEditor().Binding().Buffer().String(); got != d.Text() {
+		t.Fatalf("the editor shows %q", got)
 	}
 }

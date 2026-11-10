@@ -64,6 +64,11 @@ set -u
 
 libexec="${FROSTNOTES_LIBEXEC_DIR:-/app/libexec}"
 app="$libexec/frostnotes-app"
+# FROSTNOTES_NATIVE=1 runs the native app instead, for a trial until it
+# replaces the Tauri app (docs/plans/0009-mygo-desktop.md).
+if [ "${FROSTNOTES_NATIVE:-}" = 1 ]; then
+    app="$libexec/frostnotes-native"
+fi
 request_background="$libexec/frostnotes-request-background"
 
 state="${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes"

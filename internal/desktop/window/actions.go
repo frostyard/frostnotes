@@ -226,10 +226,6 @@ func (a *App) followLink(l editor.Link, from string, w editor.Where) {
 		a.report(a.openExternal(l.URL))
 		return
 	}
-	if strings.HasPrefix(l.Target, "#tag:") { // a tag, from the editor
-		a.searchFor("tag:" + strings.TrimPrefix(l.Target, "#tag:"))
-		return
-	}
 	if l.Target == "" { // a link to the note itself leads nowhere else
 		return
 	}
@@ -252,6 +248,65 @@ func (a *App) followLink(l editor.Link, from string, w editor.Where) {
 			return
 		}
 		a.openOrCreate(l.Target, where)
+	})
+}
+
+// preview is a link's page preview, read once.
+type preview struct {
+	text   string
+	done   bool
+	failed bool
+}
+
+// previewLines is how much of a note its page preview shows.
+const previewLines = 12
+
+// linkPreview draws the page preview of a link in the note at from.
+func (a *App) linkPreview(from func() string) func(*ui.Context, editor.Link) {
+	return func(c *ui.Context, l editor.Link) {
+		key := from() + "\x00" + l.Target
+		p := a.previews[key]
+		if p == nil {
+			p = &preview{}
+			a.previews[key] = p
+			a.loadPreview(p, from(), l.Target)
+		}
+		col := ui.Column(c).MaxWidth(360).Padding(frostui.SpaceS).Gap(frostui.SpaceXS).AlignItems(ui.Stretch)
+		col.Children(func() {
+			switch {
+			case !p.done:
+				frostui.Loading(c, "Reading the note…")
+			case p.failed:
+				frostui.Muted(c, "This note does not exist yet.")
+			default:
+				frostui.Strong(c, nameOf(l.Target))
+				ui.Text(c, p.text).Wrap()
+			}
+		})
+	}
+}
+
+func (a *App) loadPreview(p *preview, from, target string) {
+	id := a.vault.ID
+	var text string
+	a.call(func(ctx context.Context, c *api.Client) error {
+		found, err := c.Note().Resolve(ctx, &api.NoteResolveParams{VaultID: id, From: from, Targets: []string{target}})
+		if err != nil {
+			return err
+		}
+		if len(found) == 0 || found[0].Path == nil {
+			return errNoNote
+		}
+		note, err := c.Note().Read(ctx, &api.NoteReadParams{VaultID: id, Path: *found[0].Path})
+		if err != nil {
+			return err
+		}
+		text = note.Content
+		return nil
+	}, func(err error) {
+		p.done, p.failed = true, err != nil
+		lines := strings.Split(strings.TrimSpace(editor.Body(text)), "\n")
+		p.text = strings.Join(lines[:min(len(lines), previewLines)], "\n")
 	})
 }
 
@@ -489,7 +544,7 @@ func (a *App) applyTemplate(e *editor.NoteEditor, content string) {
 			if err != nil {
 				a.notify("Cannot add the template's properties: " + err.Error())
 			} else {
-				e.Binding().Apply(notes.Diff(d.Text(), next))
+				d.Edit(notes.Diff(d.Text(), next))
 			}
 		}
 	}
@@ -511,7 +566,7 @@ func (a *App) addFileProperty() {
 			a.report(err)
 			return
 		}
-		e.Binding().Apply(cs)
+		d.Edit(cs)
 	}
 	if a.Prefs.Properties == "visible" {
 		tc.ed.Properties.Add()

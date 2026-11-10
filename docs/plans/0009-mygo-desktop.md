@@ -309,9 +309,10 @@ into frostui by a change of import path:
   workspace model, and the commands' table of IDs, titles and keys,
   pure Go, ported with their Vitest cases.
 - `internal/desktop/notes`: documents, saves and merges, pure Go.
-- `internal/desktop/editor`, `livepreview`, `reading`, `history`,
-  `panes`, `settings`, `vaults`, `system` (paths, blobs, background,
-  notesd's log) and `window` (the frame and its wiring).
+- `internal/desktop/editor`, `reading`, `history`, `panes`, `catalog`,
+  `prefs`, `system` (paths, background, notesd's log, the open rules) and
+  `window` (the frame, the vault manager, settings and their wiring);
+  `livepreview` joins them in Phase 5.
 
 ## Phase 1 — Inventory and plan (done 2026-11-10)
 
@@ -386,7 +387,7 @@ The parts that need no frostui piece, in the order the orchestrator set.
   mode, the render fixtures pass for both formats, and `make check`
   passes. The branch is then pushed and its PR opened as a draft.
 
-## Phase 3 — The frame (about 1 week, once frostui's pieces land)
+## Phase 3 — The frame (done 2026-11-10)
 
 - `cmd/frostnotes` on frostui's frame: the top bar, the palette, the
   status bar in the shared order, the main menu, dialogs, toasts, About,
@@ -399,11 +400,23 @@ The parts that need no frostui piece, in the order the orchestrator set.
   every preference, vault setting, Sync, Hub and Background
   ([specs/ui.md](../specs/ui.md#settings-batch-2)).
 - `make desktop-build`, `desktop-run`.
+- **Built (2026-11-10):** `cmd/frostnotes` and `internal/desktop/window` on
+  frostui v0.2.0's `PaneShell`, `Connection`, `Settings` and palette
+  sources. The sidebar toggle is at the far left, before the brand: frostui
+  draws it there in every app. Why notesd is not running moves from a
+  block under the text to the connecting screen's Details. The open rules
+  of `open.rs` are `internal/desktop/system/open.go`, in front of
+  frostui's `Opener`, and joined the risk paths at L1.
+- **Evidence:** `internal/desktop/window`'s tests, against a real notesd:
+  Connecting, a lost connection keeping the workspace, creating, opening
+  and removing vaults, joining a loopback hub, and each screen's PNG in
+  light and dark (`FROSTNOTES_SCREENS` keeps them). `make desktop-smoke`
+  starts the release build under Xvfb.
 - **Done when:** against a real notesd in a test, the app shows
   Connecting, lists, creates, opens and removes vaults and joins a
   loopback hub, and the Tester writes each screen's PNG, light and dark.
 
-## Phase 4 — Workspace and panes (about 1–2 weeks)
+## Phase 4 — Workspace and panes (done 2026-11-10)
 
 - Tab strips, splits and view headers over Phase 2's workspace model;
   frostui's `Panes` for the sidebars, with uikit's pane tabs.
@@ -415,12 +428,26 @@ The parts that need no frostui piece, in the order the orchestrator set.
 - Every command and key of [specs/ui.md](../specs/ui.md#keyboard-map)
   through frostui's `CommandTable`
   ([design/app.md](../design/app.md#commands-and-keys)).
+- **Built (2026-11-10):** tab strips, splits and view headers; the panes,
+  with Files on frostui's `SourceList`; the quick switcher, the folder,
+  template and heading choosers as palette sources; daily notes,
+  templates and file tabs; the link hover's page preview.
+- **Evidence:** `TestEveryCommandRunsFromThePalette` and
+  `TestEveryKeyRunsItsCommand`; `make desktop-evidence`'s
+  `TestALargeVaultStaysWithinAFrame`, on an AMD Ryzen AI MAX+ 395 with a
+  CPU-drawn frame (the numbers are in the PR).
 - **Done when:** every command ID of the keyboard map runs from the
   palette and from its keys in Tester tests, and a generated vault of
   10,000 notes shows its tree and ranks the switcher's notes with no frame
   over 16 ms.
 
 ## Phase 5 — Live preview (about 3 weeks)
+
+**Waiting (2026-11-10)** for a MyGo release with its pull requests
+[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) (hidden and
+replaced ranges) and [egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654)
+(edits outside the undo history), both open. Until then the editing mode
+is source mode, whatever the preference says.
 
 - Live preview on MyGo's editor, in the order its author is building
   [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the
@@ -459,6 +486,11 @@ The parts that need no frostui piece, in the order the orchestrator set.
   [specs/ui.md](../specs/ui.md) split into what both UIs do and how each
   draws it, [design/overview.md](../design/overview.md),
   `docs/development.md`, the README.
+- **Built so far (2026-11-10):** CI's `desktop` job; `make desktop-evidence`
+  with an edit on the hub reaching the open editor; the Flatpak also
+  builds the native app, as `/app/libexec/frostnotes-native`, which
+  `flatpak run --env=FROSTNOTES_NATIVE=1 org.frostyard.Frostnotes` runs
+  for a trial. The Tauri module stays the default until parity.
 - **Done when:** the Flatpak built from the branch installs on Snow,
   opens the user's vault and syncs it, with no Rust or Node in its
   build, and `make ci` and `flatpak.yml` pass.

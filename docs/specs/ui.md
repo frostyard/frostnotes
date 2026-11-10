@@ -969,6 +969,25 @@ the editor and fields have had it. In a text field outside the editor,
 only presses with Ctrl or Alt, and F1 and F2, reach the table; Escape
 belongs to the field, a prompt or a menu.
 
+## In the native desktop app
+
+The native app ([plan 0009](../plans/0009-mygo-desktop.md#the-window),
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))
+has this spec's commands, keys, panes, settings and notices. It draws them
+with frostui, which changes these:
+
+- The title bar row is frostui's top bar, and tab strips sit under it, one
+  for each tab group. There is no ribbon.
+- [Connecting](#connecting) is frostui's connecting screen. Why notesd is not
+  running is behind its Details button.
+- The prompts are one palette with sources. Ctrl + K opens it, except in a
+  note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
+  opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
+- The status bar starts with the connection, "Local" or the hub's host.
+- Until live preview is built, the editing view is source mode. The
+  frontmatter's first line stays visible while the properties panel shows.
+- Spellcheck has no effect: MyGo's editor has none.
+
 ## Rules
 
 - No component draws literal colors or fonts; tokens only.

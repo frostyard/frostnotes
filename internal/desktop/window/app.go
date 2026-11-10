@@ -89,20 +89,21 @@ type App struct {
 	dragging bool
 	wasDrag  bool
 
-	Shell   frostui.PaneShell
-	Dialogs frostui.Dialogs
-	panes   frostui.Panes
-	cmds    *frostui.CommandTable
-	moving  *moveTarget
-	pending *pendingLine
-	held    map[string]heldMerge
-	lastMod ui.Modifiers
-	table   []commands.Spec
-	actions map[string]func()
-	toasts  []ui.Toast
-	counts  textCounts
-	vm      vaultManager
-	sets    settingsDialog
+	Shell    frostui.PaneShell
+	Dialogs  frostui.Dialogs
+	panes    frostui.Panes
+	cmds     *frostui.CommandTable
+	moving   *moveTarget
+	pending  *pendingLine
+	held     map[string]heldMerge
+	previews map[string]*preview
+	lastMod  ui.Modifiers
+	table    []commands.Spec
+	actions  map[string]func()
+	toasts   []ui.Toast
+	counts   textCounts
+	vm       vaultManager
+	sets     settingsDialog
 }
 
 type binding struct {
@@ -112,7 +113,7 @@ type binding struct {
 
 // New makes the window's state; Start connects it.
 func New(cfg Config) *App {
-	a := &App{cfg: cfg, tabs: map[string]*tabContent{}, bindings: map[*notes.Document]*binding{}, held: map[string]heldMerge{}, table: commands.Table()}
+	a := &App{cfg: cfg, tabs: map[string]*tabContent{}, bindings: map[*notes.Document]*binding{}, held: map[string]heldMerge{}, previews: map[string]*preview{}, table: commands.Table()}
 	a.Prefs = prefs.Load(filepath.Join(cfg.ConfigAt, "prefs.json"))
 	a.State = prefs.LoadState(filepath.Join(cfg.StateAt, "state.json"))
 	a.Store = workspace.NewStore(cfg.Env, filepath.Join(cfg.StateAt, "workspace"))
@@ -222,6 +223,7 @@ func (a *App) reloadAll() {
 // showVault makes v the window's vault, nil for the vault manager.
 func (a *App) showVault(v *api.Vault) {
 	a.releaseAllTabs()
+	clear(a.previews)
 	a.vault = v
 	if v == nil {
 		a.Store.Load("")
@@ -343,6 +345,8 @@ func (a *App) event(_ int64, ev api.Event) {
 		a.Catalog.Event(ev)
 	}
 	switch e := ev.(type) {
+	case api.NoteChanged:
+		clear(a.previews)
 	case api.NoteMoved:
 		a.Store.Follow(a.vaultPath(e.VaultID), func(w *workspace.Workspace) { w.ApplyMove(e.From, e.To) })
 	case api.NoteRemoved:

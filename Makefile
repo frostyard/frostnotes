@@ -1,4 +1,4 @@
-.PHONY: help build desktop-build desktop-run fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
+.PHONY: help build desktop-build desktop-run desktop-smoke desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -26,6 +26,13 @@ desktop-build: ## Build the native desktop app into build/frostnotes, as a relea
 
 desktop-run: ## Run the native desktop app against the running notesd
 	go run ./cmd/frostnotes
+
+desktop-smoke: desktop-build ## Start the native app under Xvfb against a real notesd (needs xvfb-run)
+	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
+	scripts/desktop-smoke.sh build
+
+desktop-evidence: ## Record the native app's evidence: a 10,000-note vault within a frame, a phone's edit within 2 s
+	go test -tags integration -count=1 -v -timeout 20m -run '^(TestALargeVaultStaysWithinAFrame|TestAnEditOnThePhoneReachesTheDesktop)$$' ./internal/desktop/window
 
 fmt: ## Format Go code
 	gofmt -w $(GO_FILES)

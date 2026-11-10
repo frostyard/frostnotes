@@ -22,7 +22,10 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 )
 
-var errOffline = errors.New("not connected to notesd")
+var (
+	errOffline = errors.New("not connected to notesd")
+	errNoNote  = errors.New("no such note")
+)
 
 // tabContent is what a tab's view draws with, kept while the tab shows
 // the same thing.
@@ -138,6 +141,8 @@ func (a *App) noteEditor(d *notes.Document, v workspace.View) *editor.NoteEditor
 	e.Sources, e.Uploads = src, src
 	e.Clipboard, e.OnError = a.cfg.Clipboard, a.report
 	e.Follow = func(l editor.Link, where editor.Where) { a.followLink(l, d.Path(), where) }
+	e.FollowTag = func(tag string) { a.searchFor("tag:#" + tag) }
+	e.Preview = a.linkPreview(d.Path)
 	if v.Cursor > 0 {
 		e.State.Select(v.Cursor, v.Cursor)
 	}

@@ -71,6 +71,8 @@ type NoteEditor struct {
 	Sources Sources
 	// Follow opens a link: Alt + Enter, Ctrl + click and their variants.
 	Follow func(l Link, where Where)
+	// FollowTag searches for a tag, the same way.
+	FollowTag func(tag string)
 	// Preview builds a link's page preview in a hover; nil for none.
 	Preview func(c *ui.Context, l Link)
 	// Uploads and Clipboard let files be pasted and dropped; nil for
@@ -286,12 +288,16 @@ func (e *NoteEditor) key(mods ui.Modifiers, key ui.Key) bool {
 // one.
 func (e *NoteEditor) followAt(offset int, where Where) bool {
 	e.b.Sync()
-	l, ok := LinkAt(e.b.Document().Text(), offset)
-	if !ok || e.Follow == nil {
-		return false
+	text := e.b.Document().Text()
+	if l, ok := LinkAt(text, offset); ok && e.Follow != nil {
+		e.Follow(l, where)
+		return true
 	}
-	e.Follow(l, where)
-	return true
+	if tag, ok := TagAt(text, offset); ok && e.FollowTag != nil {
+		e.FollowTag(tag)
+		return true
+	}
+	return false
 }
 
 func (e *NoteEditor) hover(r code.HoverRequest) {

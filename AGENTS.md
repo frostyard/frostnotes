@@ -44,8 +44,11 @@ of lodge's app contract is
 Next, [plan 0009](docs/plans/0009-mygo-desktop.md) moves the desktop
 app to a native Go app on MyGo and frostui, and keeps the React app as
 lodge's web app ([ADR-0038](docs/adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
-proposed). Its Phase 1, the inventory and the plan, is done
-(2026-11-10); the Tauri shell stays until the native app reaches parity.
+proposed). Its Phases 1 to 4 are built on a draft branch (2026-11-10):
+session, source mode, reading view, history and merges, the window on
+frostui's shell, the workspace and the panes. Live preview (Phase 5) waits
+for MyGo's editor ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651));
+the Tauri shell stays until the native app reaches parity.
 
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
@@ -116,6 +119,15 @@ file a step names before writing its frostnotes counterpart.
   geckodriver in lodge's development build (`make m4-evidence`,
   `scripts/lodge-e2e.sh`), and plan 0007's Porter run through lodge's
   listener and agent socket (`make porter-evidence`).
+- `cmd/frostnotes`, `internal/desktop/`: the native desktop app (plan 0009).
+  `window` joins the rest under frostui's shell; `session` is the notesd
+  connection; `notes` documents, saves and merges (no MyGo import); `editor`
+  source mode on MyGo's code editor; `reading`, `history` and `panes` their
+  views; `workspace`, `commands` and `prefs` plain data; `catalog` a vault's
+  files; `system` paths, notesd's log, the background setting and the open
+  rules; `uikit` tab strips and splits (imports only std, MyGo, purego and
+  frostui); `desktoptest` the tests' UI loop and real notesd. `make
+  desktop-build`, `desktop-run`, `desktop-smoke` (Xvfb) and `desktop-evidence`.
 - `internal/sandbox`: a Flatpak sandbox's file grants (`/.flatpak-info`) and the
   explanation of a file error they cause; the engine uses it for `vault.add`
   ([design/app.md](docs/design/app.md#the-flatpak)).
@@ -194,7 +206,7 @@ file a step names before writing its frostnotes counterpart.
   `notesctl`), `github.com/frostyard/lodge/kit` v0.4.0 (the RPC and app runtime),
   `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
   also clix's), and for the native desktop app (plan 0009)
-  `github.com/frostyard/frostui` v0.1.0 (frostyard's desktop UI kit) over
+  `github.com/frostyard/frostui` v0.2.0 (frostyard's desktop UI kit) over
   `github.com/egoist/mygo` v0.8.3. Run `make flatpak-sources` after a
   bump: it rewrites `packaging/flatpak/go-sources.json`.
 - **Rust crates** (`app/src-tauri/Cargo.toml`): `frostyard-problems` as a git
