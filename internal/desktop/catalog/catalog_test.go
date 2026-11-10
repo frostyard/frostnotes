@@ -79,3 +79,42 @@ func TestTheCatalogFollowsTheVault(t *testing.T) {
 		}
 	}
 }
+
+func TestUploadingAnAttachment(t *testing.T) {
+	c, n, loop := start(t, map[string]string{"Notes/Plan.md": "x", "Other/a.png": "taken"})
+	c.AttachmentFolder = "./media"
+	src := c.Sources(func() string { return "Notes/Plan.md" }, func(string) (string, bool) { return "", false })
+	var embeds string
+	var err error
+	done := false
+	src.Upload([]editor.File{{Name: "a.png", Data: []byte("image")}, {Name: "a.png", Data: []byte("second")}}, func(e string, er error) { embeds, err, done = e, er, true })
+	loop.Until(t, "the upload", func() bool { return done })
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The name is taken elsewhere, so the first embed names its path; the
+	// second file gets a free name.
+	if embeds != "![[Notes/media/a.png]]\n![[a 1.png]]" {
+		t.Fatalf("embeds %q", embeds)
+	}
+	files, err := n.Other.Note().Files(t.Context(), &api.NoteFilesParams{VaultID: n.Vault})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, f := range files.Files {
+		if f.Path == "Notes/media/a.png" || f.Path == "Notes/media/a 1.png" {
+			found++
+		}
+	}
+	if found != 2 {
+		t.Fatalf("%d uploaded", found)
+	}
+	big := make([]byte, editor.MaxAttach+1)
+	done = false
+	src.Upload([]editor.File{{Name: "big.bin", Data: big}}, func(_ string, er error) { err, done = er, true })
+	loop.Until(t, "the refusal", func() bool { return done })
+	if err == nil {
+		t.Fatal("a file over 10 MB uploaded")
+	}
+}

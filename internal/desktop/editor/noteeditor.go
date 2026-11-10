@@ -3,6 +3,7 @@ package editor
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
@@ -70,6 +71,12 @@ type NoteEditor struct {
 	Follow func(l Link, where Where)
 	// Preview builds a link's page preview in a hover; nil for none.
 	Preview func(c *ui.Context, l Link)
+	// Uploads and Clipboard let files be pasted and dropped; nil for
+	// none. OnError shows what went wrong, Now is the clock.
+	Uploads   Uploader
+	Clipboard Clipboard
+	OnError   func(error)
+	Now       func() time.Time
 
 	completeNext bool
 }
@@ -126,7 +133,9 @@ func (e *NoteEditor) View(c *ui.Context) ui.Element {
 		e.completeNext = false
 		e.openCompletions(st.Cursor())
 	}
-	return code.View(c, st)
+	el := code.View(c, st)
+	e.acceptDrops(el)
+	return el
 }
 
 func (e *NoteEditor) sels() []Sel {
@@ -195,6 +204,8 @@ func (e *NoteEditor) input(ev ui.InputEvent) bool {
 		case "redo":
 			e.Redo()
 			return true
+		case "paste":
+			return e.paste()
 		}
 	case ui.InputKeyDown:
 		return e.key(ev.Mods, ev.Key)
@@ -225,6 +236,8 @@ func (e *NoteEditor) key(mods ui.Modifiers, key ui.Key) bool {
 	case mods == cmd|shift && key == ui.KeyZ, mods == cmd && key == ui.KeyY:
 		e.Redo()
 		return true
+	case mods == cmd && key == ui.KeyV, mods == shift && key == ui.KeyInsert:
+		return e.paste()
 	case mods == cmd && key == ui.KeyB:
 		return run(func(t string, s []Sel) Edit { return ToggleMark(t, s, "**") })
 	case mods == cmd && key == ui.KeyI:

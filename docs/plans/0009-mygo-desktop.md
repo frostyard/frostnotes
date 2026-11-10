@@ -19,10 +19,8 @@ below, and ADR-0038. The orchestrator approved both on 2026-11-10 with
 the rules both apps now share (the palette's keys, the status bar's
 order, the top bar) and moved the shared pieces into frostui, built
 once for Frostnotes and Frostmail; this plan follows those notes.
-Phase 2, the parts that need no frostui piece, is in progress: its
-documents, source mode, reading view (with notesd's
-`note.renderMarkdown`), history, merge view and session are built
-(below), and its PR is open as a draft.
+Phase 2, the parts that need no frostui piece, is done (below), and its
+PR is open as a draft.
 
 ## The window
 
@@ -326,7 +324,7 @@ into frostui by a change of import path:
   orchestrator has the chrome, the patterns and the generic pieces to
   check against the Frostmail port.
 
-## Phase 2 — Session, source mode, reading view, history and merges (about 2 weeks)
+## Phase 2 — Session, source mode, reading view, history and merges (done 2026-11-10)
 
 The parts that need no frostui piece, in the order the orchestrator set.
 
@@ -375,10 +373,12 @@ The parts that need no frostui piece, in the order the orchestrator set.
   (`BenchmarkTypingInALongNote`, an AMD Ryzen AI MAX+ 395); the render
   rules pass in `internal/render` and every link of the generated
   vault's manifest in `internal/engine`.
-- **Left:** the workspace's and the preferences' files, and the
-  commands' table; paste and drop of attachments; the inline title and the
-  properties panel; completion of headings and block IDs; the system
-  pieces (notesd's log tail, the background setting); tab notices.
+- **Also built (2026-11-10):** the workspace's and the preferences'
+  files, the commands' table (held to the keyboard map by a test), the
+  vault catalog, completion of headings and block IDs, the inline
+  title and the properties panel, paste and drop of attachments, tab
+  notices on frostui's banner, notesd's log tail and the background
+  setting. Phase 2 is done.
 - **Done when:** M3's writers evidence passes against the native
   document and editor in a test with a real notesd (vim, MCP and a hub
   writing while the app types lose no token, and the caret stays),

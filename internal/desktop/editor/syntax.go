@@ -266,6 +266,14 @@ func (h *highlighter) FoldEnd(line int) (int, bool) {
 	if line < 0 || line >= n {
 		return 0, false
 	}
+	if line == 0 && strings.TrimRight(text.Line(0), " \t") == "---" {
+		for i := 1; i < n; i++ {
+			if t := strings.TrimRight(text.Line(i), " \t"); t == "---" || t == "..." {
+				return i, true
+			}
+		}
+		return 0, false
+	}
 	if lvl := h.heading(line); lvl > 0 {
 		end := line
 		for i := line + 1; i < n; i++ {

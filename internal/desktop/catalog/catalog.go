@@ -6,6 +6,8 @@ package catalog
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -35,6 +37,7 @@ type API interface {
 	Tags(ctx context.Context, p *api.NoteTagsParams) ([]api.TagCount, error)
 	Resolve(ctx context.Context, p *api.NoteResolveParams) ([]api.Resolution, error)
 	Read(ctx context.Context, p *api.NoteReadParams) (*api.Note, error)
+	Upload(ctx context.Context, p *api.NoteUploadParams) (*api.WriteResult, error)
 }
 
 // Catalog is one vault's files. UI thread only.
@@ -51,12 +54,15 @@ type Catalog struct {
 	stop    func()
 	// LinkFormat is the vault's: shortest, relative or absolute.
 	LinkFormat string
-	changed    []func()
+	// AttachmentFolder and Wikilinks are the vault's attachment settings.
+	AttachmentFolder string
+	Wikilinks        bool
+	changed          []func()
 }
 
 // New makes the catalog of a vault; Reload reads it.
 func New(env notes.Env, client func() API, vault int64) *Catalog {
-	return &Catalog{env: env, api: client, vault: vault, aliases: map[string][]string{}, LinkFormat: "shortest"}
+	return &Catalog{env: env, api: client, vault: vault, aliases: map[string][]string{}, LinkFormat: "shortest", AttachmentFolder: "/", Wikilinks: true}
 }
 
 // OnChange calls fn on the UI thread when the files, aliases or tags
@@ -252,19 +258,56 @@ func (c *Catalog) Search(query string, limit int, files bool) []Match {
 	return out[:min(len(out), limit)]
 }
 
-// Sources are a note's completions, from the catalog: what the editor
-// asks. text gives a note's text when a tab has it open.
-func (c *Catalog) Sources(from func() string, text func(path string) (string, bool)) editor.Sources {
-	return &sources{c: c, from: from, text: text}
+// Sources are a note's completions and uploads, from the catalog: what
+// the editor asks. text gives a note's text when a tab has it open.
+func (c *Catalog) Sources(from func() string, text func(path string) (string, bool)) *NoteSources {
+	return &NoteSources{c: c, from: from, text: text}
 }
 
-type sources struct {
+// Upload stores files beside the note (ADR-0023), by the vault's settings,
+// and gives the embeds to insert, one per line.
+func (s *NoteSources) Upload(files []editor.File, done func(embeds string, err error)) {
+	c := s.c
+	folder := editor.AttachmentFolder(c.AttachmentFolder, s.from())
+	paths := make(map[string]bool, len(c.files))
+	names := map[string]int{}
+	for _, f := range c.files {
+		paths[f.Path] = true
+		names[path.Base(f.Path)]++
+	}
+	var embeds []string
+	var err error
+	c.do(func(ctx context.Context, n API) error {
+		for _, f := range files {
+			if len(f.Data) > editor.MaxAttach {
+				return fmt.Errorf("%s is over 10 MB: copy it into the vault's folder instead", f.Name)
+			}
+			p := editor.FreePath(folder, f.Name, func(x string) bool { return paths[x] })
+			if _, err := n.Upload(ctx, &api.NoteUploadParams{VaultID: c.vault, Path: p, Data: base64.StdEncoding.EncodeToString(f.Data)}); err != nil {
+				return fmt.Errorf("upload %s: %w", f.Name, err)
+			}
+			base := path.Base(p)
+			embeds = append(embeds, editor.EmbedFor(p, c.Wikilinks, names[base] == 0))
+			paths[p] = true
+			names[base]++
+		}
+		return nil
+	}, func(e error) {
+		err = e
+		done(strings.Join(embeds, "\n"), err)
+		c.Reload()
+	})
+}
+
+// NoteSources are one note's completions and uploads.
+type NoteSources struct {
 	c    *Catalog
 	from func() string
 	text func(path string) (string, bool)
 }
 
-func (s *sources) LinkTargets(query string, limit int) []editor.Target {
+// LinkTargets lists the notes [[ completes to.
+func (s *NoteSources) LinkTargets(query string, limit int) []editor.Target {
 	var out []editor.Target
 	from := s.from()
 	if strings.TrimSpace(query) == "" {
@@ -283,7 +326,8 @@ func (s *sources) LinkTargets(query string, limit int) []editor.Target {
 	return out
 }
 
-func (s *sources) Tags() []string {
+// Tags lists the vault's tags, by count.
+func (s *NoteSources) Tags() []string {
 	if s.c.env.Now().Sub(s.c.tagsAt) > TagsTTL {
 		s.c.readTags()
 	}
@@ -298,7 +342,7 @@ func (s *sources) Tags() []string {
 
 // Subpaths lists the headings or block IDs of the note target leads to
 // ("" is the note being edited), from its text.
-func (s *sources) Subpaths(target string, blocks bool, done func([]editor.Target)) {
+func (s *NoteSources) Subpaths(target string, blocks bool, done func([]editor.Target)) {
 	from := s.from()
 	finish := func(text string) { done(subpaths(text, blocks)) }
 	if target == "" {
