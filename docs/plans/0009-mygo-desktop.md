@@ -170,7 +170,7 @@ app-local package for the rest (below).
 
 | Today | Native | Phase |
 | --- | --- | --- |
-| Reading view: notesd's HTML (`note.render`) sanitized twice, blob URLs, remote images by preference, KaTeX, task checkboxes toggle their line, callouts fold, links and tags follow, footnotes jump, audio and video play | MyGo's Markdown view over notesd's new Markdown format; `LoadImage` from blobs (and https when allowed); `Block` draws callouts and embeds; `OnLink` follows; tasks toggle by line; math as TeX; audio and video open outside | 2 |
+| Reading view: notesd's HTML (`note.render`) sanitized twice, blob URLs, remote images by preference, KaTeX, task checkboxes toggle their line, callouts fold, links and tags follow, footnotes jump, audio and video play | MyGo's Markdown view over notesd's new Markdown format; `LoadImage` from blobs (and https when allowed); `Block` draws callouts and embeds; `OnLink` follows; tasks toggle mapped source lines with undo; native vector math; local audio/video controls | 2 |
 | History: `note.versions` and the hub's `sync.history`; a version as read-only source; Show changes against the current text; Restore; Compare | `ui.List`; a read-only `editor.State`; `editor.DiffView` (unified) | 2 |
 | Merge view: side by side, the left the note (editable, saving), the right a version, a revision or the held text; revert a chunk; Done resolves | `editor.DiffView` (split, `Editable`, `HunkActions`) | 2 |
 
@@ -238,7 +238,14 @@ app-local package for the rest (below).
   text and selection, as the code editor does. Tests assert roles and
   names with `Tester.AccessByRole`; Phase 5 ends with a run of Orca.
 
-### What MyGo has no equivalent for
+### Original MyGo gaps
+
+These were the gaps at the start of the port. The 2026-11-11 issue sweep
+implements the editor's replacement/line-style hooks, remote edits, reading task
+actions and block anchors on the fork, native math and AVIF decoding in
+Frostnotes, and playback through MyGo's existing APIs. Native Spellcheck is
+removed under [ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md).
+See [the app design](../design/app.md) and [native rendering contract](../specs/render.md#markdown-for-native-views).
 
 - Hiding or replacing source in the code editor, widgets between its
   lines, and more than one font size in it (live preview).
@@ -544,11 +551,8 @@ changed the required checks, on 2026-11-10. Once frostui has the
 
 ## Later / ideas
 
-- A TeX renderer for `markdown.Options.InlineMath` and live preview, in
-  place of TeX in the code font.
 - Several windows (Open in new window), and the graph view of M5 drawn
   with MyGo's painter.
-- Audio and video in the app, once MyGo plays them.
 
 ## Open questions
 

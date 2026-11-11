@@ -72,6 +72,7 @@ type App struct {
 	afterSettings []func()
 	// settingsAsked says a request for them is running.
 	settingsAsked bool
+	vaultDataRun  uint64
 	syncInfo      *api.SyncStatus
 	conflict      []api.SyncConflict
 
@@ -351,6 +352,8 @@ func (a *App) loadVaultData() {
 		return
 	}
 	id := a.vault.ID
+	a.vaultDataRun++
+	run := a.vaultDataRun
 	a.Catalog.Reload()
 	a.refreshPanes()
 	a.settingsAsked = true
@@ -366,7 +369,7 @@ func (a *App) loadVaultData() {
 		conflicts, _ = c.Sync().Conflicts(ctx, &api.SyncConflictsParams{VaultID: id})
 		return nil
 	}, func(err error) {
-		if a.vault == nil || a.vault.ID != id {
+		if a.vault == nil || a.vault.ID != id || a.vaultDataRun != run {
 			return
 		}
 		a.settingsAsked = false

@@ -253,6 +253,7 @@ func TestBlockLinkScrollsToItsParagraph(t *testing.T) {
 		t.Fatal("block link left the view at the top")
 	}
 	scroll.Y = 0
+	f.view.SetRemoteImages(true) // recreating the drawer retains action/anchor hooks
 	f.tt.Frame()
 	f.view.GoTo("#^target")
 	f.tt.Frame()
