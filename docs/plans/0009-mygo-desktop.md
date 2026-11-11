@@ -489,6 +489,11 @@ user's vault, which the owner does at the trial.
 
 ## Phase 6 — Packaging, CI and evidence (about 1 week)
 
+**Built (2026-11-10), on the draft pull request:** the Flatpak is the native
+app with no Rust or Node, the icons are in `packaging/icons/`, the `app` CI job
+is gone, and the metainfo's screenshots come from the Tester. An installed
+Flatpak, on Snow with the owner's vault, is the owner's to check.
+
 - The Flatpak's Go module, the icons' move, the version stamp, and the
   tests of `internal/packagecheck` and `internal/workflowcheck`
   ([ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
@@ -512,6 +517,11 @@ user's vault, which the owner does at the trial.
   build, and `make ci` and `flatpak.yml` pass.
 
 ## Phase 7 — The switch
+
+**Built (2026-11-10), as the draft pull request's last commit:** `app/src-tauri`,
+the Tauri transport, the window buttons and `@tauri-apps/*` are gone, and the
+React app builds only for lodge. The ADRs stay Proposed until the owner accepts
+them. The required checks' names change with the owner.
 
 - The parity list above, checked item by item in the PR's body.
 - Delete `app/src-tauri`, the Tauri transport, the window buttons and

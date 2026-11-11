@@ -1,7 +1,6 @@
 // Package system is what the desktop app needs of the system around it
-// (plan 0009; it replaces app/src-tauri's Rust): where its files live,
-// the end of notesd's log, and the Flatpak's background setting. It
-// imports no UI.
+// (plan 0009): where its files live, the end of notesd's log, and the
+// Flatpak's background setting. It imports no UI.
 package system
 
 import (

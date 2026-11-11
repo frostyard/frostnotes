@@ -1,8 +1,8 @@
 // The line-level contract between the generated Client (gen/api.ts) and a
 // connection to notesd: the rpc subpath of @frostyard/lodge-client
 // (client/v0.3.2), whose JsonRpcSession multiplexes JSON-RPC in the
-// webview (docs/specs/rpc-protocol.md). The Tauri, gateway and lodge
-// transports implement it. The session hands events over in the kit's
+// browser (docs/specs/rpc-protocol.md). The gateway and lodge transports
+// implement it. The session hands events over in the kit's
 // envelope; the app types what they carry (gen/api.ts), and asTransport is
 // the one place the two meet.
 import type { Transport as RpcTransport } from "@frostyard/lodge-client/rpc";

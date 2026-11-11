@@ -1,6 +1,6 @@
 #!/bin/sh
 # Frostnotes' launcher in the Flatpak (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md).
-# The manifest installs it as /app/bin/frostnotes, and the Tauri app as
+# The manifest installs it as /app/bin/frostnotes, and the native app as
 # /app/libexec/frostnotes-app.
 #
 #   frostnotes --notesd       Run notesd and nothing else: how a window's
@@ -29,16 +29,16 @@
 # So Off holds at a login too, and not only for the autostart entry: the
 # request helper reads the file itself and asks the portal for no autostart,
 # which removes the entry; and `--background`, which an entry of an older
-# release still runs, starts no notesd while the file exists. The app's shell
-# stops notesd when its last window closes (no launcher can: see
-# app/src-tauri/src/background.rs).
+# release still runs, starts no notesd while the file exists. The app stops
+# notesd when its last window closes (no launcher can: see
+# internal/desktop/system).
 #
 # FROSTNOTES_LIBEXEC_DIR, when set, is the directory of frostnotes-app and
 # frostnotes-request-background: /app/libexec in the Flatpak, and a test's
 # own directory in its tests.
 #
 # A notesd that the window's sandbox started would die with the sandbox, and
-# with a duplicate window that tauri-plugin-single-instance closes at once.
+# with a duplicate window that the app's single-instance lock closes at once.
 # So the launcher has the Flatpak portal start `frostnotes --notesd` in a
 # new sandbox of this app, and then ends the flatpak-spawn process it made
 # once that notesd answers: flatpak-spawn forwards catchable signals to the
@@ -64,11 +64,6 @@ set -u
 
 libexec="${FROSTNOTES_LIBEXEC_DIR:-/app/libexec}"
 app="$libexec/frostnotes-app"
-# FROSTNOTES_NATIVE=1 runs the native app instead, for a trial until it
-# replaces the Tauri app (docs/plans/0009-mygo-desktop.md).
-if [ "${FROSTNOTES_NATIVE:-}" = 1 ]; then
-    app="$libexec/frostnotes-native"
-fi
 request_background="$libexec/frostnotes-request-background"
 
 state="${XDG_STATE_HOME:-$HOME/.local/state}/frostnotes"

@@ -1,5 +1,5 @@
 <!-- readme-kind: app -->
-<img src="app/src-tauri/icons/icon.svg" alt="Frostnotes icon" width="112" align="right">
+<img src="packaging/icons/icon.svg" alt="Frostnotes icon" width="112" align="right">
 
 # Frostnotes
 
@@ -30,10 +30,10 @@ serves them to a web app and to agents.
 - **Sync is built in.** Each device syncs with a self-hosted hub, the same
   notesd in a hub role, which keeps every revision and merges concurrent
   edits. No conflict copies. [Sync design](docs/design/sync.md)
-- **The desktop app** is Tauri v2 with a React UI and a CodeMirror 6
-  editor with live preview, a sibling of
+- **The desktop app** is a native Go app on MyGo and frostui with live
+  preview, a sibling of
   [Frostmail](https://github.com/frostyard/frostmail). [App design](docs/design/app.md)
-- **The web app** is the same UI, served by
+- **The web app** is a React UI with a CodeMirror 6 editor, served by
   [lodge](https://github.com/frostyard/lodge), frostyard's tailnet-only
   web shell, with Obsidian's phone layout on a narrow screen.
   [notesd as a lodge app](docs/specs/lodge-app.md)

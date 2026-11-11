@@ -32,7 +32,7 @@
     </p>
   </description>
   <launchable type="desktop-id">org.frostyard.Frostnotes.desktop</launchable>
-  <!-- Taken by make screenshots (dev/screenshots) of the real UI on a
+  <!-- Taken by make screenshots (the Tester, dev/screenshots/vault) on a
        made-up vault, served from main of the public repository.
        internal/packagecheck checks them. -->
   <screenshots>

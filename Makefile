@@ -119,7 +119,7 @@ verify: ## Tidy, generated files, vet, format, lint and unit tests
 
 check: fmt verify ## Format, then verify (the developer gate)
 
-ci: verify ui-check app-build app-test ## verify plus race tests and the app checks (nsl)
+ci: verify ui-check desktop-build ## verify plus race tests and the app checks (nsl)
 	go test -race -timeout 25m ./...
 
 vulncheck: ## Report reachable vulnerabilities (govulncheck; needs the network)
@@ -131,7 +131,7 @@ clean: ## Remove build output
 # The app (M0 Phase 4). Its toolchain runs in the nsl machine
 # (docs/adr/0009-development-environment-and-gates.md); CI, whose runner has
 # the toolchain, runs the same targets with IN_NSL='sh -c'.
-.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev screenshots app-build app-test app-dev app-run spike-cm6 spike-cm6-nsl web-build lodge-app lodge-package
+.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev screenshots web-build lodge-app lodge-package
 
 NSL_MACHINE ?= frostnotes
 IN_NSL := nsl run -m $(NSL_MACHINE) sh -lc
@@ -154,7 +154,7 @@ ui-dev: build ## Run notesd -devgw and Vite in the nsl machine; open http://127.
 
 web-build: ## Build the web app for lodge into build/web, base /app/notes/ (nsl)
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec tsc --noEmit && pnpm exec vite build --mode web --outDir ../build/web --emptyOutDir'
-	cp app/src-tauri/icons/icon.svg build/web/icon.svg
+	cp packaging/icons/icon.svg build/web/icon.svg
 
 # notes' install tree for lodge (docs/specs/lodge-app.md, What notesd
 # installs): copy build/lodge/apps/notes to /usr/share/lodge/apps/notes.
@@ -172,11 +172,10 @@ lodge-package: ## Stage notes' /usr tree into LODGE_DESTDIR (default build/lodge
 	packaging/lodge/stage.sh '$(LODGE_DESTDIR)' '$(VERSION)' build
 
 # The Flatpak's offline sources (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md):
-# the crates, the pnpm store and the Go modules as flatpak-builder sources.
-# Run it after any change to Cargo.lock, pnpm-lock.yaml, go.mod or go.sum;
-# CI's Flatpak sources job fails on a stale file. Needs the network, Go and Python 3.
+# the Go modules as flatpak-builder sources. Run it after any change to go.mod
+# or go.sum; CI's Flatpak sources job fails on a stale file. Needs the network and Go.
 .PHONY: flatpak-sources
-flatpak-sources: ## Regenerate packaging/flatpak/{cargo,node,go}-sources.json (network, Go, Python 3)
+flatpak-sources: ## Regenerate packaging/flatpak/go-sources.json (network, Go)
 	scripts/flatpak-sources.sh
 
 # The release .deb (frostyard/core ADR-0011, ADR-0012, ADR-0058). Snapshot
@@ -238,54 +237,19 @@ bump: ## Tag the next version with svu from a clean main equal to origin/main, t
 	echo "Tagged $$version; pushing it to origin..."; \
 	git push origin "refs/tags/$$version"
 
-app-build: ## Build the release app binary into build/frostnotes-app (nsl)
-	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm tauri build && mkdir -p ../build && cp "$$CARGO_TARGET_DIR/release/frostnotes" ../build/frostnotes-app'
+screenshots: ## Retake the Flatpak metainfo's screenshots (docs/images) on the made-up vault in dev/screenshots, headless
+	FROSTNOTES_SCREENSHOTS=$(CURDIR)/docs/images go test -tags integration -count=1 -run '^TestMetainfoScreenshots$$' ./internal/desktop/window
 
-app-test: ## Run the app shell's Rust tests (nsl; needs app/dist from app-build)
-	$(IN_NSL) 'cd app/src-tauri && cargo test --release'
-
-app-dev: build ## Run notesd and tauri dev in the nsl machine
-	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && cd .. && scripts/dev-app.sh'
-
-app-run: build app-build ## Run notesd and the built app in the nsl machine
-	$(IN_NSL) 'APP_BINARY=build/frostnotes-app scripts/dev-app.sh'
-
-screenshots: build ## Retake the Flatpak metainfo's screenshots (docs/images) on the made-up vault in dev/screenshots, headless (nsl)
-	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && cd .. && dev/screenshots/run.sh'
-
-# M0 spike 1 (docs/plans/0001-m0-foundations.md, Phase 5): the release app
-# runs the CodeMirror spike, prints its results as one JSON line and exits.
-# SPIKE=cm6:manual only opens the spike's editor, for the IME check by hand.
-SPIKE ?= cm6
-spike-cm6: ## Run spike 1 natively on the host GPU with build/frostnotes-app (from make app-build)
-	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
-	FROSTNOTES_SPIKE=$(SPIKE) build/frostnotes-app
-
-spike-cm6-nsl: ## Run spike 1 in the nsl machine under Xvfb (software rendering)
-	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
-	$(IN_NSL) 'FROSTNOTES_SPIKE=cm6 $(XVFB) build/frostnotes-app'
-
-# M3's exit evidence (docs/plans/0005-m3-desktop-app.md, Phase 7) with the
-# built app: 1, typing and scrolling in a generated 10,000-line note with
-# every live-preview provider, on the host's GPU and under Xvfb in nsl;
-# 2 and 3, every hotkey and the writer pairs, in nsl under Xvfb, where
-# xdotool presses the keys (internal/appevidence).
-.PHONY: m3-evidence
-m3-evidence: ## Record M3's exit evidence 1-3 with build/frostnotes-app (from make app-build)
-	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
-	FROSTNOTES_SPIKE=editor build/frostnotes-app
-	$(IN_NSL) 'FROSTNOTES_SPIKE=editor $(XVFB) build/frostnotes-app'
-	$(IN_NSL) 'FROSTNOTES_APP=$$PWD/build/frostnotes-app $(XVFB) go test -tags integration -count=1 -timeout 15m -v -run "^TestI" ./internal/appevidence'
-
-# M4's exit evidence 1 and 2 on loopback (docs/plans/0006-m4-notes-inside-lodge.md,
+# M4's exit evidence 1 on loopback (docs/plans/0006-m4-notes-inside-lodge.md,
 # Phases 5 and 7): lodge's development build at LODGE_E2E_REF
-# (scripts/lodge-e2e.sh), notes' web build in it, Firefox ESR through
-# geckodriver at a desktop size and at 390 x 844, and for evidence 2 the
-# desktop app under Xvfb. m4-evidence also runs Porter's evidence through
+# (scripts/lodge-e2e.sh), notes' web build in it, and Firefox ESR through
+# geckodriver at a desktop size and at 390 x 844. Evidence 2's run against
+# the desktop app is make desktop-evidence's now.
+# m4-evidence also runs Porter's evidence through
 # lodge (docs/plans/0007-folder-scopes-for-agents.md, Phase 4):
 # tokens of Porter's scope from lodgectl, an MCP client on lodge's listener
 # and on its agent socket; porter-evidence runs that alone, without
-# Firefox or the desktop app.
+# Firefox.
 # The ref has the agent socket and lodgectl's --agent.
 LODGE_E2E_REF := e76a17c57766bad3797b8d78708591d88c5e7777
 
@@ -293,9 +257,8 @@ LODGE_E2E_REF := e76a17c57766bad3797b8d78708591d88c5e7777
 lodge-e2e: ## Build lodge's development build at LODGE_E2E_REF into build/lodge-e2e (nsl)
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(LODGE_E2E_REF) build/lodge-e2e'
 
-m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 and 2 on loopback (nsl; run make app-build first)
-	@test -x build/frostnotes-app || { echo "build/frostnotes-app is missing; run make app-build first"; exit 1; }
-	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes FROSTNOTES_APP=$$PWD/build/frostnotes-app $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
+m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
 
 porter-evidence: lodge-app lodge-e2e ## Record Porter's evidence through lodge (plan 0007, Phase 4) on loopback (nsl)
 	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes go test -tags integration -count=1 -timeout 20m -v -run "^TestIPorter" ./internal/webevidence'

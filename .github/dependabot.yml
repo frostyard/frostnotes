@@ -1,16 +1,9 @@
 # Dependabot (frostyard/core ADR-0071, baseline row B13): 1 entry for each
 # ecosystem with a manifest here. internal/workflowcheck checks the list.
 #
-# A gomod, npm or cargo update also changes the Flatpak's offline sources:
-# its PR fails the Flatpak workflow's sources check until
-# `make flatpak-sources` (nsl) is run on its branch. The repository-hygiene
-# line does that.
-#
-# frostyard-problems (app/src-tauri) is a cargo git dependency on a tag of
-# frostyard/std. Dependabot cannot resolve it: its update job tried std's tag
-# v0.3.0, which holds no crate, and failed. It is bumped by hand, so the
-# cargo entry ignores it; internal/workflowcheck requires an ignore entry for
-# each frostyard git crate.
+# A gomod update also changes the Flatpak's offline sources: its PR fails the
+# Flatpak workflow's sources check until `make flatpak-sources` is run on its
+# branch. The repository-hygiene line does that.
 #
 # The commit prefix is build (or ci): svu reads it as a patch, not a feature.
 version: 2
@@ -50,17 +43,4 @@ updates:
         update-types: ["version-update:semver-major"]
     groups:
       app-npm:
-        patterns: ["*"]
-
-  - package-ecosystem: cargo
-    directory: /app/src-tauri
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: build
-      include: scope
-    ignore:
-      - dependency-name: frostyard-problems
-    groups:
-      app-cargo:
         patterns: ["*"]

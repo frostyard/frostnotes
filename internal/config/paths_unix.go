@@ -32,7 +32,6 @@ func defaultDataDir(getenv func(string) string) (string, error) {
 // app, and the rest of $XDG_RUNTIME_DIR is private to each sandbox, so the
 // app and notesd (and notesctl) meet only there
 // (docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md).
-// app/src-tauri/src/paths.rs must stay in step with this function.
 func DefaultSocket(getenv func(string) string) (string, error) {
 	run := getenv("XDG_RUNTIME_DIR")
 	if !filepath.IsAbs(run) {

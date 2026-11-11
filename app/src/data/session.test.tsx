@@ -157,9 +157,8 @@ describe("Session", () => {
 });
 
 describe("Session when notesd never answers", () => {
-  // src-tauri's notesd_connect fails at once on a missing or refused socket,
-  // and Tauri's invoke rejects with that text, a string: the connection is
-  // lost, with the text as its reason, so Connecting can show its cause.
+  // A transport's connect can fail at once and reject with a string: the
+  // connection is lost, with the text as its reason, so Connecting shows it.
   it("is lost at once, with the refusal's text", async () => {
     const refusal = "connect to notesd at /run/user/1000/app/x/notesd.sock: No such file or directory (os error 2)";
     render(

@@ -34,8 +34,6 @@ export interface TabStripProps {
   tabs: TabItem[];
   /** This group holds the window's active tab. */
   focused: boolean;
-  /** The strip sits in the title bar row, so its empty space drags the window. */
-  dragRegion: boolean;
   onCommand: (command: TabCommand) => void;
   /** A tab started to drag; the workspace's drag and drop takes it from there. */
   onDragStart: (id: string, event: DragEvent<HTMLElement>) => void;
@@ -91,12 +89,7 @@ export function TabStrip(props: TabStripProps) {
   }
 
   return (
-    <div
-      role="tablist"
-      aria-label={props.label}
-      data-tauri-drag-region={props.dragRegion || undefined}
-      className="flex h-11 items-center gap-0.5 bg-toolbar px-2"
-    >
+    <div role="tablist" aria-label={props.label} className="flex h-11 items-center gap-0.5 bg-toolbar px-2">
       {tabs.map((tab, index) => (
         <div
           key={tab.id}
@@ -157,7 +150,7 @@ export function TabStrip(props: TabStripProps) {
       >
         <Plus size={16} />
       </button>
-      <div data-tauri-drag-region={props.dragRegion || undefined} className="h-full flex-1" />
+      <div className="h-full flex-1" />
       <button
         type="button"
         aria-label="Tab list"

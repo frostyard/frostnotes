@@ -26,10 +26,9 @@ server for agents. A Go daemon, notesd, owns every vault; everything else is
 a thin client.
 
 ```
- desktop app (Tauri v2, WebKitGTK)      notesctl           agent (stdio MCP)
- React UI ── Client ── TauriTransport   Client             notesctl mcp
-        │ lines over Tauri IPC            │                    │
- Rust bridge (moves lines) ─────┐         │                    │
+ desktop app (Go, MyGo, frostui)        notesctl           agent (stdio MCP)
+ native views ── Client ────────┐       Client             notesctl mcp
+                                │         │                    │
                                 ▼         ▼                    ▼
               $XDG_RUNTIME_DIR/frostnotes/notesd.sock   JSON-RPC 2.0, one message per line
                                 │
@@ -65,9 +64,11 @@ a thin client.
 - **The contract** is generated from `schema/rpc/*.yaml` by `tools/rpcgen`
   into Go and TypeScript, and each domain declares which callers may use it
   ([ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md)).
-- **The UI** is one React app behind a `Transport`: the Tauri bridge on the
-  desktop, a WebSocket in the browser, and a mock in tests. The editor is
-  CodeMirror 6 with live preview
+- **The UIs** are two thin clients of one API: a native Go app on MyGo and
+  frostui on the desktop
+  ([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)),
+  and a React app in lodge, behind a `Transport`: a WebSocket in the browser
+  and a mock in tests. The web app's editor is CodeMirror 6 with live preview
   ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md),
   [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md));
   it saves as the user types and takes merges as remote changes, and shows
@@ -137,11 +138,11 @@ match Frostmail's icon ([ADR-0013](../adr/0013-use-a-sibling-frostyard-notebook-
 extending the sibling identity in [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md).
 It belongs to the [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell).
 
-The editable master is `app/src-tauri/icons/icon.svg`. Its comments record
+The editable master is `packaging/icons/icon.svg`. Its comments record
 the exact color tokens from core's `frostyard-design/tokens/colors.css`.
 Run `python3 scripts/render-icons.py` with PyGObject, GdkPixbuf and its
-librsvg SVG loader to regenerate the 32, 128 and 512 pixel RGBA PNGs used
-by Tauri. Commit the master and all three exports together; ordinary builds
+librsvg SVG loader to regenerate the 32, 128 and 512 pixel RGBA PNGs the
+Flatpak installs. Commit the master and all three exports together; ordinary builds
 need only the PNGs. Check the two sibling icons at native size on light and
 dark backgrounds after editing. This artwork does not change the UI tokens.
 
@@ -166,7 +167,8 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes`; `lodge/stage.sh` stages them with the binaries under `usr/` ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs), [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)); `flatpak/` is the desktop app's Flatpak with its own notesd ([design/app.md](app.md#the-flatpak), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)) |
 | `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
-| `app/` | Tauri v2 + React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
+| `cmd/frostnotes`, `internal/desktop/` | the native desktop app ([plan 0009](../plans/0009-mygo-desktop.md)) |
+| `app/` | lodge's web app: React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
 | `tools/rpcgen`, `tools/taskrun`, `tools/vaultgen` | the contract generator, the task-card runner, generated test vaults |
 
 ## Key patterns

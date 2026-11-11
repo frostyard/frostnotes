@@ -171,8 +171,7 @@ func oneRange(header string, size, limit int64) (string, bool) {
 }
 
 // ContentType returns the media type the app serves a vault file with, by
-// its lower-cased extension (docs/design/app.md#attachments); the Tauri
-// side's table in app/src-tauri/src/protocol.rs is the same.
+// its lower-cased extension (docs/design/app.md#attachments).
 func ContentType(ext string) string {
 	switch ext {
 	case "png":

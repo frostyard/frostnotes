@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Provision the nsl `frostnotes` machine (Debian 13) with the Tauri, WebKitGTK,
-# Node, Rust (with rustfmt and clippy) and Go toolchains the app build needs,
-# Xvfb, xdotool and vim for the built app's evidence runs (make m3-evidence),
-# and Firefox ESR with geckodriver for the web app's (make m4-evidence). The
+# Provision the nsl `frostnotes` machine (Debian 13) with the Node, Rust (with
+# rustfmt and clippy, for frostread's app-check) and Go toolchains, Xvfb, and
+# Firefox ESR with geckodriver for the web app's evidence (make m4-evidence). The
 # host is atomic and cannot install -dev packages; the engine itself builds
 # and tests on the host.
 #
@@ -49,8 +48,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q --no-install-recommends \
 	build-essential ca-certificates curl file git make pkg-config wget xz-utils \
-	libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
-	librsvg2-dev webkit2gtk-driver xvfb xauth xdotool vim \
+	libssl-dev xvfb xauth vim \
 	libasound2t64 libdbus-glib-1-2 libx11-xcb1 libxtst6
 
 if [[ "$(/opt/node/bin/node --version 2>/dev/null)" != "v$NODE_VERSION" ]]; then

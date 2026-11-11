@@ -1,15 +1,12 @@
 // Spike 1 (docs/plans/0001-m0-foundations.md, Phase 5): CodeMirror 6 with
 // live preview on a generated 10,000-line note, measured where it runs.
-// ?spike=cm6 shows it in any browser (add &run to measure at once); with
-// FROSTNOTES_SPIKE=cm6 the desktop app measures, prints the results as one
-// JSON line and exits (src-tauri/src/spike.rs). IME input cannot be
-// automated: check it by hand in this view. "editor" measures the app's
+// ?spike=cm6 shows it in any browser (add &run to measure at once). IME
+// input cannot be automated: check it by hand in this view. "editor"
+// measures the app's
 // own editor, every live-preview provider on, the same way
 // (docs/plans/0005-m3-desktop-app.md, Phase 5's exit); "editor/math,rendered"
 // leaves those groups of providers out, to find what costs time.
 import type { EditorView } from "@codemirror/view";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 
 import { editorExtensions } from "../editor/extensions";
@@ -79,7 +76,6 @@ function environment(): Report {
     userAgent: navigator.userAgent,
     devicePixelRatio: window.devicePixelRatio,
     viewport: [window.innerWidth, window.innerHeight],
-    tauri: isTauri(),
   };
 }
 
@@ -89,11 +85,9 @@ export interface SpikeProps {
   name: string;
   /** Measure as soon as the note has loaded. */
   auto: boolean;
-  /** Hand the results to the shell, which prints them and exits. */
-  report: boolean;
 }
 
-export function Spike({ name, auto, report }: SpikeProps) {
+export function Spike({ name, auto }: SpikeProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const loaded = useRef<{ note: string; result: Report } | null>(null);
@@ -102,11 +96,9 @@ export function Spike({ name, auto, report }: SpikeProps) {
   const [result, setResult] = useState<Report | null>(null);
   const [running, setRunning] = useState(false);
 
-  const finish = async (r: Report) => {
-    const line = JSON.stringify(r);
-    console.log(line);
+  const finish = (r: Report) => {
+    console.log(JSON.stringify(r));
     setResult(r);
-    if (report) await invoke("spike_report", { report: line });
   };
 
   const measure = async () => {
@@ -124,10 +116,10 @@ export function Spike({ name, auto, report }: SpikeProps) {
       const checks = await check(v, name.startsWith("editor") ? (x) => countHidden(x) : undefined);
       const fullParseMs = fullParse(base.note);
       setStatus("Done");
-      await finish({ ...base.result, keystroke, scroll, checks, parse: { fullParseMs } });
+      finish({ ...base.result, keystroke, scroll, checks, parse: { fullParseMs } });
     } catch (err) {
       setStatus(`Failed: ${String(err)}`);
-      await finish({ spike: name, ok: false, error: String(err) });
+      finish({ spike: name, ok: false, error: String(err) });
     } finally {
       setRunning(false);
     }
@@ -142,11 +134,8 @@ export function Spike({ name, auto, report }: SpikeProps) {
       const without = out.split(",").filter((g) => g !== "");
       if ((kind !== "cm6" && kind !== "editor") || without.some((g) => !(g in GROUPS))) {
         setStatus(`Unknown spike "${name}"`);
-        if (report) await finish({ spike: name, ok: false, error: "unknown spike" });
         return;
       }
-      // Animation frames run only while the window is shown.
-      if (isTauri()) await getCurrentWindow().show();
       await frames(10);
       const parent = host.current;
       if (!parent) return;

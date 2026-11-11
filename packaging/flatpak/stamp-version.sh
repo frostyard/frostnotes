@@ -5,12 +5,10 @@
 # prints it, and rpc.hello sends it, so a copy installed from the OCI image
 # names the release it holds. Software centres show the metainfo's newest
 # release, which is how the release reaches a user's installed app. So the tag's
-# version goes into the ldflags of the manifest, into the app shell's
-# FROSTNOTES_VERSION (the version `pnpm tauri build --config` gives the shell,
-# which its problem records carry, ADR-0036), and with the UTC date into the
-# metainfo's <releases>. The committed files keep "flatpak" and 0.0.0: a build
-# of main names itself flatpak, its shell 0.0.0 records nothing, and no release
-# is listed before one exists.
+# version goes into the ldflags of the manifest, which name notesd's, notesctl's
+# and the app's version (its problem records carry it, ADR-0036), and with the
+# UTC date into the metainfo's <releases>. The committed files keep "flatpak": a
+# build of main names itself flatpak, and no release is listed before one exists.
 #
 # Usage: stamp-version.sh VERSION COMMIT [DIR]
 #   VERSION  the tag without its v, as MAJOR.MINOR.PATCH (0.2.0)
@@ -53,10 +51,6 @@ old='-X main.version=flatpak'
 new="-X main.version=$version -X main.commit=$commit"
 found=$(grep -oF -- "$old" "$manifest" | wc -l)
 [ "$found" -eq 1 ] || die "$manifest holds '$old' $found times, want exactly once"
-oldshell='"FROSTNOTES_VERSION": "0.0.0"'
-newshell="\"FROSTNOTES_VERSION\": \"$version\""
-found=$(grep -oF -- "$oldshell" "$manifest" | wc -l)
-[ "$found" -eq 1 ] || die "$manifest holds '$oldshell' $found times, want exactly once"
 found=$(grep -oF '<releases>' "$metainfo" | wc -l)
 [ "$found" -eq 1 ] || die "$metainfo holds <releases> $found times, want exactly once"
 if grep -Fq "version=\"$version\"" "$metainfo"; then
@@ -69,12 +63,6 @@ sed -i "s/-X main\.version=flatpak/-X main.version=$version -X main.commit=$comm
 grep -Fq -- "$new" "$manifest" || die "$manifest did not take the stamp"
 if grep -Fq -- "$old" "$manifest"; then
 	die "$manifest still holds '$old'"
-fi
-# The app shell's version, for its problem records.
-sed -i "s/\"FROSTNOTES_VERSION\": \"0\.0\.0\"/\"FROSTNOTES_VERSION\": \"$version\"/" "$manifest"
-grep -Fq -- "$newshell" "$manifest" || die "$manifest did not take the shell's version"
-if grep -Fq -- "$oldshell" "$manifest"; then
-	die "$manifest still holds '$oldshell'"
 fi
 
 # The metainfo: the new release goes first, so it is the newest that

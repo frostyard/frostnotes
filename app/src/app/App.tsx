@@ -1,7 +1,4 @@
 // The app root: the connection to notesd around the main window.
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type ReactNode, useEffect } from "react";
 
 import { feed } from "../data/events";
@@ -18,11 +15,6 @@ import { Connecting, MainWindow } from "./MainWindow";
  * (the web app's bridge to lodge's shell).
  */
 export function App(props: { connect: Connect; retry?: Retry; children?: ReactNode }) {
-  // Tauri creates the window hidden; show it now that it has rendered, so
-  // it never flashes WebKit's blank white page (src-tauri main.rs).
-  useEffect(() => {
-    if (isTauri()) void getCurrentWindow().show();
-  }, []);
   // The workspace follows the window's vault and the event feed; this runs
   // before Session's first event arrives, so replays reach it.
   useEffect(() => wireWorkspace(feed, useNotes), []);
@@ -40,11 +32,10 @@ export function App(props: { connect: Connect; retry?: Retry; children?: ReactNo
     else root.dataset.theme = scheme;
     root.style.setProperty("--note-font-size", `${fontSize}px`);
   }, [theme, fontSize, shell]);
-  // The window's zoom: the webview's own in the desktop app, CSS zoom in a browser.
+  // The window's zoom, as CSS zoom.
   const zoom = usePrefs((s) => s.zoom);
   useEffect(() => {
-    if (isTauri()) void getCurrentWebview().setZoom(zoom);
-    else document.documentElement.style.zoom = zoom === 1 ? "" : String(zoom);
+    document.documentElement.style.zoom = zoom === 1 ? "" : String(zoom);
   }, [zoom]);
   return (
     <Session connect={props.connect} retry={props.retry} fallback={<Connecting />}>

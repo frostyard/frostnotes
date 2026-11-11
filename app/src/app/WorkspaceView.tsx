@@ -227,7 +227,6 @@ function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
       {!props.narrow && (
         <div
           ref={strip}
-          data-tauri-drag-region={props.top ? true : undefined}
           className="relative shrink-0 overflow-hidden border-b border-separator bg-toolbar"
           style={{ paddingRight: props.top && props.rightmost ? props.reserve : 0 }}
         >
@@ -240,7 +239,6 @@ function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
               pinned: t.pinned,
             }))}
             focused={focused}
-            dragRegion={props.top}
             onCommand={(c) => {
               switch (c.kind) {
                 case "activate":

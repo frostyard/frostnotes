@@ -36,11 +36,12 @@ M3's design is built through its Phase 8 ([plan 0005](../plans/0005-m3-desktop-a
 ([plan 0006](../plans/0006-m4-notes-inside-lodge.md)), rewritten as each phase
 lands.
 
-**Proposed (2026-11-10):** the desktop app becomes a native Go app on
-MyGo and frostui, and the React app stays as lodge's web app
+**The desktop app is a native Go app on MyGo and frostui, and the React app
+is lodge's web app**
 ([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
-[plan 0009](../plans/0009-mygo-desktop.md)). This document describes the
-Tauri app until that plan's Phase 6 rewrites it.
+[plan 0009](../plans/0009-mygo-desktop.md)). Both keep the behavior this
+document describes; where it names `features/`, `editor/` or `app/`, that is
+the web app's code.
 
 The native app's code is `cmd/frostnotes` and `internal/desktop/`
 ([plan 0009](../plans/0009-mygo-desktop.md#packages)); how its screens differ
@@ -48,12 +49,11 @@ is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
 
 ## Overview
 
-The app is a Tauri v2 window running a React UI, a thin client of notesd
-like `notesctl` and MCP. It holds no notes of its own: it lists a vault's
-files from notesd, edits a note's exact text in CodeMirror, saves it with
-its base, and shows what notesd renders. The same UI runs in a browser
-against the dev gateway, and in M4 as the web app the hub serves
-([In a browser](#in-a-browser)).
+The web app is a React UI, a thin client of notesd like `notesctl`, MCP and
+the native app. It holds no notes of its own: it lists a vault's files from
+notesd, edits a note's exact text in CodeMirror, saves it with its base, and
+shows what notesd renders. It runs inside lodge, and in a browser against the
+dev gateway ([In a browser](#in-a-browser)).
 
 ```
  features/ (presentational) ◄── app/ (containers, layout) ◄── workspace/ (tabs, splits, sidebars)
@@ -63,9 +63,7 @@ against the dev gateway, and in M4 as the web app the hub serves
                                      ├── commands/ the command registry and the window's keys
                                      ▼
                        data/ (Session, stores) ◄── Client (rpc/gen/api.ts)
-                                                     │ Transport: tauri (bridge.rs ⇄ notesd.sock)
-                                                     │            ws (devgw; lodge's /app/notes/api in M4), mock
- <img src="notesblob://localhost/<sha256>.png"> ◄── protocol.rs ◄── notesd's blobs/
+                                                     │ Transport: ws (devgw; lodge's /app/notes/api), mock
 ```
 
 ## Source layout (`app/src`)
@@ -73,9 +71,9 @@ against the dev gateway, and in M4 as the web app the hub serves
 | Path | What | Owner |
 | --- | --- | --- |
 | `main.tsx` | starts the `web` build from `lodge/main.tsx` and every other from `desktop.tsx`, each branch's imports out of the other's bundle | planner |
-| `desktop.tsx` | the desktop app's and the development browser's start: picks the transport (`VITE_NOTESD_WS`, `VITE_MOCK=1`, else Tauri), runs a spike (`FROSTNOTES_SPIKE`), renders `App` | planner |
+| `desktop.tsx` | the development browser's start: picks the transport (`VITE_NOTESD_WS`, else the mock), runs a spike (`FROSTNOTES_SPIKE`), renders `App` | planner |
 | `lodge/` | the web build inside lodge: lodge-client's handshake and `connectApi` (`main.tsx`), the `LodgeBridge` (route, context, navigate, theme, open), and canonical routes (`routes.ts`) | planner |
-| `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/tauri.ts`, `transport/ws.ts`, `gen/api.ts` (generated) | planner |
+| `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/ws.ts`, `gen/api.ts` (generated) | planner |
 | `rpc/mock/` | `MockTransport`: an in-memory notesd with notesd's semantics and a vault of made-up notes | planner |
 | `data/` | `Session`, the stores (vaults, files, sync, settings), the document registry | planner |
 | `workspace/` | the workspace model: its tree, operations, validation and persistence | planner |
@@ -89,7 +87,7 @@ against the dev gateway, and in M4 as the web app the hub serves
 | `lib/` | pure helpers: the keymap, fuzzy matching, the file tree, the outline, formatting | cards |
 | `styles/` | `tokens.css` (Frostnotes' own two tokens), `app.css` (Tailwind entry, imports the shared look), `editor.css` (the editor's and the reading view's styles) | planner |
 | `testing/` | Testing Library setup and render helpers | planner |
-| `spike/` | M0's CodeMirror spike (`make spike-cm6`), its measurement of the app's editor, and the drivers of M3's exit evidence (`make m3-evidence`) | planner |
+| `spike/` | M0's CodeMirror spike and its measurement of the editor, in a browser (`?spike=cm6`) | planner |
 
 Presentational components take data and callbacks as props, hold only
 transient state (hover, an open menu, a field being typed), and import
@@ -456,16 +454,13 @@ preview does. The CSP forbids inline script
 
 Per [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md),
 the transport's `blobURL(hash, ext)` gives a file's URL:
-`notesblob://localhost/…` in Tauri, the dev gateway's `/blobs/…` in a
-browser, a `data:` URL from the mock. Images, audio and video show
-inline in live preview, in the reading view and in a `file` tab; a PDF
-shows with a button that opens it with the system's application (the
-shell's `open_file`; [Window](#window)). Rendered HTML is finished
+lodge's content URL in the web app, the dev gateway's `/blobs/…` in a
+browser, a `data:` URL from the mock; the native app reads the blob store by
+hash. Images, audio and video show inline in live preview, in the reading
+view and in a `file` tab. Rendered HTML is finished
 (`reading/finish.ts`'s `fill`) in a template, which loads nothing, before
 the page has it: with the Load remote images preference off, a remote
-`img` loses its source there and is never requested. `notesblob://`
-answers a range at most 8 MiB long and a file without a range only up to
-64 MiB, so a large video plays without sitting whole in memory. Pasting
+`img` loses its source there and is never requested. Pasting
 or dropping a file into an editor, or the command Attach file (the
 phone's toolbar has it), calls `note.upload` with the file, at most 10 MB,
 under the vault's Default location for new attachments and a name no
@@ -473,9 +468,9 @@ file has (a nameless pasted image is `Pasted image YYYYMMDDHHmmss.png`),
 then inserts `![[name]]` (a markdown image without wikilinks) at the
 cursor, on a line of its own at a line's start (`editor/attach.ts`, M4).
 
-Both servers of a hash (`protocol.rs` in Tauri, `internal/devgw` in a
-browser; [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports))
-name the content type by extension, from one table:
+The servers of a hash (`internal/blobhttp`;
+[specs/rpc-protocol.md](../specs/rpc-protocol.md#transports)) name the
+content type by extension, from one table:
 
 | Extensions | Content type |
 | --- | --- |
@@ -484,11 +479,6 @@ name the content type by extension, from one table:
 | `mp4`, `webm`, `ogv`, `mov`, `mkv` | `video/mp4`, `video/webm`, `video/ogg`, `video/quicktime`, `video/x-matroska` |
 | `pdf`, `md` | `application/pdf`, `text/markdown; charset=utf-8` |
 | anything else | `application/octet-stream` |
-
-Under `make app-dev` the page comes from Vite's server, and WebKitGTK may
-not load a custom scheme into it (frostmail found that with `mailpart:`
-and serves `/mailpart/` from Vite in development); Phase 5 checks, and
-serves `/blobs/` from Vite there if it must.
 
 ## History and merges
 
@@ -574,13 +564,11 @@ serves `/blobs/` from Vite there if it must.
 - A view that fails while it draws shows why in its tab
   (`ViewBoundary`); the rest of the window works on.
 - Links to the web open in the system browser (`http`, `https`, `mailto`
-  only); the webview never navigates away from the app. The shell's two
-  commands (`src-tauri/src/open.rs`) are the only ways the page reaches
-  the system: `open_url` checks a link's scheme, and `open_file` (Open in
-  default app) opens a vault file only when it is a regular,
-  non-executable file inside the vault folder, of a document or media
-  type, never a script, a `.desktop` entry or HTML. Both run `xdg-open`
-  with one argument and no shell. In a browser, a web link opens in a new
+  only). In the native app, `internal/desktop/system/open.go` checks a
+  link's scheme, and opens a vault file only when it is a regular,
+  non-executable file inside the vault folder, of a document or media type,
+  never a script, a `.desktop` entry or HTML; what passes goes through
+  frostui's allow-listed `Opener`. In a browser, a web link opens in a new
   tab and files do not open.
 - View's Zoom in, Zoom out and Reset zoom step through a browser's zoom
   levels with the webview's own zoom, kept as a preference.
@@ -731,12 +719,12 @@ built in [M6](../plans/0002-roadmap.md) (core's
 [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)).
 The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/`.
 The metainfo lists 4 screenshots in `docs/images`, taken by `make screenshots`
-(`dev/screenshots`: a made-up vault, the real UI in WebKitGTK in the nsl
-machine), and `internal/packagecheck` checks them.
+(`dev/screenshots/vault`, a made-up vault, drawn by MyGo's Tester), and
+`internal/packagecheck` checks them.
 
 - **What is inside.** `/app/bin/frostnotes` is the launcher, `/app/bin/notesd`
   and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`
-  is the Tauri shell. `flatpak run --command=notesctl org.frostyard.Frostnotes`
+  is the native app. `flatpak run --command=notesctl org.frostyard.Frostnotes`
   is the CLI on a desktop.
 - **notesd** runs in its own sandbox of the same app, once per data
   directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
@@ -789,8 +777,7 @@ machine), and `internal/packagecheck` checks them.
   "Keep syncing when no window is open", On by default. Off is the existence
   of `$XDG_CONFIG_HOME/frostnotes/background-off` — in the Flatpak the app's
   own config directory, which all of its sandboxes share — and On is its
-  absence. The shell (`src-tauri/src/background.rs`, the commands
-  `background_get` and `background_set`) writes or removes it, and the
+  absence. The app (`internal/desktop/system`) writes or removes it, and the
   launcher's request helper reads it: while it exists, the request carries
   `autostart` false and the portal removes the autostart entry, and
   `frostnotes --background` starts no notesd at a login. The helper writes
@@ -821,13 +808,12 @@ machine), and `internal/packagecheck` checks them.
   While the dialog is open the window reads the file again every 2 s, with
   no limit, so a late answer shows; while no answer has `generation >=
   awaited`, the row says "Asking the desktop…". The section is drawn only
-  where `background_get` answers, that is in the Flatpak. With the file,
-  the shell also stops notesd when its last window closes: on the app's
+  that is in the Flatpak. With the file, the app also stops notesd when its
+  last window closes: on its
   exit, in the primary instance and in the Flatpak only, it runs
   `notesctl shutdown` and waits at most 35 s, then kills it. A second
-  launch ends in `tauri-plugin-single-instance` before the setup closure
-  that marks the instance primary, and a spike run never marks itself, so
-  neither stops a notesd. Off therefore holds also where the desktop's
+  launch ends at the single-instance lock, before it could stop a notesd.
+  Off therefore holds also where the desktop's
   permission is on; with the permission off, the desktop's own stop wins.
 - **Updates.** `flatpak update` installs a new deployment and leaves the
   sandbox of a running notesd alone ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
@@ -874,9 +860,9 @@ machine), and `internal/packagecheck` checks them.
     until logout; every update after that replaces it.
 - **The socket** is `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`
   when `FLATPAK_ID` is the app ID, the one runtime directory Flatpak shares
-  between the app's sandboxes. `internal/config` and `src-tauri/src/paths.rs`
-  compute it the same way. The data directory is the app's `XDG_DATA_HOME`,
-  shared by the shell and notesd, so `notesblob://` reads `blobs/` as usual.
+  between the app's sandboxes. `internal/config` computes it. The data directory is the app's
+  `XDG_DATA_HOME`, shared by the app and notesd, so the app reads `blobs/` as
+  usual.
 - **Permissions:** Wayland or X11, the GPU, the network, the Secret Service
   and the home directory (vaults are watched and written in place; the
   document portal cannot do that). Where `HOME` is `/var/home/<user>`
@@ -889,8 +875,8 @@ machine), and `internal/packagecheck` checks them.
   - *No Flatpak portal.* The launcher's last act is a line in `notesd.log`:
     `frostnotes: notesd did not start through the Flatpak portal
     (flatpak-spawn); see $state/notesd.log`. While the window cannot reach
-    notesd it calls the shell's command `notesd_log` (`src-tauri/src/notesd_log.rs`),
-    which answers only when `FLATPAK_ID` is the app ID. It reads at most
+    notesd it reads `system.ReadNotesdLog`, which answers only when
+    `FLATPAK_ID` is the app ID. It reads at most
     the last 8 KiB of the log and returns the log's path, its last line
     with text and whether that line starts with the launcher's sentence
     (`internal/packagecheck` reads both `notesd_log.rs` and
@@ -938,9 +924,8 @@ machine), and `internal/packagecheck` checks them.
     registered and then left outside the grants fails its scan, not
     `vault.add`; the window shows no scan error yet, so that case stays in
     `notesd.log`.
-- **The build** is offline: `make flatpak-sources` writes `cargo-sources.json`,
-  `node-sources.json` and `go-sources.json` from the lockfiles (with a
-  patched node generator and hash-pinned Python dependencies), and the
+- **The build** is offline: `make flatpak-sources` writes `go-sources.json`
+  from `go.mod` and `go.sum`, and the
   `Flatpak` workflow (`.github/workflows/flatpak.yml`) checks they are
   current, then builds and tests the manifest (the smoke test starts notesd
   through the launcher with a stand-in `flatpak-spawn`, checks that the
@@ -950,11 +935,11 @@ machine), and `internal/packagecheck` checks them.
   window's spawn to say `--notesd`, starts the request helper with no
   arguments, and checks that `frostnotes --background` starts no notesd and
   exits 0 while the background setting is off). Run `make flatpak-sources`
-  after any change to `Cargo.lock`, `pnpm-lock.yaml`, `go.mod` or `go.sum`.
+  after any change to `go.mod` or `go.sum`.
   A `vX.Y.Z` tag builds a release: `packaging/flatpak/stamp-version.sh`
-  stamps the version and the commit into the manifest (notesd's ldflags,
-  and the shell's `FROSTNOTES_VERSION` for its
-  [problem records](#problem-records)) and the version, with its date, into
+  stamps the version and the commit into the manifest's ldflags (which the
+  app's [problem records](#problem-records) carry too) and the version, with
+  its date, into
   the metainfo, and the workflow then publishes the OCI image
   to `ghcr.io/frostyard/frostnotes` as `vX.Y.Z` and `sha-<commit>`, moving
   `latest` only after it attested the digest. The Frostyard remote
@@ -963,17 +948,11 @@ machine), and `internal/packagecheck` checks them.
 
 ## Problem records
 
-The Tauri shell records its panics in the local systemd journal, with the
-crate `frostyard-problems` (std v0.5.0), and sends nothing over a network
-([ADR-0036](../adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
-`main` makes Tauri's context first and gives its `package_info().version`
-to `src-tauri/src/problems.rs`, which installs the panic hook: a record
-holds the app ID `org.frostyard.Frostnotes`, the version, runtime `rust`,
-component `gui`, the panic's message and its place under `src/`, and the
-hook then calls the one before. The version is `0.0.0`, which records
-nothing, until a tag's Flatpak build stamps `FROSTNOTES_VERSION` in the
-manifest, which `pnpm tauri build --config` gives the shell
-([The Flatpak](#the-flatpak)). notesd's records are in
+The native app records its panics in the local systemd journal, with
+`github.com/frostyard/std/problems`, and sends nothing over a network
+([ADR-0036](../adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)):
+a record holds the app ID `org.frostyard.Frostnotes`, the version, component
+`gui`, and the panic's message and place. notesd's records are in
 [overview.md](overview.md#problem-records).
 
 ## Dev and test
@@ -986,17 +965,9 @@ manifest, which `pnpm tauri build --config` gives the shell
   where it can be; views run in happy-dom where a test needs one, and in
   jsdom (`// @vitest-environment jsdom`) where DOMPurify must sanitize:
   the sanitizer's tests and the reading, merge and history views'.
-- `make m3-evidence` drives the built app in WebKitGTK
-  ([plan 0005, Phase 7](../plans/0005-m3-desktop-app.md#phase-7--review-and-exit-evidence)):
-  the app runs with `FROSTNOTES_SPIKE` naming a driver in `spike/`. The
-  editor's measurement (`editor`, after spike 1's `measure.ts`) times
-  typing and scrolling in a generated 10,000-line note with every
-  live-preview provider. The hotkeys (`hotkeys`, over the mock) and the
-  writer pairs (`writers`, over the Tauri bridge to a real notesd) ask a
-  harness, `internal/appevidence`, for what the page cannot do itself,
-  in lines the shell prints (`spike_say`): xdotool presses keys under
-  Xvfb, so they arrive through X, GTK and WebKit, and vim, notesctl's
-  MCP server and a second notesd through a hub write the open note.
+- `make desktop-evidence` runs the native app's evidence: a generated
+  10,000-note vault within a frame, and an edit on the hub reaching the open
+  editor. `make desktop-smoke` starts the release build under Xvfb.
 
 ## Operational notes
 

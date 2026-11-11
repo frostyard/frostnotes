@@ -141,7 +141,7 @@ it every `em` above.
 ```
 
 - **Window:** default 1200 × 780, minimum 640 × 400 (as
-  `app/src-tauri/src/main.rs` makes it), no system title bar.
+  `cmd/frostnotes` makes it), no system title bar.
 - **Panes:** the ribbon is 44 wide. The left sidebar defaults to 260
   wide and the right to 300, each between 200 and 600; the workspace
   takes the rest, at least 320. Sidebars, splits and the workspace are
@@ -162,9 +162,7 @@ it every `em` above.
 
 ### Title bar row
 
-44 high, `--bg-toolbar`, 1px `--separator` bottom: the window's drag
-region (Tauri's `data-tauri-drag-region` on it and on every empty part;
-a double click on empty space toggles maximize). It is split at the
+44 high, `--bg-toolbar`, 1px `--separator` bottom. It is split at the
 pane boundaries:
 
 1. Over the ribbon: Toggle left sidebar (`panel-left`, pressed while

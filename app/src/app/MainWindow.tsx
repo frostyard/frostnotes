@@ -4,26 +4,22 @@
 // command registry and its one key listener.
 
 import { IconButton, Splitter } from "@frostyard/lodge-ui/react";
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CalendarDays, FileSearch, Files, type LucideIcon, PanelLeft, Terminal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";
 import { feed } from "../data/events";
-import { type NotesdLog, readNotesdLog } from "../data/notesdLog";
-import { ask, openVaultManager } from "../data/overlays";
+import { openVaultManager } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
-import { useNotes } from "../data/stores";
+import { useNotes, useUI } from "../data/stores";
 import { useVaultState } from "../data/vaultState";
 import { titleOf } from "../editor/NoteEditor";
 import { DocumentRegistry, DocumentsContext } from "../editor/registry";
 import { Ribbon } from "../features/chrome/Ribbon";
 import { TitleBar } from "../features/chrome/TitleBar";
 import { TitleBarEnd } from "../features/chrome/TitleBarEnd";
-import { NotesdCause } from "../features/connecting/NotesdCause";
 import { BottomBar } from "../features/mobile/BottomBar";
 import { Drawer } from "../features/mobile/Drawer";
 import { EditingToolbar } from "../features/mobile/EditingToolbar";
@@ -46,7 +42,6 @@ import {
   setSidebarWidth,
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
-import { useMaximized, windowCommand } from "./chrome";
 import { editorCommands, workspaceCommands } from "./commands";
 import { useEditorFocus, useKeyboardInset } from "./keyboard";
 import { NARROW_BACKLINKS, openConflictsMenu, openEditingModeMenu, openIdentityMenu, openNarrowMenu } from "./menus";
@@ -144,7 +139,6 @@ export function MainWindow() {
   );
   useAliasesSync();
   const openVault = useOpenVault();
-  const maximized = useMaximized();
   const sync = useVaultState((s) => s.sync);
   const editingMode = usePrefs((s) => s.editingMode);
   const active = activeTab(ws);
@@ -167,16 +161,9 @@ export function MainWindow() {
   useEffect(() => (narrow && drawer === null ? installEdgeSwipe(setDrawer) : undefined), [narrow, drawer]);
   const widths = fitSidebars(useWindowWidth(), ws.left, ws.right);
   const shown = { left: widths.left > 0, right: widths.right > 0 };
-  const controls = isTauri();
 
   const windowControls = (
-    <TitleBarEnd
-      rightOpen={shown.right}
-      maximized={maximized}
-      windowControls={controls}
-      onToggleRight={() => registry.run("app:toggle-right-sidebar")}
-      onWindow={windowCommand}
-    />
+    <TitleBarEnd rightOpen={shown.right} onToggleRight={() => registry.run("app:toggle-right-sidebar")} />
   );
   const sidebar = (side: Side) => {
     const bar = ws[side];
@@ -200,14 +187,14 @@ export function MainWindow() {
           className="flex shrink-0 flex-col bg-sidebar"
           style={{ width: widths[side] }}
         >
-          <div data-tauri-drag-region className="flex shrink-0 items-center border-b border-separator bg-toolbar">
+          <div className="flex shrink-0 items-center border-b border-separator bg-toolbar">
             <PaneTabs
               label={side === "left" ? "Left sidebar panes" : "Right sidebar panes"}
               panes={bar.panes.map((id) => ({ id, ...PANE_INFO[id] }))}
               selected={selected}
               onSelect={(id) => update((w) => selectPane(w, side, id as PaneId))}
             />
-            <div data-tauri-drag-region className="h-11 flex-1" />
+            <div className="h-11 flex-1" />
             {side === "right" && windowControls}
           </div>
           <Pane id={selected} />
@@ -384,11 +371,8 @@ export function MainWindow() {
       <CommandsContext.Provider value={registry}>
         <DocumentsContext.Provider value={docs}>
           <div className="flex h-full flex-col bg-window">
-            <div
-              data-tauri-drag-region
-              className="flex h-11 shrink-0 items-center justify-end border-b border-separator bg-toolbar"
-            >
-              <TitleBarEnd rightOpen={false} maximized={maximized} windowControls={controls} onWindow={windowCommand} />
+            <div className="flex h-11 shrink-0 items-center justify-end border-b border-separator bg-toolbar">
+              <TitleBarEnd rightOpen={false} />
             </div>
             <VaultsView mode="window" />
             <StatusBar
@@ -415,7 +399,7 @@ export function MainWindow() {
         <div className="flex h-full flex-col bg-window">
           <div className="relative flex min-h-0 flex-1">
             <div className="flex shrink-0 flex-col border-r border-separator bg-sidebar" style={{ width: RIBBON }}>
-              <div data-tauri-drag-region className="flex shrink-0 justify-center border-b border-separator bg-toolbar">
+              <div className="flex shrink-0 justify-center border-b border-separator bg-toolbar">
                 <div className="flex h-11 items-center">
                   <IconButton
                     label="Toggle left sidebar"
@@ -477,74 +461,23 @@ function keepUnsaved(docs: DocumentRegistry): () => void {
     e.preventDefault();
   };
   window.addEventListener("beforeunload", beforeUnload);
-  let offClose: (() => void) | undefined;
-  if (isTauri()) {
-    void getCurrentWindow()
-      .onCloseRequested(async (e) => {
-        if (!docs.unsaved()) return;
-        e.preventDefault();
-        await docs.flushAll();
-        const close =
-          !docs.unsaved() ||
-          (await ask({
-            title: "Close anyway?",
-            text: "Some notes are not saved yet; what was typed in them is lost.",
-            confirmLabel: "Close",
-            danger: true,
-          }));
-        if (close) void getCurrentWindow().destroy();
-      })
-      .then((off) => {
-        offClose = off;
-      });
-  }
   return () => {
     window.removeEventListener("beforeunload", beforeUnload);
-    offClose?.();
   };
 }
 
 /**
  * Connecting stands in for MainWindow until notesd answers; the title bar
- * stays usable. In the Flatpak, while the connection is lost it says why
- * notesd is not running, from notesd.log's end (NotesdCause).
+ * stays usable.
  */
 export function Connecting() {
   const connection = useNotes((s) => s.connection);
-  const maximized = useMaximized();
-  const [log, setLog] = useState<NotesdLog | null>(null);
-  const lost = connection.state === "lost";
-  useEffect(() => {
-    // Only while the connection is lost: a retry in flight, or a connection
-    // that came, shows no cause, and the next failure reads the log again.
-    if (!lost) {
-      setLog(null);
-      return;
-    }
-    let stale = false;
-    void readNotesdLog().then((read) => {
-      if (!stale) setLog(read);
-    });
-    return () => {
-      stale = true;
-    };
-  }, [lost]);
   const text = connection.state === "lost" ? `Reconnecting to notesd… (${connection.reason})` : "Connecting to notesd…";
   return (
     <div className="flex h-full flex-col bg-window">
-      <TitleBar
-        title="Frostnotes"
-        sidebarWidth={0}
-        maximized={maximized}
-        windowControls={isTauri()}
-        onCommand={windowCommand}
-      />
-      <div
-        data-tauri-drag-region
-        className="text-empty flex flex-1 flex-col items-center justify-center gap-4 px-8 text-secondary"
-      >
+      <TitleBar title="Frostnotes" sidebarWidth={0} onToggleSidebar={() => useUI.getState().toggleSidebar()} />
+      <div className="text-empty flex flex-1 flex-col items-center justify-center gap-4 px-8 text-secondary">
         {text}
-        {lost && log && <NotesdCause log={log} />}
       </div>
       <StatusBar
         connection={connection}

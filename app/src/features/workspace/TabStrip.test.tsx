@@ -16,7 +16,6 @@ function setup(over: Partial<TabStripProps> = {}) {
     label: "Tabs",
     tabs: TABS,
     focused: true,
-    dragRegion: false,
     onCommand: (c) => commands.push(c),
     onDragStart: vi.fn(),
     ...over,
@@ -47,14 +46,7 @@ describe("TabStrip", () => {
     expect(tab("Reading list").className).toContain("text-secondary");
     expect(tab("Reading list").className).not.toContain("bg-window");
     view.rerender(
-      <TabStrip
-        label="Tabs"
-        tabs={TABS}
-        focused={false}
-        dragRegion={false}
-        onCommand={vi.fn()}
-        onDragStart={vi.fn()}
-      />,
+      <TabStrip label="Tabs" tabs={TABS} focused={false} onCommand={vi.fn()} onDragStart={vi.fn()} />,
     );
     expect(tab("Garden plan").className).toContain("bg-window");
     expect(tab("Garden plan").className).not.toContain("font-medium");
@@ -130,7 +122,7 @@ describe("TabStrip", () => {
 
   it("moves focus to the tab a key activated once the strip shows it active", () => {
     const onCommand = vi.fn();
-    const props = { label: "Tabs", focused: true, dragRegion: false, onCommand, onDragStart: vi.fn() };
+    const props = { label: "Tabs", focused: true, onCommand, onDragStart: vi.fn() };
     const view = render(<TabStrip {...props} tabs={TABS} />);
     tab("Garden plan").focus();
     fireEvent.keyDown(tab("Garden plan"), { key: "ArrowRight" });
@@ -145,14 +137,7 @@ describe("TabStrip", () => {
     fireEvent.keyDown(tab("Garden plan"), { key: "Delete" });
     const pinnedActive = TABS.map((t) => ({ ...t, active: t.id === "c" }));
     view.rerender(
-      <TabStrip
-        label="Tabs"
-        tabs={pinnedActive}
-        focused
-        dragRegion={false}
-        onCommand={(c) => commands.push(c)}
-        onDragStart={vi.fn()}
-      />,
+      <TabStrip label="Tabs" tabs={pinnedActive} focused onCommand={(c) => commands.push(c)} onDragStart={vi.fn()} />,
     );
     fireEvent.keyDown(tab("Inbox"), { key: "Delete" });
     expect(commands).toEqual([{ kind: "close", id: "a" }]);
@@ -175,17 +160,5 @@ describe("TabStrip", () => {
     fireEvent.dragStart(tab("Reading list"));
     expect(onDragStart).toHaveBeenCalledTimes(1);
     expect(onDragStart.mock.calls[0]?.[0]).toBe("b");
-  });
-
-  it("drags the window from its empty space only in the title bar row", () => {
-    const { view } = setup({ dragRegion: true });
-    const list = screen.getByRole("tablist", { name: "Tabs" });
-    expect(list.hasAttribute("data-tauri-drag-region")).toBe(true);
-    for (const el of [...screen.getAllByRole("tab"), ...screen.getAllByRole("button")]) {
-      expect(el.hasAttribute("data-tauri-drag-region"), el.getAttribute("aria-label") ?? "").toBe(false);
-    }
-    view.unmount();
-    setup({ dragRegion: false });
-    expect(document.querySelector("[data-tauri-drag-region]")).toBeNull();
   });
 });

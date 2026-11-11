@@ -1,9 +1,9 @@
 # frostyard/frostnotes
 
 Frostnotes is a notes app in the spirit of Obsidian: plain markdown files
-with YAML frontmatter, a desktop app (Tauri v2, React, CodeMirror 6 live
-preview), a web app, built-in sync through a self-hosted hub, and an MCP
-server for agents. A Go daemon, `notesd`, owns every vault; the apps,
+with YAML frontmatter, a native desktop app (Go, MyGo, frostui), a web app
+(React, CodeMirror 6 live preview), built-in sync through a self-hosted hub,
+and an MCP server for agents. A Go daemon, `notesd`, owns every vault; the apps,
 `notesctl` and MCP are thin clients. Start at [docs/README.md](docs/README.md);
 the architecture entry point is [docs/design/overview.md](docs/design/overview.md).
 
@@ -48,8 +48,8 @@ proposed). Its Phases 1 to 4 are built on a draft branch (2026-11-10):
 session, source mode, reading view, history and merges, the window on
 frostui's shell, the workspace and the panes. Phase 5's live preview draws
 marks, blocks and embeds; headings' sizes wait for MyGo's per-line styles
-([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The Tauri
-shell stays until the native app reaches parity.
+([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The draft
+pull request's last commit replaces the Tauri shell.
 
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
@@ -115,8 +115,7 @@ file a step names before writing its frostnotes counterpart.
   `internal/synctest`: sync's seeded simulation of a hub and devices
   (`make sync-sim`; reduced failures in its `testdata/regressions`).
   `internal/evidence`: real notesd processes for the milestones' exit
-  evidence; `internal/appevidence`: M3's, over the built app under Xvfb
-  (`make m3-evidence`); `internal/webevidence`: M4's, Firefox ESR through
+  evidence; `internal/webevidence`: M4's, Firefox ESR through
   geckodriver in lodge's development build (`make m4-evidence`,
   `scripts/lodge-e2e.sh`), and plan 0007's Porter run through lodge's
   listener and agent socket (`make porter-evidence`).
@@ -141,36 +140,34 @@ file a step names before writing its frostnotes counterpart.
   `Recorder` interface the packages get in their configs; `problemtest`
   holds a fake and a test journal socket. notesd's recorder
   (`github.com/frostyard/std/problems`) is made in `cmd/notesd`, and the
-  shell's in `app/src-tauri/src/problems.rs`
+  desktop app's in `cmd/frostnotes`
   ([ADR-0036](docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
   (SHA-pinned actions; no test-name filter on a unit run; the baseline
   files, below).
-- `app/`: Tauri v2 + React + TypeScript. `app/src-tauri/src/bridge.rs` only
-  moves lines to notesd's socket; JSON-RPC multiplexing is in
-  `app/src/rpc/transport.ts`, with Tauri, WebSocket (`transport/ws.ts`) and
+- `app/`: lodge's web app, React + TypeScript. JSON-RPC multiplexing is in
+  `app/src/rpc/transport.ts`, with WebSocket (`transport/ws.ts`) and
   mock (`rpc/mock/`) transports. `app/src/features/` is presentational;
   `app/src/app/` and `app/src/data/` connect it. `app/src/lodge/` runs the
   app inside lodge's frame (lodge-client, the lodge transport, content
   URLs), and `app/src/features/mobile/` holds the narrow layout's
   components. `make web-build` builds it for lodge (`/app/notes/`), and
   `make lodge-app` lays it out with `packaging/lodge/app.json`. `app/src/spike/` is M0's
-  CodeMirror spike and the drivers of M3's exit evidence. The icon's master is `app/src-tauri/icons/icon.svg`
+  CodeMirror spike. The icon's master is `packaging/icons/icon.svg`
   (`scripts/render-icons.py`, ADR-0013).
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
   the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
 - `packaging/flatpak/`: the desktop app's Flatpak (manifest, launcher,
-  Background-portal helper, AppStream, smoke test, a patch for the node
-  generator, hashed Python requirements, and the generated `cargo-`, `node-` and
+  Background-portal helper, AppStream, smoke test and the generated
   `go-sources.json`); `scripts/flatpak-sources.sh` (`make flatpak-sources`)
-  regenerates them and `tools/flatpakgo` writes the Go part;
+  regenerates it with `tools/flatpakgo`;
   `stamp-version.sh` stamps a tag's version into the manifest and the
   metainfo; CI's `flatpak.yml` builds it and publishes the image to GHCR on a
   `v*` tag
   ([ADR-0031](docs/adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)).
-  Run `make flatpak-sources` after a change to a lockfile or `go.mod`.
-- `dev/nsl/provision.sh`: the nsl machine for the app toolchain;
-  `scripts/dev-app.sh` runs notesd beside the app or Vite there;
+  Run `make flatpak-sources` after a change to `go.mod`.
+- `dev/nsl/provision.sh`: the nsl machine for the web app's toolchain;
+  `scripts/dev-app.sh` runs notesd beside Vite there;
   `scripts/move-hub-behind-lodge.sh` moves the M2 hub behind lodge
   (plan 0006, Phase 7; a dry run unless `--apply`).
   `tools/rpcgen`, `tools/taskrun`: the contract generator and the task-card
@@ -181,9 +178,9 @@ file a step names before writing its frostnotes counterpart.
 - `make check` formats, then runs `make verify`: tidy, `gen-check`, vet,
   gofmt, the pinned golangci-lint (`mise install`) and unit tests. Run it
   before claiming any Go change is complete. `make ui-check` (Biome, tsc,
-  Vitest), `make app-build` and `make app-test` run in the nsl machine;
-  `make ci` is verify plus those and the race detector. Never run pnpm,
-  node or cargo on the host. `make vault-it` (the `kill -9` harness) and
+  Vitest) runs in the nsl machine; `make ci` is verify plus that,
+  `make desktop-build` and the race detector. Never run pnpm or node on the
+  host. `make vault-it` (the `kill -9` harness) and
   `make obsidian-links` (Obsidian's link dump, local only) are the
   integration runs for changes to the scan, the write path or parsing.
   `make vulncheck` runs govulncheck (pinned in the Makefile; needs the
@@ -213,15 +210,12 @@ file a step names before writing its frostnotes counterpart.
   `github.com/bketelsen/mygo` until egoist/mygo#1654, #1655 and #1662 are in
   a release (plan 0009). Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
-- **Rust crates** (`app/src-tauri/Cargo.toml`): `frostyard-problems` as a git
-  dependency on std's tag `v0.5.0` (the shell's problem records). Run
-  `make flatpak-sources` after a change: it rewrites
-  `packaging/flatpak/cargo-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as
   `github:frostyard/lodge#client/v0.3.2&path:client` and `@frostyard/lodge-ui` as
   `github:frostyard/lodge#ui/v0.6.0&path:ui`.
 - **Tool pins** (`mise.toml`): golangci-lint 2.15.0, svu 3.4.1, nfpm 2.48.0
-  (these are not frostyard modules). No bketelsen module is used.
+  (these are not frostyard modules). The only bketelsen module is the MyGo
+  fork above.
 - **Who uses this repository:** lodge hosts `notesd --lodge` as its `notes` app
   (`packaging/lodge/app.json`); Porter calls lodge's `/mcp/notes` with a
   folder-scoped token, and lodge forwards it to `/mcp` on notesd's app socket
@@ -295,12 +289,7 @@ The repository follows core's baseline (frostyard/core ADR-0071, its spec
   grading rule (`L1` for the risk categories, `L2` for governance); a glob
   that matches no file fails.
 - `.github/dependabot.yml` (B13): 1 entry for each manifest (`go.mod`,
-  `app/package.json`, `app/src-tauri/Cargo.toml`). A new manifest gets an
-  entry. A cargo git dependency on a frostyard repository
-  (`frostyard-problems`) gets an `ignore` entry: Dependabot cannot resolve
-  it, and it is bumped by hand. The test reads these crates from the
-  `Cargo.lock` beside each `Cargo.toml`, so each `Cargo.toml` keeps its
-  lock file.
+  `app/package.json`). A new manifest gets an entry.
 
 `.github/pull_request_template.md` (B7) holds the risk tier. Vulnerabilities
 are reported privately ([SECURITY.md](SECURITY.md), B14). No `CODEOWNERS`
