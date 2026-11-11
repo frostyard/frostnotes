@@ -90,6 +90,36 @@ func TestEveryCommandRunsFromThePalette(t *testing.T) {
 	}
 }
 
+func TestAPaletteCommandShowsInTheFrameItRuns(t *testing.T) {
+	f := openNote(t)
+	// A view takes every toast waiting for it, so one still waiting after
+	// a view came too late for that frame.
+	late := 0
+	f.tt = ui.NewTester(func(c *ui.Context) {
+		f.a.View(c)
+		late += len(f.a.toasts)
+	}, 1200, 800)
+	ran := false
+	spec := f.a.table[0]
+	f.a.actions[spec.ID] = func() {
+		ran = true
+		f.a.notify("It ran.")
+	}
+	f.a.Shell.Palette.ShowSource(frostui.PaletteCommands)
+	f.tt.Frame()
+	f.tt.Type(spec.Title)
+	f.tt.Frame()
+	f.tt.Key(0, ui.KeyEnter)
+	f.tt.Frame()
+	f.tt.Frame()
+	if !ran {
+		t.Fatal("the command did not run")
+	}
+	if late != 0 {
+		t.Fatalf("%d toasts waited for a later frame", late)
+	}
+}
+
 func TestEveryKeyRunsItsCommand(t *testing.T) {
 	f := openNote(t)
 	makeApply(f)

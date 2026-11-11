@@ -400,6 +400,9 @@ func (a *App) setTitle() {
 
 // View draws the window.
 func (a *App) View(c *ui.Context) {
+	// Before anything below reads the state a palette command changes, or
+	// what it does shows a frame late.
+	a.Shell.Palette.RunPending()
 	a.lastMod = c.Modifiers()
 	a.applyAppearance(c)
 	for _, t := range a.toasts {
