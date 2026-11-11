@@ -141,3 +141,21 @@ func TestAManyTabsStripScrollsToTheActiveTab(t *testing.T) {
 		t.Fatalf("a tab shrank to %v", a.Bounds.W)
 	}
 }
+
+func TestDroppingATabInTheCenterJoinsTheGroup(t *testing.T) {
+	var gotID, gotEdge string
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Row(c).Fill().Children(func() {
+			ui.Box(c).Width(80).FillHeight().Label("Drag").Drag(TabDrag{ID: "t1"})
+			ui.Box(c).Grow(1).FillHeight().Children(func() { DropEdges(c, func(id, edge string) { gotID, gotEdge = id, edge }) })
+		})
+	}, 800, 400)
+	tt.Press(40, 200)
+	tt.Move(100, 200)
+	tt.Move(440, 200)
+	tt.Release(440, 200)
+	tt.Frame()
+	if gotID != "t1" || gotEdge != "" {
+		t.Fatalf("drop = %q/%q", gotID, gotEdge)
+	}
+}
