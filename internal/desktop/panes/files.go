@@ -38,16 +38,15 @@ type Files struct {
 	// ShowUnsupported is the Show unsupported files preference.
 	ShowUnsupported bool
 
-	list     frostui.SourceList[string]
-	made     bool
-	tree     *Tree
-	builtFor int
-	sort     string
-	unsup    bool
-	loaded   string
-	active   string
-	hovered  bool
-	ctx      *ui.Context
+	list           frostui.SourceList[string]
+	made           bool
+	tree           *Tree
+	builtFor       int
+	sort           string
+	unsup          bool
+	loaded         string
+	active         string
+	openGeneration uint64
 }
 
 func (f *Files) rebuild() {
@@ -68,8 +67,14 @@ func (f *Files) syncOpen() {
 		f.setOpen(f.Store.Workspace().Files.Expanded)
 		return
 	}
-	cur := slices.Sorted(slices.Values(f.list.OpenItems(section)))
-	stored := slices.Sorted(slices.Values(f.Store.Workspace().Files.Expanded))
+	generation := f.list.OpenGeneration()
+	if generation == f.openGeneration {
+		return
+	}
+	f.openGeneration = generation
+	cur := f.list.OpenItems(section)
+	slices.Sort(cur)
+	stored := f.Store.Workspace().Files.Expanded
 	if !slices.Equal(cur, stored) {
 		f.Store.Update(func(w *workspace.Workspace) { w.Files.Expanded = cur })
 	}
@@ -90,7 +95,10 @@ func (f *Files) Reveal(p string) {
 }
 
 // Rename starts renaming p in place (F2).
-func (f *Files) Rename(p string) { f.list.StartRename(section, p) }
+func (f *Files) Rename(p string) {
+	f.Reveal(p)
+	f.list.StartRename(section, p)
+}
 
 func (f *Files) isFolder(p string) bool {
 	n := f.tree.Nodes[p]
@@ -102,20 +110,6 @@ func (f *Files) rename(p, name string) {
 		return
 	}
 	f.Actions.Rename(p, name, f.isFolder(p))
-}
-
-// choose is a click on a row: a file opens, a folder opens or closes. The
-// arrow keys only move the choice, and Enter acts on it.
-func (f *Files) choose(p string) {
-	if !f.hovered {
-		return
-	}
-	if f.isFolder(p) {
-		f.list.SetOpen(section, p, !f.list.IsOpen(section, p))
-		f.list.ClearSelection() // so that a second click closes it
-		return
-	}
-	f.Env.Actions.Open(p, f.Env.where(f.ctx))
 }
 
 func (f *Files) activate(p string, mods ui.Modifiers) {
@@ -186,8 +180,12 @@ func (f *Files) setUp() {
 	f.list.Children = f.children
 	f.list.Row = f.sourceRow
 	f.list.Menu = f.menu
-	f.list.OnSelect = f.choose
-	f.list.OnActivate = f.activate
+	f.list.OnClick = f.activate
+	f.list.OnMiddleClick = func(p string, mods ui.Modifiers) {
+		if !f.isFolder(p) {
+			f.Env.Actions.Open(p, workspace.WhereFor(false, mods&ui.Alt != 0, 1))
+		}
+	}
 	f.list.Rename = f.rename
 	f.list.DragItems = func(items []string) any { return items[0] }
 	frostui.DropOn(&f.list, f.accepts, func(folder, p string, _ ui.Modifiers) { f.move(p, folder) })
@@ -292,7 +290,6 @@ func (f *Files) folderMenu(m *ui.Menu, p string) {
 func (f *Files) View(c *ui.Context) ui.Element {
 	f.rebuild()
 	f.setUp()
-	f.ctx = c
 	f.syncOpen()
 	if active := f.Env.Active(); active != f.active {
 		f.active = active
@@ -303,7 +300,6 @@ func (f *Files) View(c *ui.Context) ui.Element {
 	return ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		f.toolbar(c)
 		list := f.list.View(c, []frostui.SourceSection[string]{{ID: section, Items: f.tree.Roots}}).Grow(1)
-		f.hovered = list.Hovered()
 		list.ContextMenu(func(m *ui.Menu) {
 			if m.Item("New note").Chosen() && f.Actions.NewNote != nil {
 				f.Actions.NewNote("")

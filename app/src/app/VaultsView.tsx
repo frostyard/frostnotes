@@ -1,7 +1,7 @@
 // The vault manager's container (ADR-0024; docs/specs/ui.md#vault-manager):
 // the whole window while there is no vault, else a dialog from Manage
 // vaults…. It opens a vault in place, opens a folder or creates one with
-// the system's folder picker (or a typed path in a browser), joins a vault
+// a typed folder path, joins a vault
 // on a hub where notesd syncs, and removes one from the list after asking.
 import { useEffect, useState } from "react";
 
@@ -66,8 +66,6 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
   const form = (
     <CreateVault
       location={location}
-      canPick={false}
-      onBrowse={() => {}}
       onLocation={setLocation}
       onCreate={(name) => {
         if (location !== null) void addVault(client, vaultFolder(location, name), true).then(added);
@@ -81,7 +79,6 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       vaults={vaults}
       current={current}
       mode={props.mode}
-      canPick={false}
       manage={manage}
       syncAvailable={sync}
       panel={manage ? (creating ? form : joining ? join : undefined) : undefined}
@@ -102,7 +99,7 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
         setJoining(true);
       }}
       onOpenFolder={(path) => {
-        if (path !== undefined) void addVault(client, path).then(added);
+        void addVault(client, path).then(added);
       }}
       onClose={close}
     />

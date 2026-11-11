@@ -146,7 +146,7 @@ app-local package for the rest (below).
 
 | Today | Native | Phase |
 | --- | --- | --- |
-| 23 local preferences (`frostnotes.prefs.v1`: views, editing mode, inline title, readable line length, spellcheck, properties, line numbers, guides, folding, auto-pairs, smart lists, tabs, confirm delete, remote images, unsupported files, theme, font size, ribbon, zoom, last vault) | `$XDG_CONFIG_HOME/frostnotes/prefs.json`, versioned; the ribbon's preference goes, spellcheck stays unused (no checker) | 2 |
+| 23 local preferences (`frostnotes.prefs.v1`: views, editing mode, inline title, readable line length, spellcheck, properties, line numbers, guides, folding, auto-pairs, smart lists, tabs, confirm delete, remote images, unsupported files, theme, font size, ribbon, zoom, last vault) | `$XDG_CONFIG_HOME/frostnotes/prefs.json`, versioned; the ribbon's preference goes, the inactive spellcheck setting is removed ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md)) | 2 |
 | The workspace per vault (`frostnotes.workspace.v1:<path>`, 500 ms after a change and on close; moves and removals applied to other vaults' workspaces), the event resume point, recent commands | `$XDG_STATE_HOME/frostnotes/workspace/<hash of the path>.json` and `state.json`; not migrated from WebKitGTK ([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)) | 2 |
 | Vault settings (notesd's: `vault.settings`, `vault.configure`, `vault.configured`) | unchanged | 3 |
 
@@ -264,15 +264,18 @@ other sessions are writing their pull requests:
   `Buffer.EditRemote` ([egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654))
   and uses MyGo's own undo.
 
-**A fork until those land.** `go.mod` replaces MyGo with
-`github.com/bketelsen/mygo`, branch `integration/frostyard`: #1654,
-[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) and
-[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662) merged together,
-past v0.8.3. The owner approved it on 2026-11-10. The `replace` goes when all
-three pull requests are in a MyGo release. It also changes the MyGo frostui
-v0.2.0 builds against here, and frostui's CI tests only released MyGo, so
-`make verify` runs `go test github.com/frostyard/frostui/...` while the
-`replace` stays; the step goes with it. A failure there is reported to frostui.
+**A fork until the last lands.** MyGo v0.9.0 (2026-11-11) has #1654 and
+[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655). `go.mod`
+requires v0.9.0 and replaces it with `github.com/bketelsen/mygo`, branch
+`bk/editor-blocks-89d18f` at `24c98d35`: v0.9.0 and
+[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662), nothing else.
+The fork has no v0.9.0 tag, so its pseudo-version reads v0.8.4. The owner
+approved the fork on 2026-11-10 and the move to v0.9.0 on 2026-11-11. Once
+#1662 is in a MyGo release, `go.mod` requires that release and the `replace`
+goes. The fork also changes the MyGo frostui builds against here, and
+frostui's CI tests only released MyGo, so `make verify` runs
+`go test github.com/frostyard/frostui/...` while the `replace` stays; the
+step goes with it. A failure there is reported to frostui.
 
 Not filed yet: a hook for a click on a task's box in the Markdown view.
 

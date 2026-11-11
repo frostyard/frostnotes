@@ -7,11 +7,7 @@ import { vaultNameError } from "../../lib/vaultName";
 export interface CreateVaultProps {
   /** The folder the vault goes in, once one is chosen. */
   location: string | null;
-  /** The system has a folder picker: Browse opens it. Else the folder is typed. */
-  canPick: boolean;
-  /** Browse: the container opens the picker and gives back location. */
-  onBrowse: () => void;
-  /** Where there is no picker, the folder as typed. */
+  /** The folder path as typed. */
   onLocation: (path: string) => void;
   /** Create, with the name trimmed. */
   onCreate: (name: string) => void;
@@ -20,7 +16,7 @@ export interface CreateVaultProps {
 
 /** CreateVault draws the create form. */
 export function CreateVault(props: CreateVaultProps) {
-  const { location, canPick, onBrowse, onLocation, onCreate, onBack } = props;
+  const { location, onLocation, onCreate, onBack } = props;
   const [name, setName] = useState("");
   const [edited, setEdited] = useState(false);
   const nameId = useId();
@@ -80,28 +76,13 @@ export function CreateVault(props: CreateVaultProps) {
         </div>
         <div className="space-y-1">
           <div>Location</div>
-          {canPick ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-secondary text-xs leading-4">
-                {location ?? "No folder chosen"}
-              </span>
-              <button
-                type="button"
-                className="h-7 shrink-0 rounded-md border border-separator px-3 hover:bg-selection-inactive"
-                onClick={onBrowse}
-              >
-                Browse
-              </button>
-            </div>
-          ) : (
-            <input
-              type="text"
-              aria-label="Location"
-              value={location ?? ""}
-              className="h-7 w-60 max-w-full rounded-md border border-separator bg-window px-2"
-              onChange={(event) => onLocation(event.target.value)}
-            />
-          )}
+          <input
+            type="text"
+            aria-label="Location"
+            value={location ?? ""}
+            className="h-7 w-60 max-w-full rounded-md border border-separator bg-window px-2"
+            onChange={(event) => onLocation(event.target.value)}
+          />
         </div>
         <button
           type="submit"
