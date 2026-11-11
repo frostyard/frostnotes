@@ -533,28 +533,14 @@ func (r *joinRun) join(id int64, wasPaired bool) error {
 	return err
 }
 
-// registered reports whether notesd already lists the folder to be made.
-func (r *joinRun) registered() bool {
-	bg, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// addVault adds the folder to be made and waits for notesd's answer, even
+// through a cancel: one that landed mid-call could leave a vault nothing knows
+// of. The join after it sees the cancel, and removes the vault.
+func (r *joinRun) addVault() (*api.Vault, error) {
+	bg, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	list, err := r.c.Vault().List(bg, &api.VaultListParams{})
-	return err != nil || slices.ContainsFunc(list, func(v api.Vault) bool { return v.Path == r.folder })
-}
-
-// forgetFolder removes the vault of the folder from the list, after a
-// cancel that may have landed once notesd had added it.
-func (r *joinRun) forgetFolder() {
-	bg, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	list, err := r.c.Vault().List(bg, &api.VaultListParams{})
-	if err != nil {
-		return
-	}
-	for _, v := range list {
-		if v.Path == r.folder {
-			_ = r.c.Vault().Remove(bg, &api.VaultRemoveParams{ID: v.ID})
-		}
-	}
+	create := true
+	return r.c.Vault().Add(bg, &api.VaultAddParams{Path: r.folder, Create: &create})
 }
 
 // cleanupFailed says a join failed and its vault stayed on the list. It
@@ -581,14 +567,8 @@ func (r *joinRun) run() (*api.Vault, error) {
 	if r.folder == "" {
 		return nil, r.join(r.vaultID, wasPaired)
 	}
-	create := true
-	known := r.registered()
-	v, err := r.c.Vault().Add(r.ctx, &api.VaultAddParams{Path: r.folder, Create: &create})
+	v, err := r.addVault()
 	if err != nil {
-		// A cancel can land after notesd committed the vault.
-		if errors.Is(err, context.Canceled) && !known {
-			r.forgetFolder()
-		}
 		return nil, err
 	}
 	if err := r.join(v.ID, wasPaired); err != nil {

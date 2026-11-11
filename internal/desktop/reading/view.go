@@ -128,6 +128,17 @@ func (v *View) OnChange(fn func()) { v.changed = append(v.changed, fn) }
 // Markdown is the latest rendering, "" before the first.
 func (v *View) Markdown() string { return v.md }
 
+// GoTo scrolls to a link's "#Heading". A block's "#^id" has no anchor in the
+// view, and stays where it is.
+func (v *View) GoTo(subpath string) {
+	name := subpath[strings.LastIndexByte(subpath, '#')+1:]
+	if name == "" || strings.HasPrefix(name, "^") {
+		return
+	}
+	v.Options.Anchor = markdown.Slug(name)
+	v.Options.AnchorVersion++
+}
+
 // Err is why the latest rendering failed, nil when it did not.
 func (v *View) Err() error { return v.err }
 

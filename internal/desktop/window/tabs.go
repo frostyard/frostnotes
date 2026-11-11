@@ -562,6 +562,10 @@ func (a *App) tabView(c *ui.Context, tab *workspace.Tab) {
 				a.pending = nil
 			}
 		case tc.read != nil:
+			if p := a.pending; p != nil && p.subpath != "" && p.path == tc.doc.Path() && tc.read.Markdown() != "" {
+				tc.read.GoTo(p.subpath)
+				a.pending = nil
+			}
 			ui.Scroll(c).Grow(1).Fill().Padding(frostui.SpaceL, frostui.SpaceXL).Children(func() { tc.read.View(c) })
 		case tc.hist != nil:
 			tc.hist.View(c)

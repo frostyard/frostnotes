@@ -296,6 +296,11 @@ func (r *rewriter) emptyAltAt(n ast.Node, destination []byte) (int, bool) {
 			from = max(from, e)
 		}
 	}
+	if next := n.NextSibling(); next != nil {
+		if s, _, ok := childSpan(next); ok {
+			limit = min(limit, s) // what follows, a code span for one, is not this image
+		}
+	}
 	if from >= limit {
 		return 0, false
 	}

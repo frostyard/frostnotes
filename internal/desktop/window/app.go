@@ -70,6 +70,8 @@ type App struct {
 	settings *api.VaultSettings
 	// afterSettings wait for settings to load.
 	afterSettings []func()
+	// settingsAsked says a request for them is running.
+	settingsAsked bool
 	syncInfo      *api.SyncStatus
 	conflict      []api.SyncConflict
 
@@ -109,6 +111,7 @@ type App struct {
 	sets         settingsDialog
 	focusGroup   string // the tab group the focus was last in
 	early        []api.Event
+	earlySeq     int64 // the sequence of what is held in early
 	revealed     map[string]*string
 }
 
@@ -124,7 +127,13 @@ func New(cfg Config) *App {
 	a.State = prefs.LoadState(filepath.Join(cfg.StateAt, "state.json"))
 	a.Store = workspace.NewStore(cfg.Env, filepath.Join(cfg.StateAt, "workspace"))
 	a.Session = session.New(cfg.Env, cfg.Dial, a.State.Seq)
-	a.Session.OnSeq = func(seq int64) { a.State.Seq = seq }
+	a.Session.OnSeq = func(seq int64) {
+		if a.listed {
+			a.State.Seq = seq
+			return
+		}
+		a.earlySeq = seq // a close before the list answers replays what is held
+	}
 	a.Store.OnError = a.report
 	a.Session.OnEvent = a.event
 	a.Session.OnResync = a.reloadAll
@@ -242,6 +251,7 @@ func (a *App) reloadAll() {
 		for _, ev := range early {
 			a.followEarly(ev)
 		}
+		a.State.Seq = max(a.State.Seq, a.earlySeq)
 		switch {
 		case a.vault != nil && slices.ContainsFunc(list, func(v api.Vault) bool { return v.ID == a.vault.ID }):
 			a.loadVaultData()
@@ -263,7 +273,7 @@ func (a *App) showVault(v *api.Vault) {
 	clear(a.previews)
 	a.vault = v
 	a.settings = nil // the old vault's say nothing of this one
-	a.afterSettings = nil
+	a.afterSettings, a.settingsAsked = nil, false
 	if v == nil {
 		a.Store.Load("")
 		a.Catalog, a.env = nil, nil
@@ -320,6 +330,7 @@ func (a *App) loadVaultData() {
 	id := a.vault.ID
 	a.Catalog.Reload()
 	a.refreshPanes()
+	a.settingsAsked = true
 	var settings *api.VaultSettings
 	var statuses []api.SyncStatus
 	var conflicts []api.SyncConflict
@@ -335,6 +346,7 @@ func (a *App) loadVaultData() {
 		if a.vault == nil || a.vault.ID != id {
 			return
 		}
+		a.settingsAsked = false
 		if err != nil {
 			if a.settings == nil && len(a.afterSettings) > 0 {
 				a.afterSettings = nil
@@ -369,6 +381,9 @@ func (a *App) withSettings(fn func()) {
 		return
 	}
 	a.afterSettings = append(a.afterSettings, fn)
+	if !a.settingsAsked { // an earlier request failed: nothing would release fn
+		a.loadVaultData()
+	}
 }
 
 func (a *App) scheduleRefresh() {

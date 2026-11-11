@@ -138,6 +138,51 @@ func TestAFailedWriteIsReportedAndRetried(t *testing.T) {
 	}
 }
 
+func TestALeftVaultsFailedWriteIsStillRetried(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.WriteFile(dir, nil, 0o600); err != nil { // a file where the folder goes
+		t.Fatal(err)
+	}
+	loop := desktoptest.NewLoop()
+	s := NewStore(loop, dir)
+	s.Load("/vault/one")
+	s.Update(func(w *Workspace) { w.Open(note("a.md"), Here) })
+	s.Load("/vault/two") // the write fails as the window moves on
+	s.Update(func(w *Workspace) { w.Open(note("b.md"), Here) })
+	loop.Advance(SaveDelay)
+	if s.Err == nil {
+		t.Fatal("no write failed")
+	}
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	loop.Advance(SaveRetry)
+	fresh := NewStore(desktoptest.NewLoop(), dir)
+	fresh.Load("/vault/one")
+	if fresh.Workspace().ActiveTab().View != note("a.md") {
+		t.Fatalf("the left vault's change is lost: %+v", fresh.Workspace().ActiveTab().View)
+	}
+	fresh.Load("/vault/two")
+	if fresh.Workspace().ActiveTab().View != note("b.md") {
+		t.Fatalf("the shown vault's change is lost: %+v", fresh.Workspace().ActiveTab().View)
+	}
+}
+
+func TestComingBackToAVaultFindsItsUnwrittenWorkspace(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.WriteFile(dir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(desktoptest.NewLoop(), dir)
+	s.Load("/vault/one")
+	s.Update(func(w *Workspace) { w.Open(note("a.md"), Here) })
+	s.Load("/vault/two")
+	s.Load("/vault/one")
+	if s.Workspace().ActiveTab().View != note("a.md") {
+		t.Fatalf("back to %+v", s.Workspace().ActiveTab().View)
+	}
+}
+
 func TestFollowLeavesAnUnreadableWorkspaceAlone(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(desktoptest.NewLoop(), dir)

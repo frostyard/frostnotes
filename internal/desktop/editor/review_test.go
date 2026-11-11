@@ -136,6 +136,39 @@ func TestManyAliasesOfOneLargeNodeShareOneBound(t *testing.T) {
 	}
 }
 
+func TestARenameKeepsTheValuesLinesByteForByte(t *testing.T) {
+	for _, c := range []struct{ in, from, to, want string }{
+		{"---\na: &x [1, 2]\nb: *x\n---\nbody\n", "b", "c", "---\na: &x [1, 2]\nc: *x\n---\nbody\n"},
+		{"---\na: &x [1, 2]\nb: *x\n---\nbody\n", "a", "z", "---\nz: &x [1, 2]\nb: *x\n---\nbody\n"},
+		{"---\na: 1 # why\n---\nbody\n", "a", "b", "---\nb: 1 # why\n---\nbody\n"},
+		{"---\n\"a: b\": 1\n---\nbody\n", "a: b", "c", "---\nc: 1\n---\nbody\n"},
+		{"---\n'it''s': 1\n---\nbody\n", "it's", "c", "---\nc: 1\n---\nbody\n"},
+		{"---\na:\n  - x\n  - y\n---\nbody\n", "a", "b c", "---\nb c:\n  - x\n  - y\n---\nbody\n"},
+		{"---\na: 1\n---\nbody\n", "a", "x: y", "---\n\"x: y\": 1\n---\nbody\n"},
+	} {
+		got, err := RenameProperty(c.in, c.from, c.to)
+		if err != nil {
+			t.Errorf("%q: %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%q made %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestARenamePastTheAliasBoundKeepsTheAlias(t *testing.T) {
+	var in strings.Builder
+	in.WriteString("---\nbig: &b [" + strings.TrimSuffix(strings.Repeat("x, ", 5000), ", ") + "]\nk1: *b\nk2: *b\nk3: *b\n---\nbody\n")
+	got, err := RenameProperty(in.String(), "k3", "renamed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "\nrenamed: *b\n") {
+		t.Fatalf("the alias is gone: %q", got[len(got)-60:])
+	}
+}
+
 func TestWrittenOutFrontmatterIsNotBounded(t *testing.T) {
 	in := "---\nbig: [" + strings.TrimSuffix(strings.Repeat("x, ", maxExpanded+10), ", ") + "]\nafter: y\n---\nbody\n"
 	props := ReadFrontmatter(in).Properties

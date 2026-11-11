@@ -100,3 +100,29 @@ func TestANoteWithoutProperties(t *testing.T) {
 		t.Fatalf("a panel for a note without frontmatter: %q", tt.Texts())
 	}
 }
+
+func TestThePropertiesPanelTakesNoChangeWhileTheNoteIsFrozen(t *testing.T) {
+	const note = "---\nstatus: draft\ndone: false\n---\nbody\n"
+	f, v, tt := openView(t, note)
+	tt.Frame()
+	thaw := f.doc.Freeze("Busy.")
+	tt.Frame()
+	_ = tt.Click("done")
+	_ = tt.Click("Remove status")
+	_ = tt.Click("status")
+	tt.Frame()
+	tt.Type("typed")
+	tt.Frame()
+	v.Properties.Commit()
+	if f.doc.Text() != note {
+		t.Fatalf("a frozen note changed: %q", f.doc.Text())
+	}
+	thaw() // the delete failed: what is shown is what the note holds
+	tt.Frame()
+	if err := tt.Click("done"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "---\nstatus: draft\ndone: true\n---\nbody\n"; f.doc.Text() != want {
+		t.Fatalf("after thawing: %q", f.doc.Text())
+	}
+}

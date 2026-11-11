@@ -317,6 +317,9 @@ func (st *state) advance(content string, line, start, next, limit int, o Options
 			if !spanRevealed(revealed, st.fromLine, line) {
 				res.Pieces = append(res.Pieces, Piece{Start: st.from, End: end})
 			}
+			if at := openComment(content[i+2:]); at >= 0 { // what follows opens another
+				st.block, st.from, st.fromLine = blockComment, start+i+2+at, line
+			}
 		}
 		return
 	case blockMath:

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -363,12 +364,75 @@ func RenameProperty(text, from, to string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("property %s has no editable lines", from)
 	}
-	rendered, err := renderProperty(to, p.props[i].Value, f.ending)
+	// Only the key changes: its value's lines may hold anchors, aliases and
+	// comments that a value read back could not write.
+	line := p.lines[u.start]
+	end := keyEnd(line)
+	key, err := keyText(to)
 	if err != nil {
 		return "", err
 	}
-	replaceUnit(p.lines, u, rendered)
-	return replaceFront(text, f, strings.Join(p.lines, ""))
+	if end < 0 {
+		return "", fmt.Errorf("property %s has no editable key", from)
+	}
+	p.lines[u.start] = key + line[end:]
+	next, err := replaceFront(text, f, strings.Join(p.lines, ""))
+	if err != nil {
+		return "", err
+	}
+	got := ReadFrontmatter(next).Properties
+	if j := slices.IndexFunc(got, func(x Property) bool { return x.Key == to }); j < 0 || !reflect.DeepEqual(got[j].Value, p.props[i].Value) {
+		return "", fmt.Errorf("property %s cannot be renamed to %s", from, to)
+	}
+	return next, nil
+}
+
+// keyEnd is where the key that starts a line ends: past a quoted key's closing
+// quote, or at the ":" that ends a plain key; -1 when it finds neither.
+func keyEnd(line string) int {
+	switch {
+	case strings.HasPrefix(line, `"`):
+		for i := 1; i < len(line); i++ {
+			switch line[i] {
+			case '\\':
+				i++
+			case '"':
+				return i + 1
+			}
+		}
+		return -1
+	case strings.HasPrefix(line, "'"):
+		for i := 1; i < len(line); i++ {
+			if line[i] != '\'' {
+				continue
+			}
+			if i+1 < len(line) && line[i+1] == '\'' {
+				i++
+				continue
+			}
+			return i + 1
+		}
+		return -1
+	}
+	for i := range len(line) {
+		if line[i] == ':' && (i+1 == len(line) || strings.ContainsRune(" \t\r\n", rune(line[i+1]))) {
+			return i
+		}
+	}
+	return -1
+}
+
+// keyText is a key as YAML writes it.
+func keyText(key string) (string, error) {
+	rendered, err := renderProperty(key, "", "\n")
+	if err != nil {
+		return "", err
+	}
+	text, ok := strings.CutSuffix(rendered, ": \"\"\n")
+	if !ok || strings.Contains(text, "\n") {
+		return "", fmt.Errorf("the key %s cannot be written on one line", key)
+	}
+	return text, nil
 }
 
 // The types of a property, as Obsidian names them.

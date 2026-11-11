@@ -412,6 +412,14 @@ func TestNestedLinkTextIsLinear(t *testing.T) {
 	}
 }
 
+func TestACommentOpenedOnAClosingLineIsTracked(t *testing.T) {
+	in := "a %%b\nc%% tail %%d\nhidden *x*\ne%% end\n\nafter *x*\n"
+	var s Scanner
+	if got, want := show(in, s.Pieces(in, nil, false)), "a  tail  end\n\nafter x\n"; got != want {
+		t.Fatalf("%q, want %q", got, want)
+	}
+}
+
 func TestDeepOrUnclosedLinkTextStaysWithinATimeBound(t *testing.T) {
 	const n = 400000
 	for name, line := range map[string]string{

@@ -231,10 +231,12 @@ func (p *PropertiesPanel) View(c *ui.Context) ui.Element {
 			ui.Text(c, "This note's frontmatter cannot be read: "+p.parsed.Error).TextColor(t.Danger).Wrap()
 			return
 		}
-		for _, prop := range p.parsed.Properties {
-			p.row(c.Key(prop.Key), prop)
-		}
-		p.addRow(c)
+		ui.Column(c).Gap(frostui.SpaceXS).AlignItems(ui.Stretch).Disabled(p.doc.ReadOnly() != "").Children(func() {
+			for _, prop := range p.parsed.Properties {
+				p.row(c.Key(prop.Key), prop)
+			}
+			p.addRow(c)
+		})
 		if p.err != "" {
 			ui.Text(c, p.err).TextColor(t.Danger).Wrap()
 		}

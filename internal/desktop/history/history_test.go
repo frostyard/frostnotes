@@ -99,6 +99,27 @@ func TestTheMergeView(t *testing.T) {
 	}
 }
 
+func TestTheMergeViewTakesNoEditWhileFrozen(t *testing.T) {
+	f := open(t)
+	b := editor.Bind(f.doc)
+	m := NewMerge(b, "second\nLINE TWO\n", "Comparing with a conflict")
+	tt := ui.NewTester(func(c *ui.Context) { m.View(c) }, 900, 500)
+	tt.Frame()
+	thaw := f.doc.Freeze("Busy.")
+	tt.Frame()
+	if m.State.Editable || m.State.HunkActions {
+		t.Fatal("the merge view still offers edits")
+	}
+	if m.TakeBack(0) {
+		t.Fatal("a chunk was taken back from a frozen note")
+	}
+	thaw()
+	tt.Frame()
+	if !m.State.Editable || !m.TakeBack(0) {
+		t.Fatal("the merge view stayed locked")
+	}
+}
+
 func TestRestoringTwiceKeepsTheSelection(t *testing.T) {
 	f := open(t)
 	f.Write("Plan.md", f.Read("Plan.md").Hash, "third\nline two\n")

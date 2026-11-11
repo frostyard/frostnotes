@@ -846,6 +846,44 @@ func TestAnOversizedImageBlobIsRefused(t *testing.T) {
 	})
 }
 
+func TestANewNoteAsksAgainWhenTheSettingsRequestFailed(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.a.settings, f.a.settingsAsked = nil, false // the first request failed
+	f.a.createNote(workspace.Here)
+	f.until("the new note", func() bool { return f.a.activeFile() == "Untitled.md" })
+}
+
+func TestAddingAPropertyWaitsOutAFreeze(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "text\n")
+	f.openVault()
+	e := f.openNoteTab("a.md")
+	d := e.Binding().Document()
+	thaw := d.Freeze("Busy.")
+	defer thaw()
+	f.a.addFileProperty()
+	if d.Text() != "text\n" {
+		t.Fatalf("the note holds %q", d.Text())
+	}
+	if len(f.a.toasts) != 1 || f.a.toasts[0].Title != "Busy." {
+		t.Fatalf("it said %+v", f.a.toasts)
+	}
+}
+
+func TestAReadingViewLinkScrollsToItsHeading(t *testing.T) {
+	f := start(t)
+	f.Create("b.md", "text\n\n## The Goals\n\nmore\n")
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("b.md") })
+	f.a.Prefs.DefaultView = workspace.ModeRead
+	f.a.followNote("b.md", "#The Goals", false)
+	f.until("the heading", func() bool {
+		tc := f.a.activeContent()
+		return tc != nil && tc.read != nil && f.a.pending == nil && tc.read.Options.Anchor == "the-goals"
+	})
+}
+
 func TestANewVaultForgetsTheOldSettings(t *testing.T) {
 	f := start(t)
 	f.openVault()
@@ -964,12 +1002,20 @@ func TestAnEventBeforeTheVaultListIsNotLost(t *testing.T) {
 	f.openVault()
 	f.openNoteTab("a.md")
 	f.a.listed = false
+	seen := f.a.State.Seq
+	f.a.Session.OnSeq(seen + 5)
 	f.a.event(1, api.NoteMoved{VaultID: f.Vault, From: "a.md", To: "z.md"})
 	if len(f.a.early) != 1 {
 		t.Fatal("the event was dropped")
 	}
+	if f.a.State.Seq != seen {
+		t.Fatal("a close now would never replay the held event")
+	}
 	f.a.reloadAll()
 	f.until("the replay", func() bool { return f.a.listed && len(f.a.early) == 0 })
+	if f.a.State.Seq != seen+5 {
+		t.Fatalf("sequence %d after the replay", f.a.State.Seq)
+	}
 	if f.a.Store.Workspace().ActiveTab().View.Path != "z.md" {
 		t.Fatalf("not followed: %+v", f.a.Store.Workspace().ActiveTab().View)
 	}
@@ -994,18 +1040,14 @@ func TestACleanupFailureIsNotACancel(t *testing.T) {
 	}
 }
 
-func TestACancelAfterTheAddForgetsTheVault(t *testing.T) {
+func TestACancelDoesNotCutTheAddShort(t *testing.T) {
 	f := start(t)
-	dir := t.TempDir()
-	if _, err := f.Other.Vault().Add(t.Context(), &api.VaultAddParams{Path: dir}); err != nil {
-		t.Fatal(err)
-	}
-	r := joinRun{c: f.Other, folder: dir}
-	if !r.registered() {
-		t.Fatal("the vault is listed")
-	}
-	r.forgetFolder()
-	if r.registered() {
-		t.Fatal("the vault stayed")
+	dir := filepath.Join(t.TempDir(), "new")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	r := joinRun{c: f.Other, ctx: ctx, folder: dir}
+	v, err := r.addVault()
+	if err != nil || v == nil {
+		t.Fatalf("vault %v, err %v", v, err)
 	}
 }

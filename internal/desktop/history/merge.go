@@ -36,7 +36,7 @@ func NewMerge(b *editor.Binding, other, title string) *Merge {
 // TakeBack puts the other side's text of chunk i back in the note, as
 // the user's edit.
 func (m *Merge) TakeBack(i int) bool {
-	if i < 0 || i >= len(m.State.Hunks()) {
+	if i < 0 || i >= len(m.State.Hunks()) || m.b.Document().ReadOnly() != "" {
 		return false
 	}
 	m.State.Revert(i)
@@ -47,6 +47,8 @@ func (m *Merge) TakeBack(i int) bool {
 // View draws the merge view.
 func (m *Merge) View(c *ui.Context) ui.Element {
 	m.b.Sync()
+	writable := m.b.Document().ReadOnly() == ""
+	m.State.Editable, m.State.HunkActions = writable, writable
 	c.OnWindowShortcut(ui.Cmd, ui.KeyZ, func() { m.b.Undo() })
 	c.OnWindowShortcut(ui.Cmd|ui.Shift, ui.KeyZ, func() { m.b.Redo() })
 	c.OnWindowShortcut(ui.Cmd, ui.KeyY, func() { m.b.Redo() })

@@ -224,11 +224,16 @@ type Store struct {
 	Err error
 	// OnError is told of a new failure.
 	OnError func(error)
+
+	// unwritten holds, by vault, a workspace the window has left whose last
+	// write failed, until a retry lands it.
+	unwritten map[string]*Workspace
+	retry     func() // stops the timer of the next retry
 }
 
 // NewStore keeps workspaces in dir.
 func NewStore(env notes.Env, dir string) *Store {
-	return &Store{env: env, dir: dir, ws: New()}
+	return &Store{env: env, dir: dir, ws: New(), unwritten: map[string]*Workspace{}}
 }
 
 func (s *Store) file(vaultPath string) string {
@@ -264,12 +269,49 @@ func (s *Store) Load(vaultPath string) {
 		return
 	}
 	s.Flush()
+	if s.stop != nil { // the write failed, and the retry would write the next vault's
+		s.stop()
+		s.stop = nil
+		s.unwritten[s.vault] = s.ws
+		s.scheduleRetry()
+	}
 	s.vault = vaultPath
 	if vaultPath == "" {
 		s.ws = New()
 		return
 	}
+	if w := s.unwritten[vaultPath]; w != nil {
+		delete(s.unwritten, vaultPath)
+		s.ws = w
+		s.stop = s.env.After(SaveDelay, s.Flush)
+		return
+	}
 	s.ws = s.read(vaultPath)
+}
+
+func (s *Store) scheduleRetry() {
+	if s.retry != nil {
+		s.retry()
+	}
+	s.retry = s.env.After(SaveRetry, s.writeUnwritten)
+}
+
+// writeUnwritten tries again the workspaces of vaults the window left.
+func (s *Store) writeUnwritten() {
+	if s.retry != nil {
+		s.retry()
+		s.retry = nil
+	}
+	for p, w := range s.unwritten {
+		err := s.write(p, w)
+		s.record(err)
+		if err == nil {
+			delete(s.unwritten, p)
+		}
+	}
+	if len(s.unwritten) > 0 {
+		s.scheduleRetry()
+	}
 }
 
 // Update applies an operation and writes the result soon.
@@ -283,6 +325,7 @@ func (s *Store) Update(op func(*Workspace)) {
 
 // Flush writes a pending change now.
 func (s *Store) Flush() {
+	s.writeUnwritten()
 	if s.stop == nil {
 		return
 	}
@@ -332,6 +375,11 @@ func (s *Store) Follow(vaultPath string, op func(*Workspace)) {
 		// At once: the event's sequence is kept, so it will not be replayed.
 		s.Update(op)
 		s.Flush()
+		return
+	}
+	if w := s.unwritten[vaultPath]; w != nil { // newer than its file
+		op(w)
+		s.writeUnwritten()
 		return
 	}
 	data, err := os.ReadFile(s.file(vaultPath))

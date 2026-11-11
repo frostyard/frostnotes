@@ -636,6 +636,10 @@ func (a *App) insertTemplate(template string) {
 			a.notify("Cannot insert the template: " + err.Error())
 			return
 		}
+		if reason := d.ReadOnly(); reason != "" {
+			a.notify(reason)
+			return
+		}
 		a.applyTemplate(e, content)
 	})
 }
@@ -671,6 +675,10 @@ func (a *App) addFileProperty() {
 	e := tc.ed.Editor
 	e.Binding().Sync()
 	d := e.Binding().Document()
+	if reason := d.ReadOnly(); reason != "" {
+		a.notify(reason)
+		return
+	}
 	if !editor.ReadFrontmatter(d.Text()).Exists {
 		at := editor.FrontmatterStart(d.Text())
 		cs, err := notes.ChangesOf(len(d.Text()), notes.Change{From: at, To: at, Insert: "---\n---\n"})

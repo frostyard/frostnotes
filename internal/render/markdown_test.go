@@ -166,6 +166,11 @@ func TestAReferenceImageTakesNoOtherImagesDestination(t *testing.T) {
 			t.Errorf("%q made %q", in, got)
 		}
 	}
+	for _, in := range []string{"![][r] `![](photo.png)`\n\n[r]: photo.png\n", "![][r]`![](photo.png)`\n\n[r]: photo.png\n"} {
+		if got := Markdown([]byte(in), mdVault()); strings.Contains(got, "`![](<blob") {
+			t.Errorf("the code span was rewritten: %q", got)
+		}
+	}
 	got := Markdown([]byte("![][r] ![](photo.png)\n\n[r]: doc.pdf\n"), mdVault())
 	if !strings.Contains(got, "![](<blob:aaaa.png>)") {
 		t.Errorf("the image after a reference was not rewritten: %q", got)
