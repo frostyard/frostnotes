@@ -1080,6 +1080,7 @@ A note rendered as Markdown for a native view (docs/specs/render.md#markdown-for
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `markdown` | `string` | CommonMark with GitHub's extensions: Obsidian's links as note: and tag: links, attachments as blob: images, highlights as <mark>, callouts and note embeds as fenced blocks of the frostnotes-callout and frostnotes-embed languages, comments and block IDs gone, the rest as written. |
+| `sourceLines` | `[]int` (optional) | For each rendered Markdown line, its 1-based source-note line; 0 for generated or embedded-note lines. Absent on older daemons. Used only with the exact content rendered. |
 
 ### Type `VersionContent`
 

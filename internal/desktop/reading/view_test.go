@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/markdown/parser"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
@@ -207,6 +208,61 @@ func TestABlockAsksForThePathItHadWhenDrawn(t *testing.T) {
 	}
 }
 
+func TestReadingTaskClickEditsItsMappedSourceLine(t *testing.T) {
+	for _, source := range []string{"---\ntitle: Tasks\n---\n%%comment%%\n- [ ] water\n", "> [!note] Work\n> - [ ] water\n"} {
+		t.Run(source, func(t *testing.T) {
+			f := open(t, map[string]string{"Tasks.md": source}, "Tasks.md")
+			if err := f.tt.Click("Mark task done"); err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Replace(source, "[ ]", "[x]", 1)
+			if f.doc.Text() != want {
+				t.Fatalf("got %q, want %q; mapping %v of %q", f.doc.Text(), want, f.view.sourceLines, f.view.md)
+			}
+			f.doc.Save()
+			f.loop.Until(t, "save", func() bool { return f.doc.Status() == notes.StatusClean })
+			got, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "Tasks.md"})
+			if err != nil || got.Content != want {
+				t.Fatalf("saved %+v: %v", got, err)
+			}
+		})
+	}
+}
+
+func TestObsoleteReadingTaskClickDoesNotEdit(t *testing.T) {
+	f := open(t, map[string]string{"Tasks.md": "- [ ] original\n"}, "Tasks.md")
+	cs, _ := notes.ChangesOf(len(f.doc.Text()), notes.Change{From: 0, To: 0, Insert: "new line\n"})
+	f.doc.Local(cs)
+	before := f.doc.Text()
+	_ = f.tt.Click("Mark task done") // the stale action may already be disabled
+	if f.doc.Text() != before {
+		t.Fatal("obsolete checkbox changed current text")
+	}
+}
+
+func TestBlockLinkScrollsToItsParagraph(t *testing.T) {
+	source := strings.Repeat("Earlier paragraph.\n\n", 60) + "Destination paragraph. ^target\n"
+	f := open(t, map[string]string{"Blocks.md": source}, "Blocks.md")
+	var scroll ui.ScrollState
+	f.tt = ui.NewTester(func(c *ui.Context) {
+		c.DisableAnimations()
+		ui.Scroll(c).Fill().TrackScroll(&scroll).Children(func() { f.view.View(c) })
+	}, 400, 160)
+	f.view.GoTo("#^target")
+	f.tt.Frame()
+	if scroll.Y <= 0 {
+		t.Fatal("block link left the view at the top")
+	}
+	scroll.Y = 0
+	f.view.SetRemoteImages(true) // recreating the drawer retains action/anchor hooks
+	f.tt.Frame()
+	f.view.GoTo("#^target")
+	f.tt.Frame()
+	if scroll.Y <= 0 {
+		t.Fatal("repeated block link did not scroll")
+	}
+}
+
 func TestDecodeAVIF(t *testing.T) {
 	// A generated transparent 4 x 3 AVIF, with no external fixture.
 	encoded, err := base64.StdEncoding.DecodeString("AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAAGUbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAAAAAAAOcGl0bQAAAAAAAQAAACxpbG9jAAAAAEQAAAIAAQAAAAEAAAG8AAAAFQACAAAAAQAAAdEAAAAVAAAAQmlpbmYAAAAAAAIAAAAaaW5mZQIAAAAAAQAAYXYwMUNvbG9yAAAAABppbmZlAgAAAAACAABhdjAxQWxwaGEAAAAAGmlyZWYAAAAAAAAADmF1eGwAAgABAAEAAADRaXBycAAAAKtpcGNvAAAAFGlzcGUAAAAAAAAABAAAAAMAAAAQcGl4aQAAAAADCAgIAAAAE2F2MUOBAAwACgUYBHiBCAAAABNjb2xybmNseAABAA0ABoAAAAAOcGl4aQAAAAABCAAAABNhdjFDgQAcAAoFGAR4hUAAAAA4YXV4QwAAAAB1cm46bXBlZzptcGVnQjpjaWNwOnN5c3RlbXM6YXV4aWxpYXJ5OmFscGhhAAAAAB5pcG1hAAAAAAAAAAIAAQQBAoMEAAIEAQWGhwAAADJtZGF0EgAKBRgEeIEIMgoWYAAAAAHpuw3IEgAKBRgEeIVAMgoWYAAAAAYE0Hcg")
@@ -245,5 +301,23 @@ func TestRemoteImagePreferenceRetriesRefusedImages(t *testing.T) {
 	case <-requests:
 	case <-time.After(5 * time.Second):
 		t.Fatal("enabling remote images did not retry the cached refusal")
+	}
+}
+
+func TestStandaloneBlockIDsResolveTheirContainer(t *testing.T) {
+	for _, tc := range []struct {
+		source string
+		kind   parser.Kind
+	}{
+		{"- first\n- second\n\n^target\n", parser.List},
+		{"> quote\n\n^target\n", parser.Quote},
+		{"| a |\n| - |\n| 1 |\n\n^target\n", parser.Table},
+	} {
+		f := open(t, map[string]string{"Blocks.md": "Before.\n\n" + tc.source}, "Blocks.md")
+		d := parser.Parse(f.view.Markdown())
+		i := f.view.anchorBlock(d, "^target")
+		if i < 0 || d.Block(i).Kind != tc.kind {
+			t.Fatalf("%q: index %d in %q", tc.source, i, f.view.Markdown())
+		}
 	}
 }

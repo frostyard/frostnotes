@@ -1245,6 +1245,10 @@ type RenderedMarkdown struct {
 	// embeds as fenced blocks of the frostnotes-callout and frostnotes-embed
 	// languages, comments and block IDs gone, the rest as written.
 	Markdown string `json:"markdown"`
+	// For each rendered Markdown line, its 1-based source-note line; 0 for
+	// generated or embedded-note lines. Absent on older daemons. Used only with
+	// the exact content rendered.
+	SourceLines []int64 `json:"sourceLines,omitzero"`
 }
 
 // VersionContent: A version's content.

@@ -192,6 +192,35 @@ func TestAdjacentReferenceImagesCannotRewriteCode(t *testing.T) {
 	}
 }
 
+func TestNativeSourceLinesFollowCalloutsAndSkipEmbeds(t *testing.T) {
+	source := "---\ntitle: Example\n---\n%% hidden\ncomment %%\n- [ ] first #garden\n\n> [!note] Tasks\n> - [ ] inner\n\n![[Plan]]\n\n- [ ] last\n"
+	got := MarkdownWithSourceLines([]byte(source), mdVault())
+	lines := strings.Split(got.Markdown, "\n")
+	if len(got.SourceLines) != len(lines) {
+		t.Fatalf("map has %d lines for %d: %q", len(got.SourceLines), len(lines), got.Markdown)
+	}
+	for i, line := range lines {
+		switch {
+		case strings.Contains(line, "- [ ] first"):
+			if got.SourceLines[i] != 6 {
+				t.Fatalf("first: %d", got.SourceLines[i])
+			}
+		case strings.Contains(line, "- [ ] inner"):
+			if got.SourceLines[i] != 9 {
+				t.Fatalf("inner: %d", got.SourceLines[i])
+			}
+		case strings.Contains(line, "- [ ] last"):
+			if got.SourceLines[i] != 13 {
+				t.Fatalf("last: %d", got.SourceLines[i])
+			}
+		case strings.Contains(line, "Grow "):
+			if got.SourceLines[i] != 0 {
+				t.Fatalf("embed owns source line: %d", got.SourceLines[i])
+			}
+		}
+	}
+}
+
 func TestNativeMediaEmbeds(t *testing.T) {
 	o := mdVault()
 	o.Resolve = func(_, target string) string { return target }

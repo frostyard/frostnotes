@@ -1099,6 +1099,49 @@ func TestACancelDoesNotCutTheAddShort(t *testing.T) {
 	}
 }
 
+func TestReadingTaskClickHasUndoAndRedoWithoutAnEditor(t *testing.T) {
+	f := start(t)
+	source := "- [ ] water\n"
+	f.Create("Tasks.md", source)
+	f.openVault()
+	f.until("catalog", func() bool { return f.a.hasFile("Tasks.md") })
+	f.a.Prefs.DefaultView = workspace.ModeRead
+	f.a.followNote("Tasks.md", "", false)
+	f.until("loaded task", func() bool { tc := f.a.activeContent(); return tc != nil && tc.doc != nil && tc.doc.Loaded() })
+	f.loop.Advance(reading.RenderDelay)
+	f.waitText("water")
+	tc := f.a.activeContent()
+	if tc.ed != nil || tc.readBuffer == nil {
+		t.Fatal("reading view has no history buffer")
+	}
+	f.until("interactive task", func() bool {
+		f.loop.Advance(reading.RenderDelay)
+		return f.tt.Click("Mark task done") == nil
+	})
+	if tc.doc.Text() != "- [x] water\n" {
+		t.Fatalf("click: %q", tc.doc.Text())
+	}
+	f.a.run("editor:undo")
+	if tc.doc.Text() != source {
+		t.Fatalf("undo: %q", tc.doc.Text())
+	}
+	f.a.run("editor:redo")
+	if tc.doc.Text() != "- [x] water\n" {
+		t.Fatalf("redo: %q", tc.doc.Text())
+	}
+	f.a.toggleMode()
+	f.until("editor mode", func() bool { return f.a.activeEditor() != nil })
+	f.a.run("editor:undo")
+	if tc.doc.Text() != source {
+		t.Fatalf("undo after mode switch: %q", tc.doc.Text())
+	}
+	tc.doc.Save()
+	f.until("save", func() bool { return tc.doc.Status() == notes.StatusClean })
+	if got := f.Read("Tasks.md").Content; got != source {
+		t.Fatalf("saved %q", got)
+	}
+}
+
 func TestStatusEditingModeMenuChoosesEachMode(t *testing.T) {
 	f := start(t)
 	f.Create("a.md", "text\n")

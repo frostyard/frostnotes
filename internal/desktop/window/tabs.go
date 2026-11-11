@@ -30,18 +30,19 @@ var (
 // tabContent is what a tab's view draws with, kept while the tab shows
 // the same thing.
 type tabContent struct {
-	view     workspace.View
-	doc      *notes.Document
-	ed       *editor.NoteView
-	read     *reading.View
-	hist     *history.View
-	merg     *history.Merge
-	held     string // a merge's other text
-	img      ui.ImageSource
-	fileRead bool
-	err      string
-	scroll   ui.ScrollState
-	restored bool
+	view       workspace.View
+	doc        *notes.Document
+	ed         *editor.NoteView
+	read       *reading.View
+	readBuffer *editor.Binding
+	hist       *history.View
+	merg       *history.Merge
+	held       string // a merge's other text
+	img        ui.ImageSource
+	fileRead   bool
+	err        string
+	scroll     ui.ScrollState
+	restored   bool
 }
 
 func sameContent(a, b workspace.View) bool {
@@ -58,10 +59,13 @@ func (a *App) content(tab *workspace.Tab) *tabContent {
 		}
 		return tc
 	}
-	if tc := a.tabs[tab.ID]; tc != nil {
-		a.release(tc)
-	}
+	// Acquire the replacement before releasing the old view. Switching modes
+	// of the same note must retain its shared buffer and undo history.
+	previous := a.tabs[tab.ID]
 	tc := a.make(tab)
+	if previous != nil {
+		a.release(previous)
+	}
 	a.tabs[tab.ID] = tc
 	return tc
 }
@@ -74,6 +78,7 @@ func (a *App) make(tab *workspace.Tab) *tabContent {
 	case workspace.ViewNote:
 		tc.doc = a.Session.Open(a.vault.ID, v.Path)
 		if v.Mode == workspace.ModeRead {
+			tc.readBuffer = a.bindingFor(tc.doc)
 			tc.read = reading.New(a.cfg.Env, a.readingAPI, tc.doc, a.cfg.Blobs)
 			tc.read.RemoteImages = a.Prefs.LoadRemoteImages
 			tc.read.Links = a.readingLinks()
@@ -180,7 +185,7 @@ func (a *App) release(tc *tabContent) {
 	if tc.ed != nil {
 		tc.ed.Properties.Commit() // a field with the focus has not committed
 	}
-	if tc.ed != nil || tc.merg != nil {
+	if tc.ed != nil || tc.merg != nil || tc.readBuffer != nil {
 		if b := a.bindings[tc.doc]; b != nil {
 			if b.refs--; b.refs == 0 {
 				b.b.Close()

@@ -382,6 +382,20 @@ func (d *Document) Edit(cs ChangeSet) {
 	}
 }
 
+// EditIfText applies an outside edit only while the visible buffer still has
+// base. Rendered controls use it to reject clicks from an obsolete rendering.
+func (d *Document) EditIfText(base string, cs ChangeSet) bool {
+	d.syncBuffer()
+	if d.text != base || !d.change(cs) {
+		return false
+	}
+	if d.buf != nil {
+		d.buf.Edit(cs)
+	}
+	d.notify()
+	return true
+}
+
 func (d *Document) markDirty() {
 	first := !d.dirty
 	d.dirty = true

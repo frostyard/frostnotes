@@ -1049,6 +1049,15 @@ a record holds the app ID `org.frostyard.Frostnotes`, the version, component
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check, its updates (gaps G2 and G3) and the move from a host notesd (G4) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
 - The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) (the desktop app on MyGo and frostui; the React app stays as lodge's web app)
 
+Native reading task clicks and `#^block` navigation use the original source-line
+map from [renderMarkdown](../specs/render.md#markdown-for-native-views), built in
+[plan 0009](../plans/0009-mygo-desktop.md) under
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
+Task edits reject stale renderings after synchronizing the attached buffer and
+use the shared document's save/merge path. Tasks in embedded notes remain
+read-only. Block IDs resolve to rendered paragraph/list positions, and repeated
+links scroll again.
+
 Native audio/video attachment tabs and standalone media embeds use MyGo's
 playback APIs. [Rendered media fences](../specs/render.md#markdown-for-native-views)
 contain only blob identifiers. Playback accepts a full SHA-256 and a supported

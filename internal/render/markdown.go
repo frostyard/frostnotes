@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -52,40 +53,115 @@ func markdownOf(note []byte, opts Options, stack []string, left *budget) string 
 type edit struct {
 	start, end int
 	text       string
+	lines      []int
 }
 
 type rewriter struct {
-	opts  Options
-	stack []string
-	left  *budget
-	body  []byte
-	edits []edit
+	opts    Options
+	stack   []string
+	left    *budget
+	body    []byte
+	origins []int
+	edits   []edit
 }
 
 // rewrite rewrites a body (a note's, or a callout's inside) as Markdown.
+// NativeMarkdown includes source-line provenance for interactive native views.
+type NativeMarkdown struct {
+	Markdown    string
+	SourceLines []int
+}
+
+// MarkdownWithSourceLines renders the note and maps output lines to its source.
+// Embedded notes map to zero: clicks must never write a different document.
+func MarkdownWithSourceLines(note []byte, opts Options) NativeMarkdown {
+	body, base := markdown.RenderSource(note)
+	origins := make([]int, bytes.Count(body, []byte("\n"))+1)
+	for i := range origins {
+		origins[i] = base + i
+	}
+	return rewriteMapped(body, opts, []string{opts.Path}, &budget{embeds: MaxEmbeds, bytes: MaxEmbedBytes}, origins)
+}
+
 func rewrite(body []byte, opts Options, stack []string, left *budget) string {
-	md := markdown.Goldmark(goldmark.WithParserOptions(
-		parser.WithInlineParsers(util.Prioritized(highlightParser{}, 500))))
+	return rewriteMapped(body, opts, stack, left, nil).Markdown
+}
+
+func rewriteMapped(body []byte, opts Options, stack []string, left *budget, origins []int) NativeMarkdown {
+	md := markdown.Goldmark(goldmark.WithParserOptions(parser.WithInlineParsers(util.Prioritized(highlightParser{}, 500))))
 	root := md.Parser().Parse(text.NewReader(body))
-	r := &rewriter{opts: opts, stack: stack, left: left, body: body}
+	r := &rewriter{opts: opts, stack: stack, left: left, body: body, origins: origins}
 	_ = ast.Walk(root, r.visit)
 	slices.SortStableFunc(r.edits, func(a, b edit) int { return a.start - b.start })
-	var out bytes.Buffer
+	starts := []int{0}
+	for i, c := range body {
+		if c == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	origin := func(at int) int {
+		i := sort.Search(len(starts), func(i int) bool { return starts[i] > at }) - 1
+		if i >= 0 && i < len(origins) {
+			return origins[i]
+		}
+		return 0
+	}
+	var out strings.Builder
+	lines := []int{origin(0)}
+	// appendText assigns provenance to each newly started output line. Text
+	// appended midway through a line keeps that line's existing provenance.
+	appendText := func(value string, mapped []int, fallback int) {
+		line := 0
+		if out.Len() == 0 || strings.HasSuffix(out.String(), "\n") {
+			if len(mapped) > 0 {
+				lines[len(lines)-1] = mapped[0]
+			} else {
+				lines[len(lines)-1] = fallback
+			}
+		}
+		for _, c := range value {
+			if c == '\n' {
+				line++
+				n := fallback
+				if line < len(mapped) {
+					n = mapped[line]
+				}
+				lines = append(lines, n)
+			}
+		}
+		out.WriteString(value)
+	}
+	unchanged := func(from, to int) {
+		first := sort.Search(len(starts), func(i int) bool { return starts[i] > from }) - 1
+		var mapped []int
+		for i := first; i < len(starts) && starts[i] <= to; i++ {
+			if i < len(origins) {
+				mapped = append(mapped, origins[i])
+			} else {
+				mapped = append(mapped, 0)
+			}
+		}
+		appendText(string(body[from:to]), mapped, origin(from))
+	}
 	pos := 0
 	for _, e := range r.edits {
 		if e.start < pos {
-			continue // inside an edit already made
+			continue
 		}
-		out.Write(body[pos:e.start])
-		out.WriteString(e.text)
+		unchanged(pos, e.start)
+		fallback := 0
+		if !strings.Contains(e.text, "\n") {
+			fallback = origin(e.start)
+		}
+		appendText(e.text, e.lines, fallback)
 		pos = e.end
 	}
-	out.Write(body[pos:])
-	return out.String()
+	unchanged(pos, len(body))
+	return NativeMarkdown{Markdown: out.String(), SourceLines: lines}
 }
 
 func (r *rewriter) add(start, end int, text string) {
-	r.edits = append(r.edits, edit{start, end, text})
+	r.edits = append(r.edits, edit{start: start, end: end, text: text})
 }
 
 func (r *rewriter) resolve(target string) string {
@@ -517,8 +593,16 @@ func (r *rewriter) callout(q ast.Node) bool {
 	if title := strings.TrimSpace(string(m[3])); title != "" {
 		info += " " + title
 	}
-	body := rewrite([]byte(inner.String()), r.opts, r.stack, r.left)
-	r.add(start, end, inContainer(fence(info, body), container))
+	firstLine := bytes.Count(r.body[:start], []byte("\n"))
+	var origins []int
+	if firstLine+1 < len(r.origins) {
+		origins = r.origins[firstLine+1 : min(firstLine+len(lines), len(r.origins))]
+	}
+	body := rewriteMapped([]byte(inner.String()), r.opts, r.stack, r.left, origins)
+	output := inContainer(fence(info, body.Markdown), container)
+	mapped := append([]int{0}, body.SourceLines...)
+	mapped = append(mapped, 0)
+	r.edits = append(r.edits, edit{start: start, end: end, text: output, lines: mapped})
 	return true
 }
 

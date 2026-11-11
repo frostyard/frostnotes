@@ -886,11 +886,15 @@ func (a *App) commandActions() map[string]func() {
 		"editor:undo": func() {
 			if e := a.activeEditor(); e != nil {
 				e.Undo()
+			} else if tc := a.activeContent(); tc != nil && tc.readBuffer != nil {
+				tc.readBuffer.Undo()
 			}
 		},
 		"editor:redo": func() {
 			if e := a.activeEditor(); e != nil {
 				e.Redo()
+			} else if tc := a.activeContent(); tc != nil && tc.readBuffer != nil {
+				tc.readBuffer.Redo()
 			}
 		},
 	}
@@ -927,6 +931,9 @@ func (a *App) applies(id string) bool {
 		return tab.View.Type == workspace.ViewNote
 	case "sync:view-version-history", "workspace:edit-file-title":
 		return tab.View.Type == workspace.ViewNote || tab.View.Type == workspace.ViewFile
+	case "editor:undo", "editor:redo":
+		tc := a.activeContent()
+		return a.activeEditor() != nil || tc != nil && tc.readBuffer != nil
 	case "insert-template", "markdown:add-metadata-property":
 		return a.activeEditor() != nil
 	case "editor:follow-link", "editor:open-link-in-new-leaf", "editor:open-link-in-new-split", "editor:open-link-in-new-window":
