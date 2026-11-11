@@ -24,11 +24,12 @@ const (
 // it were the note, and only those on screen are asked for. UI thread only.
 type Blocks struct {
 	*drawer
-	env        notes.Env
-	api        func() Renderer
-	entries    map[string]*rendering
-	generation int
-	stop       func()
+	env             notes.Env
+	api             func() Renderer
+	entries         map[string]*rendering
+	generation      int
+	imageGeneration int
+	stop            func()
 }
 
 // rendering is what notesd said of one piece of Markdown.
@@ -58,6 +59,9 @@ func (b *Blocks) Changed() {
 // View draws source, within width when it is not 0; its source, dimmed,
 // until notesd has answered.
 func (b *Blocks) View(c *ui.Context, source string, width int) {
+	b.Options.InlineMath = func(tex string, size float32) (markdown.InlineObject, bool) {
+		return b.math.Inline(tex, size, c.Theme().Text)
+	}
 	r := b.rendering(source)
 	if !r.done {
 		ui.Text(c, source).TextColor(c.Theme().TextMuted).Wrap()
@@ -67,7 +71,7 @@ func (b *Blocks) View(c *ui.Context, source string, width int) {
 	if width > 0 {
 		col.MaxWidth(float32(width))
 	}
-	col.Children(func() { markdown.View(c, r.md, &b.Options) })
+	col.Children(func() { markdown.View(c.Key(b.imageGeneration), r.md, &b.Options) })
 }
 
 func (b *Blocks) rendering(source string) *rendering {
@@ -104,4 +108,13 @@ func (b *Blocks) render(source string, r *rendering) {
 			}
 		})
 	}()
+}
+
+// SetRemoteImages refreshes blocks whose image load was previously refused.
+func (b *Blocks) SetRemoteImages(on bool) {
+	if b.RemoteImages == on {
+		return
+	}
+	b.drawer = b.withRemoteImages(on)
+	b.imageGeneration++
 }

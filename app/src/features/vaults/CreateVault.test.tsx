@@ -36,8 +36,6 @@ describe("vaultFolder", () => {
 function setup(props: Partial<CreateVaultProps> = {}) {
   const all: CreateVaultProps = {
     location: null,
-    canPick: true,
-    onBrowse: vi.fn(),
     onLocation: vi.fn(),
     onCreate: vi.fn(),
     onBack: vi.fn(),
@@ -56,7 +54,7 @@ describe("CreateVault", () => {
     expect(screen.getByRole("region", { name: "Create new vault" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Create new vault" })).toBeTruthy();
     expect(document.activeElement).toBe(name());
-    expect(screen.getByText("No folder chosen")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Location" }) as HTMLInputElement).value).toBe("");
     expect(create().hasAttribute("disabled")).toBe(true);
   });
 
@@ -65,7 +63,7 @@ describe("CreateVault", () => {
     await user.type(name(), "  Garden ");
     expect(create().hasAttribute("disabled")).toBe(true); // no folder yet
     rerender(<CreateVault {...props} location="/home/wren/Documents" />);
-    expect(screen.getByText("/home/wren/Documents")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Location" }) as HTMLInputElement).value).toBe("/home/wren/Documents");
     expect(create().hasAttribute("disabled")).toBe(false);
     await user.click(create());
     expect(props.onCreate).toHaveBeenCalledWith("Garden");
@@ -91,15 +89,8 @@ describe("CreateVault", () => {
     expect(props.onCreate).not.toHaveBeenCalled();
   });
 
-  it("browses for the folder with the picker", async () => {
-    const { props, user } = setup();
-    await user.click(screen.getByRole("button", { name: "Browse" }));
-    expect(props.onBrowse).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("textbox", { name: "Location" })).toBeNull();
-  });
-
-  it("takes a typed folder where there is no picker", async () => {
-    const { props, user, rerender } = setup({ canPick: false });
+  it("takes a typed folder path", async () => {
+    const { props, user, rerender } = setup();
     expect(screen.queryByRole("button", { name: "Browse" })).toBeNull();
     fireEvent.change(screen.getByRole("textbox", { name: "Location" }), { target: { value: "/home/wren" } });
     expect(props.onLocation).toHaveBeenLastCalledWith("/home/wren");

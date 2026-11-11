@@ -47,7 +47,7 @@ lodge's web app ([ADR-0038](docs/adr/0038-draw-the-desktop-app-natively-with-myg
 accepted on 2026-11-10). It is built on a draft pull request (2026-11-10):
 session, source mode, reading view, history and merges, the window on
 frostui's shell, the workspace and the panes. Phase 5's live preview draws
-marks, blocks and embeds; headings' sizes wait for MyGo's per-line styles
+marks, blocks and embeds; heading sizes and completed-task strike-through use MyGo's per-line styles
 ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The draft
 pull request's last commit replaces the Tauri shell.
 
@@ -205,7 +205,8 @@ file a step names before writing its frostnotes counterpart.
   `notesctl`), `github.com/frostyard/lodge/kit` v0.4.0 (the RPC and app runtime),
   `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
   also clix's), and for the native desktop app (plan 0009)
-  `github.com/frostyard/frostui` v0.2.0 (frostyard's desktop UI kit) over
+  `github.com/frostyard/frostui` at the source-list/status-menu PR commit
+  (pinned by pseudo-version in `go.mod`) (frostyard's desktop UI kit) over
   `github.com/egoist/mygo` v0.8.3, replaced by the owner's fork
   `github.com/bketelsen/mygo` until egoist/mygo#1654, #1655 and #1662 are in
   a release (plan 0009). Run `make flatpak-sources` after a bump: it rewrites

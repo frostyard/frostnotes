@@ -983,14 +983,15 @@ with frostui, which changes these:
   note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
   opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
 - The status bar starts with the connection, "Local" or the hub's host.
-- Live preview draws what the web app's does, but: headings keep the editor's
-  font size and a done task is dimmed without a strike-through until MyGo has
-  per-line styles; math keeps its TeX source; audio and video keep their
-  embeds. An image within a line draws under it. In source mode, the
+- Live preview draws headings at their hierarchy's size and dims/strikes
+  completed tasks off selected lines; selection restores source styles.
+  Math draws as vector paths ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md));
+  audio and video have playback controls in standalone embeds and attachment tabs. An image within a line draws under it.
+  In source mode, the
   frontmatter's first line stays visible while the properties panel shows.
-- The status bar's editing mode toggles the reading view, and Live Preview or
-  Source mode comes from Settings: frostui's status items have no menu.
-- Spellcheck has no effect: MyGo's editor has none.
+- The status bar's editing mode opens a menu with Reading view, Live Preview
+  and Source mode; choosing an editing mode also sets its default.
+- Spellcheck is absent from native Settings ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md)); the web app retains its browser setting.
 
 ## Rules
 

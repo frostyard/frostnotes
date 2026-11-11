@@ -146,7 +146,7 @@ const (
 )
 
 // DropEdges draws, over a group's view while a tab is dragged, the four
-// edges it can land on to make a new split, each a quarter of the group.
+// edges it can land on to make a new split, and a center that joins the group.
 func DropEdges(c *ui.Context, drop func(id, edge string)) {
 	t := c.Theme()
 	zone := func(key, edge string, grow float32) {
@@ -154,7 +154,7 @@ func DropEdges(c *ui.Context, drop func(id, edge string)) {
 		if _, over := ui.DragOver[TabDrag](el); over {
 			el.Background(frostui.ToneFill(t, frostui.Accent))
 		}
-		if d, ok := ui.Drop[TabDrag](el); ok && drop != nil && edge != "" {
+		if d, ok := ui.Drop[TabDrag](el); ok && drop != nil {
 			drop(d.ID, edge)
 		}
 	}
@@ -162,7 +162,7 @@ func DropEdges(c *ui.Context, drop func(id, edge string)) {
 		zone("l", EdgeLeft, 1)
 		ui.Column(c).Grow(2).AlignItems(ui.Stretch).Children(func() {
 			zone("t", EdgeTop, 1)
-			ui.Box(c).Grow(2)
+			zone("c", "", 2)
 			zone("b", EdgeBottom, 1)
 		})
 		zone("r", EdgeRight, 1)

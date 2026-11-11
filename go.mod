@@ -3,12 +3,14 @@ module github.com/frostyard/frostnotes
 go 1.27.4
 
 require (
-	github.com/egoist/mygo v0.8.3
+	github.com/d2lang/mathjax-go v0.1.0
+	github.com/egoist/mygo v0.8.4-0.20261110203557-f5c3a6e111a3
 	github.com/frostyard/clix v0.5.0
-	github.com/frostyard/frostui v0.2.0
+	github.com/frostyard/frostui v0.2.1-0.20261111070608-a6a2df5dd07d
 	github.com/frostyard/lodge/kit v0.4.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/gen2brain/gav1d v0.2.6
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
@@ -86,4 +88,4 @@ require (
 // fork, those three merged. It goes when all are in a MyGo release
 // (docs/plans/0009-mygo-desktop.md). While it stays, make verify also runs
 // frostui's tests against it; the step and the replace go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111005420-2088771701f7
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111072942-5fa528b3792a

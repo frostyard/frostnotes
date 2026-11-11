@@ -1,8 +1,11 @@
 package panes
 
 import (
+	"context"
 	"slices"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -329,5 +332,144 @@ func TestTagsAnswerTheKeyboard(t *testing.T) {
 	tt.Key(0, ui.KeyEnter)
 	if len(searched) != 1 || searched[0] != "tag:#two" {
 		t.Fatalf("searched %q", searched)
+	}
+}
+
+func TestRenameRevealsAClosedFolder(t *testing.T) {
+	f := start(t, map[string]string{"Closed/Plan.md": "note"})
+	store := workspace.NewStore(f.loop, t.TempDir())
+	store.Load("/vault")
+	p := &Files{Env: f.env, Store: store, Actions: FileActions{Rename: func(string, string, bool) {}}}
+	tt := ui.NewTester(func(c *ui.Context) { p.View(c) }, 300, 500)
+	p.Rename("Closed/Plan.md")
+	tt.Frame()
+	if _, ok := tt.Find("Name"); !ok {
+		t.Fatal("rename field was not revealed")
+	}
+}
+
+func TestTagExpansionSurvivesRefreshAndSort(t *testing.T) {
+	p := &Tags{counts: []api.TagCount{{Tag: "garden/beds", Count: 1}}}
+	p.rebuild()
+	p.state.Open.Add(p.roots[0])
+	p.counts = []api.TagCount{{Tag: "garden/beds", Count: 2}, {Tag: "other", Count: 3}}
+	p.ByCount = true
+	p.rebuild()
+	for _, n := range p.roots {
+		if n.Tag == "garden" && !p.state.Open.Has(n) {
+			t.Fatal("expanded tag collapsed")
+		}
+	}
+}
+
+type queuedPaneLoop struct {
+	*desktoptest.Loop
+	posted chan func()
+}
+
+func (l *queuedPaneLoop) Post(f func()) { l.posted <- f }
+
+type numberedPaneAPI struct {
+	API
+	calls atomic.Int64
+}
+
+func (a *numberedPaneAPI) Tags(context.Context, *api.NoteTagsParams) ([]api.TagCount, error) {
+	return []api.TagCount{{Tag: "tag", Count: a.calls.Add(1)}}, nil
+}
+func (a *numberedPaneAPI) Properties(context.Context, *api.NotePropertiesParams) ([]api.PropertyCount, error) {
+	return []api.PropertyCount{{Key: "key", Count: a.calls.Add(1)}}, nil
+}
+func (a *numberedPaneAPI) Tasks(context.Context, *api.NoteTasksParams) ([]api.TaskEntry, error) {
+	return []api.TaskEntry{{Path: "a.md", Line: a.calls.Add(1)}}, nil
+}
+func (a *numberedPaneAPI) Search(context.Context, *api.NoteSearchParams) ([]api.SearchHit, error) {
+	return []api.SearchHit{{Path: strconv.FormatInt(a.calls.Add(1), 10)}}, nil
+}
+
+func TestPaneRefreshDiscardsOlderAnswers(t *testing.T) {
+	for _, name := range []string{"tags", "properties", "tasks", "search"} {
+		t.Run(name, func(t *testing.T) {
+			loop := &queuedPaneLoop{Loop: desktoptest.NewLoop(), posted: make(chan func(), 2)}
+			client := &numberedPaneAPI{}
+			env := &Env{Loop: loop, API: func() API { return client }}
+			var refresh func()
+			var value func() int64
+			switch name {
+			case "tags":
+				p := &Tags{Env: env}
+				refresh = p.Refresh
+				value = func() int64 { return p.counts[0].Count }
+			case "properties":
+				p := &Properties{Env: env}
+				refresh = p.Refresh
+				value = func() int64 { return p.counts[0].Count }
+			case "tasks":
+				p := &Tasks{Env: env}
+				refresh = p.Refresh
+				value = func() int64 { return p.tasks[0].Line }
+			case "search":
+				p := &Search{Env: env, Query: "same"}
+				refresh = func() { p.Refresh(); loop.Advance(SearchDelay) }
+				value = func() int64 { n, _ := strconv.ParseInt(p.hits[0].Path, 10, 64); return n }
+			}
+			refresh()
+			first := <-loop.posted
+			refresh()
+			second := <-loop.posted
+			second()
+			first()
+			if value() != 2 {
+				t.Fatalf("older %s answer replaced current result", name)
+			}
+		})
+	}
+}
+
+func TestFilesClicksDoNotDependOnHoverOrSelection(t *testing.T) {
+	f := start(t, map[string]string{"A.md": "a", "B.md": "b"})
+	store := workspace.NewStore(f.loop, t.TempDir())
+	store.Load("/vault")
+	p := &Files{Env: f.env, Store: store}
+	var places []string
+	f.env.Actions.Open = func(path, where string) { f.opened = append(f.opened, path); places = append(places, where) }
+	tt := ui.NewTester(func(c *ui.Context) { p.View(c) }, 300, 500)
+	tt.Frame()
+	if err := tt.Click("A"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	if !slices.Equal(f.opened, []string{"A.md"}) {
+		t.Fatalf("arrow activated a file: %v", f.opened)
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if !slices.Equal(f.opened, []string{"A.md", "B.md"}) {
+		t.Fatalf("Enter: %v", f.opened)
+	}
+	r, ok := tt.Find("A")
+	if !ok {
+		t.Fatal("missing A")
+	}
+	tt.PressButton(2, r.X+2, r.Y+2)
+	tt.ReleaseButton(2, r.X+2, r.Y+2)
+	tt.Frame()
+	if !slices.Equal(places, []string{workspace.Here, workspace.Here, workspace.NewTab}) {
+		t.Fatalf("destinations: %v", places)
+	}
+}
+
+func TestIdleFilesOpenSyncDoesNotAllocate(t *testing.T) {
+	store := workspace.NewStore(desktoptest.NewLoop(), t.TempDir())
+	store.Load("/vault")
+	p := &Files{Store: store}
+	p.syncOpen()
+	for i := range 1000 {
+		p.list.SetOpen(section, strconv.Itoa(i), true)
+	}
+	p.syncOpen()
+	if n := testing.AllocsPerRun(20, p.syncOpen); n != 0 {
+		t.Fatalf("idle folder persistence allocates %v times", n)
 	}
 }
