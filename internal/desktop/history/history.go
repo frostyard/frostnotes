@@ -10,6 +10,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -166,12 +167,27 @@ func (v *View) Reload() {
 	}, func(err error) {
 		v.err, v.loaded = err, true
 		if err == nil {
+			// The selection is an entry, not a place: a new version shifts them.
+			if v.selected >= 0 && v.selected < len(v.entries) {
+				v.selected = slices.IndexFunc(entries, v.entries[v.selected].same)
+			}
 			v.entries = entries
 			if v.selected < 0 && len(entries) > 0 {
 				v.Select(0)
 			}
 		}
 	})
+}
+
+// same reports whether o is the same version or revision as e.
+func (e Entry) same(o Entry) bool {
+	switch {
+	case e.Version != nil && o.Version != nil:
+		return e.Version.ID == o.Version.ID
+	case e.Revision != nil && o.Revision != nil:
+		return e.Revision.Seq == o.Revision.Seq
+	}
+	return false
 }
 
 // Select shows entry i.
@@ -208,7 +224,7 @@ func (v *View) Select(i int) {
 		}
 		return nil
 	}, func(err error) {
-		if v.selected != i {
+		if v.selected < 0 || v.selected >= len(v.entries) || !v.entries[v.selected].same(e) {
 			return
 		}
 		v.err = err

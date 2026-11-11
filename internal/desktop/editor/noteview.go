@@ -160,6 +160,28 @@ func NewPropertiesPanel(doc *notes.Document) *PropertiesPanel {
 // Add opens a new row (Ctrl + ;).
 func (p *PropertiesPanel) Add() { p.isAdd, p.adding, p.Folded = true, "", false }
 
+// Commit writes what a field holds while it still has the focus, as the
+// window closes: a text field otherwise commits on Enter or losing focus.
+func (p *PropertiesPanel) Commit() {
+	for _, prop := range p.parsed.Properties {
+		d := p.drafts[prop.Key]
+		if d == nil {
+			continue
+		}
+		vault := ""
+		if p.Types != nil {
+			vault = p.Types()[prop.Key]
+		}
+		kind := PropertyType(prop.Key, prop.Value, vault)
+		if d.valueFocus && d.value != valueText(prop.Value) {
+			p.set(prop.Key, typedText(d.value, kind))
+		}
+		if d.keyFocus && d.key != prop.Key && strings.TrimSpace(d.key) != "" {
+			p.rename(prop.Key, strings.TrimSpace(d.key))
+		}
+	}
+}
+
 func (p *PropertiesPanel) apply(next string, err error) {
 	if err != nil {
 		p.err = err.Error()

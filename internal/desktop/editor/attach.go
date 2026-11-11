@@ -2,6 +2,7 @@ package editor
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -18,10 +19,39 @@ import (
 // MaxAttach is the most bytes notesd takes in one note.upload.
 const MaxAttach = 10 << 20
 
-// File is a file to attach: its name, and its bytes.
+// File is a file to attach: its name, and its bytes or the local path to
+// read them from.
 type File struct {
 	Name string
 	Data []byte
+	Path string
+}
+
+// Read is the file's bytes, at most MaxAttach of them. It may read the
+// disk, so an upload calls it off the UI thread.
+func (f File) Read() ([]byte, error) {
+	data := f.Data
+	if f.Path != "" {
+		info, err := os.Stat(f.Path)
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("%s is not a regular file", f.Name)
+		}
+		in, err := os.Open(f.Path)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = in.Close() }()
+		if data, err = io.ReadAll(io.LimitReader(in, MaxAttach+1)); err != nil {
+			return nil, err
+		}
+	}
+	if len(data) > MaxAttach {
+		return nil, fmt.Errorf("%s is over 10 MB: copy it into the vault's folder instead", f.Name)
+	}
+	return data, nil
 }
 
 // Uploader stores attachments beside a note (ADR-0023) and reports the
@@ -97,7 +127,7 @@ func PastedName(at time.Time, ext string) string {
 // wikilinks, the path when another file has its name; else a Markdown
 // image with the path, encoded.
 func EmbedFor(p string, wikilinks, nameIsUnique bool) string {
-	if wikilinks {
+	if wikilinks && !strings.ContainsAny(p, "#|[]^") { // those end a wikilink's target
 		if nameIsUnique {
 			return "![[" + path.Base(p) + "]]"
 		}
@@ -119,7 +149,7 @@ func CleanName(name string) string {
 // of a line that holds text, the text gets a line of its own.
 func (e *NoteEditor) insertEmbeds(text string) {
 	e.Run(func(doc string, sels []Sel) Edit {
-		pos := sels[len(sels)-1].Head
+		pos := min(sels[len(sels)-1].Head, len(doc)) // the text may be shorter by now
 		l := lineAt(doc, pos)
 		own := ""
 		if pos == l.from && l.to > l.from {
@@ -145,7 +175,12 @@ func (e *NoteEditor) Attach(files []File) {
 	if e.Uploads == nil || len(files) == 0 {
 		return
 	}
+	release := func() {}
+	if e.Hold != nil {
+		release = e.Hold()
+	}
 	e.Uploads.Upload(files, func(embeds string, err error) {
+		defer release()
 		if err != nil {
 			e.report(err)
 			return
@@ -154,26 +189,12 @@ func (e *NoteEditor) Attach(files []File) {
 	})
 }
 
-// AttachPaths reads local files and attaches them; a file over MaxAttach
-// is refused, naming it.
+// AttachPaths attaches local files, which the upload reads off the UI
+// thread.
 func (e *NoteEditor) AttachPaths(paths []string) {
 	files := make([]File, 0, len(paths))
 	for _, p := range paths {
-		info, err := os.Stat(p)
-		if err != nil {
-			e.report(err)
-			return
-		}
-		if info.Size() > MaxAttach {
-			e.report(fmt.Errorf("%s is over 10 MB: copy it into the vault's folder instead", filepath.Base(p)))
-			return
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			e.report(err)
-			return
-		}
-		files = append(files, File{Name: CleanName(filepath.Base(p)), Data: data})
+		files = append(files, File{Name: CleanName(filepath.Base(p)), Path: p})
 	}
 	e.Attach(files)
 }

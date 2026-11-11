@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/frostyard/frostnotes/api"
@@ -118,5 +119,19 @@ func TestUploadingAnAttachment(t *testing.T) {
 	loop.Until(t, "the refusal", func() bool { return done })
 	if err == nil {
 		t.Fatal("a file over 10 MB uploaded")
+	}
+}
+
+// Run with the race detector: the setting is read on the UI thread.
+func TestUploadReadsTheSettingBeforeItsWorker(t *testing.T) {
+	c, _, loop := start(t, map[string]string{"Plan.md": "x"})
+	src := c.Sources(func() string { return "Plan.md" }, func(string) (string, bool) { return "", false })
+	var embeds string
+	done := false
+	src.Upload([]editor.File{{Name: "a.png", Data: []byte("x")}}, func(e string, _ error) { embeds, done = e, true })
+	c.Wikilinks = false
+	loop.Until(t, "the upload", func() bool { return done })
+	if !strings.HasPrefix(embeds, "![[") {
+		t.Fatalf("embeds %q", embeds)
 	}
 }

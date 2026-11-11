@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -150,15 +151,28 @@ func (m *vaultManager) list(c *ui.Context, a *App) {
 
 func (m *vaultManager) remove(a *App, v *api.Vault) {
 	id, name := v.ID, v.Name
-	a.Dialogs.Ask(frostui.Confirm{Title: `Remove "` + name + `" from the list?`, Body: "Its folder and files stay where they are.", Action: "Remove", Destructive: true,
-		OnConfirm: func() {
-			a.call(func(ctx context.Context, c *api.Client) error {
-				return c.Vault().Remove(ctx, &api.VaultRemoveParams{ID: id})
-			}, func(err error) {
-				a.report(err)
-				a.reloadAll()
-			})
-		}})
+	synced := false
+	a.call(func(ctx context.Context, c *api.Client) error {
+		// Not synced, or sync unavailable: nothing more to say.
+		if statuses, err := c.Sync().Status(ctx, &api.SyncStatusParams{}); err == nil {
+			synced = slices.ContainsFunc(statuses, func(s api.SyncStatus) bool { return s.VaultID == id })
+		}
+		return nil
+	}, func(error) {
+		forgets := "Frostnotes forgets its index and version history on this device."
+		if synced {
+			forgets = "Frostnotes forgets its index and version history on this device, and its place on the hub; open it again to sync it, after joining."
+		}
+		a.Dialogs.Ask(frostui.Confirm{Title: `Remove "` + name + `" from the list?`, Body: "Its folder and files stay where they are. " + forgets, Action: "Remove", Destructive: true,
+			OnConfirm: func() {
+				a.call(func(ctx context.Context, c *api.Client) error {
+					return c.Vault().Remove(ctx, &api.VaultRemoveParams{ID: id})
+				}, func(err error) {
+					a.report(err)
+					a.reloadAll()
+				})
+			}})
+	})
 }
 
 func action(c *ui.Context, title, body string, fn func()) {

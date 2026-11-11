@@ -31,7 +31,32 @@ type Frontmatter struct {
 	Error      string // why it is not a mapping, "" when it is
 }
 
-var frontRe = regexp.MustCompile(`(?s)^---(\r?\n)(?:(.*?\r?\n))?---(?:\r?\n|$)`)
+// frontSpan finds frontmatter at the start of text: the opening line's
+// ending, what is between it and the first closing line ("---" or "..."),
+// and where that line ends.
+func frontSpan(text string) (ending, body string, end int, ok bool) {
+	first, rest, found := strings.Cut(text, "\n")
+	if !found || strings.TrimSuffix(first, "\r") != "---" {
+		return "", "", 0, false
+	}
+	ending = text[len("---") : len(first)+1]
+	start := len(first) + 1
+	for at := start; at <= len(text); {
+		next := len(text)
+		line := rest[at-start:]
+		if i := strings.IndexByte(line, '\n'); i >= 0 {
+			line, next = line[:i], at+i+1
+		}
+		if t := strings.TrimSuffix(line, "\r"); t == "---" || t == "..." {
+			return ending, text[start:at], next, true
+		}
+		if next == len(text) {
+			break
+		}
+		at = next
+	}
+	return "", "", 0, false
+}
 
 type frontText struct {
 	exists bool
@@ -45,11 +70,11 @@ func splitFront(text string) frontText {
 	if strings.HasPrefix(text, "\uFEFF") {
 		bom = len("\uFEFF")
 	}
-	m := frontRe.FindStringSubmatch(text[bom:])
-	if m == nil {
+	ending, body, _, ok := frontSpan(text[bom:])
+	if !ok {
 		return frontText{start: bom, ending: "\n"}
 	}
-	return frontText{exists: true, start: bom + 3 + len(m[1]), text: m[2], ending: m[1]}
+	return frontText{exists: true, start: bom + 3 + len(ending), text: body, ending: ending}
 }
 
 type unit struct{ start, end int }
@@ -60,20 +85,39 @@ type parsedFront struct {
 	units map[string]unit
 }
 
+// maxExpanded bounds the nodes a property's value expands to through YAML
+// aliases: a note can name itself, or double at each level.
+const maxExpanded = 10000
+
+// nodeValue is a node's value, its aliases followed. An alias inside what
+// it names, or past the bound, is nil.
 func nodeValue(n *yaml.Node) any {
+	left := maxExpanded
+	return expand(n, map[*yaml.Node]bool{}, &left)
+}
+
+func expand(n *yaml.Node, open map[*yaml.Node]bool, left *int) any {
+	if *left--; *left < 0 {
+		return nil
+	}
 	switch n.Kind {
 	case yaml.AliasNode:
-		return nodeValue(n.Alias)
+		if open[n.Alias] {
+			return nil
+		}
+		open[n.Alias] = true
+		defer delete(open, n.Alias)
+		return expand(n.Alias, open, left)
 	case yaml.SequenceNode:
 		out := make([]any, len(n.Content))
 		for i, c := range n.Content {
-			out[i] = nodeValue(c)
+			out[i] = expand(c, open, left)
 		}
 		return out
 	case yaml.MappingNode:
 		out := make(map[string]any, len(n.Content)/2)
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			out[n.Content[i].Value] = nodeValue(n.Content[i+1])
+			out[n.Content[i].Value] = expand(n.Content[i+1], open, left)
 		}
 		return out
 	case yaml.ScalarNode:
@@ -136,8 +180,10 @@ func parseFront(text string) (*parsedFront, error) {
 	return p, nil
 }
 
+// indented reports whether a line continues a property's value: indented,
+// or a list item under its key. A key may itself start with "-".
 func indented(line string) bool {
-	return line != "" && strings.ContainsAny(line[:1], " \t-")
+	return line != "" && strings.ContainsAny(line[:1], " \t") || line == "-" || strings.HasPrefix(line, "- ")
 }
 
 // unitEnd is where a property's lines end, keeping trailing blank lines
@@ -399,11 +445,11 @@ func frontEnd(text string) int {
 	if strings.HasPrefix(text, "\uFEFF") {
 		bom = len("\uFEFF")
 	}
-	m := frontRe.FindString(text[bom:])
-	if m == "" {
+	_, _, end, ok := frontSpan(text[bom:])
+	if !ok {
 		return 0
 	}
-	return bom + len(m)
+	return bom + end
 }
 
 // FrontmatterStart is where a note's frontmatter starts or would start:

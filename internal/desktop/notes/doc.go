@@ -721,6 +721,7 @@ func (d *Document) recheck() {
 // meanwhile stays, on top of it.
 func (d *Document) Restore() {
 	if d.flight != nil {
+		d.landed = append(d.landed, d.Restore)
 		return
 	}
 	path := d.path
@@ -752,10 +753,12 @@ func (d *Document) Restore() {
 	}, func(err error) {
 		d.flight = nil
 		switch {
+		case d.path != path:
+			d.Reload() // moved meanwhile
 		case err != nil:
 			d.notice = &Notice{Kind: NoticeFailed, Reason: err.Error()}
 			d.notify()
-		case d.path == path:
+		default:
 			text := d.adopt(n.Content)
 			if remote, err := Diff(f.sent, text).Map(f.since, false); err == nil {
 				d.applyRemote(remote)

@@ -323,12 +323,12 @@ func ToggleChecklist(text string, sels []Sel) Edit {
 			return []notes.Change{{From: from, To: from, Insert: "- [ ] "}}
 		}
 		content := from + len(item)
-		if m := taskRe.FindStringSubmatch(text[content:l.to]); m != nil {
+		if m := taskRe.FindStringSubmatchIndex(text[content:l.to]); m != nil {
 			mark := "x"
-			if m[1] != " " {
+			if text[content+m[2]:content+m[3]] != " " {
 				mark = " "
 			}
-			return []notes.Change{{From: content + 1, To: content + 2, Insert: mark}}
+			return []notes.Change{{From: content + m[2], To: content + m[3], Insert: mark}}
 		}
 		insert := " [ ] "
 		if strings.HasSuffix(item, " ") || strings.HasSuffix(item, "\t") {
@@ -473,6 +473,44 @@ var quotesRe = regexp.MustCompile(`^(\s*>\s?)+`)
 // listRe reads a line's quote, list marker and task box.
 var listRe = regexp.MustCompile(`^((?:\s*>\s?)*)(\s*)(?:([-*+])|(\d+)([.)]))([ \t]+)(\[.\][ \t]+)?`)
 
+// inCode reports whether the line starting at from is code: inside a fence,
+// or indented after a blank line with no list above it to continue.
+func inCode(text string, from int) bool {
+	fence := ""
+	prev, lastText := "", ""
+	for at := 0; at < from; {
+		end := strings.IndexByte(text[at:], '\n')
+		if end < 0 {
+			break
+		}
+		content := text[at : at+end]
+		t := strings.TrimLeft(content, " ")
+		switch {
+		case fence != "":
+			if strings.HasPrefix(t, fence) && strings.Trim(strings.TrimSpace(t), fence[:1]) == "" {
+				fence = ""
+			}
+		case len(content)-len(t) <= 3 && (strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")):
+			fence = t[:len(t)-len(strings.TrimLeft(t, t[:1]))]
+		}
+		prev = content
+		if strings.TrimSpace(content) != "" {
+			lastText = content
+		}
+		at += end + 1
+	}
+	if fence != "" {
+		return true
+	}
+	line := text[from:]
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	indented := strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")
+	return indented && strings.TrimSpace(prev) == "" && !listRe.MatchString(lastText) &&
+		!strings.HasPrefix(lastText, "    ") && !strings.HasPrefix(lastText, "\t")
+}
+
 // ContinueMarkup is Enter with smart lists: a list item, task or quote
 // continues on the new line; an empty one ends its list. ok is false when
 // a caret is not in one, and Enter does what it always does.
@@ -485,6 +523,10 @@ func ContinueMarkup(text string, sels []Sel) (Edit, bool) {
 	handled := true
 	e := byRange(text, sels, func(text string, r Sel) ([]notes.Change, Sel) {
 		l := lineAt(text, r.Head)
+		if inCode(text, l.from) {
+			handled = false
+			return nil, r
+		}
 		if m := listRe.FindStringSubmatch(l.text); m != nil {
 			prefix := m[0]
 			if r.Head-l.from < len(prefix) {

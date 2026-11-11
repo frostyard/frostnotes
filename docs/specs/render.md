@@ -213,7 +213,8 @@ Rules, over `RenderSource`'s body (no frontmatter, comments gone):
   (`note:#Top`).
 - **Markdown links and images to vault files** keep their text and get
   the resolved destination: `note:` for a link, `blob:` for an image.
-  Web links, references and links with no text stay as written.
+  An image with no alt text gets its destination too. Web links, references
+  and links with no text stay as written.
 - **Embeds:** an image becomes `![name](<blob:hash.ext>)` (an alias
   that is a size is dropped); another file becomes a `note:` link to
   it. Note embeds alone in a paragraph become fenced blocks, each

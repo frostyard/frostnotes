@@ -550,3 +550,33 @@ func TestARecreationIsTheOneWriteInFlight(t *testing.T) {
 		t.Fatalf("file holds %q", got)
 	}
 }
+
+func TestARestoreDuringASaveWaitsForIt(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "kept\n")
+	d, _, _, _ := f.openGated("a.md")
+	d.flight = &flight{sent: d.text, since: EmptyChanges(len(d.text))}
+	d.Restore()
+	if len(d.landed) != 1 {
+		t.Fatal("the restore was dropped")
+	}
+}
+
+func TestARenameDuringARestoreReadsTheNewPath(t *testing.T) {
+	f := newFixture(t)
+	hash := f.Create("a.md", "kept\n")
+	d, _, g, _ := f.openGated("a.md")
+	if err := f.Other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.Vault, Path: "a.md", Base: hash}); err != nil {
+		t.Fatal(err)
+	}
+	d.Removed()
+	d.Restore()
+	r := f.nextRead(g)
+	d.Moved("b.md")
+	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	next := f.nextRead(g)
+	if next.path != "b.md" {
+		t.Fatalf("read %q", next.path)
+	}
+	next.answer <- func() (*api.Note, error) { return &api.Note{Content: "kept\n", Hash: d.Base()}, nil }
+}

@@ -98,3 +98,24 @@ func TestTheMergeView(t *testing.T) {
 		t.Fatalf("Done: %v %v", err, done)
 	}
 }
+
+func TestRestoringTwiceKeepsTheSelection(t *testing.T) {
+	f := open(t)
+	f.Write("Plan.md", f.Read("Plan.md").Hash, "third\nline two\n")
+	f.doc.Reload()
+	f.loop.Until(t, "the document", func() bool { return f.doc.Text() == "third\nline two\n" })
+	h := New(f.loop, f.history, nil, f.doc)
+	f.loop.Until(t, "the versions", func() bool { return len(h.Entries()) == 3 && h.Content() != "" })
+	h.Select(2)
+	f.loop.Until(t, "the oldest", func() bool { return h.Content() == "first\nline two\n" })
+	h.Restore()
+	f.loop.Until(t, "the new version", func() bool { return len(h.Entries()) == 4 })
+	if got := h.Entries()[h.selected].Version.ID; got != h.Entries()[3].Version.ID {
+		t.Fatalf("the selection moved to version %d", got)
+	}
+	f.Write("Plan.md", f.Read("Plan.md").Hash, "fourth\nline two\n")
+	f.doc.Reload()
+	f.loop.Until(t, "the document", func() bool { return f.doc.Text() == "fourth\nline two\n" })
+	h.Restore()
+	f.loop.Until(t, "the second restore", func() bool { return f.Read("Plan.md").Content == "first\nline two\n" })
+}

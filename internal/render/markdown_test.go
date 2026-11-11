@@ -141,3 +141,17 @@ func TestMarkdownFenceWithABacktickInItsInfo(t *testing.T) {
 		t.Fatalf("what follows the block is not a paragraph: %q", out)
 	}
 }
+
+func TestMarkdownImageWithNoAlt(t *testing.T) {
+	got := Markdown([]byte("![](photo.png) and ![](photo.png)\n"), mdVault())
+	if want := "![](<blob:aaaa.png>) and ![](<blob:aaaa.png>)\n"; got != want {
+		t.Fatalf("%q, want %q", got, want)
+	}
+}
+
+func TestAnEscapedHashIsPartOfTheName(t *testing.T) {
+	l, ok := markdownDestination([]byte("draft%231.png#part"))
+	if !ok || l.Target != "draft#1.png" || l.Subpath != "#part" {
+		t.Fatalf("%+v", l)
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/panes"
 	"github.com/frostyard/frostnotes/internal/desktop/prefs"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
+	"github.com/frostyard/frostnotes/internal/render"
 )
 
 // The palette's sources besides the commands.
@@ -237,6 +238,9 @@ func (a *App) followLink(l editor.Link, from string, w editor.Where) {
 		found, err = c.Note().Resolve(ctx, &api.NoteResolveParams{VaultID: id, From: from, Targets: []string{l.Target}})
 		return err
 	}, func(err error) {
+		if a.vault == nil || a.vault.ID != id {
+			return // the window moved to another vault meanwhile
+		}
 		if err != nil {
 			a.report(err)
 			return
@@ -282,10 +286,25 @@ func (a *App) linkPreview(from func() string) func(*ui.Context, editor.Link) {
 				frostui.Muted(c, "This note does not exist yet.")
 			default:
 				frostui.Strong(c, nameOf(l.Target))
-				markdown.View(c, p.text, &markdown.Options{})
+				markdown.View(c, p.text, &markdown.Options{OnLink: a.previewLink})
 			}
 		})
 	}
+}
+
+// previewLink follows a link in a page preview, as the reading view does:
+// a web link goes through the rules of what the app opens.
+func (a *App) previewLink(href string) {
+	links := a.readingLinks()
+	if p, sub, tag, ok := render.NoteLink(href); ok {
+		if tag != "" {
+			links.Tag(tag)
+		} else if p != "" {
+			links.Note(p, sub, false)
+		}
+		return
+	}
+	links.URL(href)
 }
 
 func (a *App) loadPreview(p *preview, from, target string) {
@@ -431,16 +450,43 @@ func (a *App) deleteFile(p string, folder bool) {
 	}
 	name, id := nameOf(p), a.vault.ID
 	a.confirmDelete(name, "You can restore it from its version history.", func() {
-		a.call(func(ctx context.Context, c *api.Client) error {
-			return c.Note().Delete(ctx, &api.NoteDeleteParams{VaultID: id, Path: p, Base: hash})
-		}, func(err error) {
-			if err != nil {
-				a.notify("Cannot delete " + name + ": " + err.Error())
-				return
+		a.saveUnder(id, p, func(bases map[string]string) {
+			if b, ok := bases[p]; ok {
+				hash = b
 			}
-			a.actionToasts = append(a.actionToasts, frostui.ActionToast{Title: "Deleted " + name + ".", Action: "Undo", OnAction: func() { a.restoreFile(id, p) }})
+			a.call(func(ctx context.Context, c *api.Client) error {
+				return c.Note().Delete(ctx, &api.NoteDeleteParams{VaultID: id, Path: p, Base: hash})
+			}, func(err error) {
+				if err != nil {
+					a.notify("Cannot delete " + name + ": " + err.Error())
+					return
+				}
+				a.actionToasts = append(a.actionToasts, frostui.ActionToast{Title: "Deleted " + name + ".", Action: "Undo", OnAction: func() { a.restoreFile(id, p) }})
+			})
 		})
 	})
+}
+
+// saveUnder saves the open notes at or inside p, then gives their bases: a
+// delete comes after, or the save's unsaved text would make the note again.
+// What was typed stays in the deleted note's version history.
+func (a *App) saveUnder(vault int64, p string, next func(bases map[string]string)) {
+	docs := a.Session.Under(vault, p)
+	left := len(docs) + 1
+	done := func() {
+		if left--; left > 0 {
+			return
+		}
+		bases := make(map[string]string, len(docs))
+		for _, d := range docs {
+			bases[d.Path()] = d.Base()
+		}
+		next(bases)
+	}
+	for _, d := range docs {
+		d.Flush(done)
+	}
+	done()
 }
 
 // restoreFile brings a deleted file back from its newest version.
@@ -472,21 +518,28 @@ func (a *App) deleteFolder(p string) {
 	}
 	name, id := path.Base(p), a.vault.ID
 	a.confirmDelete(name, "Its "+strconv.Itoa(len(files))+" files can be restored from their version history.", func() {
-		var res *api.FolderDeleteResult
-		a.call(func(ctx context.Context, c *api.Client) (err error) {
-			res, err = c.Note().DeleteFolder(ctx, &api.NoteDeleteFolderParams{VaultID: id, Path: p, Files: files})
-			return err
-		}, func(err error) {
-			if err != nil {
-				a.notify("Cannot delete " + name + ": " + err.Error())
-				return
+		a.saveUnder(id, p, func(bases map[string]string) {
+			for i := range files {
+				if b, ok := bases[files[i].Path]; ok {
+					files[i].Base = b
+				}
 			}
-			a.Catalog.Reload()
-			if len(res.Kept) > 0 {
-				a.notify("Deleted " + name + ", but kept " + strconv.Itoa(len(res.Kept)) + " changed files.")
-			} else {
-				a.notify("Deleted " + name + ".")
-			}
+			var res *api.FolderDeleteResult
+			a.call(func(ctx context.Context, c *api.Client) (err error) {
+				res, err = c.Note().DeleteFolder(ctx, &api.NoteDeleteFolderParams{VaultID: id, Path: p, Files: files})
+				return err
+			}, func(err error) {
+				if err != nil {
+					a.notify("Cannot delete " + name + ": " + err.Error())
+					return
+				}
+				a.Catalog.Reload()
+				if len(res.Kept) > 0 {
+					a.notify("Deleted " + name + ", but kept " + strconv.Itoa(len(res.Kept)) + " changed files.")
+				} else {
+					a.notify("Deleted " + name + ".")
+				}
+			})
 		})
 	})
 }

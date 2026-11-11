@@ -79,3 +79,13 @@ func TestTheStore(t *testing.T) {
 		t.Error("reset left the file")
 	}
 }
+
+func TestResetGivesANewTabID(t *testing.T) {
+	s := NewStore(desktoptest.NewLoop(), t.TempDir())
+	s.Load("/vault/one")
+	old := s.Workspace().ActiveTab().ID
+	s.Reset()
+	if s.Workspace().ActiveTab().ID == old {
+		t.Fatalf("the new tab kept the ID %s", old)
+	}
+}

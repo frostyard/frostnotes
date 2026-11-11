@@ -222,7 +222,10 @@ func (s *Scanner) line(out []Piece, content string, start int, st state, line in
 	key := lineKey{content, st.afterText, st.afterGap}
 	ps, ok := s.cache[key]
 	if !ok {
-		ps = linePieces(content, st.afterText, st.afterGap)
+		// A copy: a substring in the cache would keep the whole note alive,
+		// a new note each edit.
+		key.text = strings.Clone(content)
+		ps = linePieces(key.text, st.afterText, st.afterGap)
 		s.cache[key] = ps
 	}
 	for _, p := range ps {
@@ -692,7 +695,8 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 				}
 			}
 			if closeBracket, dest, ok := linkAt(line, i, end); ok {
-				if label, plain := plainText(line, i+1, closeBracket, inline(nil, line, i+1, closeBracket)); plain && label != "" && len(label) <= maxObject {
+				inner := inline(nil, line, i+1, closeBracket) // once: nested links would double the work
+				if label, plain := plainText(line, i+1, closeBracket, inner); plain && label != "" && len(label) <= maxObject {
 					target, _, _ := parseEmbed(line[i:dest])
 					if strings.Contains(target, ":") {
 						target = ""
@@ -703,9 +707,7 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 				}
 				ps = append(ps, Piece{Start: i, End: i + 1}, Piece{Start: closeBracket, End: dest})
 				used = append(used, closeBracket)
-				i++
-				end2 := closeBracket
-				ps = inline(ps, line, i, end2)
+				ps = append(ps, inner...)
 				i = dest
 			} else {
 				i++

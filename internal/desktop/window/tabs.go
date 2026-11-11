@@ -152,6 +152,10 @@ func (a *App) noteEditor(d *notes.Document, v workspace.View) *editor.NoteEditor
 	e.Follow = func(l editor.Link, where editor.Where) { a.followLink(l, d.Path(), where) }
 	e.FollowTag = func(tag string) { a.searchFor("tag:#" + tag) }
 	e.Preview = a.linkPreview(d.Path)
+	e.Hold = func() func() {
+		held := a.Session.Open(d.Vault(), d.Path())
+		return func() { a.Session.Release(held) }
+	}
 	e.Rendered = reading.NewBlocks(a.cfg.Env, a.readingAPI, d, a.cfg.Blobs)
 	e.Rendered.RemoteImages = a.Prefs.LoadRemoteImages
 	e.Rendered.Links = a.readingLinks()
@@ -291,15 +295,22 @@ func (a *App) loadFile(tc *tabContent) {
 		tc.err = "This file is not in the vault."
 		return
 	}
-	data, err := os.ReadFile(filepath.Join(a.cfg.Blobs, hash[:2], hash))
-	if err != nil {
-		tc.err = err.Error()
-		return
-	}
-	tc.img, err = reading.Decode(data, strings.TrimPrefix(filepath.Ext(tc.view.Path), "."))
-	if err != nil {
-		tc.err = err.Error()
-	}
+	blob := filepath.Join(a.cfg.Blobs, hash[:2], hash)
+	ext := strings.TrimPrefix(filepath.Ext(tc.view.Path), ".")
+	go func() { // a large file must not hold up the window
+		var img ui.ImageSource
+		data, err := os.ReadFile(blob)
+		if err == nil {
+			img, err = reading.Decode(data, ext)
+		}
+		a.cfg.Env.Post(func() {
+			if err != nil {
+				tc.err = err.Error()
+				return
+			}
+			tc.img = img
+		})
+	}()
 }
 
 func (a *App) fileHash(p string) string {
@@ -329,7 +340,20 @@ func (a *App) splitNode(n *workspace.Node) *uikit.SplitNode {
 }
 
 func (a *App) group(c *ui.Context, g *workspace.Node) {
-	ui.Column(c).Grow(1).MinWidth(160).MinHeight(160).AlignItems(ui.Stretch).Children(func() {
+	col := ui.Column(c).Grow(1).MinWidth(160).MinHeight(160).AlignItems(ui.Stretch)
+	// The focus coming into a group makes it the active one, as a click in
+	// its editor does; a command that moves the active group moves no focus.
+	if col.FocusWithin() {
+		if a.focusGroup != g.ID {
+			a.focusGroup = g.ID
+			if a.Store.Workspace().ActiveID != g.ID {
+				a.Store.Update(func(w *workspace.Workspace) { w.ActiveID = g.ID })
+			}
+		}
+	} else if a.focusGroup == g.ID {
+		a.focusGroup = ""
+	}
+	col.Children(func() {
 		a.strip(c, g)
 		tab := &g.Tabs[g.Active]
 		ui.Column(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {

@@ -98,6 +98,9 @@ func (s TabStrip) tab(c *ui.Context, el ui.Element, index int, tab Tab) {
 		el.ContextMenu(func(m *ui.Menu) { s.Menu(m, tab.ID) })
 	}
 	el.HandleInput(func(ev ui.InputEvent) bool {
+		if ev.Kind == ui.InputPointerDown && ev.Button == 0 && index == s.Active && s.Activate != nil {
+			s.Activate(tab.ID) // a press on the shown tab still makes its group the active one
+		}
 		if ev.Kind == ui.InputPointerDown && ev.Button == 2 && s.Close != nil && !tab.Pinned {
 			s.Close(tab.ID)
 			return true

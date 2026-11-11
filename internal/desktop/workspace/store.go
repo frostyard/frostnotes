@@ -296,7 +296,11 @@ func (s *Store) Reset() {
 	if s.vault != "" {
 		_ = os.Remove(s.file(s.vault))
 	}
+	next := s.ws.NextID
 	s.ws = New()
+	// A new ID, or the window would keep showing the old tab that had it.
+	s.ws.NextID = max(s.ws.NextID, next)
+	s.ws.Root.Tabs[0].ID = s.ws.takeID("t")
 }
 
 // Follow applies a move or delete to the workspace of the vault it

@@ -10,6 +10,7 @@ package session
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -285,6 +286,17 @@ func (s *Session) forget(d *notes.Document) bool {
 	delete(s.watched, d)
 	d.Dispose()
 	return true
+}
+
+// Under lists the open documents of a vault at a path or inside it.
+func (s *Session) Under(vault int64, p string) []*notes.Document {
+	var out []*notes.Document
+	for k, d := range s.docs {
+		if k.vault == vault && (k.path == p || strings.HasPrefix(k.path, p+"/")) {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // Unsaved reports whether any open note has text notesd has not saved,

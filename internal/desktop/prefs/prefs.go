@@ -109,7 +109,7 @@ func decode(data []byte, into any) bool {
 	v := reflect.ValueOf(into).Elem()
 	for i := range v.NumField() {
 		name, _, _ := strings.Cut(v.Type().Field(i).Tag.Get("json"), ",")
-		if value, ok := raw[name]; ok {
+		if value, ok := raw[name]; ok && value.Kind() != 'n' { // null keeps the default
 			_ = json.Unmarshal(value, v.Field(i).Addr().Interface())
 		}
 	}

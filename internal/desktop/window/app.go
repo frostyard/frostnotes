@@ -105,6 +105,7 @@ type App struct {
 	counts       textCounts
 	vm           vaultManager
 	sets         settingsDialog
+	focusGroup   string // the tab group the focus was last in
 }
 
 type binding struct {
@@ -137,9 +138,18 @@ func (a *App) Start() { a.Session.Start() }
 // close: at once when every note reached notesd, else when the user says
 // so (docs/design/app.md#operational-notes).
 func (a *App) RequestClose(done func()) {
+	for _, tc := range a.tabs {
+		if tc.ed != nil {
+			tc.ed.Properties.Commit()
+		}
+	}
 	a.Store.Flush()
 	a.saveState()
 	a.Session.Flush(func() {
+		// What was typed while another note saved is not in its document yet.
+		for _, b := range a.bindings {
+			b.b.Sync()
+		}
 		if !a.Session.Unsaved() {
 			a.Session.Close()
 			done()
@@ -236,6 +246,7 @@ func (a *App) showVault(v *api.Vault) {
 	a.releaseAllTabs()
 	clear(a.previews)
 	a.vault = v
+	a.settings = nil // the old vault's say nothing of this one
 	if v == nil {
 		a.Store.Load("")
 		a.Catalog, a.env = nil, nil

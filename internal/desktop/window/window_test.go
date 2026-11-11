@@ -9,14 +9,18 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	code "github.com/egoist/mygo/ui/editor"
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
+	"github.com/frostyard/frostnotes/internal/desktop/editor"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/session"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
@@ -520,5 +524,245 @@ func TestTheBreadcrumbRevealsAFolder(t *testing.T) {
 	w := f.a.Store.Workspace()
 	if w.Left.Panes[w.Left.Active] != "files" || !slices.Contains(w.Files.Expanded, "Projects") {
 		t.Fatalf("pane %q, expanded %q", w.Left.Panes[w.Left.Active], w.Files.Expanded)
+	}
+}
+
+// heldUploads answers an upload when the test says.
+type heldUploads struct{ done func(string, error) }
+
+func (u *heldUploads) Upload(_ []editor.File, done func(string, error)) { u.done = done }
+
+func (f *fixture) openNoteTab(p string) *editor.NoteEditor {
+	f.t.Helper()
+	f.until("the catalog", func() bool { return f.a.hasFile(p) })
+	f.a.open(p, workspace.NewTab)
+	f.until("the note", func() bool {
+		e := f.a.activeEditor()
+		return f.a.activeFile() == p && e != nil && e.Binding().Document().Loaded()
+	})
+	return f.a.activeEditor()
+}
+
+func TestAnUploadOutlastsAModeSwitch(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "text\n")
+	f.openVault()
+	e := f.openNoteTab("a.md")
+	up := &heldUploads{}
+	e.Uploads = up
+	e.Attach([]editor.File{{Name: "p.png", Data: []byte("x")}})
+	f.a.toggleMode() // the only tab of the note leaves edit mode
+	f.until("the reading view", func() bool { return f.a.activeEditor() == nil })
+	up.done("![[p.png]]", nil)
+	f.tt.Frame()
+	f.loop.Advance(notes.SaveDelay)
+	f.loop.Until(t, "the save", func() bool {
+		f.tt.Frame()
+		f.loop.Post(func() {})
+		return strings.Contains(f.Read("a.md").Content, "![[p.png]]")
+	})
+}
+
+func TestClosingCommitsAFocusedProperty(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "---\nstatus: draft\n---\nbody\n")
+	f.openVault()
+	f.openNoteTab("a.md")
+	f.tt.Frame()
+	if err := f.tt.Click("status"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	f.tt.Key(ui.Cmd, ui.KeyA)
+	f.tt.Type("final")
+	f.tt.Frame()
+	closed := false
+	f.a.RequestClose(func() { closed = true })
+	f.until("the close", func() bool { return closed })
+	if got := f.Read("a.md").Content; !strings.Contains(got, "status: final") {
+		t.Fatalf("file holds %q", got)
+	}
+}
+
+func TestClosingSeesWhatWasTypedDuringTheFlush(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "a\n")
+	f.Create("b.md", "b\n")
+	f.openVault()
+	a := f.openNoteTab("a.md")
+	b := f.openNoteTab("b.md")
+	b.Binding().Buffer().Edit(code.Edit{Start: 0, End: 0, Text: "typed "})
+	b.Binding().Sync()
+	closed := false
+	f.a.RequestClose(func() { closed = true })
+	a.Binding().Buffer().Edit(code.Edit{Start: 0, End: 0, Text: "late "}) // while b saves
+	f.waitText("Close anyway?")
+	if closed {
+		t.Fatal("closed with what was typed unsaved")
+	}
+}
+
+func TestAPagePreviewsLinkFollowsTheOpenRules(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	var opened []string
+	f.a.cfg.OpenURL = func(u string) error { opened = append(opened, u); return nil }
+	f.a.previews["a.md\x00b"] = &preview{text: "see [mail](mailto:a@e.test?attach=/etc/passwd) here", done: true}
+	draw := f.a.linkPreview(func() string { return "a.md" })
+	tt := ui.NewTester(func(c *ui.Context) { draw(c, editor.Link{Target: "b"}) }, 400, 300)
+	if err := tt.Click("mail"); err != nil {
+		t.Fatal(err)
+	}
+	if len(opened) != 1 {
+		t.Fatalf("the link did not go through the app's rules: %q", opened)
+	}
+}
+
+func TestALinkResolvedAfterAVaultSwitchIsDropped(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "a\n")
+	other, err := f.Other.Vault().Add(t.Context(), &api.VaultAddParams{Path: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("a.md") })
+	f.a.followLink(editor.Link{Target: "New note"}, "a.md", editor.WhereHere)
+	before := f.a.vault
+	f.a.vault = other  // the answer comes after the switch
+	for i := range 3 { // the resolve's answer, and a create that would follow it
+		done := false
+		f.a.call(func(ctx context.Context, c *api.Client) error {
+			_, err := c.Note().Create(ctx, &api.NoteCreateParams{VaultID: other.ID, Path: "Sentinel " + strconv.Itoa(i) + ".md"})
+			return err
+		}, func(error) { done = true })
+		f.loop.Until(t, "a round trip", func() bool { return done })
+	}
+	f.a.vault = before
+	files, err := f.Other.Note().Files(t.Context(), &api.NoteFilesParams{VaultID: other.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(files.Files, func(v api.VaultFile) bool { return v.Path == "New note.md" }) {
+		t.Fatalf("the note went to the vault switched to: %+v", files.Files)
+	}
+}
+
+func TestDeletingADirtyNoteStaysDeleted(t *testing.T) {
+	for _, tc := range []struct{ name, del string }{{"the note", "Dir/a.md"}, {"its folder", "Dir"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := start(t)
+			f.Create("Dir/a.md", "text\n")
+			f.openVault()
+			e := f.openNoteTab("Dir/a.md")
+			e.Binding().Buffer().Edit(code.Edit{Start: 0, End: 0, Text: "typed "})
+			e.Binding().Sync()
+			f.a.Prefs.ConfirmDelete = false
+			f.a.deleteFile(tc.del, tc.del == "Dir")
+			f.loop.Until(t, "the delete", func() bool {
+				f.tt.Frame()
+				f.loop.Post(func() {})
+				_, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "Dir/a.md"})
+				return err != nil
+			})
+			d := e.Binding().Document()
+			f.until("the deleted notice", func() bool { return d.Notice() != nil && d.Notice().Kind == notes.NoticeDeleted })
+			if _, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "Dir/a.md"}); err == nil {
+				t.Fatal("the note came back")
+			}
+		})
+	}
+}
+
+func TestANewVaultForgetsTheOldSettings(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	v := *f.a.vault
+	f.a.showVault(&v)
+	if f.a.settings != nil {
+		t.Fatal("the old settings stayed for the new vault")
+	}
+	f.until("the settings", func() bool { return f.a.settings != nil })
+}
+
+func TestTheRightSidebarButtonWorksInAFrame(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.tt.Frame()
+	if !f.a.Store.Workspace().Right.Open {
+		t.Fatal("it starts closed")
+	}
+	if err := f.tt.Click("Toggle right sidebar"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	f.tt.Frame()
+	if f.a.Store.Workspace().Right.Open {
+		t.Fatal("the click was undone")
+	}
+}
+
+func TestAPressInAGroupMakesItActive(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "a\n")
+	f.Create("b.md", "b\n")
+	f.openVault()
+	f.openNoteTab("a.md")
+	f.until("the second note", func() bool { return f.a.hasFile("b.md") })
+	f.a.open("b.md", workspace.ToRight)
+	f.until("b", func() bool {
+		e := f.a.activeEditor()
+		return f.a.activeFile() == "b.md" && e != nil && e.Binding().Document().Loaded()
+	})
+	f.tt.Frame()
+	first := func() ui.Rect {
+		var out ui.Rect
+		for _, n := range f.tt.AccessAll() {
+			if n.Name == "Note" && (out.W == 0 || n.Bounds.X < out.X) {
+				out = n.Bounds
+			}
+		}
+		return out
+	}()
+	if first.W == 0 {
+		t.Fatal("no editor")
+	}
+	f.tt.ClickAt(first.X+first.W/2, first.Y+first.H/2)
+	f.tt.Frame()
+	f.tt.Frame()
+	if f.a.activeFile() != "a.md" {
+		t.Fatalf("a click in a's editor left %q active", f.a.activeFile())
+	}
+	// A press on the other group's shown tab makes it active too.
+	var tab ui.Rect
+	for _, n := range f.tt.AccessAll() {
+		if n.Role == ui.RoleTab && n.Name == "b" {
+			tab = n.Bounds
+		}
+	}
+	f.tt.ClickAt(tab.X+16, tab.Y+tab.H/2)
+	f.tt.Frame()
+	if f.a.activeFile() != "b.md" {
+		t.Fatalf("a press on b's tab left %q active", f.a.activeFile())
+	}
+}
+
+func TestRemovingAVaultSaysWhatIsForgotten(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.a.vm.remove(f.a, &f.a.vaults[0])
+	f.waitText("Its folder and files stay where they are. Frostnotes forgets its index and version history on this device.")
+}
+
+func TestResetLeavesNoHiddenEditor(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "a\n")
+	f.openVault()
+	f.a.Store.Update(func(w *workspace.Workspace) { w.Open(workspace.Note("a.md", workspace.ModeEdit), workspace.Here) })
+	f.until("the note", func() bool { e := f.a.activeEditor(); return e != nil && e.Binding().Document().Loaded() })
+	f.a.run("frostnotes:reset-workspace-layout")
+	f.tt.Frame()
+	if f.a.activeEditor() != nil {
+		t.Fatal("the old editor is still the active one")
 	}
 }

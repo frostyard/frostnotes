@@ -58,3 +58,9 @@ func TestState(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 }
+
+func TestANullKeepsTheDefault(t *testing.T) {
+	if got := Parse([]byte(`{"confirmDelete":null}`)); !got.ConfirmDelete {
+		t.Fatal("null turned off the delete confirmation")
+	}
+}

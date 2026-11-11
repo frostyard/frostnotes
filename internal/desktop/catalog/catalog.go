@@ -310,19 +310,21 @@ func (s *NoteSources) Upload(files []editor.File, done func(embeds string, err e
 		paths[f.Path] = true
 		names[path.Base(f.Path)]++
 	}
+	wikilinks := c.Wikilinks
 	var embeds []string
 	var err error
 	c.do(func(ctx context.Context, n API) error {
 		for _, f := range files {
-			if len(f.Data) > editor.MaxAttach {
-				return fmt.Errorf("%s is over 10 MB: copy it into the vault's folder instead", f.Name)
+			data, err := f.Read()
+			if err != nil {
+				return err
 			}
 			p := editor.FreePath(folder, f.Name, func(x string) bool { return paths[x] })
-			if _, err := n.Upload(ctx, &api.NoteUploadParams{VaultID: c.vault, Path: p, Data: base64.StdEncoding.EncodeToString(f.Data)}); err != nil {
+			if _, err := n.Upload(ctx, &api.NoteUploadParams{VaultID: c.vault, Path: p, Data: base64.StdEncoding.EncodeToString(data)}); err != nil {
 				return fmt.Errorf("upload %s: %w", f.Name, err)
 			}
 			base := path.Base(p)
-			embeds = append(embeds, editor.EmbedFor(p, c.Wikilinks, names[base] == 0))
+			embeds = append(embeds, editor.EmbedFor(p, wikilinks, names[base] == 0))
 			paths[p] = true
 			names[base]++
 		}

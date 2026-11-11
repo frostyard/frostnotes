@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
+	"unsafe"
 
 	"github.com/frostyard/frostnotes/internal/vaultgen"
 )
@@ -390,6 +392,45 @@ func TestLinksTagsAndFootnotesAreObjects(t *testing.T) {
 	for _, p := range s.Pieces(long, nil, false) {
 		if p.Kind != Hide {
 			t.Fatalf("a long link drew as an object: %+v", p)
+		}
+	}
+}
+
+func TestNestedLinkTextIsLinear(t *testing.T) {
+	line := strings.Repeat("[a ", 40) + "b" + strings.Repeat("](c)", 40)
+	done := make(chan struct{})
+	go func() {
+		var s Scanner
+		s.Pieces(line, nil, false)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("nested links took exponential time")
+	}
+}
+
+func TestTheCacheHoldsNoSubstringOfTheNote(t *testing.T) {
+	note := "# One\n[[Plan]] and #tag\n"
+	var s Scanner
+	s.Pieces(note, nil, false)
+	start := uintptr(unsafe.Pointer(unsafe.StringData(note)))
+	inside := func(x string) bool {
+		if x == "" {
+			return false
+		}
+		p := uintptr(unsafe.Pointer(unsafe.StringData(x)))
+		return p >= start && p < start+uintptr(len(note))
+	}
+	for key, pieces := range s.cache {
+		if inside(key.text) {
+			t.Errorf("the key %q shares the note's memory", key.text)
+		}
+		for _, p := range pieces {
+			if inside(p.Label) || inside(p.Target) {
+				t.Errorf("a piece of %q shares the note's memory", key.text)
+			}
 		}
 	}
 }

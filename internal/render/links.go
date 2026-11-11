@@ -88,10 +88,11 @@ func markdownDestination(dest []byte) (markdown.Link, bool) {
 	if linkScheme.MatchString(s) || strings.HasPrefix(s, "//") {
 		return markdown.Link{}, false
 	}
-	if decoded, err := url.PathUnescape(s); err == nil {
-		s = decoded
-	}
+	// The fragment first: an escaped "#" belongs to the name.
 	target, sub, hasSub := strings.Cut(s, "#")
+	if decoded, err := url.PathUnescape(target); err == nil {
+		target = decoded
+	}
 	l := markdown.Link{Kind: markdown.LinkMarkdown, Target: target}
 	if hasSub {
 		l.Subpath = "#" + sub

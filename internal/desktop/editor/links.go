@@ -19,7 +19,7 @@ type Link struct {
 
 var (
 	wikiLinkRe = regexp.MustCompile(`(!?)\[\[([^\[\]\n]+)\]\]`)
-	mdLinkRe   = regexp.MustCompile(`(!?)\[([^\]\n]*)\]\(\s*(<[^>\n]*>|[^)\s]*)(?:\s+"[^"\n]*")?\s*\)`)
+	mdLinkRe   = regexp.MustCompile(`(!?)\[([^\]\n]*)\]\(\s*(<[^>\n]*>|(?:[^()\s]|\((?:[^()\s]|\([^()\s]*\))*\))*)(?:\s+"[^"\n]*")?\s*\)`)
 	autoLinkRe = regexp.MustCompile(`<([a-zA-Z][a-zA-Z0-9+.-]*:[^>\s]+)>`)
 	bareURLRe  = regexp.MustCompile(`\bhttps?://[^\s<>()\[\]]+[^\s<>()\[\].,;:!?'"]`)
 	schemeRe   = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
@@ -53,11 +53,11 @@ func LinkAt(text string, pos int) (Link, bool) {
 			if dest == "" {
 				return Link{}, false
 			}
+			if i := strings.IndexByte(dest, '#'); i >= 0 { // before unescaping: %23 is part of the name
+				dest, link.Subpath = dest[:i], dest[i:]
+			}
 			if p, err := url.PathUnescape(dest); err == nil {
 				dest = p
-			}
-			if i := strings.IndexByte(dest, '#'); i >= 0 {
-				dest, link.Subpath = dest[:i], dest[i:]
 			}
 			link.Target = dest
 			return link, true

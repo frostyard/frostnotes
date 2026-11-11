@@ -59,6 +59,8 @@ type rewriter struct {
 	left  *budget
 	body  []byte
 	edits []edit
+	// emptyFrom is past the last image with no alt text.
+	emptyFrom int
 }
 
 // rewrite rewrites a body (a note's, or a callout's inside) as Markdown.
@@ -252,6 +254,9 @@ func (r *rewriter) markdownLink(n ast.Node) {
 		return
 	}
 	_, textEnd, ok := childSpan(n)
+	if !ok && image {
+		textEnd, ok = r.emptyAltAt(n)
+	}
 	if !ok {
 		return
 	}
@@ -270,6 +275,33 @@ func (r *rewriter) markdownLink(n ast.Node) {
 		}
 	}
 	r.add(start, end, dest(NoteScheme+resolved+l.Subpath))
+}
+
+// emptyAltAt finds where an image with no alt text has its "]": it has no
+// text to place it by, so it is the next "![](" after what comes before it.
+func (r *rewriter) emptyAltAt(n ast.Node) (int, bool) {
+	from := r.emptyFrom
+	if prev := n.PreviousSibling(); prev != nil {
+		if _, e, ok := childSpan(prev); ok {
+			from = max(from, e)
+		}
+	} else {
+		block := n.Parent()
+		for block != nil && block.Type() != ast.TypeBlock {
+			block = block.Parent()
+		}
+		if block != nil && block.Lines().Len() > 0 {
+			from = max(from, block.Lines().At(0).Start)
+		}
+	}
+	const marker = "![]("
+	j := bytes.Index(r.body[from:], []byte(marker))
+	if j < 0 {
+		return 0, false
+	}
+	at := from + j + len("![")
+	r.emptyFrom = at
+	return at, true
 }
 
 // destinationAt finds the destination of an inline link whose text ends at

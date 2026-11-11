@@ -29,8 +29,9 @@ func (a *App) frame(c *ui.Context) {
 		f.SidebarPane = paneLeft
 	}
 	a.layoutFromWorkspace()
+	drawn := a.layoutDrawn()
 	a.Shell.View(c, f)
-	a.layoutToWorkspace()
+	a.layoutToWorkspace(drawn)
 	a.sets.view(c, a)
 }
 
@@ -211,17 +212,34 @@ func (a *App) layoutFromWorkspace() {
 	}
 }
 
-// layoutToWorkspace keeps what the user changed in this frame.
-func (a *App) layoutToWorkspace() {
+// paneLayout is one sidebar's layout as the frame starts drawing it.
+type paneLayout struct {
+	width     float32
+	collapsed bool
+}
+
+// layoutDrawn is the sidebars' layout the frame starts with.
+func (a *App) layoutDrawn() map[string]paneLayout {
+	out := make(map[string]paneLayout, 2)
+	for _, id := range []string{paneLeft, paneRight} {
+		out[id] = paneLayout{a.panes.Layout.Widths[id], a.panes.Layout.Collapsed[id]}
+	}
+	return out
+}
+
+// layoutToWorkspace keeps what the panes changed in this frame. A button
+// that changed the workspace itself in this frame keeps its change: only
+// what moved since the frame started is copied back.
+func (a *App) layoutToWorkspace(drawn map[string]paneLayout) {
 	if a.vault == nil {
 		return
 	}
 	w := a.Store.Workspace()
 	sync := func(id, side string, s *workspace.Sidebar) {
-		if width := float64(a.panes.Layout.Widths[id]); width != 0 && width != s.Width {
+		if width := float64(a.panes.Layout.Widths[id]); width != 0 && a.panes.Layout.Widths[id] != drawn[id].width && width != s.Width {
 			a.Store.Update(func(w *workspace.Workspace) { w.SetSidebarWidth(side, width) })
 		}
-		if open := !a.panes.Layout.Collapsed[id]; open != s.Open {
+		if collapsed := a.panes.Layout.Collapsed[id]; collapsed != drawn[id].collapsed && !collapsed != s.Open {
 			a.Store.Update(func(w *workspace.Workspace) { w.ToggleSidebar(side) })
 		}
 	}

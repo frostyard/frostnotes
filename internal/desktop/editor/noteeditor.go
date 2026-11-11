@@ -87,6 +87,9 @@ type NoteEditor struct {
 	// HideFront hides the frontmatter in live preview, while the properties
 	// panel stands in for it.
 	HideFront bool
+	// Hold keeps the note open until the release it returns runs, for an
+	// upload that may outlast this editor; nil for none.
+	Hold func() (release func())
 	// Rendered draws live preview's callouts, tables, embeds and images;
 	// nil leaves them as source.
 	Rendered *reading.Blocks
@@ -366,8 +369,8 @@ func (e *NoteEditor) completeSubpath(at int, target string, blocks bool, query s
 	version := e.b.Buffer().Version()
 	start := at - len(query)
 	e.Sources.Subpaths(target, blocks, func(found []Target) {
-		if e.b.Buffer().Version() != version {
-			return // the text moved on; the next key asks again
+		if e.b.Buffer().Version() != version || e.State.Cursor() != at {
+			return // the text or the caret moved on; the next key asks again
 		}
 		var items []code.Completion
 		for _, t := range found {
