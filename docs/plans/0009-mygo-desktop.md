@@ -469,7 +469,8 @@ costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 **Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
 strike-through. Math stays as TeX source and audio and video as their embeds
 (below, under Later). The owner used it with their real vault on Snow on
-2026-11-10. Not done: a run of Orca.
+2026-11-10, and waived the run of Orca that day; the Tester's checks of roles
+and names stand in for it.
 
 - Live preview on MyGo's editor, in the order its author is building
   [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the
