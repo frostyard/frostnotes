@@ -460,6 +460,44 @@ func TestFilesClicksDoNotDependOnHoverOrSelection(t *testing.T) {
 	}
 }
 
+func TestAMiddleClickOpensAFileOnlyWhenReleasedOnIt(t *testing.T) {
+	f := start(t, map[string]string{"A.md": "a", "B.md": "b", "Dir/C.md": "c"})
+	store := workspace.NewStore(f.loop, t.TempDir())
+	store.Load("/vault")
+	p := &Files{Env: f.env, Store: store}
+	var places []string
+	f.env.Actions.Open = func(path, where string) { f.opened = append(f.opened, path); places = append(places, where) }
+	tt := ui.NewTester(func(c *ui.Context) { p.View(c) }, 300, 500)
+	tt.Frame()
+	at := func(name string) (float32, float32) {
+		t.Helper()
+		r, ok := tt.Find(name)
+		if !ok {
+			t.Fatalf("missing %s", name)
+		}
+		return r.X + 2, r.Y + 2
+	}
+	ax, ay := at("A")
+	bx, by := at("B")
+	tt.PressButton(2, ax, ay) // released over another row: no click
+	tt.Move(bx, by)
+	tt.ReleaseButton(2, bx, by)
+	tt.Frame()
+	dx, dy := at("Dir")
+	tt.PressButton(2, dx, dy) // a folder does not open
+	tt.ReleaseButton(2, dx, dy)
+	tt.Frame()
+	if len(f.opened) != 0 {
+		t.Fatalf("opened %v", f.opened)
+	}
+	tt.PressButton(2, bx, by)
+	tt.ReleaseButton(2, bx, by)
+	tt.Frame()
+	if !slices.Equal(f.opened, []string{"B.md"}) || !slices.Equal(places, []string{workspace.NewTab}) {
+		t.Fatalf("opened %v in %v", f.opened, places)
+	}
+}
+
 func TestIdleFilesOpenSyncDoesNotAllocate(t *testing.T) {
 	store := workspace.NewStore(desktoptest.NewLoop(), t.TempDir())
 	store.Load("/vault")

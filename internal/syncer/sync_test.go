@@ -120,8 +120,10 @@ func deviceOptions(name string) rpctest.Options {
 // everything the hub's log holds.
 func settle(t *testing.T, h *node, devices ...*node) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), settleWait)
-	defer cancel()
+	// No deadline of its own: how long a vault takes to sync depends on the
+	// runner, and a fixed one ran out on slow CI runners twice. A stall ends
+	// at the test binary's -timeout, whose panic shows every goroutine.
+	ctx := t.Context()
 	for range 50 {
 		vs, err := h.c.Hub().Vaults(ctx, &api.HubVaultsParams{})
 		if err != nil {
