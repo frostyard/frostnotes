@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -352,4 +354,199 @@ func TestAnOutsideEditReachesTheDocument(t *testing.T) {
 		}
 	}
 	f.loop.Until(t, "the reload", func() bool { return b.text == "start\nvim\n" })
+}
+
+// gate is a NoteAPI whose reads and creates wait, while held, for the test
+// to let them through, so a test can type during one or answer them out of
+// order. The rest go straight to notesd.
+type gate struct {
+	NoteAPI
+	loop    *desktoptest.Loop // woken when a request arrives
+	held    atomic.Bool
+	reads   chan *heldRead
+	creates chan chan struct{}
+	writes  atomic.Int32
+}
+
+// heldRead is a read waiting for its answer.
+type heldRead struct {
+	path   string
+	answer chan func() (*api.Note, error)
+}
+
+func (g *gate) Read(ctx context.Context, p *api.NoteReadParams) (*api.Note, error) {
+	if !g.held.Load() {
+		return g.NoteAPI.Read(ctx, p)
+	}
+	r := &heldRead{path: p.Path, answer: make(chan func() (*api.Note, error))}
+	g.reads <- r
+	g.loop.Post(func() {})
+	return (<-r.answer)()
+}
+
+func (g *gate) Create(ctx context.Context, p *api.NoteCreateParams) (*api.WriteResult, error) {
+	if g.held.Load() {
+		release := make(chan struct{})
+		g.creates <- release
+		g.loop.Post(func() {})
+		<-release
+	}
+	return g.NoteAPI.Create(ctx, p)
+}
+
+func (g *gate) Write(ctx context.Context, p *api.NoteWriteParams) (*api.WriteResult, error) {
+	g.writes.Add(1)
+	return g.NoteAPI.Write(ctx, p)
+}
+
+// countedEnv counts the answers the UI thread has run.
+type countedEnv struct {
+	*desktoptest.Loop
+	ran atomic.Int32
+}
+
+func (e *countedEnv) Post(f func()) {
+	e.Loop.Post(func() {
+		f()
+		e.ran.Add(1)
+	})
+}
+
+// openGated loads a document behind a gate, which holds from then on.
+func (f *fixture) openGated(path string) (*Document, *fakeBuffer, *gate, *countedEnv) {
+	f.t.Helper()
+	g := &gate{NoteAPI: f.client(), loop: f.loop, reads: make(chan *heldRead, 4), creates: make(chan chan struct{}, 4)}
+	env := &countedEnv{Loop: f.loop}
+	d := NewDocument(env, func() NoteAPI { return g }, f.Vault, path)
+	d.Load()
+	f.loop.Until(f.t, "the note to load", d.Loaded)
+	b := &fakeBuffer{doc: d, text: d.Text()}
+	d.Attach(b)
+	g.held.Store(true)
+	return d, b, g, env
+}
+
+func (f *fixture) nextRead(g *gate) *heldRead {
+	f.t.Helper()
+	var r *heldRead
+	f.loop.Until(f.t, "a read", func() bool {
+		select {
+		case r = <-g.reads:
+			return true
+		default:
+			return false
+		}
+	})
+	return r
+}
+
+func TestOnlyTheNewestReadCounts(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "start\n")
+	d, b, g, env := f.openGated("a.md")
+	before := env.ran.Load()
+	d.Reload()
+	older := f.nextRead(g)
+	d.Reload()
+	newer := f.nextRead(g)
+	newer.answer <- func() (*api.Note, error) { return &api.Note{Content: "newer\n", Hash: "new"}, nil }
+	f.loop.Until(t, "the newer answer", func() bool { return env.ran.Load() == before+1 })
+	older.answer <- func() (*api.Note, error) { return &api.Note{Content: "older\n", Hash: "old"}, nil }
+	f.loop.Until(t, "the older answer", func() bool { return env.ran.Load() == before+2 })
+	if b.text != "newer\n" || d.Base() != "new" {
+		t.Fatalf("text %q, base %q", b.text, d.Base())
+	}
+}
+
+func TestARenameDuringAReadReadsTheNewPath(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "start\n")
+	d, _, g, _ := f.openGated("a.md")
+	d.Reload()
+	first := f.nextRead(g)
+	if first.path != "a.md" {
+		t.Fatalf("read %q", first.path)
+	}
+	d.Moved("b.md")
+	first.answer <- func() (*api.Note, error) { return nil, &api.Error{Code: api.CodeNotFound} }
+	second := f.nextRead(g)
+	if second.path != "b.md" {
+		t.Fatalf("read %q after the move", second.path)
+	}
+	second.answer <- func() (*api.Note, error) { return &api.Note{Content: "start\n", Hash: d.Base()}, nil }
+}
+
+func TestTypingDuringARefusalIsHeld(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "file\n")
+	d, b, g, _ := f.openGated("a.md")
+	d.base = strings.Repeat("0", 64)
+	b.typeAt(t, 0, 4, "typed")
+	f.loop.Advance(SaveDelay)
+	r := f.nextRead(g)
+	b.typeAt(t, 5, 5, " more")
+	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	f.loop.Until(t, "the refusal", func() bool { return d.Notice() != nil })
+	if n := d.Notice(); n.Kind != NoticeRefused || n.Text != "typed more\n" {
+		t.Fatalf("notice %+v", n)
+	}
+}
+
+func TestTypingDuringARestoreStays(t *testing.T) {
+	f := newFixture(t)
+	hash := f.Create("a.md", "kept\n")
+	d, b, g, _ := f.openGated("a.md")
+	if err := f.Other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.Vault, Path: "a.md", Base: hash}); err != nil {
+		t.Fatal(err)
+	}
+	d.Removed()
+	d.Restore()
+	r := f.nextRead(g)
+	b.typeAt(t, 4, 4, " typed")
+	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	f.loop.Until(t, "the restore", func() bool { return d.Notice() == nil })
+	f.settle(d)
+	if b.text != "kept typed\n" {
+		t.Fatalf("buffer %q", b.text)
+	}
+	if got := f.Read("a.md").Content; got != "kept typed\n" {
+		t.Fatalf("file holds %q", got)
+	}
+}
+
+func TestARecreationIsTheOneWriteInFlight(t *testing.T) {
+	f := newFixture(t)
+	hash := f.Create("a.md", "text\n")
+	d, b, g, _ := f.openGated("a.md")
+	b.typeAt(t, 4, 4, " more")
+	if err := f.Other.Note().Delete(t.Context(), &api.NoteDeleteParams{VaultID: f.Vault, Path: "a.md", Base: hash}); err != nil {
+		t.Fatal(err)
+	}
+	d.Removed()
+	var release chan struct{}
+	f.loop.Until(t, "the create", func() bool {
+		select {
+		case release = <-g.creates:
+			return true
+		default:
+			return false
+		}
+	})
+	// While it runs: typing, a save, and the removal's event again.
+	b.typeAt(t, 9, 9, " again")
+	d.Save()
+	d.Removed()
+	if n := g.writes.Load(); n != 0 {
+		t.Fatalf("%d writes during the create", n)
+	}
+	if len(g.creates) != 0 {
+		t.Fatal("a second create during the first")
+	}
+	close(release)
+	r := f.nextRead(g) // the second removal is checked
+	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	f.settle(d)
+	if got := f.Read("a.md").Content; got != "text more again\n" {
+		t.Fatalf("file holds %q", got)
+	}
 }

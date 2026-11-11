@@ -274,14 +274,24 @@ func (r *rewriter) markdownLink(n ast.Node) {
 
 // destinationAt finds the destination of an inline link whose text ends at
 // i: "](" then the destination, in angle brackets or up to a space or the
-// closing parenthesis, parentheses balanced.
+// closing parenthesis, parentheses balanced. A reference link has no "("
+// after its own "]", and has no destination here.
 func destinationAt(body []byte, i int) (start, end int, ok bool) {
-	// The text may end before emphasis closes: skip to the "](".
-	j := bytes.Index(body[i:], []byte("]("))
-	if j < 0 || bytes.IndexByte(body[i:i+j], '\n') >= 0 {
+	// The text may end before emphasis closes: skip to the link's own "]".
+	j := i
+	for j < len(body) && body[j] != ']' {
+		switch body[j] {
+		case '\n':
+			return 0, 0, false
+		case '\\':
+			j++
+		}
+		j++
+	}
+	if j+1 >= len(body) || body[j+1] != '(' {
 		return 0, 0, false
 	}
-	start = i + j + 2
+	start = j + 2
 	for start < len(body) && (body[start] == ' ' || body[start] == '\t') {
 		start++
 	}
@@ -338,8 +348,55 @@ func (r *rewriter) loneEmbed(p ast.Node) bool {
 	for _, e := range embeds {
 		b.WriteString(r.embedBlock(e.l, e.path))
 	}
-	r.add(start, end, b.String())
+	first := string(r.body[start:p.Lines().At(0).Start])
+	r.add(start, end, inContainer(b.String(), first))
 	return true
+}
+
+// inContainer writes a block's lines inside the quote or list its first
+// line is in: first is that line's prefix, as "> " or "- ".
+func inContainer(block, first string) string {
+	if first == "" {
+		return block
+	}
+	rest := continuation(first)
+	var b strings.Builder
+	for i, line := range strings.SplitAfter(block, "\n") {
+		switch {
+		case line == "":
+		case i == 0:
+			b.WriteString(first + line)
+		default:
+			b.WriteString(rest + line)
+		}
+	}
+	return b.String()
+}
+
+// continuation is what the lines after a container's first start with:
+// its quote marks and its indentation, a list's marker becoming spaces.
+func continuation(first string) string {
+	return strings.Map(func(c rune) rune {
+		if c == '>' || c == ' ' || c == '\t' {
+			return c
+		}
+		return ' '
+	}, first)
+}
+
+// stripContainer takes a container's prefix off a line, as far as the line
+// has it: a lazy continuation line may not.
+func stripContainer(line, prefix string) string {
+	for _, c := range prefix {
+		if c == '>' {
+			if t := strings.TrimLeft(line, " "); strings.HasPrefix(t, ">") {
+				line = t[1:]
+			}
+			continue
+		}
+		line = strings.TrimPrefix(line, string(c))
+	}
+	return line
 }
 
 func (r *rewriter) embedBlock(l markdown.Link, p string) string {
@@ -372,18 +429,23 @@ func (r *rewriter) embedBlock(l markdown.Link, p string) string {
 }
 
 // fence wraps content in a fenced block of info, with a fence longer than
-// any run of backticks inside.
+// any run of its mark inside. The mark is a backtick, or a tilde when info
+// has a backtick, which CommonMark does not allow after a backtick fence.
 func fence(info, content string) string {
+	mark := '`'
+	if strings.ContainsRune(info, '`') {
+		mark = '~'
+	}
 	longest, run := 0, 0
 	for _, c := range content {
-		if c == '`' {
+		if c == mark {
 			run++
 			longest = max(longest, run)
 		} else {
 			run = 0
 		}
 	}
-	f := strings.Repeat("`", max(3, longest+1))
+	f := strings.Repeat(string(mark), max(3, longest+1))
 	if content != "" && !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
@@ -409,21 +471,25 @@ func (r *rewriter) callout(q ast.Node) bool {
 	if !ok {
 		return false
 	}
+	// What is before this quote's own mark on its first line is the
+	// container it is in.
+	container := string(r.body[start:seg.Start])
+	container = container[:max(0, strings.LastIndexByte(container, '>'))]
+	rest := continuation(container)
 	lines := strings.SplitAfter(string(r.body[start:end]), "\n")
 	var inner strings.Builder
 	for i, line := range lines {
-		line = quoteMark.ReplaceAllString(line, "")
 		if i == 0 {
 			continue // the [!type] line
 		}
-		inner.WriteString(line)
+		inner.WriteString(quoteMark.ReplaceAllString(stripContainer(line, rest), ""))
 	}
 	info := CalloutLanguage + " " + strings.ToLower(string(m[1])) + string(m[2])
 	if title := strings.TrimSpace(string(m[3])); title != "" {
 		info += " " + title
 	}
 	body := rewrite([]byte(inner.String()), r.opts, r.stack, r.left)
-	r.add(start, end, fence(info, body))
+	r.add(start, end, inContainer(fence(info, body), container))
 	return true
 }
 

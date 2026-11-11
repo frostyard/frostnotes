@@ -110,3 +110,34 @@ func TestNoteLink(t *testing.T) {
 		t.Error("a web link read as a note")
 	}
 }
+
+func TestMarkdownReferenceLinkBeforeAnInlineLink(t *testing.T) {
+	in := "[plan][p] and [site](https://example.com)\n\n[p]: Plan.md\n"
+	got := Markdown([]byte(in), mdVault())
+	if !strings.Contains(got, "[site](https://example.com)") {
+		t.Fatalf("the inline link changed: %q", got)
+	}
+}
+
+func TestMarkdownBlocksStayInTheirContainers(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"an embed in a quote", "> ![[Deep4]]\n\nafter\n", "> ```frostnotes-embed Notes/Deep4.md\n> deepest\n> ```\n\nafter\n"},
+		{"a callout in a list", "- item\n\n  > [!note] T\n  > body\n", "- item\n\n  ```frostnotes-callout note T\n  body\n  ```\n"},
+		{"a callout in a quote", "> > [!note]\n> > body\n", "> ```frostnotes-callout note\n> body\n> ```\n"},
+	} {
+		if got := Markdown([]byte(tc.in), mdVault()); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestMarkdownFenceWithABacktickInItsInfo(t *testing.T) {
+	got := Markdown([]byte("> [!note] Use `x` here\n> a ~~~ b\n\nafter\n"), mdVault())
+	want := "~~~~frostnotes-callout note Use `x` here\na ~~~ b\n~~~~\n\nafter\n"
+	if got != want {
+		t.Fatalf("%q, want %q", got, want)
+	}
+	if out := HTML([]byte(got), Options{}); !strings.Contains(out, "<p>after</p>") {
+		t.Fatalf("what follows the block is not a paragraph: %q", out)
+	}
+}

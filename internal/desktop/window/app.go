@@ -375,11 +375,15 @@ func (a *App) event(_ int64, ev api.Event) {
 	}
 }
 
-// blocksChanged has live preview's rendered blocks read the vault again.
+// blocksChanged has what a note embeds, in live preview and the reading
+// view, read the vault again.
 func (a *App) blocksChanged() {
 	for _, tc := range a.tabs {
 		if tc.ed != nil {
 			tc.ed.Editor.Rendered.Changed()
+		}
+		if tc.read != nil {
+			tc.read.Changed()
 		}
 	}
 }

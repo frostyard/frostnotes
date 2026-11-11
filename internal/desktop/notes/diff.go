@@ -3,6 +3,7 @@ package notes
 import (
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // diffBudget bounds the edit distance, in lines, that Diff searches for a
@@ -12,8 +13,10 @@ import (
 const diffBudget = 1000
 
 // Diff returns the changes that make b from a: whole lines first (Myers'
-// algorithm), then each changed run of lines trimmed to the bytes that
-// differ, so a typed word is a change of a word.
+// algorithm), then each changed run of lines trimmed to the characters
+// that differ, so a typed word is a change of a word. A change never starts
+// or ends inside a character: mapped over another, it could make invalid
+// UTF-8.
 func Diff(a, b string) ChangeSet {
 	if a == b {
 		return EmptyChanges(len(a))
@@ -50,6 +53,9 @@ func commonPrefix(a, b string) int {
 	for i < n && a[i] == b[i] {
 		i++
 	}
+	for i > 0 && (i < len(a) && !utf8.RuneStart(a[i]) || i < len(b) && !utf8.RuneStart(b[i])) {
+		i--
+	}
 	return i
 }
 
@@ -58,6 +64,9 @@ func commonSuffix(a, b string) int {
 	i := 0
 	for i < n && a[len(a)-1-i] == b[len(b)-1-i] {
 		i++
+	}
+	for i > 0 && (!utf8.RuneStart(a[len(a)-i]) || !utf8.RuneStart(b[len(b)-i])) {
+		i--
 	}
 	return i
 }

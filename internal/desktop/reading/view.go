@@ -95,6 +95,7 @@ type View struct {
 	rendered string // the text md was rendered from
 	err      error
 	inFlight bool
+	stale    bool // the vault changed since the last rendering asked
 	stop     func()
 	changed  []func()
 }
@@ -117,8 +118,14 @@ func (v *View) Markdown() string { return v.md }
 // Err is why the latest rendering failed, nil when it did not.
 func (v *View) Err() error { return v.err }
 
+// Changed says the vault changed: what the note embeds may read otherwise.
+func (v *View) Changed() {
+	v.stale = true
+	v.schedule()
+}
+
 func (v *View) schedule() {
-	if v.doc.Loaded() && v.doc.Text() == v.rendered && v.md != "" {
+	if !v.stale && v.doc.Loaded() && v.doc.Text() == v.rendered && v.md != "" {
 		return
 	}
 	if v.stop != nil {
@@ -145,7 +152,7 @@ func (v *View) render() {
 	if v.doc.Loaded() {
 		params.Content = &text
 	}
-	v.inFlight = true
+	v.inFlight, v.stale = true, false
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -160,7 +167,7 @@ func (v *View) render() {
 			for _, fn := range v.changed {
 				fn()
 			}
-			if v.doc.Loaded() && v.doc.Text() != v.rendered {
+			if v.stale || v.doc.Loaded() && v.doc.Text() != v.rendered {
 				v.schedule()
 			}
 		})

@@ -131,13 +131,17 @@ type Document struct {
 	listeners                []func()
 	waiters                  []func() // Flush's callbacks
 	landed                   []func() // what waits for the write in flight
+	reads                    int      // numbers Reload's reads: only the newest counts
 }
 
-// flight is a write in progress: the text it sent, and what was typed
-// since.
+// flight is a write in progress, or a request that stands in for one: the
+// text it sent, and what was typed since. creating says it makes a deleted
+// note again, and removed that the note was removed again meanwhile.
 type flight struct {
-	sent  string
-	since ChangeSet
+	sent     string
+	since    ChangeSet
+	creating bool
+	removed  bool
 }
 
 // NewDocument makes the document of a note; client returns notesd's note
@@ -280,12 +284,17 @@ var errNotConnected = errors.New("not connected to notesd")
 
 // Load reads the note.
 func (d *Document) Load() {
+	path := d.path
 	var n *api.Note
 	d.call(func(ctx context.Context, c NoteAPI) (err error) {
-		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: d.path})
+		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: path})
 		return err
 	}, func(err error) {
 		if d.loaded || d.disposed {
+			return
+		}
+		if d.path != path {
+			d.Load() // moved meanwhile
 			return
 		}
 		switch {
@@ -403,13 +412,27 @@ func (d *Document) Save() {
 		} else {
 			d.answered(res)
 		}
-		landed := d.landed
-		d.landed = nil
-		for _, f := range landed {
-			f()
-		}
-		d.settle()
+		d.land()
 	})
+}
+
+// land runs what waited for the request in flight to end.
+func (d *Document) land() {
+	landed := d.landed
+	d.landed = nil
+	for _, f := range landed {
+		f()
+	}
+	d.settle()
+}
+
+// catchUp handles a note.changed that came during the request in flight.
+func (d *Document) catchUp() {
+	seen := d.seen
+	d.seen = ""
+	if seen != "" && seen != d.base {
+		d.Changed(seen)
+	}
 }
 
 // Flush saves now and calls done once nothing is unsaved, or a failed
@@ -479,11 +502,7 @@ func (d *Document) answered(res *api.WriteResult) {
 	if d.dirty {
 		d.Save()
 	}
-	seen := d.seen
-	d.seen = ""
-	if seen != "" && seen != d.base {
-		d.Changed(seen)
-	}
+	d.catchUp()
 }
 
 // refusedBase matches notesd's conflict when it has no base to merge from.
@@ -517,23 +536,34 @@ func (d *Document) retryLater(reason string) {
 // takes the file's text, and the editor's is kept for the merge view, so
 // nothing typed is lost and nothing is overwritten.
 func (d *Document) refused() {
-	held := d.text
+	path := d.path
+	d.flight = &flight{sent: d.text, since: EmptyChanges(len(d.text))}
+	d.reads++
 	var n *api.Note
 	d.call(func(ctx context.Context, c NoteAPI) (err error) {
-		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: d.path})
+		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: path})
 		return err
 	}, func(err error) {
-		if err != nil {
-			d.retryLater(err.Error())
+		d.flight = nil
+		switch {
+		case d.path != path:
+			d.refused() // moved meanwhile
 			return
+		case err != nil:
+			d.retryLater(err.Error())
+		default:
+			held := d.text // with what was typed during the read
+			text := d.adopt(n.Content)
+			d.applyRemote(Diff(d.text, text))
+			d.base = n.Hash
+			stop(&d.debounce)
+			stop(&d.maxWait)
+			d.dirty = false
+			d.notice = &Notice{Kind: NoticeRefused, Text: held}
+			d.notify()
+			d.catchUp()
 		}
-		text := d.adopt(n.Content)
-		d.applyRemote(Diff(d.text, text))
-		d.base = n.Hash
-		d.dirty = false
-		d.notice = &Notice{Kind: NoticeRefused, Text: held}
-		d.notify()
-		d.settle()
+		d.land()
 	})
 }
 
@@ -561,12 +591,22 @@ func (d *Document) Reload() {
 	if !d.loaded {
 		return
 	}
+	path := d.path
+	d.reads++
+	read := d.reads
 	var n *api.Note
 	d.call(func(ctx context.Context, c NoteAPI) (err error) {
-		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: d.path})
+		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: path})
 		return err
 	}, func(err error) {
-		if err != nil || d.disposed {
+		if read != d.reads || d.disposed {
+			return // a newer read answers
+		}
+		if d.path != path {
+			d.Reload() // moved meanwhile
+			return
+		}
+		if err != nil {
 			return // a note that is gone says so through note.removed
 		}
 		if d.flight != nil || d.dirty {
@@ -614,6 +654,10 @@ func (d *Document) Removed() {
 		return
 	}
 	if d.flight != nil {
+		if d.flight.creating {
+			d.flight.removed = true
+			return
+		}
 		d.landed = append(d.landed, d.Removed)
 		return
 	}
@@ -623,34 +667,70 @@ func (d *Document) Removed() {
 		return
 	}
 	text := d.text
+	f := &flight{sent: text, since: EmptyChanges(len(text)), creating: true}
+	d.flight = f
+	d.dirty = false
+	d.reads++
+	stop(&d.debounce)
+	stop(&d.maxWait)
+	stop(&d.retry)
 	params := &api.NoteCreateParams{VaultID: d.vault, Path: d.path, Content: d.toFile(text)}
 	var res *api.WriteResult
 	d.call(func(ctx context.Context, c NoteAPI) (err error) {
 		res, err = c.Create(ctx, params)
 		return err
 	}, func(err error) {
+		d.flight = nil
 		if err != nil {
+			d.dirty = true
 			d.retryLater(err.Error())
+			d.land()
 			return
 		}
 		d.base = res.Hash
 		d.baseText = text
-		d.dirty = d.text != text
+		d.dirty = !f.since.Empty()
 		d.notice = nil
 		d.notify()
+		if f.removed {
+			d.recheck()
+		}
 		if d.dirty {
 			d.Save()
 		}
-		d.settle()
+		d.catchUp()
+		d.land()
 	})
 }
 
-// Restore brings a deleted note back from its last version.
+// recheck reads a note that was removed again while it was being made
+// again: whichever came last decides.
+func (d *Document) recheck() {
+	path := d.path
+	d.call(func(ctx context.Context, c NoteAPI) (err error) {
+		_, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: path})
+		return err
+	}, func(err error) {
+		if isCode(err, api.CodeNotFound) && d.path == path && !d.disposed {
+			d.Removed()
+		}
+	})
+}
+
+// Restore brings a deleted note back from its last version. What is typed
+// meanwhile stays, on top of it.
 func (d *Document) Restore() {
+	if d.flight != nil {
+		return
+	}
+	path := d.path
+	f := &flight{sent: d.text, since: EmptyChanges(len(d.text))}
+	d.flight = f
+	d.reads++
 	var res *api.WriteResult
 	var n *api.Note
 	d.call(func(ctx context.Context, c NoteAPI) error {
-		versions, err := c.Versions(ctx, &api.NoteVersionsParams{VaultID: d.vault, Path: d.path})
+		versions, err := c.Versions(ctx, &api.NoteVersionsParams{VaultID: d.vault, Path: path})
 		if err != nil {
 			return err
 		}
@@ -664,23 +744,32 @@ func (d *Document) Restore() {
 		if last == nil {
 			return errors.New("the note has no version to restore")
 		}
-		if res, err = c.Revert(ctx, &api.NoteRevertParams{VaultID: d.vault, Path: d.path, Version: last.ID}); err != nil {
+		if res, err = c.Revert(ctx, &api.NoteRevertParams{VaultID: d.vault, Path: path, Version: last.ID}); err != nil {
 			return err
 		}
-		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: d.path})
+		n, err = c.Read(ctx, &api.NoteReadParams{VaultID: d.vault, Path: path})
 		return err
 	}, func(err error) {
-		if err != nil {
+		d.flight = nil
+		switch {
+		case err != nil:
 			d.notice = &Notice{Kind: NoticeFailed, Reason: err.Error()}
 			d.notify()
-			return
+		case d.path == path:
+			text := d.adopt(n.Content)
+			if remote, err := Diff(f.sent, text).Map(f.since, false); err == nil {
+				d.applyRemote(remote)
+			}
+			d.base = res.Hash
+			d.dirty = !f.since.Empty()
+			d.notice = nil
+			d.notify()
 		}
-		text := d.adopt(n.Content)
-		d.applyRemote(Diff(d.text, text))
-		d.base = res.Hash
-		d.dirty = false
-		d.notice = nil
-		d.notify()
+		if d.dirty {
+			d.Save()
+		}
+		d.catchUp()
+		d.land()
 	})
 }
 

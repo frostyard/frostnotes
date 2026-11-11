@@ -67,7 +67,9 @@ type Session struct {
 	seq    int64
 	docs   map[docKey]*notes.Document
 	refs   map[*notes.Document]int
-	closed bool
+	// watched are released documents waiting for a retry to land.
+	watched map[*notes.Document]bool
+	closed  bool
 
 	listeners []func()
 	// OnEvent sees every event after the session has routed note events
@@ -84,7 +86,7 @@ type Session struct {
 // New makes a session that resumes events after seq (0 for live events
 // only). Start connects it.
 func New(env notes.Env, dial Dialer, seq int64) *Session {
-	return &Session{env: env, dial: dial, seq: seq, docs: map[docKey]*notes.Document{}, refs: map[*notes.Document]int{}}
+	return &Session{env: env, dial: dial, seq: seq, docs: map[docKey]*notes.Document{}, refs: map[*notes.Document]int{}, watched: map[*notes.Document]bool{}}
 }
 
 // State and Reason say where the connection stands, and why it dropped.
@@ -251,23 +253,38 @@ func (s *Session) Open(vault int64, path string) *notes.Document {
 }
 
 // Release gives back a document Open returned; the last release saves
-// what is unsaved, then forgets it.
+// what is unsaved, then forgets it. A save that failed keeps the document
+// until a retry lands it, so closing a tab loses no text.
 func (s *Session) Release(d *notes.Document) {
 	if s.refs[d]--; s.refs[d] > 0 {
 		return
 	}
 	delete(s.refs, d)
 	d.Flush(func() {
-		if s.refs[d] > 0 {
-			return // opened again meanwhile
+		if !s.forget(d) && !s.watched[d] {
+			s.watched[d] = true
+			d.OnChange(func() { s.forget(d) })
 		}
-		for k, v := range s.docs {
-			if v == d {
-				delete(s.docs, k)
-			}
-		}
-		d.Dispose()
 	})
+}
+
+// forget drops a released document once nothing of it is unsaved; it
+// reports whether nothing more is to be waited for.
+func (s *Session) forget(d *notes.Document) bool {
+	if s.refs[d] > 0 {
+		return true // opened again meanwhile
+	}
+	if d.Unsaved() {
+		return false
+	}
+	for k, v := range s.docs {
+		if v == d {
+			delete(s.docs, k)
+		}
+	}
+	delete(s.watched, d)
+	d.Dispose()
+	return true
 }
 
 // Unsaved reports whether any open note has text notesd has not saved,

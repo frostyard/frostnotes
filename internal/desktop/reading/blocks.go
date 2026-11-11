@@ -92,10 +92,11 @@ func (b *Blocks) render(source string, r *rendering) {
 	}
 	r.inFlight = true
 	generation := b.generation
+	params := &api.NoteRenderMarkdownParams{VaultID: b.doc.Vault(), Path: b.doc.Path(), Content: &source}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		res, err := client.RenderMarkdown(ctx, &api.NoteRenderMarkdownParams{VaultID: b.doc.Vault(), Path: b.doc.Path(), Content: &source})
+		res, err := client.RenderMarkdown(ctx, params)
 		b.env.Post(func() {
 			r.inFlight, r.generation = false, generation
 			if err == nil {

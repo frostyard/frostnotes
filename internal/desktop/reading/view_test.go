@@ -2,6 +2,7 @@ package reading
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"hash/crc32"
@@ -126,5 +127,36 @@ func TestDecodeRefusesAHugeImageFromItsHeader(t *testing.T) {
 	}
 	if _, err := Decode(small.Bytes(), "png"); err != nil {
 		t.Fatalf("a small image: %v", err)
+	}
+}
+
+func TestAnEditOfAnEmbeddedNoteReachesTheReadingView(t *testing.T) {
+	f := open(t, map[string]string{"Plan.md": "![[Seeds]]\n", "Seeds.md": "old seeds\n"}, "Plan.md")
+	if !strings.Contains(f.view.Markdown(), "old seeds") {
+		t.Fatalf("rendered %q", f.view.Markdown())
+	}
+	f.Write("Seeds.md", f.Read("Seeds.md").Hash, "new seeds\n")
+	f.view.Changed()
+	f.loop.Advance(RenderDelay)
+	f.loop.Until(t, "the new rendering", func() bool { return strings.Contains(f.view.Markdown(), "new seeds") })
+}
+
+// pathRenderer answers with the path it was asked for.
+type pathRenderer struct{ asked chan string }
+
+func (r pathRenderer) RenderMarkdown(_ context.Context, p *api.NoteRenderMarkdownParams) (*api.RenderedMarkdown, error) {
+	r.asked <- p.Path
+	return &api.RenderedMarkdown{Markdown: "x"}, nil
+}
+
+// Run with the race detector: the request's path is read on the UI thread.
+func TestABlockAsksForThePathItHadWhenDrawn(t *testing.T) {
+	f := open(t, map[string]string{"Plan.md": "text\n"}, "Plan.md")
+	r := pathRenderer{asked: make(chan string, 1)}
+	b := NewBlocks(f.loop, func() Renderer { return r }, f.doc, f.Blobs)
+	b.rendering("source")
+	f.doc.Moved("Moved.md")
+	if got := <-r.asked; got != "Plan.md" {
+		t.Fatalf("asked for %q", got)
 	}
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
+	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	"github.com/frostyard/frostnotes/internal/rpctest"
 )
 
 type fixture struct {
@@ -79,5 +81,35 @@ func TestReleaseSavesAndForgets(t *testing.T) {
 	}
 	if f.s.Open(f.Vault, "Plan.md") == d {
 		t.Fatal("a released document came back")
+	}
+}
+
+func TestAReleasedNoteKeepsItsTextUntilASaveLands(t *testing.T) {
+	f := start(t)
+	f.Create("Plan.md", "one\n")
+	d := f.s.Open(f.Vault, "Plan.md")
+	f.loop.Until(t, "the note to load", d.Loaded)
+	f.Srv.Stop()
+	f.loop.Until(t, "the drop", func() bool { return f.s.State() == Reconnecting })
+	cs, err := notes.ChangesOf(len(d.Text()), notes.Change{From: 3, To: 3, Insert: " two"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Edit(cs)
+
+	f.s.Release(d) // the save fails and waits to retry
+	if !f.s.Unsaved() {
+		t.Fatal("the released note's text is gone")
+	}
+	f.Srv = rpctest.StartWith(t, rpctest.Options{DataDir: f.Data})
+	f.App, f.Other = f.Srv.Dial(t), f.Srv.Dial(t)
+	f.loop.Advance(RetryDelay)
+	f.loop.Until(t, "the reconnection", func() bool { return f.s.State() == Connected })
+	f.loop.Until(t, "the save", func() bool { return !f.s.Unsaved() })
+	if got := f.Read("Plan.md").Content; got != "one two\n" {
+		t.Fatalf("file holds %q", got)
+	}
+	if f.s.Open(f.Vault, "Plan.md") == d {
+		t.Fatal("a saved, released document stayed")
 	}
 }

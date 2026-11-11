@@ -219,7 +219,10 @@ Rules, over `RenderSource`'s body (no frontmatter, comments gone):
   it. Note embeds alone in a paragraph become fenced blocks, each
   ```` ```frostnotes-embed <path><subpath> ```` holding the embedded
   note's (or heading section's) Markdown, rewritten by these rules; a
-  fence is one backtick longer than any run inside. A note embed within
+  fence is one backtick longer than any run inside, or tildes, one longer
+  than any run of them, when its info has a backtick, which CommonMark does
+  not allow after a backtick fence. A block inside a quote or a list keeps
+  that container's prefix on each of its lines. A note embed within
   a line, or one too deep, a loop or past the budget (as for `HTML`), is
   a `note:` link.
 - **Callouts** (a quote whose first line is `[!type]`) become fenced

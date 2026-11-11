@@ -4,6 +4,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func mustChanges(t *testing.T, n int, cs ...Change) ChangeSet {
@@ -183,5 +184,41 @@ func TestChangeAlgebraRandom(t *testing.T) {
 		if mustApply(t, Diff(doc, other), doc) != other {
 			t.Fatalf("#%d diff of %q and %q", i, doc, other)
 		}
+	}
+}
+
+func TestDiffKeepsWholeCharacters(t *testing.T) {
+	for _, tc := range []struct{ a, b string }{
+		{"é", "ê"},
+		{"xé y", "xê y"},
+		{"one\ncafé\ntwo\n", "one\ncafè\ntwo\n"},
+		{"日本", "日本語"},
+		{"😀", "😁"},
+	} {
+		cs := Diff(tc.a, tc.b)
+		if got := mustApply(t, cs, tc.a); got != tc.b {
+			t.Errorf("%q to %q made %q", tc.a, tc.b, got)
+		}
+		for _, c := range cs.Changes() {
+			if !utf8.ValidString(tc.a[c.From:c.To]) || !utf8.ValidString(c.Insert) {
+				t.Errorf("%q to %q cuts a character: %+v", tc.a, tc.b, c)
+			}
+		}
+	}
+}
+
+func TestConcurrentChangesOfOneCharacterStayValid(t *testing.T) {
+	base := "é\n"
+	mine, theirs := Diff(base, "ê\n"), Diff(base, "è\n")
+	mapped, err := theirs.Map(mine, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := mustApply(t, mapped, mustApply(t, mine, base))
+	if !utf8.ValidString(got) {
+		t.Fatalf("merged %q is invalid UTF-8", got)
+	}
+	if !strings.Contains(got, "ê") || !strings.Contains(got, "è") {
+		t.Fatalf("merged %q lost a side", got)
 	}
 }

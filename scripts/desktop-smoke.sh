@@ -1,8 +1,9 @@
 #!/bin/sh
 # The native desktop app's smoke test (docs/plans/0009-mygo-desktop.md,
 # Phase 6): the release build starts under Xvfb against a real notesd with
-# a vault, and is still running when the test stops it. A window that
-# cannot load GTK, connect or draw exits or crashes before then. Everything
+# a vault, and is still running when the test stops it. A build that cannot
+# load GTK or start exits or crashes before then; the test does not check
+# that the window connected or drew, which the Tester's tests do. Everything
 # lives in a temporary directory, and nothing touches the caller's notes.
 #
 # Usage: scripts/desktop-smoke.sh [BUILD_DIR]. It needs notesd, notesctl
@@ -23,6 +24,7 @@ trap cleanup EXIT
 
 export HOME="$tmp/home" XDG_RUNTIME_DIR="$tmp/run" XDG_CONFIG_HOME="$tmp/config" XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state"
 export LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11
+unset FROSTNOTES_SOCKET FROSTNOTES_DATA_DIR
 mkdir -p "$HOME" "$XDG_RUNTIME_DIR" "$tmp/vault"
 chmod 700 "$XDG_RUNTIME_DIR"
 printf '# Garden\n\nSome **bold** text.\n' >"$tmp/vault/Garden.md"

@@ -223,8 +223,8 @@ app-local package for the rest (below).
   editor lays out and highlights only the lines in view, a line at a
   time, so a keystroke never waits for a parse of the whole note.
   Events from notesd wake the window through a coalescing waker, as
-  ChairLift's console does. Images decode once and stay in a cache of
-  bounded size. Tested on a `tools/vaultgen` vault of 10,000 notes.
+  ChairLift's console does. Images decode once and stay cached while the
+  view that drew them is open. Tested on a `tools/vaultgen` vault of 10,000 notes.
 - **Accessibility.** MyGo gives its widgets AT-SPI roles: the outline is
   a tree, tabs a tab list, the editor a multi-line text field, the
   Markdown view headings, lists, links, tables and check boxes, dialogs
