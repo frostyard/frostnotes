@@ -423,6 +423,53 @@ func TestARestoredImageTabShowsOnceTheFilesAreRead(t *testing.T) {
 	}
 }
 
+func TestLivePreviewInTheWindow(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "see [[b|the other note]]\n\n![[b]]\n\nlast\n")
+	f.Create("b.md", "b's own text\n")
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("b.md") })
+	f.a.open("a.md", workspace.NewTab)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil && f.a.activeEditor().Binding().Document().Loaded() })
+	e := f.a.activeEditor()
+	end := len(e.Binding().Document().Text())
+	e.State.Select(end, end)
+	f.waitText("b's own text")
+	if !f.has("Live Preview") {
+		t.Fatalf("no mode in %q", f.tt.Texts())
+	}
+	if err := f.tt.Click("the other note"); err != nil {
+		t.Fatal(err)
+	}
+	f.until("the link's note", func() bool { return f.a.activeFile() == "b.md" })
+}
+
+func TestSourceModeInTheWindow(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "**bold**\n\nlast\n")
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("a.md") })
+	f.a.Prefs.EditingMode = "source"
+	f.a.open("a.md", workspace.NewTab)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil && f.a.activeEditor().Binding().Document().Loaded() })
+	e := f.a.activeEditor()
+	e.State.Select(11, 11)
+	f.tt.Frame()
+	if got := e.State.Replacements(); len(got) != 0 {
+		t.Fatalf("source mode replaced %+v", got)
+	}
+	if !f.has("Source mode") {
+		t.Fatalf("no mode in %q", f.tt.Texts())
+	}
+	f.a.Prefs.EditingMode = "live"
+	f.a.prefsChanged()
+	f.tt.Frame()
+	f.tt.Frame()
+	if got := e.State.Replacements(); len(got) == 0 {
+		t.Fatal("live preview replaced nothing after the preference changed")
+	}
+}
+
 func TestDeletingAFileCanBeUndone(t *testing.T) {
 	f := start(t)
 	f.Create("a.md", "text\n")

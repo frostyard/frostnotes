@@ -49,6 +49,7 @@ type Catalog struct {
 	vault int64
 
 	files   []api.VaultFile
+	named   map[string][]string // paths by last segment, lower-cased
 	folders []string
 	aliases map[string][]string
 	tags    []api.TagCount
@@ -125,6 +126,11 @@ func (c *Catalog) Reload() {
 		}
 		c.files, c.folders, c.loaded = got.Files, got.Folders, true
 		slices.SortFunc(c.files, func(a, b api.VaultFile) int { return strings.Compare(a.Path, b.Path) })
+		c.named = make(map[string][]string, len(c.files))
+		for _, f := range c.files {
+			name := strings.ToLower(path.Base(f.Path))
+			c.named[name] = append(c.named[name], f.Path)
+		}
 		c.notify()
 		c.readAliases()
 		c.readTags()
@@ -356,6 +362,12 @@ func (s *NoteSources) LinkTargets(query string, limit int) []editor.Target {
 }
 
 // Tags lists the vault's tags, by count.
+// Resolve is the file a link from the note names, "" for none, by the
+// rules notesd follows (docs/specs/markdown.md#link-resolution).
+func (s *NoteSources) Resolve(target string) string {
+	return markdown.Resolve(s.from(), target, func(name string) []string { return s.c.named[name] })
+}
+
 func (s *NoteSources) Tags() []string {
 	if s.c.env.Now().Sub(s.c.tagsAt) > TagsTTL {
 		s.c.readTags()

@@ -202,6 +202,8 @@ func (s fakeSources) LinkTargets(query string, limit int) []Target {
 
 func (fakeSources) Tags() []string { return []string{"project", "garden"} }
 
+func (fakeSources) Resolve(string) string { return "" }
+
 func (fakeSources) Subpaths(_ string, blocks bool, done func([]Target)) {
 	if blocks {
 		done([]Target{{Insert: "abc", Label: "abc", Detail: "a line"}})

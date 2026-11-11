@@ -1,8 +1,13 @@
 package livepreview
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/frostyard/frostnotes/internal/vaultgen"
 )
 
 // show draws text as live preview would: hidden ranges go, and stand-ins
@@ -13,6 +18,8 @@ func show(text string, ps []Piece) string {
 	for _, p := range ps {
 		b.WriteString(text[at:p.Start])
 		switch p.Kind {
+		case Link, Tag, Footnote, Dim:
+			b.WriteString(p.Label)
 		case Bullet:
 			b.WriteString("•")
 		case Quote:
@@ -54,7 +61,11 @@ func TestWhatShows(t *testing.T) {
 		{"![alt](a.png) stays", "![alt](a.png) stays"},
 		{"$x_1 * y_2$ stays", "$x_1 * y_2$ stays"},
 		{"costs $5 and *more*", "costs $5 and more"},
-		{"see[^1] here", "see[1] here"},
+		{"see[^1] here", "see1 here"},
+		{"[^1]: a definition", "[^1]: a definition"},
+		{"a #tag and #nested/tag, not#one or #123", "a #tag and #nested/tag, not#one or #123"},
+		{"- [x] done **well**", "☑ done well"},
+		{"- [x] done [[Plan]]", "☑ done Plan"},
 		{"text %%hidden%% more", "text  more"},
 		{"A paragraph ^block-1", "A paragraph"},
 		{"- item", "• item"},
@@ -155,7 +166,7 @@ func TestLineEndingsAreLeftOut(t *testing.T) {
 }
 
 func FuzzPieces(f *testing.F) {
-	for _, in := range []string{"# a **b** [c](d) [[e|f]] `g`", "---\na\n---\n%%\n```\n$$\n", "- [x] *", "> *", "\uFEFF---\n"} {
+	for _, in := range []string{"# a **b** [c](d) [[e|f]] `g`", "---\na\n---\n%%\n```\n$$\n", "- [x] *", "> *", "\uFEFF---\n", "> [!a]\n> b\n", "|a|\n|-|\n|b|", "```go\nx", "![[a.png|3]] ![a](b.png) #t [^n]"} {
 		f.Add(in)
 	}
 	f.Fuzz(func(t *testing.T, in string) {
@@ -167,7 +178,49 @@ func FuzzPieces(f *testing.F) {
 			}
 			end = p.End
 		}
+		checkScan(t, in, s.Scan(in, Options{Blocks: true, Embed: embedAll, HideFront: true}))
 	})
+}
+
+// checkScan holds a scan to what MyGo is given: pieces sorted, apart and
+// in range, and blocks on lines of the text.
+func checkScan(t *testing.T, in string, r Result) {
+	t.Helper()
+	end := -1
+	for _, p := range r.Pieces {
+		if p.Start < end || p.End < p.Start || p.End > len(in) {
+			t.Fatalf("%q: %+v after %d", in, p, end)
+		}
+		end = p.End
+	}
+	lines := strings.Count(in, "\n")
+	for _, b := range r.Blocks {
+		if b.Line < 0 || b.Line > lines {
+			t.Fatalf("%q: %+v of %d lines", in, b, lines)
+		}
+	}
+}
+
+func TestEveryNoteOfAGeneratedVaultScans(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vault")
+	m, err := vaultgen.Generate(dir, vaultgen.Options{Seed: 9, Notes: 400})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s Scanner
+	blocks := 0
+	for _, n := range m.Notes {
+		data, err := os.ReadFile(filepath.Join(dir, n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := s.Scan(string(data), Options{Blocks: true, HideFront: true, Embed: embedAll})
+		checkScan(t, string(data), r)
+		blocks += len(r.Blocks)
+	}
+	if blocks == 0 {
+		t.Fatal("the vault drew no blocks")
+	}
 }
 
 func BenchmarkAKeystrokeInALongNote(b *testing.B) {
@@ -194,5 +247,149 @@ func BenchmarkAKeystrokeInALongNote(b *testing.B) {
 		i++
 		changed := text[:len(text)/2] + string(rune('a'+i%26)) + text[len(text)/2:]
 		s.Pieces(changed, func(l int) bool { return l == 5000 }, false)
+	}
+}
+
+func embedAll(target string, wikilink bool) EmbedKind {
+	switch {
+	case target == "":
+		return NoEmbed
+	case strings.HasSuffix(target, ".png"), strings.HasSuffix(target, ".jpg"):
+		return ImageEmbed
+	case wikilink && target != "Missing":
+		return NoteEmbed
+	}
+	return NoEmbed
+}
+
+func scanBlocks(text string, revealed func(int) bool) Result {
+	var s Scanner
+	return s.Scan(text, Options{Revealed: revealed, Blocks: true, Embed: embedAll})
+}
+
+func TestWholeBlocksDrawInPlaceOfTheirLines(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, shown, source, label string
+		line                           int
+	}{
+		{"callout", "a\n> [!note] Title\n> text\nb", "a\nb", "> [!note] Title\n> text", "Callout", 1},
+		{"callout at the end", "> [!tip]\n> text", "", "> [!tip]\n> text", "Callout", 0},
+		{"table", "| a | b |\n|---|---|\n| 1 | 2 |\n\nafter", "\nafter", "| a | b |\n|---|---|\n| 1 | 2 |", "Table", 0},
+		{"table without outer pipes", "a | b\n--- | ---\n1 | 2\n", "", "a | b\n--- | ---\n1 | 2", "Table", 0},
+		{"note embed", "x\n![[Plan]]\ny", "x\ny", "![[Plan]]", "Embedded note", 1},
+		{"image alone", "![[a.png]]\ny", "y", "![[a.png]]", "Image", 0},
+		{"markdown image alone", "![alt](dir/a.png)\ny", "y", "![alt](dir/a.png)", "Image", 0},
+	} {
+		r := scanBlocks(tc.in, nil)
+		if got := show(tc.in, r.Pieces); got != tc.shown {
+			t.Errorf("%s: shows %q, want %q", tc.name, got, tc.shown)
+		}
+		if len(r.Blocks) != 1 || r.Blocks[0].Source != tc.source || r.Blocks[0].Line != tc.line || r.Blocks[0].Label != tc.label {
+			t.Errorf("%s: blocks %+v", tc.name, r.Blocks)
+		}
+	}
+}
+
+func TestAWholeBlockShowsItsSourceWithASelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		line     int
+	}{
+		{"callout", "> [!note]\n> text\n", 1},
+		{"table", "| a |\n|---|\n| 1 |\n", 2},
+		{"fence", "```go\nx\n```\n", 1},
+		{"embed", "![[Plan]]\n", 0},
+	} {
+		r := scanBlocks(tc.in, func(l int) bool { return l == tc.line })
+		if len(r.Blocks) != 0 {
+			t.Errorf("%s: blocks %+v", tc.name, r.Blocks)
+		}
+	}
+}
+
+func TestWhatIsNotAWholeBlock(t *testing.T) {
+	for _, tc := range []struct{ name, in string }{
+		{"a plain quote", "> quote\n"},
+		{"pipes without a delimiter", "a | b\nc | d\n"},
+		{"a delimiter of the wrong width", "a | b\n---\n"},
+		{"an unresolved embed", "![[Missing]]\n"},
+		{"a note embed within a line", "see ![[Plan]] here\n"},
+		{"indented code", "x\n\n    > [!note]\n"},
+		{"a callout in a fence", "~~~\n> [!note]\n~~~\n"},
+	} {
+		r := scanBlocks(tc.in, func(l int) bool { return tc.name == "a callout in a fence" })
+		if len(r.Blocks) != 0 {
+			t.Errorf("%s: blocks %+v", tc.name, r.Blocks)
+		}
+	}
+}
+
+func TestAnImageWithinALineGoesUnderIt(t *testing.T) {
+	in := "before ![[a.png|300x200]] after\nnext"
+	r := scanBlocks(in, nil)
+	if got := show(in, r.Pieces); got != "before  after\nnext" {
+		t.Fatalf("shows %q", got)
+	}
+	if len(r.Blocks) != 1 || r.Blocks[0].Line != 0 || r.Blocks[0].Width != 300 || r.Blocks[0].Source != "![[a.png|300x200]]" {
+		t.Fatalf("blocks %+v", r.Blocks)
+	}
+}
+
+func TestAFenceGetsAHeader(t *testing.T) {
+	in := "a\n```go title\nx := 1\ny\n```\nb"
+	r := scanBlocks(in, nil)
+	if got := show(in, r.Pieces); got != "a\nx := 1\ny\nb" {
+		t.Fatalf("shows %q", got)
+	}
+	want := Block{Kind: CodeHeader, Line: 1, Label: "Code block", Language: "go", Code: "x := 1\ny"}
+	if len(r.Blocks) != 1 || r.Blocks[0] != want {
+		t.Fatalf("blocks %+v", r.Blocks)
+	}
+	in = "```\nnever closed\n"
+	r = scanBlocks(in, nil)
+	if got := show(in, r.Pieces); got != "never closed\n" {
+		t.Fatalf("an open fence shows %q", got)
+	}
+	if len(r.Blocks) != 1 || r.Blocks[0].Code != "never closed" {
+		t.Fatalf("an open fence's blocks %+v", r.Blocks)
+	}
+}
+
+func TestParseEmbed(t *testing.T) {
+	for _, tc := range []struct {
+		in, target string
+		wikilink   bool
+		width      int
+	}{
+		{"![[a.png]]", "a.png", true, 0},
+		{"![[a.png|300]]", "a.png", true, 300},
+		{"![[Plan#Goals|the plan]]", "Plan", true, 0},
+		{"![alt](a%20b.png)", "a b.png", false, 0},
+		{"![alt|120](<a b.png> \"t\")", "a b.png", false, 120},
+		{"![x](https://e.test/a.png#f)", "https://e.test/a.png#f", false, 0},
+	} {
+		target, wikilink, width := parseEmbed(tc.in)
+		if target != tc.target || wikilink != tc.wikilink || width != tc.width {
+			t.Errorf("%s: %q %v %d", tc.in, target, wikilink, width)
+		}
+	}
+}
+
+func TestLinksTagsAndFootnotesAreObjects(t *testing.T) {
+	in := "[[Plan#Goals]] [site](https://e.test) #tag see[^n]"
+	var s Scanner
+	var got []Piece
+	for _, p := range s.Pieces(in, nil, false) {
+		got = append(got, Piece{Kind: p.Kind, Label: p.Label})
+	}
+	want := []Piece{{Kind: Link, Label: "Plan > Goals"}, {Kind: Link, Label: "site"}, {Kind: Tag, Label: "#tag"}, {Kind: Footnote, Label: "n"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%+v", got)
+	}
+	long := "[[" + strings.Repeat("x", maxObject+1) + "]]"
+	for _, p := range s.Pieces(long, nil, false) {
+		if p.Kind != Hide {
+			t.Fatalf("a long link drew as an object: %+v", p)
+		}
 	}
 }

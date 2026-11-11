@@ -307,6 +307,9 @@ func (a *App) prefsChanged() {
 	for _, tc := range a.tabs {
 		if tc.ed != nil {
 			tc.ed.Editor.Prefs = a.editorPrefs()
+			tc.ed.Editor.Rendered.RemoteImages = a.Prefs.LoadRemoteImages
+			tc.ed.Editor.Rendered.Changed()
+			tc.ed.Editor.RefreshLive()
 		}
 		if tc.read != nil {
 			tc.read.RemoteImages = a.Prefs.LoadRemoteImages

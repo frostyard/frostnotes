@@ -71,8 +71,9 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-// The native desktop app needs two MyGo changes that are not released yet:
-// egoist/mygo#1654 (Buffer.EditRemote) and #1655 (State.SetReplacements).
-// This is branch integration/frostyard on a fork, those two merged. It goes
-// when both are in a MyGo release (docs/plans/0009-mygo-desktop.md).
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111000504-9e0be8bbd63b
+// The native desktop app needs three MyGo changes that are not released yet:
+// egoist/mygo#1654 (Buffer.EditRemote), #1655 (State.SetReplacements) and
+// #1662 (elements between lines). This is branch integration/frostyard on a
+// fork, those three merged. It goes when all are in a MyGo release
+// (docs/plans/0009-mygo-desktop.md).
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111003810-fb6a0d2ed71b

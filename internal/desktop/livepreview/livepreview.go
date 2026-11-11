@@ -2,12 +2,14 @@
 // (docs/design/app.md#live-preview, ADR-0039): which ranges of a note's
 // source hide, and what stands in for the rest, on the lines no selection
 // touches. It is plain Go over the text: the editor turns its pieces into
-// MyGo's replacements.
+// MyGo's replacements and its blocks into MyGo's blocks.
 package livepreview
 
 import (
+	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +28,18 @@ const (
 	Task
 	// Rule is a horizontal rule.
 	Rule
+	// Link shows Label, which a click follows.
+	Link
+	// Tag shows Label, which a click searches for.
+	Tag
+	// Footnote shows Label, the reference's name, which a click jumps from.
+	Footnote
+	// Dim shows Label, a done task's text, dimmed.
+	Dim
+
+	// embedMark marks an embed in a line's cached pieces, which placeEmbeds
+	// settles: what it draws as depends on the vault, not the line.
+	embedMark
 )
 
 // Piece shows bytes Start to End of the text as its Kind.
@@ -34,6 +48,73 @@ type Piece struct {
 	Kind       Kind
 	// Done is a Task's state.
 	Done bool
+	// Label is what a Link, Tag, Footnote or Dim shows.
+	Label string
+	// Target is the file a Link names, "" for one to the web.
+	Target string
+}
+
+// BlockKind says what a Block draws.
+type BlockKind uint8
+
+// The kinds of block.
+const (
+	// Rendered draws Source as the reading view would.
+	Rendered BlockKind = iota
+	// CodeHeader draws a fence's language and a Copy button.
+	CodeHeader
+)
+
+// Block is something drawn between lines, or in place of the lines a piece
+// hides from their start through a newline.
+type Block struct {
+	Kind BlockKind
+	// Line is the line it goes with, from 0.
+	Line int
+	// Label names it for assistive technology.
+	Label string
+	// Source is a Rendered block's Markdown.
+	Source string
+	// Width is the width an image's alias asks for, 0 for its own.
+	Width int
+	// Language and Code are a CodeHeader's.
+	Language, Code string
+}
+
+// EmbedKind says what an embed's target draws as.
+type EmbedKind uint8
+
+// The kinds of embed.
+const (
+	// NoEmbed leaves the embed's source as written.
+	NoEmbed EmbedKind = iota
+	// ImageEmbed draws an image, under its line or in place of it.
+	ImageEmbed
+	// NoteEmbed draws a note, when the embed is alone on its line.
+	NoteEmbed
+)
+
+// Options say what Scan shows.
+type Options struct {
+	// Revealed reports whether a selection touches a line, from 0: such a
+	// line shows its source. Nil touches none.
+	Revealed func(line int) bool
+	// HideFront hides the frontmatter, the properties panel standing in.
+	HideFront bool
+	// Blocks draws callouts, tables and fences' headers as Blocks; without
+	// it they keep their source.
+	Blocks bool
+	// Embed says what the target of an embed or image draws as; wikilink
+	// says which it is. Nil, or without Blocks, none draw.
+	Embed func(target string, wikilink bool) EmbedKind
+}
+
+// Result is what shows of a text.
+type Result struct {
+	// Pieces are sorted and apart.
+	Pieces []Piece
+	// Blocks are in the order of their lines.
+	Blocks []Block
 }
 
 // The block a line is in, which decides whether its inline syntax counts.
@@ -64,16 +145,21 @@ type lineKey struct {
 	afterGap  bool // the line before is blank: four spaces start code
 }
 
-// Pieces lists what shows of text, sorted and apart. revealed reports
-// whether a selection touches a line, from 0: such a line shows its
-// source. With hideFront the frontmatter hides, the properties panel
-// standing in for it.
+// Pieces lists what shows of text, sorted and apart, without blocks.
+// revealed reports whether a selection touches a line, from 0: such a line
+// shows its source. With hideFront the frontmatter hides, the properties
+// panel standing in for it.
 func (s *Scanner) Pieces(text string, revealed func(line int) bool, hideFront bool) []Piece {
+	return s.Scan(text, Options{Revealed: revealed, HideFront: hideFront}).Pieces
+}
+
+// Scan works out what shows of text.
+func (s *Scanner) Scan(text string, o Options) Result {
 	if s.cache == nil {
 		s.cache = map[lineKey][]Piece{}
 	}
-	var out []Piece
-	st := state{closedFront: closedFront(text)}
+	var res Result
+	st := state{text: text, closedFront: closedFront(text)}
 	line, start := 0, 0
 	lines := 0
 	for start <= len(text) {
@@ -84,21 +170,35 @@ func (s *Scanner) Pieces(text string, revealed func(line int) bool, hideFront bo
 			next = end + 1
 		}
 		content := strings.TrimSuffix(text[start:end], "\r")
+		if o.Blocks && st.block == blockText {
+			if n, after := wholeBlock(text, content, start, next, line, st, o, &res); n > 0 {
+				st.afterGap, st.afterText = false, false
+				line, start = line+n, after
+				lines += n
+				continue
+			}
+		}
 		was := st.block
-		st.advance(content, line, start, next, min(next, len(text)), revealed, hideFront, &out)
+		st.advance(content, line, start, next, min(next, len(text)), o, &res)
 		if was == blockText && st.block == blockText && !st.structural {
-			out = s.line(out, content, start, st, line, revealed)
+			from := len(res.Pieces)
+			res.Pieces = s.line(res.Pieces, content, start, st, line, o.Revealed)
+			placeEmbeds(&res, from, text, content, start, min(next, len(text)), line, o)
 		}
 		st.afterGap = strings.TrimSpace(content) == ""
 		st.afterText = was == blockText && !st.afterGap && !st.structural
 		line, start = line+1, next
 		lines++
 	}
+	if o.Blocks && st.block == blockFence && !spanRevealed(o.Revealed, st.fromLine, line-1) {
+		st.endFence(len(text), len(text), &res) // a fence that runs on to the end
+	}
 	if len(s.cache) > maxCache*lines+64 {
 		clear(s.cache)
 	}
-	slices.SortStableFunc(out, func(a, b Piece) int { return a.Start - b.Start })
-	return apart(out)
+	slices.SortStableFunc(res.Pieces, func(a, b Piece) int { return a.Start - b.Start })
+	res.Pieces = apart(res.Pieces)
+	return res
 }
 
 // apart drops pieces that overlap one before them.
@@ -135,8 +235,11 @@ func (s *Scanner) line(out []Piece, content string, start int, st state, line in
 
 // state follows the blocks that span lines.
 type state struct {
+	text       string
 	block      block
 	fence      string // the marks that close a fence
+	language   string // a fence's language
+	body       int    // where a fence's code starts
 	from       int    // where a hidden block starts
 	fromLine   int
 	afterText  bool
@@ -177,7 +280,8 @@ func spanRevealed(revealed func(int) bool, from, to int) bool {
 // advance moves the state over a line that starts at start and whose next
 // line starts at next (limit is that, held to the text), and adds the
 // pieces of a block it ends.
-func (st *state) advance(content string, line, start, next, limit int, revealed func(int) bool, hideFront bool, out *[]Piece) {
+func (st *state) advance(content string, line, start, next, limit int, o Options, res *Result) {
+	revealed := o.Revealed
 	st.structural = false
 	trim := strings.TrimRight(content, " \t")
 	switch st.block {
@@ -185,8 +289,8 @@ func (st *state) advance(content string, line, start, next, limit int, revealed 
 		st.structural = true
 		if trim == "---" || trim == "..." {
 			st.block = blockText
-			if hideFront && !spanRevealed(revealed, st.fromLine, line) {
-				*out = append(*out, Piece{Start: st.from, End: limit})
+			if o.HideFront && !spanRevealed(revealed, st.fromLine, line) {
+				res.Pieces = append(res.Pieces, Piece{Start: st.from, End: limit})
 			}
 		}
 		return
@@ -194,6 +298,9 @@ func (st *state) advance(content string, line, start, next, limit int, revealed 
 		st.structural = true
 		if t := strings.TrimSpace(content); strings.HasPrefix(t, st.fence) && strings.Trim(t, st.fence[:1]) == "" {
 			st.block = blockText
+			if o.Blocks && !spanRevealed(revealed, st.fromLine, line) {
+				st.endFence(start, limit, res)
+			}
 		}
 		return
 	case blockComment:
@@ -205,7 +312,7 @@ func (st *state) advance(content string, line, start, next, limit int, revealed 
 				end = limit // the whole line goes, and its row
 			}
 			if !spanRevealed(revealed, st.fromLine, line) {
-				*out = append(*out, Piece{Start: st.from, End: end})
+				res.Pieces = append(res.Pieces, Piece{Start: st.from, End: end})
 			}
 		}
 		return
@@ -224,6 +331,11 @@ func (st *state) advance(content string, line, start, next, limit int, revealed 
 		mark := t[:1]
 		n := len(t) - len(strings.TrimLeft(t, mark))
 		st.block, st.fence, st.structural = blockFence, strings.Repeat(mark, n), true
+		st.from, st.fromLine, st.body = start, line, limit
+		st.language = ""
+		if f := strings.Fields(t[n:]); len(f) > 0 {
+			st.language = f[0]
+		}
 	case strings.HasPrefix(t, "$$") && !strings.Contains(t[2:], "$$"):
 		st.block, st.structural = blockMath, true
 	case strings.Count(content, "%%")%2 == 1 && strings.HasPrefix(t, "%%"):
@@ -231,14 +343,201 @@ func (st *state) advance(content string, line, start, next, limit int, revealed 
 	}
 }
 
+// endFence hides a fence's marks, whose closing line runs from close to
+// limit, and puts its header in place of its opening line.
+func (st *state) endFence(close, limit int, res *Result) {
+	res.Pieces = append(res.Pieces, Piece{Start: st.from, End: st.body})
+	if limit > close {
+		res.Pieces = append(res.Pieces, Piece{Start: close, End: limit})
+	}
+	code := strings.TrimSuffix(st.text[st.body:max(st.body, close)], "\n")
+	res.Blocks = append(res.Blocks, Block{Kind: CodeHeader, Line: st.fromLine, Label: "Code block", Language: st.language, Code: code})
+}
+
+// wholeBlock draws a callout or a table that starts at this line, unless a
+// selection touches it: how many lines it took and where the next starts.
+func wholeBlock(text, content string, start, next, line int, st state, o Options, res *Result) (lines, after int) {
+	if st.afterGap && (strings.HasPrefix(content, "    ") || strings.HasPrefix(content, "\t")) {
+		return 0, 0 // indented code
+	}
+	var label string
+	switch {
+	case strings.Contains(content, "[!") && calloutRe.MatchString(content):
+		label = "Callout"
+		lines, after = runOfLines(text, start, func(i int, l string) bool { return i == 0 || quotedRe.MatchString(l) })
+	case strings.IndexByte(content, '|') >= 0 && tableStarts(text, content, next):
+		label = "Table"
+		lines, after = runOfLines(text, start, func(i int, l string) bool { return i < 2 || tableRow(l) })
+	default:
+		return 0, 0
+	}
+	if spanRevealed(o.Revealed, line, line+lines-1) {
+		return 0, 0
+	}
+	limit := min(after, len(text))
+	res.Pieces = append(res.Pieces, Piece{Start: start, End: limit})
+	res.Blocks = append(res.Blocks, Block{Kind: Rendered, Line: line, Label: label, Source: strings.TrimRight(text[start:limit], "\r\n")})
+	return lines, after
+}
+
+// runOfLines counts the lines from start that keep holds of, and where the
+// line after them starts.
+func runOfLines(text string, start int, keep func(i int, line string) bool) (lines, after int) {
+	for start <= len(text) {
+		end, next := len(text), len(text)+1
+		if i := strings.IndexByte(text[start:], '\n'); i >= 0 {
+			end, next = start+i, start+i+1
+		}
+		if !keep(lines, strings.TrimSuffix(text[start:end], "\r")) {
+			break
+		}
+		lines++
+		start = next
+	}
+	return lines, start
+}
+
+// tableStarts reports whether header is a table's first row: the next line
+// is its delimiter row, with as many cells.
+func tableStarts(text, header string, next int) bool {
+	if next >= len(text) {
+		return false
+	}
+	delim := text[next:]
+	if i := strings.IndexByte(delim, '\n'); i >= 0 {
+		delim = delim[:i]
+	}
+	delim = strings.TrimSuffix(delim, "\r")
+	return delimiterRe.MatchString(delim) && cells(header) == cells(delim)
+}
+
+// cells counts a table row's cells.
+func cells(row string) int {
+	row = strings.TrimSpace(row)
+	row = strings.TrimPrefix(row, "|")
+	if strings.HasSuffix(row, "|") && !strings.HasSuffix(row, "\\|") {
+		row = row[:len(row)-1]
+	}
+	n := 1
+	for i := 0; i < len(row); i++ {
+		switch row[i] {
+		case '\\':
+			i++
+		case '|':
+			n++
+		}
+	}
+	return n
+}
+
+// tableRow reports whether a line goes on a table: not blank, and no other
+// block's start.
+func tableRow(line string) bool {
+	t := strings.TrimLeft(line, " ")
+	return strings.TrimSpace(line) != "" && !strings.HasPrefix(t, ">") && !strings.HasPrefix(t, "```") &&
+		!strings.HasPrefix(t, "~~~") && !headingRe.MatchString(line)
+}
+
+// placeEmbeds settles the embeds among the line's pieces from from on:
+// those that draw hide, and the rest keep their source.
+func placeEmbeds(res *Result, from int, text, content string, start, limit, line int, o Options) {
+	if !slices.ContainsFunc(res.Pieces[from:], func(p Piece) bool { return p.Kind == embedMark }) {
+		return
+	}
+	kept := res.Pieces[:from]
+	pieces := slices.Clone(res.Pieces[from:])
+	for _, p := range pieces {
+		if p.Kind != embedMark {
+			kept = append(kept, p)
+			continue
+		}
+		src := text[p.Start:p.End]
+		target, wikilink, width := parseEmbed(src)
+		kind := NoEmbed
+		if o.Blocks && o.Embed != nil {
+			kind = o.Embed(target, wikilink)
+		}
+		alone := strings.TrimSpace(content) == src
+		if kind == NoEmbed || kind == NoteEmbed && !alone {
+			continue
+		}
+		label := "Image"
+		if kind == NoteEmbed {
+			label = "Embedded note"
+		}
+		res.Blocks = append(res.Blocks, Block{Kind: Rendered, Line: line, Label: label, Source: src, Width: width})
+		if alone {
+			kept = append(kept[:from], Piece{Start: start, End: limit})
+			break
+		}
+		kept = append(kept, Piece{Start: p.Start, End: p.End})
+	}
+	res.Pieces = kept
+}
+
+// parseEmbed reads the source of an embed, an image or a link: its target, without a
+// subpath, whether it is a wikilink, and the width its alias asks for.
+func parseEmbed(src string) (target string, wikilink bool, width int) {
+	if inner, ok := strings.CutPrefix(src, "![["); ok {
+		inner = strings.TrimSuffix(inner, "]]")
+		name, alias, _ := strings.Cut(inner, "|")
+		name, _, _ = strings.Cut(name, "#")
+		return strings.TrimSpace(name), true, sizeWidth(alias)
+	}
+	open := strings.IndexByte(src, '[')
+	closeBracket, _, ok := linkAt(src, open, len(src))
+	if !ok {
+		return "", false, 0
+	}
+	if i := strings.LastIndexByte(src[open+1:closeBracket], '|'); i >= 0 {
+		width = sizeWidth(src[open+1+i+1 : closeBracket])
+	}
+	dest := strings.TrimSpace(src[closeBracket+2 : len(src)-1])
+	if rest, ok := strings.CutPrefix(dest, "<"); ok {
+		dest, _, _ = strings.Cut(rest, ">")
+	} else if f := strings.Fields(dest); len(f) > 0 {
+		dest = f[0]
+	}
+	if d, err := url.PathUnescape(dest); err == nil && !strings.Contains(dest, "://") {
+		dest = d
+	}
+	if !strings.Contains(dest, "://") {
+		dest, _, _ = strings.Cut(dest, "#")
+	}
+	return dest, false, width
+}
+
+// sizeWidth is the width of a size alias, "300" or "300x200", 0 for other
+// text.
+func sizeWidth(alias string) int {
+	m := sizeRe.FindStringSubmatch(strings.TrimSpace(alias))
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 var (
-	headingRe = regexp.MustCompile(`^ {0,3}#{1,6}(?:[ \t]+|$)`)
-	quoteRe   = regexp.MustCompile(`^ {0,3}(?:> ?)+`)
-	taskRe    = regexp.MustCompile(`^[ \t]*([-*+]|\d+[.)])[ \t]+(\[(.)\])(?:[ \t]|$)`)
-	bulletRe  = regexp.MustCompile(`^[ \t]*([-*+])[ \t]+`)
-	ruleRe    = regexp.MustCompile(`^ {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$`)
-	blockIDRe = regexp.MustCompile(`[ \t]\^[A-Za-z0-9-]+[ \t]*$`)
+	calloutRe   = regexp.MustCompile(`^ {0,3}> ?\[![^\]]+\]`)
+	quotedRe    = regexp.MustCompile(`^ {0,3}>`)
+	delimiterRe = regexp.MustCompile(`^ {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$`)
+	sizeRe      = regexp.MustCompile(`^(\d+)(?:x\d+)?$`)
+	headingRe   = regexp.MustCompile(`^ {0,3}#{1,6}(?:[ \t]+|$)`)
+	quoteRe     = regexp.MustCompile(`^ {0,3}(?:> ?)+`)
+	taskRe      = regexp.MustCompile(`^[ \t]*([-*+]|\d+[.)])[ \t]+(\[(.)\])(?:[ \t]|$)`)
+	bulletRe    = regexp.MustCompile(`^[ \t]*([-*+])[ \t]+`)
+	ruleRe      = regexp.MustCompile(`^ {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$`)
+	blockIDRe   = regexp.MustCompile(`[ \t]\^[A-Za-z0-9-]+[ \t]*$`)
+	tagRe       = regexp.MustCompile(`^#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*`)
 )
+
+// maxObject bounds a label drawn as one object, which cannot wrap: a longer
+// link keeps to hidden marks.
+const maxObject = 80
 
 // linePieces are the pieces of a line of text, from its start.
 func linePieces(line string, afterText, afterGap bool) []Piece {
@@ -247,6 +546,7 @@ func linePieces(line string, afterText, afterGap bool) []Piece {
 	}
 	var ps []Piece
 	at := 0
+	done := false
 	if m := quoteRe.FindString(line); m != "" {
 		ps = append(ps, Piece{Start: 0, End: len(m), Kind: Quote})
 		at = len(m)
@@ -261,6 +561,7 @@ func linePieces(line string, afterText, afterGap bool) []Piece {
 		at += n
 	default:
 		if m := taskRe.FindStringSubmatchIndex(rest); m != nil {
+			done = rest[m[6]:m[7]] != " "
 			from := m[2]
 			if rest[m[2]] >= '0' && rest[m[2]] <= '9' {
 				from = m[4] // an ordered task keeps its number
@@ -278,7 +579,39 @@ func linePieces(line string, afterText, afterGap bool) []Piece {
 		ps = append(ps, Piece{Start: at + m[0], End: end})
 		end = at + m[0]
 	}
-	return inline(ps, line, at, end)
+	before := len(ps)
+	ps = inline(ps, line, at, end)
+	if done && end > at {
+		if label, ok := plainText(line, at, end, ps[before:]); ok {
+			return append(ps[:before], Piece{Start: at, End: end, Kind: Dim, Label: label})
+		}
+	}
+	return ps
+}
+
+// plainText is line[at:end] without the marks ps hide; false when ps show
+// something else there, which a label cannot hold.
+func plainText(line string, at, end int, ps []Piece) (string, bool) {
+	slices.SortStableFunc(ps, func(a, b Piece) int { return a.Start - b.Start })
+	var b strings.Builder
+	for _, p := range ps {
+		if p.Kind != Hide || p.Start < at {
+			return "", false
+		}
+		b.WriteString(line[at:p.Start])
+		at = p.End
+	}
+	b.WriteString(line[at:end])
+	return b.String(), true
+}
+
+// wikiLabel is what a wikilink's inside shows: its alias, or its target
+// with " > " before a subpath.
+func wikiLabel(inner string) string {
+	if _, alias, ok := strings.Cut(inner, "|"); ok {
+		return strings.TrimSpace(alias)
+	}
+	return strings.TrimSpace(strings.ReplaceAll(inner, "#", " > "))
 }
 
 // inline adds the marks of inline syntax in line[at:end].
@@ -316,7 +649,8 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 			}
 		case strings.HasPrefix(line[i:end], "![["):
 			if j := strings.Index(line[i:end], "]]"); j >= 0 {
-				i += j + 2 // an embed: a block, shown as written for now
+				ps = append(ps, Piece{Start: i, End: i + j + 2, Kind: embedMark})
+				i += j + 2
 			} else {
 				i += 3
 			}
@@ -331,29 +665,55 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 			if bar := strings.IndexByte(line[i:close], '|'); bar >= 0 {
 				open = i + bar + 1
 			}
-			ps = append(ps, Piece{Start: i, End: open}, Piece{Start: close, End: close + 2})
+			if label := wikiLabel(line[i+2 : close]); label != "" && len(label) <= maxObject {
+				name, _, _ := strings.Cut(line[i+2:close], "|")
+				name, _, _ = strings.Cut(name, "#")
+				ps = append(ps, Piece{Start: i, End: close + 2, Kind: Link, Label: label, Target: strings.TrimSpace(name)})
+			} else {
+				ps = append(ps, Piece{Start: i, End: open}, Piece{Start: close, End: close + 2})
+			}
 			i = close + 2
 		case c == '!' && i+1 < end && line[i+1] == '[':
 			if _, dest, ok := linkAt(line, i+1, end); ok {
-				i = dest // an image: a block, shown as written for now
+				ps = append(ps, Piece{Start: i, End: dest, Kind: embedMark})
+				i = dest
 			} else {
 				i += 2
 			}
 		case c == '[':
 			if i+1 < end && line[i+1] == '^' {
 				if j := strings.IndexByte(line[i:end], ']'); j > 0 {
-					ps = append(ps, Piece{Start: i + 1, End: i + 2})
+					definition := strings.TrimSpace(line[:i]) == "" && i+j+1 < end && line[i+j+1] == ':'
+					if !definition {
+						ps = append(ps, Piece{Start: i, End: i + j + 1, Kind: Footnote, Label: line[i+2 : i+j]})
+					}
 					i += j + 1
 					break
 				}
 			}
 			if closeBracket, dest, ok := linkAt(line, i, end); ok {
+				if label, plain := plainText(line, i+1, closeBracket, inline(nil, line, i+1, closeBracket)); plain && label != "" && len(label) <= maxObject {
+					target, _, _ := parseEmbed(line[i:dest])
+					if strings.Contains(target, ":") {
+						target = ""
+					}
+					ps = append(ps, Piece{Start: i, End: dest, Kind: Link, Label: label, Target: target})
+					i = dest
+					break
+				}
 				ps = append(ps, Piece{Start: i, End: i + 1}, Piece{Start: closeBracket, End: dest})
 				used = append(used, closeBracket)
 				i++
 				end2 := closeBracket
 				ps = inline(ps, line, i, end2)
 				i = dest
+			} else {
+				i++
+			}
+		case c == '#' && (i == 0 || line[i-1] == ' ' || line[i-1] == '\t'):
+			if m := tagRe.FindString(line[i:end]); m != "" {
+				ps = append(ps, Piece{Start: i, End: i + len(m), Kind: Tag, Label: m})
+				i += len(m)
 			} else {
 				i++
 			}

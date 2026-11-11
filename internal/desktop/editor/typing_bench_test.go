@@ -9,6 +9,7 @@ import (
 
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	"github.com/frostyard/frostnotes/internal/desktop/reading"
 )
 
 // longNote is a note of n lines in the shapes of the user's notes:
@@ -42,13 +43,17 @@ func BenchmarkTypingInALongNote(b *testing.B) {
 func benchTyping(b *testing.B, live bool) {
 	n := desktoptest.StartNotesd(b)
 	loop := desktoptest.NewLoop()
-	content := longNote(10000)
+	blocks := strings.Repeat("> [!note] A callout\n> its text\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```go\nx := 1\n```\n\n", 100)
+	content := longNote(10000-strings.Count(blocks, "\n")) + blocks
 	n.Create("Long.md", content)
 	d := notes.NewDocument(loop, func() notes.NoteAPI { return n.AppNotes() }, n.Vault, "Long.md")
 	d.Load()
 	loop.Until(b, "the note to load", d.Loaded)
 	ed := NewNoteEditor(Bind(d))
 	ed.Prefs.Live = live
+	if live {
+		ed.Rendered = reading.NewBlocks(loop, func() reading.Renderer { return n.AppNotes() }, d, n.Blobs)
+	}
 	tt := ui.NewTester(func(c *ui.Context) { ed.View(c).Fill() }, 1200, 800)
 	if err := tt.Click("Note"); err != nil {
 		b.Fatal(err)

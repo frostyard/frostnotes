@@ -237,6 +237,7 @@ func (a *App) showVault(v *api.Vault) {
 	a.Store.Load(v.Path)
 	a.Catalog = catalog.New(a.cfg.Env, a.catalogAPI, v.ID)
 	a.Catalog.OnChange(a.scheduleRefresh)
+	a.Catalog.OnChange(a.catalogChanged)
 	a.makePanes(v)
 	a.loadVaultData()
 	a.setTitle()
@@ -348,16 +349,37 @@ func (a *App) event(_ int64, ev api.Event) {
 	switch e := ev.(type) {
 	case api.NoteChanged:
 		clear(a.previews)
+		a.blocksChanged()
 	case api.NoteMoved:
 		a.Store.Follow(a.vaultPath(e.VaultID), func(w *workspace.Workspace) { w.ApplyMove(e.From, e.To) })
+		a.blocksChanged()
 	case api.NoteRemoved:
 		a.Store.Follow(a.vaultPath(e.VaultID), func(w *workspace.Workspace) { w.ApplyDelete(e.Path) })
+		a.blocksChanged()
 	case api.VaultAdded, api.VaultRemoved:
 		a.reloadAll()
 	case api.VaultConfigured:
 		a.loadVaultData()
 	case api.SyncChanged:
 		a.syncChanged(e.Status)
+	}
+}
+
+// blocksChanged has live preview's rendered blocks read the vault again.
+func (a *App) blocksChanged() {
+	for _, tc := range a.tabs {
+		if tc.ed != nil {
+			tc.ed.Editor.Rendered.Changed()
+		}
+	}
+}
+
+// catalogChanged has live preview look again at what its embeds name.
+func (a *App) catalogChanged() {
+	for _, tc := range a.tabs {
+		if tc.ed != nil {
+			tc.ed.Editor.RefreshLive()
+		}
 	}
 }
 

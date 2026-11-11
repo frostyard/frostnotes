@@ -388,8 +388,10 @@ The native app works out the same reveal rule in
 `internal/desktop/livepreview`
 ([ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)),
 and `internal/desktop/editor/live.go` shows its pieces as MyGo's
-`Replacement`s. Its tabs of a note share one buffer, so they share one undo
-history.
+`Replacement`s and its blocks as MyGo's `Block`s; `reading.Blocks` draws
+callouts, tables, embeds and images as the reading view does, renders only
+those on screen, and renders them again a second after the vault changes. Its
+tabs of a note share one buffer, so they share one undo history.
 
 ### Properties
 

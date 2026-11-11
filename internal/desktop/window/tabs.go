@@ -73,11 +73,7 @@ func (a *App) make(tab *workspace.Tab) *tabContent {
 		if v.Mode == workspace.ModeRead {
 			tc.read = reading.New(a.cfg.Env, a.readingAPI, tc.doc, a.cfg.Blobs)
 			tc.read.RemoteImages = a.Prefs.LoadRemoteImages
-			tc.read.Links = reading.Links{
-				Note: func(p, sub string, newTab bool) { a.followNote(p, sub, newTab) },
-				Tag:  func(t string) { a.searchFor("tag:#" + t) },
-				URL:  func(u string) { a.report(a.openExternal(u)) },
-			}
+			tc.read.Links = a.readingLinks()
 			break
 		}
 		tc.ed = editor.NewNoteView(a.noteEditor(tc.doc, v))
@@ -95,6 +91,15 @@ func (a *App) make(tab *workspace.Tab) *tabContent {
 		a.loadFile(tc)
 	}
 	return tc
+}
+
+// readingLinks are where a rendered note's links lead.
+func (a *App) readingLinks() reading.Links {
+	return reading.Links{
+		Note: func(p, sub string, newTab bool) { a.followNote(p, sub, newTab) },
+		Tag:  func(t string) { a.searchFor("tag:#" + t) },
+		URL:  func(u string) { a.report(a.openExternal(u)) },
+	}
 }
 
 func (a *App) readingAPI() reading.Renderer {
@@ -147,6 +152,9 @@ func (a *App) noteEditor(d *notes.Document, v workspace.View) *editor.NoteEditor
 	e.Follow = func(l editor.Link, where editor.Where) { a.followLink(l, d.Path(), where) }
 	e.FollowTag = func(tag string) { a.searchFor("tag:#" + tag) }
 	e.Preview = a.linkPreview(d.Path)
+	e.Rendered = reading.NewBlocks(a.cfg.Env, a.readingAPI, d, a.cfg.Blobs)
+	e.Rendered.RemoteImages = a.Prefs.LoadRemoteImages
+	e.Rendered.Links = a.readingLinks()
 	if v.Cursor > 0 {
 		e.State.Select(v.Cursor, v.Cursor)
 	}

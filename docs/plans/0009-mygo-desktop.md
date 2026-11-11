@@ -264,10 +264,11 @@ other sessions are writing their pull requests:
   and uses MyGo's own undo.
 
 **A fork until those land.** `go.mod` replaces MyGo with
-`github.com/bketelsen/mygo`, branch `integration/frostyard`: #1654 and
-[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) merged
-together, 150 commits past v0.8.3. The owner approved it on 2026-11-10. The
-`replace` goes when both pull requests are in a MyGo release.
+`github.com/bketelsen/mygo`, branch `integration/frostyard`: #1654,
+[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) and
+[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662) merged together,
+past v0.8.3. The owner approved it on 2026-11-10. The `replace` goes when all
+three pull requests are in a MyGo release.
 
 Not filed yet: a hook for a click on a task's box in the Markdown view.
 
@@ -452,13 +453,17 @@ The parts that need no frostui piece, in the order the orchestrator set.
 marks of headings, emphasis, highlights, inline code, links and wikilinks,
 footnotes, comments and block IDs; bullets, tasks, quotes and rules; the
 frontmatter while the properties panel shows; and the reveal rule. The editor
-shows them as MyGo's `Replacement`s (`internal/desktop/editor/live.go`), a
-click on a task's box toggles it, and undo is MyGo's. A keystroke in a
-10,000-line note, with a frame drawn on the CPU, costs 13 ms in live preview
-and 2.6 ms in source mode.
+shows them as MyGo's `Replacement`s and `Block`s
+(`internal/desktop/editor/live.go`): callouts, tables, note embeds and images
+as the reading view draws them (`reading.Blocks`), fences' headers with Copy,
+and links, tags, footnotes and task boxes a click reaches. Undo is MyGo's. A
+keystroke in a 10,000-line note with blocks, with a frame drawn on the CPU,
+costs 15 ms in live preview and 2.4 ms in source mode.
 
-**Waiting** for elements between lines and per-line styles in MyGo, for the
-block constructs and headings' sizes.
+**Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
+strike-through. Math stays as TeX source and audio and video as their embeds
+(below, under Later). Not done: a run of Orca, and opening every note of the
+user's vault, which the owner does at the trial.
 
 - Live preview on MyGo's editor, in the order its author is building
   [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the

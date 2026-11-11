@@ -50,10 +50,9 @@ type Links struct {
 	URL func(url string)
 }
 
-// View is a tab's reading view of a note. UI thread only.
-type View struct {
-	env   notes.Env
-	api   func() Renderer
+// drawer draws notesd's rendered Markdown of a note: what the reading view
+// and live preview's blocks share.
+type drawer struct {
 	doc   *notes.Document
 	blobs string // notesd's blob store, read by hash
 
@@ -64,28 +63,41 @@ type View struct {
 	// Options are the Markdown view's; the view fills in its hooks.
 	Options markdown.Options
 
+	folds map[string]bool // callouts the user opened or closed
+}
+
+func newDrawer(doc *notes.Document, blobs string) *drawer {
+	d := &drawer{doc: doc, blobs: blobs, folds: map[string]bool{}}
+	d.Options = markdown.Options{
+		Extensions: parser.GFM | parser.ExtFootnotes | parser.ExtMath | parser.ExtDollarMath,
+		OnLink:     d.link,
+		LoadImage:  d.loadImage,
+		Code: map[string]func(*ui.Context, *markdown.CodeBlockView){
+			render.EmbedLanguage:   d.embed,
+			render.CalloutLanguage: d.callout,
+		},
+	}
+	return d
+}
+
+// View is a tab's reading view of a note. UI thread only.
+type View struct {
+	*drawer
+	env notes.Env
+	api func() Renderer
+
 	md       string
 	rendered string // the text md was rendered from
 	err      error
 	inFlight bool
 	stop     func()
-	folds    map[string]bool // callouts the user opened or closed, by info
 	changed  []func()
 }
 
 // New makes the reading view of doc. blobs is notesd's blob store
 // (config.Paths.Blobs).
 func New(env notes.Env, client func() Renderer, doc *notes.Document, blobs string) *View {
-	v := &View{env: env, api: client, doc: doc, blobs: blobs, folds: map[string]bool{}}
-	v.Options = markdown.Options{
-		Extensions: parser.GFM | parser.ExtFootnotes | parser.ExtMath | parser.ExtDollarMath,
-		OnLink:     v.link,
-		LoadImage:  v.loadImage,
-		Code: map[string]func(*ui.Context, *markdown.CodeBlockView){
-			render.EmbedLanguage:   v.embed,
-			render.CalloutLanguage: v.callout,
-		},
-	}
+	v := &View{drawer: newDrawer(doc, blobs), env: env, api: client}
 	doc.OnChange(v.schedule)
 	v.render()
 	return v
@@ -155,7 +167,7 @@ func (v *View) View(c *ui.Context) ui.Element {
 	return markdown.View(c, v.md, &v.Options)
 }
 
-func (v *View) link(href string) {
+func (v *drawer) link(href string) {
 	if p, sub, tag, ok := render.NoteLink(href); ok {
 		switch {
 		case tag != "" && v.Links.Tag != nil:
@@ -175,7 +187,7 @@ func (v *View) link(href string) {
 
 var blobRe = regexp.MustCompile(`^blob:([0-9a-f]{64})\.([a-z0-9]{1,8})$`)
 
-func (v *View) loadImage(url string) (ui.ImageSource, error) {
+func (v *drawer) loadImage(url string) (ui.ImageSource, error) {
 	if m := blobRe.FindStringSubmatch(url); m != nil {
 		data, err := os.ReadFile(filepath.Join(v.blobs, m[1][:2], m[1]))
 		if err != nil {
@@ -222,7 +234,7 @@ func fetch(url string) (ui.ImageSource, error) {
 
 // embed draws a note embed: a quiet box holding the embedded note, with
 // its name, which opens it.
-func (v *View) embed(c *ui.Context, b *markdown.CodeBlockView) {
+func (v *drawer) embed(c *ui.Context, b *markdown.CodeBlockView) {
 	t := c.Theme()
 	target := strings.TrimSpace(strings.TrimPrefix(b.Info, render.EmbedLanguage))
 	p, sub, _ := strings.Cut(target, "#")
@@ -255,7 +267,7 @@ func calloutTone(t *ui.Theme, typ string) ui.Color {
 
 // callout draws a callout: its title in its type's color over its text,
 // which a fold mark lets the user open and close.
-func (v *View) callout(c *ui.Context, b *markdown.CodeBlockView) {
+func (v *drawer) callout(c *ui.Context, b *markdown.CodeBlockView) {
 	t := c.Theme()
 	info := strings.TrimSpace(strings.TrimPrefix(b.Info, render.CalloutLanguage))
 	head, title, _ := strings.Cut(info, " ")
@@ -266,7 +278,7 @@ func (v *View) callout(c *ui.Context, b *markdown.CodeBlockView) {
 	if title == "" && head != "" {
 		title = strings.ToUpper(head[:1]) + head[1:]
 	}
-	key := strconv.Itoa(b.Index) + info
+	key := strconv.Itoa(b.Index) + info + b.Code() // live preview's blocks share the map
 	open, set := v.folds[key]
 	if !set {
 		open = fold != "-"
@@ -278,7 +290,7 @@ func (v *View) callout(c *ui.Context, b *markdown.CodeBlockView) {
 	})
 }
 
-func (v *View) calloutBody(c *ui.Context, b *markdown.CodeBlockView, key, title, fold string, tone ui.Color, open bool) {
+func (v *drawer) calloutBody(c *ui.Context, b *markdown.CodeBlockView, key, title, fold string, tone ui.Color, open bool) {
 	{
 		row := ui.Row(c).Gap(6).AlignItems(ui.Center)
 		if fold != "" {

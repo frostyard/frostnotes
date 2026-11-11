@@ -7,6 +7,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
+
+	"github.com/frostyard/frostnotes/internal/desktop/reading"
 )
 
 // Prefs are the editor's preferences (docs/specs/ui.md#settings-batch-2).
@@ -59,6 +61,8 @@ type Sources interface {
 	// leads to ("" is the note being edited), through done on the UI
 	// thread; done is not called when it leads to no note.
 	Subpaths(target string, blocks bool, done func([]Target))
+	// Resolve is the file a link names, "" for none.
+	Resolve(target string) string
 }
 
 // NoteEditor is one tab's editor of a note: MyGo's code editor on the
@@ -83,8 +87,12 @@ type NoteEditor struct {
 	// HideFront hides the frontmatter in live preview, while the properties
 	// panel stands in for it.
 	HideFront bool
+	// Rendered draws live preview's callouts, tables, embeds and images;
+	// nil leaves them as source.
+	Rendered *reading.Blocks
 
 	completeNext bool
+	focusNext    bool
 	live         liveState
 }
 
@@ -146,6 +154,10 @@ func (e *NoteEditor) View(c *ui.Context) ui.Element {
 	}
 	e.showLive(c)
 	el := code.View(c, st)
+	if e.focusNext {
+		e.focusNext = false
+		el.Focus()
+	}
 	e.acceptDrops(el)
 	return el
 }
