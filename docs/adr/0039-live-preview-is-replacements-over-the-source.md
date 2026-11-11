@@ -1,6 +1,6 @@
 # 0039 — Draw live preview as replacements over the source
 
-- **Status:** Proposed
+- **Status:** Accepted (Brian, 2026-11-10)
 - **Date:** 2026-11-10
 
 ## Context
@@ -51,8 +51,8 @@ editor has no syntax tree, and a keystroke in a 10,000-line note has 16 ms.
   `internal/markdown` and the highlighter. It may disagree with them on odd
   input; the worst outcome is a mark shown or hidden wrongly, since the text
   itself never changes.
-- Live preview stays incomplete until MyGo has per-line styles, and the app
-  cannot replace Tauri before then.
+- Headings keep one size, and a done task has no strike-through, until MyGo
+  has per-line styles.
 
 ## Alternatives considered
 

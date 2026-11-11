@@ -328,7 +328,7 @@ into frostui by a change of import path:
   `app/src-tauri`, `packaging/flatpak`, the workflows and the evidence,
   and from MyGo v0.8.3's documentation and source.
 - [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
-  proposed.
+  accepted on 2026-11-10.
 - **Done when:** this plan and ADR-0038 are committed and the
   orchestrator has the chrome, the patterns and the generic pieces to
   check against the Frostmail port.
@@ -468,8 +468,8 @@ costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 
 **Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
 strike-through. Math stays as TeX source and audio and video as their embeds
-(below, under Later). Not done: a run of Orca, and opening every note of the
-user's vault, which the owner does at the trial.
+(below, under Later). The owner used it with their real vault on Snow on
+2026-11-10. Not done: a run of Orca.
 
 - Live preview on MyGo's editor, in the order its author is building
   [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the
@@ -497,8 +497,8 @@ user's vault, which the owner does at the trial.
 
 **Built (2026-11-10), on the draft pull request:** the Flatpak is the native
 app with no Rust or Node, the icons are in `packaging/icons/`, the `app` CI job
-is gone, and the metainfo's screenshots come from the Tester. An installed
-Flatpak, on Snow with the owner's vault, is the owner's to check.
+is gone, and the metainfo's screenshots come from the Tester. The owner
+installed the Flatpak on Snow and used it with their vault on 2026-11-10.
 
 - The Flatpak's Go module, the icons' move, the version stamp, and the
   tests of `internal/packagecheck` and `internal/workflowcheck`
@@ -526,8 +526,8 @@ Flatpak, on Snow with the owner's vault, is the owner's to check.
 
 **Built (2026-11-10), as the draft pull request's last commit:** `app/src-tauri`,
 the Tauri transport, the window buttons and `@tauri-apps/*` are gone, and the
-React app builds only for lodge. The ADRs stay Proposed until the owner accepts
-them. The required checks' names change with the owner. Once frostui has the
+React app builds only for lodge. The owner accepted ADR-0038 and ADR-0039, and
+changed the required checks, on 2026-11-10. Once frostui has the
 `mailto` rule (planned for its v0.2.1), `system.WebURL`'s filter goes and
 `Opener` does it alone.
 

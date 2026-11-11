@@ -44,7 +44,7 @@ of lodge's app contract is
 Next, [plan 0009](docs/plans/0009-mygo-desktop.md) moves the desktop
 app to a native Go app on MyGo and frostui, and keeps the React app as
 lodge's web app ([ADR-0038](docs/adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
-proposed). Its Phases 1 to 4 are built on a draft branch (2026-11-10):
+accepted on 2026-11-10). It is built on a draft pull request (2026-11-10):
 session, source mode, reading view, history and merges, the window on
 frostui's shell, the workspace and the panes. Phase 5's live preview draws
 marks, blocks and embeds; headings' sizes wait for MyGo's per-line styles

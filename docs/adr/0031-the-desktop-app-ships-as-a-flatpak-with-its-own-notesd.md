@@ -304,4 +304,4 @@ and the wait read a nil signal. The wait now ends as Consequences says.
 - Builds on: [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0004](0004-a-notes-daemon-with-thin-clients.md), [ADR-0016](0016-pair-devices-with-a-one-time-code-and-a-revocable-token.md) (device tokens in the Secret Service), [ADR-0023](0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (the other way notesd runs)
 - Core: [ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md), [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)
 - Built in: [roadmap, M6](../plans/0002-roadmap.md)
-- Proposed to be superseded in part by: [ADR-0038](0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) (the Flatpak's Tauri module becomes a Go module)
+- Superseded in part by: [ADR-0038](0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) (the Flatpak's Tauri module becomes a Go module)

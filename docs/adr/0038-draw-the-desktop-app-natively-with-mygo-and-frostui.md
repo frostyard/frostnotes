@@ -1,6 +1,6 @@
 # 0038 — Draw the desktop app natively with MyGo and frostui
 
-- **Status:** Proposed
+- **Status:** Accepted (Brian, 2026-11-10)
 - **Date:** 2026-11-10
 
 ## Context
@@ -230,7 +230,7 @@ React app has a TypeScript client and Lezer.
 - Shapes: [design/app.md](../design/app.md), [specs/ui.md](../specs/ui.md),
   [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md)
 - Built in: [plan 0009](../plans/0009-mygo-desktop.md)
-- Supersedes in part, once accepted: [ADR-0004](0004-a-notes-daemon-with-thin-clients.md)
+- Supersedes in part: [ADR-0004](0004-a-notes-daemon-with-thin-clients.md)
   (the desktop client and one UI codebase),
   [ADR-0007](0007-edit-in-codemirror-6-with-live-preview.md) (CodeMirror on
   the desktop), [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md)

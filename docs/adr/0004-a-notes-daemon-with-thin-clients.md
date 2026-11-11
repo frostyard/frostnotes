@@ -67,4 +67,4 @@ generated JSON-RPC contract, and a React UI behind a swappable transport
 - Builds on: frostmail ADR-0002 and ADR-0009
 - Related: [ADR-0005](0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0008](0008-generate-the-rpc-contract-from-a-yaml-idl.md), [ADR-0011](0011-look-like-frostmails-sibling-with-obsidians-layout.md)
 - Followed by: [ADR-0026](0026-notesd-runs-as-a-lodge-app.md) (M4: the hub's authentication and TLS are lodge's, and notesd runs behind it)
-- Proposed to be superseded in part by: [ADR-0038](0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) (the desktop client becomes a native Go app; the React UI stays as the web app)
+- Superseded in part by: [ADR-0038](0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) (the desktop client becomes a native Go app; the React UI stays as the web app)
