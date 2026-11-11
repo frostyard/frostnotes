@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -39,6 +40,14 @@ const maxRemoteImage = 20 << 20
 
 // maxImagePixels bounds an image's size once decoded, at 4 bytes a pixel.
 const maxImagePixels = 64 << 20
+
+// MaxImageFile bounds the bytes of an image in the vault.
+const MaxImageFile = 128 << 20
+
+// maxViewPixels bounds what one view holds decoded: MyGo's Markdown view keeps
+// every image it loaded for as long as the view lives, so images past this
+// show as their descriptions.
+const maxViewPixels = 256 << 20
 
 // Renderer is what the view needs of notesd; api.NoteClient has it.
 type Renderer interface {
@@ -69,10 +78,14 @@ type drawer struct {
 	Options markdown.Options
 
 	folds map[string]bool // callouts the user opened or closed
+
+	decoding sync.Mutex // images load on goroutines of their own
+	pixels   int64      // decoded so far, under decoding
+	budget   int64      // what pixels may reach
 }
 
 func newDrawer(doc *notes.Document, blobs string) *drawer {
-	d := &drawer{doc: doc, blobs: blobs, folds: map[string]bool{}}
+	d := &drawer{doc: doc, blobs: blobs, folds: map[string]bool{}, budget: maxViewPixels}
 	d.Options = markdown.Options{
 		Extensions: parser.GFM | parser.ExtFootnotes | parser.ExtMath | parser.ExtDollarMath,
 		OnLink:     d.link,
@@ -201,16 +214,68 @@ var blobRe = regexp.MustCompile(`^blob:([0-9a-f]{64})\.([a-z0-9]{1,8})$`)
 
 func (v *drawer) loadImage(url string) (ui.ImageSource, error) {
 	if m := blobRe.FindStringSubmatch(url); m != nil {
-		data, err := os.ReadFile(filepath.Join(v.blobs, m[1][:2], m[1]))
+		return v.decode(func() ([]byte, error) { return ReadImage(filepath.Join(v.blobs, m[1][:2], m[1])) }, m[2])
+	}
+	if v.RemoteImages && (strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://")) {
+		data, ext, err := fetch(url) // a slow server holds up no other image
 		if err != nil {
 			return nil, err
 		}
-		return Decode(data, m[2])
-	}
-	if v.RemoteImages && (strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://")) {
-		return fetch(url)
+		return v.decode(func() ([]byte, error) { return data, nil }, ext)
 	}
 	return nil, os.ErrNotExist
+}
+
+// decode decodes one image at a time and counts it against the view's budget.
+func (v *drawer) decode(read func() ([]byte, error), ext string) (ui.ImageSource, error) {
+	v.decoding.Lock()
+	defer v.decoding.Unlock()
+	if v.pixels >= v.budget {
+		return nil, errors.New("image: this note's images are too large to show together")
+	}
+	data, err := read()
+	if err != nil {
+		return nil, err
+	}
+	src, err := Decode(data, ext)
+	if err != nil {
+		return nil, err
+	}
+	switch s := src.(type) {
+	case *ui.Bitmap:
+		w, h := s.Size()
+		v.pixels += int64(w) * int64(h)
+	case *ui.SVG:
+		w, h := s.Size()
+		v.pixels += int64(w) * int64(h)
+	}
+	return src, nil
+}
+
+// ReadImage reads an image file of the vault, refusing one over MaxImageFile
+// before it holds any of it.
+func ReadImage(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	tooLarge := errors.New("image: larger than " + strconv.Itoa(MaxImageFile>>20) + " MB")
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > MaxImageFile {
+		return nil, tooLarge
+	}
+	data, err := io.ReadAll(io.LimitReader(f, MaxImageFile+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxImageFile {
+		return nil, tooLarge
+	}
+	return data, nil
 }
 
 // Decode reads an image of a note or the web. Its size in pixels is checked
@@ -229,28 +294,27 @@ func Decode(data []byte, ext string) (ui.ImageSource, error) {
 	return ui.DecodeBitmap(data)
 }
 
-func fetch(url string) (ui.ImageSource, error) {
+func fetch(url string) (data []byte, ext string, err error) {
 	client := &http.Client{Timeout: 20 * time.Second}
 	resp, err := client.Get(url) //nolint:noctx // bounded by the client's timeout; LoadImage has no context
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("image: " + resp.Status)
+		return nil, "", errors.New("image: " + resp.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxRemoteImage+1))
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxRemoteImage+1))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(data) > maxRemoteImage {
-		return nil, errors.New("image: larger than " + strconv.Itoa(maxRemoteImage>>20) + " MB")
+		return nil, "", errors.New("image: larger than " + strconv.Itoa(maxRemoteImage>>20) + " MB")
 	}
-	ext := ""
 	if strings.Contains(resp.Header.Get("Content-Type"), "svg") {
 		ext = "svg"
 	}
-	return Decode(data, ext)
+	return data, ext, nil
 }
 
 // embed draws a note embed: a quiet box holding the embedded note, with

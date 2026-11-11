@@ -3,7 +3,6 @@ package window
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -176,6 +175,9 @@ func (a *App) openText(p string) (string, bool) {
 }
 
 func (a *App) release(tc *tabContent) {
+	if tc.ed != nil {
+		tc.ed.Properties.Commit() // a field with the focus has not committed
+	}
 	if tc.ed != nil || tc.merg != nil {
 		if b := a.bindings[tc.doc]; b != nil {
 			if b.refs--; b.refs == 0 {
@@ -299,7 +301,7 @@ func (a *App) loadFile(tc *tabContent) {
 	ext := strings.TrimPrefix(filepath.Ext(tc.view.Path), ".")
 	go func() { // a large file must not hold up the window
 		var img ui.ImageSource
-		data, err := os.ReadFile(blob)
+		data, err := reading.ReadImage(blob)
 		if err == nil {
 			img, err = reading.Decode(data, ext)
 		}

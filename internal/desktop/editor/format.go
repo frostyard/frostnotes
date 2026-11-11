@@ -478,6 +478,11 @@ var listRe = regexp.MustCompile(`^((?:\s*>\s?)*)(\s*)(?:([-*+])|(\d+)([.)]))([ \
 func inCode(text string, from int) bool {
 	fence := ""
 	prev, lastText := "", ""
+	indentedCode := false // the indented run so far is code
+	isIndented := func(s string) bool { return strings.HasPrefix(s, "    ") || strings.HasPrefix(s, "\t") }
+	startsCode := func() bool {
+		return strings.TrimSpace(prev) == "" && !listRe.MatchString(lastText) && !isIndented(lastText)
+	}
 	for at := 0; at < from; {
 		end := strings.IndexByte(text[at:], '\n')
 		if end < 0 {
@@ -493,6 +498,15 @@ func inCode(text string, from int) bool {
 		case len(content)-len(t) <= 3 && (strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")):
 			fence = t[:len(t)-len(strings.TrimLeft(t, t[:1]))]
 		}
+		switch {
+		case fence != "":
+			indentedCode = false
+		case strings.TrimSpace(content) == "": // a blank line does not end it
+		case isIndented(content):
+			indentedCode = indentedCode || startsCode()
+		default:
+			indentedCode = false
+		}
 		prev = content
 		if strings.TrimSpace(content) != "" {
 			lastText = content
@@ -506,9 +520,7 @@ func inCode(text string, from int) bool {
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
 		line = line[:i]
 	}
-	indented := strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")
-	return indented && strings.TrimSpace(prev) == "" && !listRe.MatchString(lastText) &&
-		!strings.HasPrefix(lastText, "    ") && !strings.HasPrefix(lastText, "\t")
+	return isIndented(line) && (indentedCode || startsCode())
 }
 
 // ContinueMarkup is Enter with smart lists: a list item, task or quote

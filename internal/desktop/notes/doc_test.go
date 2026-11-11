@@ -602,3 +602,49 @@ func TestAFailedFirstReadSaysSoAndRetriesTheRead(t *testing.T) {
 		t.Fatalf("notice %+v", d.Notice())
 	}
 }
+
+func TestARefusedTextCountsAsUnsavedUntilDismissed(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "file\n")
+	d, b := f.open("a.md")
+	d.base = "0000000000000000000000000000000000000000000000000000000000000000"
+	b.typeAt(t, 0, 4, "typed")
+	f.loop.Advance(SaveDelay)
+	f.loop.Until(t, "the refusal", func() bool { return d.Notice() != nil })
+	if !d.Unsaved() {
+		t.Fatal("the refused text does not count as unsaved")
+	}
+	d.Dismiss()
+	if d.Unsaved() {
+		t.Fatal("still unsaved after the user dismissed it")
+	}
+}
+
+func TestAFrozenNoteSavesButTakesNoEdits(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "file\n")
+	d, b := f.open("a.md")
+	b.typeAt(t, 0, 0, "typed ")
+	thaw := d.Freeze("Busy.")
+	if d.ReadOnly() != "Busy." {
+		t.Fatalf("read-only for %q", d.ReadOnly())
+	}
+	cs, err := ChangesOf(len(d.Text()), Change{From: 0, To: 0, Insert: "late "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Edit(cs)
+	if d.Text() != "typed file\n" {
+		t.Fatalf("a frozen note took an edit: %q", d.Text())
+	}
+	done := false
+	d.Flush(func() { done = true })
+	f.loop.Until(t, "the save", func() bool { return done })
+	if got := f.Read("a.md").Content; got != "typed file\n" {
+		t.Fatalf("file holds %q", got)
+	}
+	thaw()
+	if d.ReadOnly() != "" {
+		t.Fatalf("still read-only for %q", d.ReadOnly())
+	}
+}

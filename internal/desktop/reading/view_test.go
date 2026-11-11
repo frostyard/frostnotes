@@ -8,6 +8,8 @@ import (
 	"hash/crc32"
 	"image"
 	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -127,6 +129,47 @@ func TestDecodeRefusesAHugeImageFromItsHeader(t *testing.T) {
 	}
 	if _, err := Decode(small.Bytes(), "png"); err != nil {
 		t.Fatalf("a small image: %v", err)
+	}
+}
+
+func TestAViewsDecodedImagesAreBounded(t *testing.T) {
+	dir := t.TempDir()
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	url := func(c string) string {
+		hash := strings.Repeat(c, 64)
+		if err := os.MkdirAll(filepath.Join(dir, hash[:2]), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, hash[:2], hash), data.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return "blob:" + hash + ".png"
+	}
+	d := newDrawer(nil, dir)
+	d.budget = 4
+	if _, err := d.loadImage(url("a")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.loadImage(url("b")); err == nil {
+		t.Fatal("an image past the budget was decoded")
+	}
+}
+
+func TestReadImageRefusesAnOversizedFile(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "big")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := f.Truncate(MaxImageFile + 1); err != nil { // sparse: takes no disk
+		t.Fatal(err)
+	}
+	if _, err := ReadImage(p); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Fatalf("err %v", err)
 	}
 }
 

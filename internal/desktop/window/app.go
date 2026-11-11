@@ -68,8 +68,10 @@ type App struct {
 	vault    *api.Vault
 	Catalog  *catalog.Catalog
 	settings *api.VaultSettings
-	syncInfo *api.SyncStatus
-	conflict []api.SyncConflict
+	// afterSettings wait for settings to load.
+	afterSettings []func()
+	syncInfo      *api.SyncStatus
+	conflict      []api.SyncConflict
 
 	env        *panes.Env
 	files      *panes.Files
@@ -141,15 +143,12 @@ func (a *App) Start() { a.Session.Start() }
 // close: at once when every note reached notesd, else when the user says
 // so (docs/design/app.md#operational-notes).
 func (a *App) RequestClose(done func()) {
-	for _, tc := range a.tabs {
-		if tc.ed != nil {
-			tc.ed.Properties.Commit()
-		}
-	}
+	a.commitDrafts()
 	a.Store.Flush()
 	a.saveState()
 	a.Session.Flush(func() {
 		// What was typed while another note saved is not in its document yet.
+		a.commitDrafts()
 		for _, b := range a.bindings {
 			b.b.Sync()
 		}
@@ -164,6 +163,15 @@ func (a *App) RequestClose(done func()) {
 				done()
 			}})
 	})
+}
+
+// commitDrafts writes what the properties fields with the focus hold.
+func (a *App) commitDrafts() {
+	for _, tc := range a.tabs {
+		if tc.ed != nil {
+			tc.ed.Properties.Commit()
+		}
+	}
 }
 
 func (a *App) savePrefs() { a.report(prefs.Save(filepath.Join(a.cfg.ConfigAt, "prefs.json"), a.Prefs)) }
@@ -255,6 +263,7 @@ func (a *App) showVault(v *api.Vault) {
 	clear(a.previews)
 	a.vault = v
 	a.settings = nil // the old vault's say nothing of this one
+	a.afterSettings = nil
 	if v == nil {
 		a.Store.Load("")
 		a.Catalog, a.env = nil, nil
@@ -323,7 +332,14 @@ func (a *App) loadVaultData() {
 		conflicts, _ = c.Sync().Conflicts(ctx, &api.SyncConflictsParams{VaultID: id})
 		return nil
 	}, func(err error) {
-		if err != nil || a.vault == nil || a.vault.ID != id {
+		if a.vault == nil || a.vault.ID != id {
+			return
+		}
+		if err != nil {
+			if a.settings == nil && len(a.afterSettings) > 0 {
+				a.afterSettings = nil
+				a.notify("Cannot create the note: the vault's settings did not load: " + err.Error())
+			}
 			return
 		}
 		a.settings = settings
@@ -337,7 +353,22 @@ func (a *App) loadVaultData() {
 			}
 		}
 		a.conflict = conflicts
+		waiting := a.afterSettings
+		a.afterSettings = nil
+		for _, fn := range waiting {
+			fn()
+		}
 	})
+}
+
+// withSettings runs fn once the vault's settings are known: where a new note
+// goes depends on them. A move to another vault drops it.
+func (a *App) withSettings(fn func()) {
+	if a.settings != nil {
+		fn()
+		return
+	}
+	a.afterSettings = append(a.afterSettings, fn)
 }
 
 func (a *App) scheduleRefresh() {

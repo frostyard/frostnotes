@@ -155,3 +155,19 @@ func TestAnEscapedHashIsPartOfTheName(t *testing.T) {
 		t.Fatalf("%+v", l)
 	}
 }
+
+func TestAReferenceImageTakesNoOtherImagesDestination(t *testing.T) {
+	for _, in := range []string{
+		"![][r]\n\n![](b.png)\n\n[r]: photo.png\n",
+		"![][r] ![](b.png)\n\n[r]: photo.png\n",
+	} {
+		got := Markdown([]byte(in), mdVault())
+		if !strings.Contains(got, "![](b.png)") || strings.Contains(got, "![](<blob:aaaa.png>)") {
+			t.Errorf("%q made %q", in, got)
+		}
+	}
+	got := Markdown([]byte("![][r] ![](photo.png)\n\n[r]: doc.pdf\n"), mdVault())
+	if !strings.Contains(got, "![](<blob:aaaa.png>)") {
+		t.Errorf("the image after a reference was not rewritten: %q", got)
+	}
+}

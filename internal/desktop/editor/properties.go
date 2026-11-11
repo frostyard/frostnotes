@@ -85,20 +85,23 @@ type parsedFront struct {
 	units map[string]unit
 }
 
-// maxExpanded bounds the nodes a property's value expands to through YAML
-// aliases: a note can name itself, or double at each level.
+// maxExpanded bounds the nodes a note's frontmatter expands to through YAML
+// aliases, all its properties together: a note can name itself, double at
+// each level, or name one large value many times. What is written out costs
+// nothing, as the file's size bounds it.
 const maxExpanded = 10000
 
 // nodeValue is a node's value, its aliases followed. An alias inside what
-// it names, or past the bound, is nil.
-func nodeValue(n *yaml.Node) any {
-	left := maxExpanded
-	return expand(n, map[*yaml.Node]bool{}, &left)
+// it names, or past the bound left, is nil.
+func nodeValue(n *yaml.Node, left *int) any {
+	return expand(n, map[*yaml.Node]bool{}, left)
 }
 
 func expand(n *yaml.Node, open map[*yaml.Node]bool, left *int) any {
-	if *left--; *left < 0 {
-		return nil
+	if len(open) > 0 { // inside an alias
+		if *left--; *left < 0 {
+			return nil
+		}
 	}
 	switch n.Kind {
 	case yaml.AliasNode:
@@ -164,13 +167,14 @@ func parseFront(text string) (*parsedFront, error) {
 		return nil, errors.New("frontmatter must be a block YAML mapping")
 	}
 	seen := map[string]bool{}
+	left := maxExpanded
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		key, val := root.Content[i], root.Content[i+1]
 		if seen[key.Value] {
 			return nil, fmt.Errorf("the key %s appears twice", key.Value)
 		}
 		seen[key.Value] = true
-		p.props = append(p.props, Property{Key: key.Value, Value: nodeValue(val)})
+		p.props = append(p.props, Property{Key: key.Value, Value: nodeValue(val, &left)})
 		at := key.Line - 1
 		if at < 0 || at >= len(p.lines) || strings.ContainsAny(p.lines[at][:min(1, len(p.lines[at]))], " \t#-") {
 			continue

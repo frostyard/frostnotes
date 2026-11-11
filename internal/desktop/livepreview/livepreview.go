@@ -522,7 +522,8 @@ func parseEmbed(src string) (target string, wikilink bool, width int) {
 		return strings.TrimSpace(name), true, sizeWidth(alias)
 	}
 	open := strings.IndexByte(src, '[')
-	closeBracket, _, ok := linkAt(src, open, len(src))
+	work := 2*len(src) + 16
+	closeBracket, _, ok := linkAt(src, open, len(src), &work)
 	if !ok {
 		return "", false, 0
 	}
@@ -617,7 +618,7 @@ func linePieces(line string, afterText, afterGap bool) []Piece {
 		end = at + m[0]
 	}
 	before := len(ps)
-	ps = inline(ps, line, at, end)
+	ps = inline(ps, line, at, end, &linkScan{work: 16*len(line) + 1024})
 	if done && end > at {
 		if label, ok := plainText(line, at, end, ps[before:]); ok {
 			return append(ps[:before], Piece{Start: at, End: end, Kind: Dim, Label: label})
@@ -651,11 +652,31 @@ func wikiLabel(inner string) string {
 	return strings.TrimSpace(strings.ReplaceAll(inner, "#", " > "))
 }
 
+// maxLinkNesting is how deep text inside link text is read for more marks;
+// deeper text shows as written.
+const maxLinkNesting = 8
+
+// linkScan bounds what the links of one line cost: a note can nest links
+// without end, or open brackets that never close.
+type linkScan struct {
+	depth int // links around the text being read
+	work  int // bytes the scans for a link's end may still read
+}
+
 // inline adds the marks of inline syntax in line[at:end].
-func inline(ps []Piece, line string, at, end int) []Piece {
-	var used []int // closing marks already taken
+func inline(ps []Piece, line string, at, end int, scan *linkScan) []Piece {
+	used := map[int]bool{} // closing marks already taken
+	noWikiEnd := false     // no "]]" is left
+	wikiEnd := func(i int) int {
+		if noWikiEnd {
+			return -1
+		}
+		j := strings.Index(line[i:end], "]]")
+		noWikiEnd = j < 0
+		return j
+	}
 	for i := at; i < end; {
-		if slices.Contains(used, i) {
+		if used[i] {
 			i++
 			continue
 		}
@@ -685,14 +706,14 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 				i++
 			}
 		case strings.HasPrefix(line[i:end], "![["):
-			if j := strings.Index(line[i:end], "]]"); j >= 0 {
+			if j := wikiEnd(i); j >= 0 {
 				ps = append(ps, Piece{Start: i, End: i + j + 2, Kind: embedMark})
 				i += j + 2
 			} else {
 				i += 3
 			}
 		case strings.HasPrefix(line[i:end], "[["):
-			j := strings.Index(line[i:end], "]]")
+			j := wikiEnd(i)
 			if j < 0 {
 				i += 2
 				break
@@ -711,7 +732,7 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 			}
 			i = close + 2
 		case c == '!' && i+1 < end && line[i+1] == '[':
-			if _, dest, ok := linkAt(line, i+1, end); ok {
+			if _, dest, ok := linkAt(line, i+1, end, &scan.work); ok {
 				ps = append(ps, Piece{Start: i, End: dest, Kind: embedMark})
 				i = dest
 			} else {
@@ -728,8 +749,13 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 					break
 				}
 			}
-			if closeBracket, dest, ok := linkAt(line, i, end); ok {
-				inner := inline(nil, line, i+1, closeBracket) // once: nested links would double the work
+			if closeBracket, dest, ok := linkAt(line, i, end, &scan.work); ok {
+				var inner []Piece
+				if scan.depth < maxLinkNesting {
+					scan.depth++
+					inner = inline(nil, line, i+1, closeBracket, scan) // once: nested links would double the work
+					scan.depth--
+				}
 				if label, plain := plainText(line, i+1, closeBracket, inner); plain && label != "" && len(label) <= maxObject {
 					target, _, _ := parseEmbed(line[i:dest])
 					if strings.Contains(target, ":") {
@@ -740,7 +766,7 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 					break
 				}
 				ps = append(ps, Piece{Start: i, End: i + 1}, Piece{Start: closeBracket, End: dest})
-				used = append(used, closeBracket)
+				used[closeBracket] = true
 				ps = append(ps, inner...)
 				i = dest
 			} else {
@@ -766,7 +792,7 @@ func inline(ps []Piece, line string, at, end int) []Piece {
 			}
 			ps = append(ps, Piece{Start: i, End: i + len(mark)}, Piece{Start: j, End: j + len(mark)})
 			for k := j; k < j+len(mark); k++ {
-				used = append(used, k)
+				used[k] = true
 			}
 			i += len(mark)
 		default:
@@ -820,9 +846,12 @@ func mathEnd(line string, i, end int) int {
 
 // linkAt reads a Markdown link whose '[' is at i: where its ']' is and
 // where it ends.
-func linkAt(line string, i, end int) (closeBracket, dest int, ok bool) {
+func linkAt(line string, i, end int, work *int) (closeBracket, dest int, ok bool) {
 	depth := 0
 	for j := i; j < end; j++ {
+		if *work--; *work < 0 {
+			return 0, 0, false
+		}
 		switch line[j] {
 		case '\\':
 			j++
@@ -838,6 +867,9 @@ func linkAt(line string, i, end int) (closeBracket, dest int, ok bool) {
 			}
 			parens := 0
 			for k := j + 1; k < end; k++ {
+				if *work--; *work < 0 {
+					return 0, 0, false
+				}
 				switch line[k] {
 				case '\\':
 					k++
@@ -878,7 +910,7 @@ func wordByte(c byte) bool {
 }
 
 // emphasisEnd finds the mark that closes one opened at i.
-func emphasisEnd(line string, i, end int, mark string, used []int) int {
+func emphasisEnd(line string, i, end int, mark string, used map[int]bool) int {
 	after := i + len(mark)
 	if after >= end || line[after] == ' ' || line[after] == '\t' {
 		return -1 // not left-flanking
@@ -898,7 +930,7 @@ func emphasisEnd(line string, i, end int, mark string, used []int) int {
 				continue
 			}
 		}
-		if line[j:j+len(mark)] != mark || slices.Contains(used, j) {
+		if line[j:j+len(mark)] != mark || used[j] {
 			continue
 		}
 		if line[j-1] == ' ' || line[j-1] == '\t' {

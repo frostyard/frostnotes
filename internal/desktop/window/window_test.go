@@ -23,6 +23,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
 	"github.com/frostyard/frostnotes/internal/desktop/editor"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	"github.com/frostyard/frostnotes/internal/desktop/reading"
 	"github.com/frostyard/frostnotes/internal/desktop/session"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 	"github.com/frostyard/frostnotes/internal/rpctest"
@@ -673,6 +674,176 @@ func TestDeletingADirtyNoteStaysDeleted(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClosingATabCommitsAFocusedProperty(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "---\nstatus: draft\n---\nbody\n")
+	f.openVault()
+	f.openNoteTab("a.md")
+	f.tt.Frame()
+	if err := f.tt.Click("status"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	f.tt.Key(ui.Cmd, ui.KeyA)
+	f.tt.Type("final")
+	f.tt.Frame()
+	id := f.a.Store.Workspace().ActiveTab().ID
+	f.a.Store.Update(func(w *workspace.Workspace) { w.Close(id) })
+	f.until("the save", func() bool { return strings.Contains(f.Read("a.md").Content, "status: final") })
+}
+
+func TestClosingCommitsAPropertyTypedDuringTheFlush(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "---\nstatus: draft\n---\nbody\n")
+	f.Create("b.md", "b\n")
+	f.openVault()
+	b := f.openNoteTab("b.md")
+	a := f.openNoteTab("a.md")
+	f.tt.Frame()
+	if err := f.tt.Click("status"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	b.Binding().Buffer().Edit(code.Edit{Start: 0, End: 0, Text: "typed "})
+	b.Binding().Sync()
+	closed := false
+	f.a.RequestClose(func() { closed = true })
+	f.tt.Key(ui.Cmd, ui.KeyA) // while b saves
+	f.tt.Type("final")
+	f.tt.Frame()
+	f.waitText("Close anyway?")
+	if closed || !strings.Contains(a.Binding().Document().Text(), "status: final") {
+		t.Fatalf("closed %v, the note holds %q", closed, a.Binding().Document().Text())
+	}
+}
+
+func TestACreateAnsweredAfterAVaultSwitchOpensNothing(t *testing.T) {
+	f := start(t)
+	other, err := f.Other.Vault().Add(t.Context(), &api.VaultAddParams{Path: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.openVault()
+	f.a.createAndOpen("New note.md", workspace.Here, nil)
+	before := f.a.vault
+	f.a.vault = other // the answer comes after the switch
+	f.loop.Until(t, "the create", func() bool {
+		_, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: before.ID, Path: "New note.md"})
+		f.loop.Post(func() {})
+		return err == nil
+	})
+	for range 3 {
+		done := false
+		f.a.call(func(ctx context.Context, c *api.Client) error {
+			_, err := c.Note().Files(ctx, &api.NoteFilesParams{VaultID: other.ID})
+			return err
+		}, func(error) { done = true })
+		f.loop.Until(t, "a round trip", func() bool { return done })
+	}
+	if p := f.a.Store.Workspace().ActiveTab().View.Path; p == "New note.md" {
+		t.Fatal("the note opened in the vault switched to")
+	}
+	f.a.vault = before
+}
+
+func TestADeleteStopsWhenANoteCannotBeSaved(t *testing.T) {
+	f := start(t)
+	f.Create("Dir/a.md", "text\n")
+	f.openVault()
+	e := f.openNoteTab("Dir/a.md")
+	dir := filepath.Join(f.Dir, "Dir")
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	e.Binding().Buffer().Edit(code.Edit{Start: 0, End: 0, Text: "typed "})
+	e.Binding().Sync()
+	f.a.Prefs.ConfirmDelete = false
+	f.a.deleteFile("Dir/a.md", false)
+	f.loop.Until(t, "the refusal", func() bool { return len(f.a.toasts) > 0 }) // drawn frames take them
+	if got := f.a.toasts[0].Title; got != "Cannot delete a: some of its text could not be saved." {
+		t.Fatalf("it said %q", got)
+	}
+	d := e.Binding().Document()
+	if d.ReadOnly() != "" {
+		t.Fatalf("the note stays read-only: %q", d.ReadOnly())
+	}
+	if _, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "Dir/a.md"}); err != nil {
+		t.Fatalf("the note is gone: %v", err)
+	}
+}
+
+func TestANoteTakesNoEditsWhileItIsBeingDeleted(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "text\n")
+	f.openVault()
+	e := f.openNoteTab("a.md")
+	e.Binding().Buffer().Edit(code.Edit{Start: 0, End: 0, Text: "typed "})
+	e.Binding().Sync()
+	f.a.Prefs.ConfirmDelete = false
+	f.a.deleteFile("a.md", false)
+	d := e.Binding().Document()
+	if d.ReadOnly() == "" {
+		t.Fatal("the note can be edited during its delete")
+	}
+	f.tt.Frame()
+	if !e.State.ReadOnly {
+		t.Fatal("the editor takes typing during the delete")
+	}
+	f.until("the deleted notice", func() bool { return d.Notice() != nil && d.Notice().Kind == notes.NoticeDeleted })
+	f.until("the answer", func() bool { return d.ReadOnly() == "" })
+	if _, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "a.md"}); err == nil {
+		t.Fatal("the note came back")
+	}
+}
+
+func TestANewNoteWaitsForTheVaultsSettings(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.a.settingChanged("vault:newNoteLocation", "folder")
+	f.until("the location", func() bool { return f.a.settings.NewNoteLocation == api.NewNoteLocationFolder })
+	f.a.settingChanged("vault:newNoteFolder", "Inbox")
+	f.until("the folder", func() bool { return f.a.settings.NewNoteFolder == "Inbox" })
+	v := *f.a.vault
+	f.a.showVault(&v)
+	if f.a.settings != nil {
+		t.Fatal("the settings are already here")
+	}
+	f.a.createNote(workspace.Here)
+	f.until("the new note", func() bool { return f.a.activeFile() != "" })
+	if p := f.a.activeFile(); p != "Inbox/Untitled.md" {
+		t.Fatalf("the new note is %q", p)
+	}
+}
+
+func TestAnOversizedImageBlobIsRefused(t *testing.T) {
+	f := start(t)
+	var data bytes.Buffer
+	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Other.Note().Upload(t.Context(), &api.NoteUploadParams{VaultID: f.Vault, Path: "a.png", Data: base64.StdEncoding.EncodeToString(data.Bytes())}); err != nil {
+		t.Fatal(err)
+	}
+	f.openVault()
+	f.until("the catalog", func() bool { return f.a.hasFile("a.png") })
+	hash := f.a.fileHash("a.png")
+	blob := filepath.Join(f.Blobs, hash[:2], hash)
+	if err := os.Chmod(blob, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(blob, reading.MaxImageFile+1); err != nil { // sparse: takes no disk
+		t.Fatal(err)
+	}
+	f.a.Store.Update(func(w *workspace.Workspace) {
+		w.Open(workspace.View{Type: workspace.ViewFile, Path: "a.png"}, workspace.Here)
+	})
+	f.until("the refusal", func() bool {
+		tc := f.a.activeContent()
+		return tc != nil && strings.Contains(tc.err, "larger than")
+	})
 }
 
 func TestANewVaultForgetsTheOldSettings(t *testing.T) {

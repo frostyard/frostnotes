@@ -1,6 +1,7 @@
 package livepreview
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -408,6 +409,45 @@ func TestNestedLinkTextIsLinear(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("nested links took exponential time")
+	}
+}
+
+func TestDeepOrUnclosedLinkTextStaysWithinATimeBound(t *testing.T) {
+	const n = 400000
+	for name, line := range map[string]string{
+		"nested":          strings.Repeat("[a ", n) + "b" + strings.Repeat("](c)", n),
+		"unclosed":        strings.Repeat("[ ", n),
+		"closed once":     strings.Repeat("[ ", n) + "]",
+		"unclosed parens": strings.Repeat("[a]( ", n),
+		"wikilinks":       strings.Repeat("[[", n),
+		"emphasis":        strings.Repeat("**a** ", n),
+	} {
+		done := make(chan struct{})
+		go func() {
+			var s Scanner
+			s.Pieces(line, nil, false)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s took over 10 seconds", name)
+		}
+	}
+}
+
+func TestLinkNestingIsCappedWhateverTheWorkLeft(t *testing.T) {
+	const n = 100000
+	line := strings.Repeat("[a ", n) + "b" + strings.Repeat("](c)", n)
+	done := make(chan struct{})
+	go func() {
+		inline(nil, line, 0, len(line), &linkScan{work: math.MaxInt})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("deep nesting took over 10 seconds")
 	}
 }
 

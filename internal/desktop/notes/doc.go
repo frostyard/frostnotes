@@ -119,6 +119,8 @@ type Document struct {
 	text     string
 	crlf     bool
 	readOnly string
+	frozen   int    // Freeze calls not yet thawed
+	frozenBy string // why the last of them stops edits
 	base     string // the hash notesd last confirmed: the next write's base
 	baseText string // what base names, as text is
 	buf      Buffer
@@ -168,13 +170,35 @@ func (d *Document) Base() string { return d.base }
 func (d *Document) CRLF() bool { return d.crlf }
 
 // ReadOnly says why the note cannot be edited here, "" when it can.
-func (d *Document) ReadOnly() string { return d.readOnly }
+func (d *Document) ReadOnly() string {
+	if d.frozen > 0 {
+		return d.frozenBy
+	}
+	return d.readOnly
+}
+
+// Freeze stops the user's edits, for reason, until the func it returns runs.
+// Saves and other writers' changes go on.
+func (d *Document) Freeze(reason string) (thaw func()) {
+	d.syncBuffer()
+	d.frozen++
+	d.frozenBy = reason
+	d.notify()
+	return func() {
+		d.frozen--
+		d.notify()
+	}
+}
 
 // Loaded reports whether the note has been read.
 func (d *Document) Loaded() bool { return d.loaded }
 
-// Unsaved reports whether typed text has not reached notesd yet.
-func (d *Document) Unsaved() bool { return d.dirty || d.flight != nil }
+// Unsaved reports whether typed text has not reached notesd yet: text to
+// save, or text notesd refused, which only its notice holds until the user
+// merges or dismisses it.
+func (d *Document) Unsaved() bool {
+	return d.dirty || d.flight != nil || (d.notice != nil && d.notice.Kind == NoticeRefused)
+}
 
 // Notice is what the tabs say about the document, nil for nothing.
 func (d *Document) Notice() *Notice { return d.notice }
@@ -329,7 +353,7 @@ func (d *Document) Local(cs ChangeSet) {
 // change applies the user's change cs to the text: a typed edit, an undo,
 // a redo or an edit from outside the editor.
 func (d *Document) change(cs ChangeSet) bool {
-	if cs.Empty() || !d.loaded || d.readOnly != "" {
+	if cs.Empty() || !d.loaded || d.ReadOnly() != "" {
 		return false
 	}
 	text, err := cs.Apply(d.text)

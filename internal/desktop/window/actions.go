@@ -157,7 +157,7 @@ func newNotePath(taken func(string) bool, folder string) string {
 }
 
 func (a *App) createNote(where string) {
-	a.createNoteAt(newNotePath(a.hasFile, a.newNoteFolder()), where)
+	a.withSettings(func() { a.createNoteAt(newNotePath(a.hasFile, a.newNoteFolder()), where) })
 }
 
 func (a *App) createNoteIn(folder string) {
@@ -173,6 +173,9 @@ func (a *App) createAndOpen(p, where string, then func(*workspace.Workspace)) {
 		_, err := c.Note().Create(ctx, &api.NoteCreateParams{VaultID: id, Path: p})
 		return err
 	}, func(err error) {
+		if a.vault == nil || a.vault.ID != id {
+			return // the window moved to another vault meanwhile
+		}
 		if err != nil {
 			a.notify("Cannot create " + p + ": " + err.Error())
 			return
@@ -198,15 +201,17 @@ func (a *App) openOrCreate(target, where string) {
 	if !strings.HasSuffix(strings.ToLower(bare), ".md") {
 		file = bare + ".md"
 	}
-	p := file
-	if folder := a.newNoteFolder(); !strings.Contains(file, "/") && folder != "" {
-		p = join(folder, file)
-	}
-	if a.hasFile(p) {
-		a.open(p, where)
-		return
-	}
-	a.createNoteAt(p, where)
+	a.withSettings(func() {
+		p := file
+		if folder := a.newNoteFolder(); !strings.Contains(file, "/") && folder != "" {
+			p = join(folder, file)
+		}
+		if a.hasFile(p) {
+			a.open(p, where)
+			return
+		}
+		a.createNoteAt(p, where)
+	})
 }
 
 func (a *App) searchFor(query string) {
@@ -463,13 +468,14 @@ func (a *App) deleteFile(p string, folder bool) {
 	}
 	name, id := nameOf(p), a.vault.ID
 	a.confirmDelete(name, "You can restore it from its version history.", func() {
-		a.saveUnder(id, p, func(bases map[string]string) {
+		a.saveUnder(id, p, name, func(bases map[string]string, thaw func()) {
 			if b, ok := bases[p]; ok {
 				hash = b
 			}
 			a.call(func(ctx context.Context, c *api.Client) error {
 				return c.Note().Delete(ctx, &api.NoteDeleteParams{VaultID: id, Path: p, Base: hash})
 			}, func(err error) {
+				thaw()
 				if err != nil {
 					a.notify("Cannot delete " + name + ": " + err.Error())
 					return
@@ -482,19 +488,36 @@ func (a *App) deleteFile(p string, folder bool) {
 
 // saveUnder saves the open notes at or inside p, then gives their bases: a
 // delete comes after, or the save's unsaved text would make the note again.
-// What was typed stays in the deleted note's version history.
-func (a *App) saveUnder(vault int64, p string, next func(bases map[string]string)) {
+// What was typed stays in the deleted note's version history. The notes take
+// no edits until next calls thaw, once the delete has answered; a note that
+// could not be saved stops the delete, which next then never sees.
+func (a *App) saveUnder(vault int64, p, name string, next func(bases map[string]string, thaw func())) {
 	docs := a.Session.Under(vault, p)
+	a.commitDrafts()
+	thaws := make([]func(), 0, len(docs))
+	for _, d := range docs {
+		thaws = append(thaws, d.Freeze("Deleting this note."))
+	}
+	thaw := func() {
+		for _, fn := range thaws {
+			fn()
+		}
+	}
 	left := len(docs) + 1
 	done := func() {
 		if left--; left > 0 {
+			return
+		}
+		if slices.ContainsFunc(docs, (*notes.Document).Unsaved) {
+			thaw()
+			a.notify("Cannot delete " + name + ": some of its text could not be saved.")
 			return
 		}
 		bases := make(map[string]string, len(docs))
 		for _, d := range docs {
 			bases[d.Path()] = d.Base()
 		}
-		next(bases)
+		next(bases, thaw)
 	}
 	for _, d := range docs {
 		d.Flush(done)
@@ -531,7 +554,7 @@ func (a *App) deleteFolder(p string) {
 	}
 	name, id := path.Base(p), a.vault.ID
 	a.confirmDelete(name, "Its "+strconv.Itoa(len(files))+" files can be restored from their version history.", func() {
-		a.saveUnder(id, p, func(bases map[string]string) {
+		a.saveUnder(id, p, name, func(bases map[string]string, thaw func()) {
 			for i := range files {
 				if b, ok := bases[files[i].Path]; ok {
 					files[i].Base = b
@@ -542,6 +565,7 @@ func (a *App) deleteFolder(p string) {
 				res, err = c.Note().DeleteFolder(ctx, &api.NoteDeleteFolderParams{VaultID: id, Path: p, Files: files})
 				return err
 			}, func(err error) {
+				thaw()
 				if err != nil {
 					a.notify("Cannot delete " + name + ": " + err.Error())
 					return

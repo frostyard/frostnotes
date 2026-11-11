@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -71,7 +72,7 @@ func TestReadingAFileRefusesWhatIsNotARegularFile(t *testing.T) {
 }
 
 func TestSmartListsLeaveCodeAlone(t *testing.T) {
-	for _, in := range []string{"```\n- a|\n```", "~~~\n> q|\n~~~", "text\n\n    - a|"} {
+	for _, in := range []string{"```\n- a|\n```", "~~~\n> q|\n~~~", "text\n\n    - a|", "\n    x\n    - a|", "    x\n\n    - a|"} {
 		doc, sels := at(in)
 		if _, ok := ContinueMarkup(doc, sels); ok {
 			t.Errorf("%q was continued", in)
@@ -105,6 +106,41 @@ func TestYAMLAliasesAreBounded(t *testing.T) {
 		case <-time.After(20 * time.Second):
 			t.Fatalf("%s did not finish", name)
 		}
+	}
+}
+
+func TestManyAliasesOfOneLargeNodeShareOneBound(t *testing.T) {
+	var in strings.Builder
+	in.WriteString("---\nbig: &b [" + strings.TrimSuffix(strings.Repeat("x, ", 5000), ", ") + "]\n")
+	for i := range 5000 {
+		fmt.Fprintf(&in, "k%d: *b\n", i)
+	}
+	in.WriteString("---\nbody\n")
+	var count func(v any) int
+	count = func(v any) int {
+		n := 1
+		if s, ok := v.([]any); ok {
+			for _, c := range s {
+				n += count(c)
+			}
+		}
+		return n
+	}
+	total := 0
+	for _, p := range ReadFrontmatter(in.String()).Properties {
+		total += count(p.Value)
+	}
+	const written = 5001 + 5000 // the sequence as written and a value for each alias
+	if total > written+maxExpanded {
+		t.Fatalf("%d values from one sequence", total)
+	}
+}
+
+func TestWrittenOutFrontmatterIsNotBounded(t *testing.T) {
+	in := "---\nbig: [" + strings.TrimSuffix(strings.Repeat("x, ", maxExpanded+10), ", ") + "]\nafter: y\n---\nbody\n"
+	props := ReadFrontmatter(in).Properties
+	if len(props) != 2 || len(props[0].Value.([]any)) != maxExpanded+10 || props[1].Value != "y" {
+		t.Fatalf("%d properties", len(props))
 	}
 }
 

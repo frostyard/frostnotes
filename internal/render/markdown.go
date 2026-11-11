@@ -255,7 +255,7 @@ func (r *rewriter) markdownLink(n ast.Node) {
 	}
 	_, textEnd, ok := childSpan(n)
 	if !ok && image {
-		textEnd, ok = r.emptyAltAt(n)
+		textEnd, ok = r.emptyAltAt(n, raw)
 	}
 	if !ok {
 		return
@@ -278,28 +278,37 @@ func (r *rewriter) markdownLink(n ast.Node) {
 }
 
 // emptyAltAt finds where an image with no alt text has its "]": it has no
-// text to place it by, so it is the next "![](" after what comes before it.
-func (r *rewriter) emptyAltAt(n ast.Node) (int, bool) {
-	from := r.emptyFrom
+// text to place it by, so it is the next "![](" in its block after what comes
+// before it. A reference image ("![][r]") has no such marker of its own, so a
+// marker whose destination is not this image's belongs to a later image.
+func (r *rewriter) emptyAltAt(n ast.Node, destination []byte) (int, bool) {
+	block := n.Parent()
+	for block != nil && block.Type() != ast.TypeBlock {
+		block = block.Parent()
+	}
+	if block == nil || block.Lines().Len() == 0 {
+		return 0, false
+	}
+	lines := block.Lines()
+	from, limit := max(r.emptyFrom, lines.At(0).Start), lines.At(lines.Len()-1).Stop
 	if prev := n.PreviousSibling(); prev != nil {
 		if _, e, ok := childSpan(prev); ok {
 			from = max(from, e)
 		}
-	} else {
-		block := n.Parent()
-		for block != nil && block.Type() != ast.TypeBlock {
-			block = block.Parent()
-		}
-		if block != nil && block.Lines().Len() > 0 {
-			from = max(from, block.Lines().At(0).Start)
-		}
+	}
+	if from >= limit {
+		return 0, false
 	}
 	const marker = "![]("
-	j := bytes.Index(r.body[from:], []byte(marker))
+	j := bytes.Index(r.body[from:limit], []byte(marker))
 	if j < 0 {
 		return 0, false
 	}
 	at := from + j + len("![")
+	start, end, ok := destinationAt(r.body, at)
+	if !ok || !bytes.Equal(bytes.Trim(r.body[start:end], "<>"), destination) {
+		return 0, false
+	}
 	r.emptyFrom = at
 	return at, true
 }
