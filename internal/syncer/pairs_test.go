@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -394,12 +395,33 @@ func TestADeviceSkipsAPathOutsideItsVault(t *testing.T) {
 }
 
 func TestVerifyAndHistory(t *testing.T) {
-	h, a, b := twoDevices(t, map[string]string{"n.md": fiveLines})
+	h := newHub(t, map[string]string{"n.md": fiveLines})
+	a := newDevice(t, h, "a", nil)
+	var hold atomic.Bool
+	reached, release := make(chan struct{}, 1), make(chan struct{})
+	defer close(release)
+	opts := deviceOptions("b")
+	opts.Crash = func(point string) bool {
+		if point != "uploaded" || !hold.Load() {
+			return false
+		}
+		select {
+		case reached <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+		case <-t.Context().Done():
+		}
+		return true // the differing write never reaches the hub
+	}
+	b := pairAndJoin(t, h, start(t, opts, vaultDir(t, nil)), "b")
+	settle(t, h, a, b)
 	ctx := t.Context()
 	a.write("n.md", fiveLines+"six\n")
 	a.srv.Syncer.Kick(a.vault)
-	settle(t, h, a.node, b.node)
-	for _, d := range []*device{a, b} {
+	settle(t, h, a, b)
+	for _, d := range []*node{a, b} {
 		rep, err := d.c.Sync().Verify(ctx, &api.SyncVerifyParams{VaultID: d.vault})
 		if err != nil || !rep.Ok || rep.Files != 1 {
 			t.Fatalf("verify = %+v, %v", rep, err)
@@ -409,11 +431,17 @@ func TestVerifyAndHistory(t *testing.T) {
 	if err != nil || len(revs) != 2 || revs[0].DeviceName != "a" || revs[1].Op != api.RevisionOpCreate {
 		t.Fatalf("history = %+v, %v", revs, err)
 	}
-	// A file that differs is reported.
-	b.outside("n.md", "changed while b is offline\n")
-	b.net.cut()
+	// Hold the push before it reaches the hub. Verify uses a separate
+	// connection, so background sync cannot erase the difference under test.
+	hold.Store(true)
+	b.outside("n.md", "changed before b could push\n")
 	b.rescan()
-	b.net.heal()
+	b.srv.Syncer.Kick(b.vault)
+	select {
+	case <-reached:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
 	rep, err := b.c.Sync().Verify(ctx, &api.SyncVerifyParams{VaultID: b.vault})
 	if err != nil || rep.Ok || len(rep.Differing) != 1 {
 		t.Fatalf("verify of a differing vault = %+v, %v", rep, err)
