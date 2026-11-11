@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -764,5 +765,76 @@ func TestResetLeavesNoHiddenEditor(t *testing.T) {
 	f.tt.Frame()
 	if f.a.activeEditor() != nil {
 		t.Fatal("the old editor is still the active one")
+	}
+}
+
+func TestALinkOpensAtItsHeading(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "see [[b#Two]] and [[#Local]]\n\n# Local\n")
+	f.Create("b.md", "# One\n\ntext\n\n# Two\n")
+	f.openVault()
+	e := f.openNoteTab("a.md")
+	f.a.followLink(editor.Link{Target: "", Subpath: "#Local"}, "a.md", editor.WhereHere)
+	f.tt.Frame()
+	f.tt.Frame()
+	if got := e.Binding().Buffer().Pos(e.State.Cursor()).Line; got != 2 {
+		t.Fatalf("own heading: line %d", got)
+	}
+	f.a.followLink(editor.Link{Target: "b", Subpath: "#Two"}, "a.md", editor.WhereTab)
+	f.until("b at its heading", func() bool {
+		b := f.a.activeEditor()
+		return f.a.activeFile() == "b.md" && b != nil && b.Binding().Document().Loaded() && f.a.pending == nil && b.Binding().Buffer().Pos(b.State.Cursor()).Line == 4
+	})
+}
+
+func TestAnEventBeforeTheVaultListIsNotLost(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "a\n")
+	f.openVault()
+	f.openNoteTab("a.md")
+	f.a.listed = false
+	f.a.event(1, api.NoteMoved{VaultID: f.Vault, From: "a.md", To: "z.md"})
+	if len(f.a.early) != 1 {
+		t.Fatal("the event was dropped")
+	}
+	f.a.reloadAll()
+	f.until("the replay", func() bool { return f.a.listed && len(f.a.early) == 0 })
+	if f.a.Store.Workspace().ActiveTab().View.Path != "z.md" {
+		t.Fatalf("not followed: %+v", f.a.Store.Workspace().ActiveTab().View)
+	}
+}
+
+func TestSyncMissingOnlyForThatAnswer(t *testing.T) {
+	if !syncMissing(&api.Error{Code: api.CodeMethodNotFound}) || !syncMissing(&api.Error{Code: api.CodeUnavailable}) {
+		t.Error("a notesd without sync was not recognized")
+	}
+	if syncMissing(errors.New("connection lost")) || syncMissing(nil) {
+		t.Error("a lost connection read as no sync")
+	}
+}
+
+func TestACleanupFailureIsNotACancel(t *testing.T) {
+	err := cleanupFailed(context.Canceled, "Notes", errors.New("gone"))
+	if errors.Is(err, context.Canceled) {
+		t.Fatal("the cleanup failure would be dropped as a cancel")
+	}
+	if !strings.Contains(err.Error(), "Notes") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestACancelAfterTheAddForgetsTheVault(t *testing.T) {
+	f := start(t)
+	dir := t.TempDir()
+	if _, err := f.Other.Vault().Add(t.Context(), &api.VaultAddParams{Path: dir}); err != nil {
+		t.Fatal(err)
+	}
+	r := joinRun{c: f.Other, folder: dir}
+	if !r.registered() {
+		t.Fatal("the vault is listed")
+	}
+	r.forgetFolder()
+	if r.registered() {
+		t.Fatal("the vault stayed")
 	}
 }

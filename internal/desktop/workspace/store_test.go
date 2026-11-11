@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"encoding/json/v2"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
@@ -87,5 +89,65 @@ func TestResetGivesANewTabID(t *testing.T) {
 	s.Reset()
 	if s.Workspace().ActiveTab().ID == old {
 		t.Fatalf("the new tab kept the ID %s", old)
+	}
+}
+
+func TestFollowWritesAtOnce(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(desktoptest.NewLoop(), dir)
+	s.Load("/vault/one")
+	s.Update(func(w *Workspace) { w.Open(note("a.md"), Here) })
+	s.Follow("/vault/one", func(w *Workspace) { w.ApplyMove("a.md", "b.md") })
+	fresh := NewStore(desktoptest.NewLoop(), dir)
+	fresh.Load("/vault/one")
+	if fresh.Workspace().ActiveTab().View != note("b.md") {
+		t.Fatalf("not written: %+v", fresh.Workspace().ActiveTab())
+	}
+}
+
+func TestAFailedWriteIsReportedAndRetried(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := os.WriteFile(dir, nil, 0o600); err != nil { // a file where the folder goes
+		t.Fatal(err)
+	}
+	loop := desktoptest.NewLoop()
+	s := NewStore(loop, dir)
+	reported := 0
+	s.OnError = func(error) { reported++ }
+	s.Load("/vault/one")
+	s.Update(func(w *Workspace) { w.Open(note("a.md"), Here) })
+	loop.Advance(SaveDelay)
+	if s.Err == nil || reported != 1 {
+		t.Fatalf("err %v, reported %d", s.Err, reported)
+	}
+	loop.Advance(SaveRetry) // still failing: said once
+	if reported != 1 {
+		t.Fatalf("reported %d times", reported)
+	}
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	loop.Advance(SaveRetry)
+	if s.Err != nil {
+		t.Fatalf("the retry failed: %v", s.Err)
+	}
+	fresh := NewStore(desktoptest.NewLoop(), dir)
+	fresh.Load("/vault/one")
+	if fresh.Workspace().ActiveTab().View != note("a.md") {
+		t.Fatal("the retry wrote nothing")
+	}
+}
+
+func TestFollowLeavesAnUnreadableWorkspaceAlone(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(desktoptest.NewLoop(), dir)
+	bad := s.file("/vault/two")
+	if err := os.WriteFile(bad, []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.Follow("/vault/two", func(w *Workspace) { w.ApplyMove("a.md", "b.md") })
+	got, err := os.ReadFile(bad)
+	if err != nil || string(got) != "not json" {
+		t.Fatalf("%q %v", got, err)
 	}
 }

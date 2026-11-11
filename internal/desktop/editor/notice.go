@@ -67,6 +67,10 @@ func Notice(c *ui.Context, d *notes.Document, a NoticeActions) {
 		if closeTab {
 			a.Close()
 		}
+	case notes.NoticeLoadFailed:
+		if retry, _ := frostui.Banner(c, frostui.Danger, "dialog-error", "Cannot read this note: "+n.Reason+".", "Retry", false); retry {
+			d.RetryNow()
+		}
 	case notes.NoticeFailed:
 		if retry, _ := frostui.Banner(c, frostui.Danger, "dialog-error", "Not saved: "+n.Reason+". Retrying.", "Retry now", false); retry {
 			d.RetryNow()

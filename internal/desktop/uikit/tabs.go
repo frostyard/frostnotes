@@ -42,9 +42,16 @@ type TabStrip struct {
 	// Dragging is set while a tab of the strip is dragged, so the groups
 	// show where it can land.
 	Dragging *bool
+	// Revealed is the tab last scrolled into view, so that a new active tab
+	// is, and the user can then scroll away from it.
+	Revealed *string
 }
 
-const stripHeight = 36
+const (
+	stripHeight = 36
+	// minTabWidth keeps a tab's title readable; past it the strip scrolls.
+	minTabWidth = 96
+)
 
 // View draws the strip.
 func (s TabStrip) View(c *ui.Context) ui.Element {
@@ -52,15 +59,18 @@ func (s TabStrip) View(c *ui.Context) ui.Element {
 	active := s.Active
 	bar := ui.Row(c).Height(stripHeight).AlignItems(ui.Stretch).Background(frostui.Chrome(t))
 	bar.Children(func() {
-		tabs := ui.TabsBase(c, &active, len(s.Tabs))
-		tabs.List.Grow(1).AlignItems(ui.Stretch).Label(s.Label).Children(func() {
-			for i, tab := range s.Tabs {
-				s.tab(c.Key(tab.ID), tabs.Tab(i), i, tab)
-			}
-			end := ui.Box(c).Grow(1)
-			if d, ok := ui.Drop[TabDrag](end); ok && s.Move != nil {
-				s.Move(d.ID, len(s.Tabs))
-			}
+		// The tabs scroll when they do not fit; the Tab list reaches any of them.
+		ui.ScrollHorizontal(c).Grow(1).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
+			tabs := ui.TabsBase(c, &active, len(s.Tabs))
+			tabs.List.Grow(1).AlignItems(ui.Stretch).Label(s.Label).Children(func() {
+				for i, tab := range s.Tabs {
+					s.tab(c.Key(tab.ID), tabs.Tab(i), i, tab)
+				}
+				end := ui.Box(c).Grow(1).MinWidth(frostui.SpaceL)
+				if d, ok := ui.Drop[TabDrag](end); ok && s.Move != nil {
+					s.Move(d.ID, len(s.Tabs))
+				}
+			})
 		})
 		ui.Row(c).Gap(frostui.SpaceXS).Padding(0, frostui.SpaceXS).AlignItems(ui.Center).Children(func() {
 			if s.New != nil && ToolButton(c, "list-add", s.NewLabel).Clicked() {
@@ -80,6 +90,11 @@ func (s TabStrip) View(c *ui.Context) ui.Element {
 func (s TabStrip) tab(c *ui.Context, el ui.Element, index int, tab Tab) {
 	t := c.Theme()
 	el.Padding(0, frostui.SpaceS, 0, frostui.SpaceM).Gap(frostui.SpaceXS).AlignItems(ui.Center).MaxWidth(220).Shrink(1).Label(tab.Title).Drag(TabDrag{tab.ID})
+	el.MinWidth(minTabWidth).Shrink(0)
+	if index == s.Active && s.Revealed != nil && *s.Revealed != tab.ID {
+		*s.Revealed = tab.ID
+		el.ScrollIntoView()
+	}
 	if index == s.Active {
 		el.Background(t.Background)
 	} else if el.Hovered() {

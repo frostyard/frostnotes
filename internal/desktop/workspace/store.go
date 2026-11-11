@@ -17,8 +17,12 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/system"
 )
 
-// SaveDelay is how long after the last change the workspace is written.
-const SaveDelay = 500 * time.Millisecond
+const (
+	// SaveDelay is how long after the last change the workspace is written.
+	SaveDelay = 500 * time.Millisecond
+	// SaveRetry is how long after a failed write it is tried again.
+	SaveRetry = 5 * time.Second
+)
 
 var (
 	idRe  = regexp.MustCompile(`^[tgs][0-9]+$`)
@@ -218,6 +222,8 @@ type Store struct {
 	stop  func()
 	// Err is the last write's failure, nil when it worked.
 	Err error
+	// OnError is told of a new failure.
+	OnError func(error)
 }
 
 // NewStore keeps workspaces in dir.
@@ -283,7 +289,19 @@ func (s *Store) Flush() {
 	s.stop()
 	s.stop = nil
 	if s.vault != "" {
-		s.Err = s.write(s.vault, s.ws)
+		s.record(s.write(s.vault, s.ws))
+		if s.Err != nil {
+			s.stop = s.env.After(SaveRetry, s.Flush)
+		}
+	}
+}
+
+// record keeps the latest write's error, and reports a new one.
+func (s *Store) record(err error) {
+	changed := (err == nil) != (s.Err == nil) || err != nil && err.Error() != s.Err.Error()
+	s.Err = err
+	if changed && err != nil && s.OnError != nil {
+		s.OnError(err)
 	}
 }
 
@@ -311,13 +329,29 @@ func (s *Store) Follow(vaultPath string, op func(*Workspace)) {
 		return
 	}
 	if vaultPath == s.vault {
+		// At once: the event's sequence is kept, so it will not be replayed.
 		s.Update(op)
+		s.Flush()
 		return
 	}
-	if _, err := os.Stat(s.file(vaultPath)); err != nil {
+	data, err := os.ReadFile(s.file(vaultPath))
+	if os.IsNotExist(err) {
 		return
 	}
-	w := s.read(vaultPath)
+	if err != nil {
+		s.record(err)
+		return
+	}
+	if !readable(data) {
+		return // not ours to overwrite
+	}
+	w := Validate(data)
 	op(w)
-	s.Err = s.write(vaultPath, w)
+	s.record(s.write(vaultPath, w))
+}
+
+// readable reports whether a stored workspace can be read at all.
+func readable(data []byte) bool {
+	var in Workspace
+	return json.Unmarshal(data, &in) == nil && in.Version == Version
 }

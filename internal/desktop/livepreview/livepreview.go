@@ -341,9 +341,43 @@ func (st *state) advance(content string, line, start, next, limit int, o Options
 		}
 	case strings.HasPrefix(t, "$$") && !strings.Contains(t[2:], "$$"):
 		st.block, st.structural = blockMath, true
-	case strings.Count(content, "%%")%2 == 1 && strings.HasPrefix(t, "%%"):
-		st.block, st.from, st.fromLine, st.structural = blockComment, start, line, true
+	default:
+		if at := openComment(content); at >= 0 {
+			st.block, st.from, st.fromLine, st.structural = blockComment, start+at, line, true
+		}
 	}
+}
+
+// openComment finds a "%%" on the line that no later "%%" closes, outside
+// code spans: where a comment that runs on starts, -1 for none.
+func openComment(line string) int {
+	if !strings.Contains(line, "%%") {
+		return -1
+	}
+	open := -1
+	for i := 0; i < len(line); {
+		switch {
+		case line[i] == '\\':
+			i += 2
+		case line[i] == '`':
+			n := run(line, i, len(line), '`')
+			if j := closing(line, i+n, len(line), n); j >= 0 {
+				i = j + n
+			} else {
+				i += n
+			}
+		case strings.HasPrefix(line[i:], "%%"):
+			if open < 0 {
+				open = i
+			} else {
+				open = -1
+			}
+			i += 2
+		default:
+			i++
+		}
+	}
+	return open
 }
 
 // endFence hides a fence's marks, whose closing line runs from close to

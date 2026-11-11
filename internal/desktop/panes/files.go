@@ -42,7 +42,6 @@ type Files struct {
 	made     bool
 	tree     *Tree
 	builtFor int
-	files    int
 	sort     string
 	unsup    bool
 	loaded   string
@@ -54,21 +53,11 @@ type Files struct {
 func (f *Files) rebuild() {
 	cat := f.Env.Catalog
 	w := f.Store.Workspace()
-	stamp := len(cat.Files()) + 31*len(cat.Folders())
-	if f.tree != nil && stamp == f.files && f.sort == w.Files.Sort && f.unsup == f.ShowUnsupported && f.builtFor == f.generation() {
+	if f.tree != nil && f.sort == w.Files.Sort && f.unsup == f.ShowUnsupported && f.builtFor == cat.Generation() {
 		return
 	}
 	f.tree = BuildTree(cat.Files(), cat.Folders(), w.Files.Sort, f.ShowUnsupported)
-	f.files, f.sort, f.unsup, f.builtFor = stamp, w.Files.Sort, f.ShowUnsupported, f.generation()
-}
-
-// generation changes whenever the catalog's paths may have.
-func (f *Files) generation() int {
-	n := 0
-	for _, x := range f.Env.Catalog.Files() {
-		n += len(x.Path)
-	}
-	return n
+	f.sort, f.unsup, f.builtFor = w.Files.Sort, f.ShowUnsupported, cat.Generation()
 }
 
 // syncOpen loads the workspace's open folders when the vault changes, and

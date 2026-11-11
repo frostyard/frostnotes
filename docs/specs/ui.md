@@ -362,7 +362,8 @@ padding, with buttons at its right (12/16 `--accent`, no background),
 refused base ("Not saved: notesd no longer has the version this text
 started from. Your text is kept." Compare), a deleted note ("This note
 was deleted." Restore, Close), a failed save ("Not saved: <reason>.
-Retrying." Retry now).
+Retrying." Retry now), a note that could not be read ("Cannot read this
+note: <reason>." Retry, in the native app).
 
 ### Editor and reading view
 

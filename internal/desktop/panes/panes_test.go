@@ -252,3 +252,82 @@ func TestCountsAndOutline(t *testing.T) {
 		t.Error("the outline lost its rows")
 	}
 }
+
+func TestARenameOfTheSameLengthRebuildsTheFiles(t *testing.T) {
+	f := start(t, map[string]string{"aaa.md": "x"})
+	files := &Files{Env: f.env, Store: workspace.NewStore(f.loop, t.TempDir())}
+	files.rebuild()
+	if _, err := f.Other.Note().Move(t.Context(), &api.NoteMoveParams{VaultID: f.Vault, Path: "aaa.md", To: "bbb.md"}); err != nil {
+		t.Fatal(err)
+	}
+	generation := f.env.Catalog.Generation()
+	f.env.Catalog.Reload()
+	f.loop.Until(t, "the reload", func() bool { return f.env.Catalog.Generation() != generation })
+	files.rebuild()
+	if files.tree.Nodes["bbb.md"] == nil {
+		t.Fatalf("the tree kept %q", files.tree.Roots)
+	}
+}
+
+func TestANoteWithoutHeadingsIsParsedOnce(t *testing.T) {
+	f := start(t, map[string]string{"a.md": "x"})
+	f.text = "no headings\n"
+	o := &Outline{Env: f.env}
+	o.refresh()
+	o.refresh()
+	if o.parses != 1 {
+		t.Fatalf("parsed %d times", o.parses)
+	}
+}
+
+func TestTasksAreRowsOfAList(t *testing.T) {
+	rows := taskRows([]api.TaskEntry{{Path: "a.md", Title: "A", Text: "1"}, {Path: "a.md", Title: "A", Text: "2"}, {Path: "b.md", Title: "B", Text: "3"}})
+	if len(rows) != 5 || rows[0].title != "A" || rows[1].task.Text != "1" || rows[3].title != "B" {
+		t.Fatalf("%+v", rows)
+	}
+}
+
+func TestSearchOfflineAndAfterReconnect(t *testing.T) {
+	f := start(t, map[string]string{"a.md": "findme\n"})
+	real := f.env.API
+	f.env.API = func() API { return nil }
+	s := &Search{Env: f.env, Query: "findme"}
+	s.schedule()
+	f.loop.Advance(SearchDelay)
+	if s.err == nil || s.done != "findme" {
+		t.Fatalf("offline: done %q, err %v", s.done, s.err)
+	}
+	f.env.API = real
+	f.loop.Until(t, "the results", func() bool {
+		s.Refresh()
+		f.loop.Advance(SearchDelay)
+		f.loop.Until(t, "the answer", func() bool { return s.err == nil })
+		return len(s.hits) == 1
+	})
+}
+
+func TestTagsAnswerTheKeyboard(t *testing.T) {
+	f := start(t, map[string]string{"a.md": "#one #two\n"})
+	var searched []string
+	f.env.Actions.SearchFor = func(q string) { searched = append(searched, q) }
+	p := &Tags{Env: f.env}
+	p.Refresh()
+	f.loop.Until(t, "the tags", func() bool { return len(p.roots) == 2 })
+	tt := ui.NewTester(func(c *ui.Context) { p.View(c) }, 300, 300)
+	tt.Frame()
+	for range 6 { // past the sort button, to the list
+		tt.Key(0, ui.KeyTab)
+		tt.Key(0, ui.KeyDown)
+		if p.chosen >= 0 {
+			break
+		}
+	}
+	if p.chosen != 0 {
+		t.Fatalf("Tab and Down chose row %d", p.chosen)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Key(0, ui.KeyEnter)
+	if len(searched) != 1 || searched[0] != "tag:#two" {
+		t.Fatalf("searched %q", searched)
+	}
+}

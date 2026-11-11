@@ -434,3 +434,15 @@ func TestTheCacheHoldsNoSubstringOfTheNote(t *testing.T) {
 		}
 	}
 }
+
+func TestACommentOpenedAfterText(t *testing.T) {
+	in := "text %%start\nhidden\nend%%\n\nafter *x*\n"
+	var s Scanner
+	if got, want := show(in, s.Pieces(in, nil, false)), "text \nafter x\n"; got != want {
+		t.Fatalf("%q, want %q", got, want)
+	}
+	code := "a `%%` b\n\nafter *x*\n"
+	if got, want := show(code, s.Pieces(code, nil, false)), "a %% b\n\nafter x\n"; got != want {
+		t.Fatalf("%q, want %q", got, want)
+	}
+}

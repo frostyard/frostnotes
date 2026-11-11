@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/frostyard/frostnotes/internal/markdown"
 )
 
 // Link is a link in a note: to a vault file (Target, and Subpath, a
@@ -87,4 +89,29 @@ func TagAt(text string, pos int) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// SubpathLine is the line, from 1, a link's "#Heading", "#A#B" or "#^block"
+// leads to in text, 0 when the note has none.
+func SubpathLine(text, subpath string) int {
+	sub := strings.TrimPrefix(subpath, "#")
+	doc := markdown.Parse([]byte(text))
+	if id, ok := strings.CutPrefix(sub, "^"); ok {
+		for _, b := range doc.Blocks {
+			if strings.EqualFold(b.ID, id) {
+				return b.Line
+			}
+		}
+		return 0
+	}
+	parts := strings.Split(sub, "#")
+	next := 0
+	for _, h := range doc.Headings {
+		if strings.EqualFold(strings.TrimSpace(h.Text), strings.TrimSpace(parts[next])) {
+			if next++; next == len(parts) {
+				return h.Line
+			}
+		}
+	}
+	return 0
 }

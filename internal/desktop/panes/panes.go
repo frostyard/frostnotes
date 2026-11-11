@@ -2,6 +2,7 @@ package panes
 
 import (
 	"context"
+	"errors"
 	"path"
 	"regexp"
 	"slices"
@@ -151,7 +152,19 @@ func (s *Search) schedule() {
 	})
 }
 
+// Refresh asks the current query again: the vault changed, or notesd came
+// back.
+func (s *Search) Refresh() {
+	if strings.TrimSpace(s.Query) != "" {
+		s.schedule()
+	}
+}
+
 func (s *Search) run(q string) {
+	if s.Env.API() == nil {
+		s.done, s.err = q, errors.New("not connected to notesd")
+		return
+	}
 	var hits []api.SearchHit
 	limit := int64(100)
 	s.Env.call(func(ctx context.Context, a API) error {
@@ -413,6 +426,7 @@ type Tags struct {
 	Env     *Env
 	ByCount bool
 	state   ui.OutlineState[*TagNode]
+	chosen  int
 	roots   []*TagNode
 	counts  []api.TagCount
 }
@@ -440,7 +454,11 @@ func (p *Tags) View(c *ui.Context) ui.Element {
 			frostui.Muted(c, "No tags.").Padding(frostui.SpaceS)
 			return
 		}
-		ui.Outline(c, &p.state, p.roots, func(n *TagNode) []*TagNode {
+		if p.state.List.Selected == nil {
+			p.chosen = -1
+			p.state.List.Selected = &p.chosen
+		}
+		list := ui.Outline(c, &p.state, p.roots, func(n *TagNode) []*TagNode {
 			return n.Children
 		}, func(n *TagNode) {
 			r := ui.Row(c).Grow(1).Gap(frostui.SpaceXS).AlignItems(ui.Center).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("#" + n.Tag)
@@ -452,6 +470,11 @@ func (p *Tags) View(c *ui.Context) ui.Element {
 				frostui.Caption(c, strconv.FormatInt(n.Count, 10))
 			})
 		}).Grow(1)
+		if list.Submitted() && p.chosen >= 0 {
+			if n, ok := p.state.List.Key(p.chosen).(*TagNode); ok {
+				p.Env.Actions.SearchFor("tag:#" + n.Tag)
+			}
+		}
 	})
 }
 
@@ -540,6 +563,9 @@ type Outline struct {
 	state       ui.OutlineState[*heading]
 	roots       []*heading
 	text        string
+	chosen      int
+	parsed      bool
+	parses      int // for the tests
 }
 
 type heading struct {
@@ -570,13 +596,14 @@ func nestHeadings(hs []markdown.Heading) []*heading {
 func (o *Outline) refresh() {
 	text, ok := o.Env.ActiveText()
 	if !ok {
-		o.roots, o.text = nil, ""
+		o.roots, o.text, o.parsed = nil, "", false
 		return
 	}
-	if text == o.text && o.roots != nil {
+	if o.parsed && text == o.text {
 		return
 	}
-	o.text = text
+	o.text, o.parsed = text, true
+	o.parses++
 	o.roots = nestHeadings(markdown.Parse([]byte(text)).Headings)
 	var openAll func([]*heading)
 	openAll = func(hs []*heading) {
@@ -619,7 +646,11 @@ func (o *Outline) View(c *ui.Context) ui.Element {
 		if o.CurrentLine != nil {
 			cur = o.current(o.CurrentLine())
 		}
-		ui.Outline(c, &o.state, o.roots, func(h *heading) []*heading { return h.children }, func(h *heading) {
+		if o.state.List.Selected == nil {
+			o.chosen = -1
+			o.state.List.Selected = &o.chosen
+		}
+		list := ui.Outline(c, &o.state, o.roots, func(h *heading) []*heading { return h.children }, func(h *heading) {
 			r := ui.Row(c).Grow(1).AlignItems(ui.Center).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(h.Text)
 			if r.Clicked() {
 				o.Env.Actions.JumpToLine(h.Line)
@@ -631,6 +662,11 @@ func (o *Outline) View(c *ui.Context) ui.Element {
 				}
 			})
 		}).Grow(1)
+		if list.Submitted() && o.chosen >= 0 {
+			if h, ok := o.state.List.Key(o.chosen).(*heading); ok {
+				o.Env.Actions.JumpToLine(h.Line)
+			}
+		}
 	})
 }
 
@@ -638,6 +674,27 @@ func (o *Outline) View(c *ui.Context) ui.Element {
 type Tasks struct {
 	Env   *Env
 	tasks []api.TaskEntry
+	rows  []taskRow
+	list  ui.ListState
+}
+
+// taskRow is a row of the list: a note's title, or one of its tasks.
+type taskRow struct {
+	title string
+	task  *api.TaskEntry
+}
+
+func taskRows(tasks []api.TaskEntry) []taskRow {
+	var out []taskRow
+	last := ""
+	for i := range tasks {
+		if tasks[i].Path != last {
+			last = tasks[i].Path
+			out = append(out, taskRow{title: tasks[i].Title})
+		}
+		out = append(out, taskRow{task: &tasks[i]})
+	}
+	return out
 }
 
 // Refresh reads the tasks again.
@@ -650,28 +707,29 @@ func (p *Tasks) Refresh() {
 		p.Env.report(err)
 		if err == nil {
 			p.tasks = got
+			p.rows = taskRows(got)
 		}
 	})
 }
 
 // View draws the pane.
 func (p *Tasks) View(c *ui.Context) ui.Element {
-	return ui.Scroll(c).Fill().Gap(frostui.SpaceXS).Padding(frostui.SpaceS).Children(func() {
-		if len(p.tasks) == 0 {
+	return ui.Column(c).Fill().AlignItems(ui.Stretch).Padding(frostui.SpaceS).Children(func() {
+		if len(p.rows) == 0 {
 			frostui.Muted(c, "No open tasks.")
 			return
 		}
-		last := ""
-		for i, task := range p.tasks {
-			if task.Path != last {
-				last = task.Path
-				frostui.Strong(c.Key(task.Path), task.Title)
+		ui.List(c, &p.list, len(p.rows), func(i int) {
+			item := p.rows[i]
+			if item.task == nil {
+				frostui.Strong(c, item.title)
+				return
 			}
-			r := row(c.Key(i), task.Text, false)
+			r := row(c, item.task.Text, false)
 			if r.Clicked() {
-				p.Env.Actions.OpenAtLine(task.Path, int(task.Line), p.Env.where(c))
+				p.Env.Actions.OpenAtLine(item.task.Path, int(item.task.Line), p.Env.where(c))
 			}
-			r.Children(func() { ui.Text(c, task.Text).Wrap() })
-		}
+			r.Children(func() { ui.Text(c, item.task.Text).Wrap() })
+		}).Grow(1)
 	})
 }

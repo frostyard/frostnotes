@@ -375,7 +375,7 @@ func (a *App) strip(c *ui.Context, g *workspace.Node) {
 	for i, t := range g.Tabs {
 		tabs[i] = uikit.Tab{ID: t.ID, Title: t.View.Title(), Pinned: t.Pinned}
 	}
-	uikit.TabStrip{Label: "Tabs", NewLabel: "New tab", ListLabel: "Tab list", CloseLabel: func(title string) string { return "Close " + title }, Tabs: tabs, Active: g.Active, Dragging: &a.dragging,
+	uikit.TabStrip{Label: "Tabs", NewLabel: "New tab", ListLabel: "Tab list", CloseLabel: func(title string) string { return "Close " + title }, Tabs: tabs, Active: g.Active, Dragging: &a.dragging, Revealed: a.revealedTab(g.ID),
 		Activate: func(id string) { a.Store.Update(func(w *workspace.Workspace) { w.Activate(id) }) },
 		Close:    func(id string) { a.Store.Update(func(w *workspace.Workspace) { w.Close(id) }) },
 		New: func() {
@@ -391,6 +391,19 @@ func (a *App) strip(c *ui.Context, g *workspace.Node) {
 			}
 		},
 	}.View(c)
+}
+
+// revealedTab is the tab a group's strip last scrolled into view.
+func (a *App) revealedTab(group string) *string {
+	if a.revealed == nil {
+		a.revealed = map[string]*string{}
+	}
+	r := a.revealed[group]
+	if r == nil {
+		r = new(string)
+		a.revealed[group] = r
+	}
+	return r
 }
 
 func (a *App) tabMenu(m *ui.Menu, g *workspace.Node, id string) {
@@ -537,7 +550,13 @@ func (a *App) tabView(c *ui.Context, tab *workspace.Tab) {
 			tc.ed.ShowTitle, tc.ed.ShowProperties, tc.ed.Readable = a.Prefs.InlineTitle, a.Prefs.Properties == "visible", a.Prefs.ReadableLineLength
 			tc.ed.View(c)
 			if a.pending != nil && a.pending.path == tc.doc.Path() && tc.doc.Loaded() {
-				goToLine(tc.ed.Editor, a.pending.line)
+				line := a.pending.line
+				if a.pending.subpath != "" {
+					line = editor.SubpathLine(tc.doc.Text(), a.pending.subpath)
+				}
+				if a.pending.subpath == "" || line > 0 {
+					goToLine(tc.ed.Editor, line)
+				}
 				a.pending = nil
 			}
 		case tc.read != nil:

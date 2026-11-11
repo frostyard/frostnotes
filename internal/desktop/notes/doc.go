@@ -92,6 +92,8 @@ const (
 	NoticeFailed
 	// NoticeDeleted: the note was deleted and nothing was unsaved.
 	NoticeDeleted
+	// NoticeLoadFailed: the note could not be read; Reason says why.
+	NoticeLoadFailed
 )
 
 // Notice is what a document's tabs say about it.
@@ -302,12 +304,15 @@ func (d *Document) Load() {
 			d.text = d.adopt(n.Content)
 			d.base = n.Hash
 			d.loaded, d.missing = true, false
+			if d.notice != nil && d.notice.Kind == NoticeLoadFailed {
+				d.notice = nil
+			}
 		case isCode(err, api.CodeNotFound):
 			d.missing = true
 		case errors.Is(err, errNotConnected):
 			return // Reconnected loads it
 		default:
-			d.notice = &Notice{Kind: NoticeFailed, Reason: err.Error()}
+			d.notice = &Notice{Kind: NoticeLoadFailed, Reason: err.Error()}
 		}
 		d.notify()
 	})
@@ -459,6 +464,10 @@ func (d *Document) settle() {
 
 // RetryNow runs a waiting retry at once.
 func (d *Document) RetryNow() {
+	if !d.loaded {
+		d.Load()
+		return
+	}
 	stop(&d.retry)
 	d.Save()
 }

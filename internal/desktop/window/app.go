@@ -106,6 +106,8 @@ type App struct {
 	vm           vaultManager
 	sets         settingsDialog
 	focusGroup   string // the tab group the focus was last in
+	early        []api.Event
+	revealed     map[string]*string
 }
 
 type binding struct {
@@ -121,6 +123,7 @@ func New(cfg Config) *App {
 	a.Store = workspace.NewStore(cfg.Env, filepath.Join(cfg.StateAt, "workspace"))
 	a.Session = session.New(cfg.Env, cfg.Dial, a.State.Seq)
 	a.Session.OnSeq = func(seq int64) { a.State.Seq = seq }
+	a.Store.OnError = a.report
 	a.Session.OnEvent = a.event
 	a.Session.OnResync = a.reloadAll
 	a.Session.OnChange(a.connectionChanged)
@@ -226,6 +229,11 @@ func (a *App) reloadAll() {
 			return
 		}
 		a.vaults, a.listed = list, true
+		early := a.early
+		a.early = nil
+		for _, ev := range early {
+			a.followEarly(ev)
+		}
 		switch {
 		case a.vault != nil && slices.ContainsFunc(list, func(v api.Vault) bool { return v.ID == a.vault.ID }):
 			a.loadVaultData()
@@ -351,6 +359,7 @@ func (a *App) refreshPanes() {
 	a.tagsPane.Refresh()
 	a.properties.Refresh()
 	a.tasks.Refresh()
+	a.search.Refresh()
 }
 
 func (a *App) vaultPath(id int64) string {
@@ -366,6 +375,15 @@ func (a *App) vaultPath(id int64) string {
 func (a *App) event(_ int64, ev api.Event) {
 	if a.Catalog != nil {
 		a.Catalog.Event(ev)
+	}
+	if !a.listed {
+		// A move or a delete replayed before the vault list answers has no
+		// vault to apply to yet; the sequence has moved past it.
+		switch ev.(type) {
+		case api.NoteMoved, api.NoteRemoved:
+			a.early = append(a.early, ev)
+			return
+		}
 	}
 	switch e := ev.(type) {
 	case api.NoteChanged:
@@ -383,6 +401,16 @@ func (a *App) event(_ int64, ev api.Event) {
 		a.loadVaultData()
 	case api.SyncChanged:
 		a.syncChanged(e.Status)
+	}
+}
+
+// followEarly applies a move or delete held until the vault list came.
+func (a *App) followEarly(ev api.Event) {
+	switch e := ev.(type) {
+	case api.NoteMoved:
+		a.Store.Follow(a.vaultPath(e.VaultID), func(w *workspace.Workspace) { w.ApplyMove(e.From, e.To) })
+	case api.NoteRemoved:
+		a.Store.Follow(a.vaultPath(e.VaultID), func(w *workspace.Workspace) { w.ApplyDelete(e.Path) })
 	}
 }
 

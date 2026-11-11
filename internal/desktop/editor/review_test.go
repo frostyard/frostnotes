@@ -3,6 +3,7 @@ package editor
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -178,5 +179,41 @@ func TestCommittingAFieldThatHasTheFocus(t *testing.T) {
 	v.Properties.Commit()
 	if !strings.Contains(f.doc.Text(), "status: final") {
 		t.Fatalf("%q", f.doc.Text())
+	}
+}
+
+// askedSources records what the link list was asked for.
+type askedSources struct {
+	fakeSources
+	asked []string
+}
+
+func (s *askedSources) LinkTargets(query string, _ int) []Target {
+	s.asked = append(s.asked, query)
+	return []Target{{Insert: "garden", Label: "garden"}} // keeps the list open
+}
+
+func TestTheLinkListIsAskedAgainAsTheQueryGrows(t *testing.T) {
+	f := openEditor(t, "a.md", "")
+	src := &askedSources{}
+	f.ed.Sources = src
+	for _, k := range []string{"[", "[", "g", "a", "r"} {
+		f.tt.Type(k)
+		f.tt.Frame()
+	}
+	if !slices.Contains(src.asked, "gar") {
+		t.Fatalf("asked %q", src.asked)
+	}
+}
+
+func TestSubpathLine(t *testing.T) {
+	text := "# One\n\n## Two\n\ntext ^blk\n\n# Three\n\n## Two\n"
+	for _, tc := range []struct {
+		sub  string
+		want int
+	}{{"#One", 1}, {"#two", 3}, {"#Three#Two", 9}, {"#^blk", 5}, {"#Nowhere", 0}, {"#^none", 0}} {
+		if got := SubpathLine(text, tc.sub); got != tc.want {
+			t.Errorf("%s: line %d, want %d", tc.sub, got, tc.want)
+		}
 	}
 }

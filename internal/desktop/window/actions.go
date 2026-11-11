@@ -40,10 +40,20 @@ type moveTarget struct {
 // heldMerge is the text a merge view compares with, which no version holds.
 type heldMerge struct{ text, title string }
 
-// pendingLine is where a note opens once its editor has its text.
+// goToSubpath has the note at p show a heading or block once its editor
+// has its text.
+func (a *App) goToSubpath(p, sub string) {
+	if sub != "" {
+		a.pending = &pendingLine{path: p, subpath: sub}
+	}
+}
+
+// pendingLine is where a note opens once its editor has its text: a line,
+// or a link's "#Heading" or "#^block".
 type pendingLine struct {
-	path string
-	line int
+	subpath string
+	path    string
+	line    int
 }
 
 func whereOf(w editor.Where) string {
@@ -208,13 +218,14 @@ func (a *App) searchFor(query string) {
 }
 
 // followNote follows a link the reading view drew, which notesd resolved.
-func (a *App) followNote(p, _ string, newTab bool) {
+func (a *App) followNote(p, sub string, newTab bool) {
 	where := workspace.Here
 	if newTab {
 		where = workspace.NewTab
 	}
 	if a.hasFile(p) {
 		a.open(p, where)
+		a.goToSubpath(p, sub)
 		return
 	}
 	a.openOrCreate(p, where)
@@ -229,7 +240,8 @@ func (a *App) followLink(l editor.Link, from string, w editor.Where) {
 		a.report(a.openExternal(l.URL))
 		return
 	}
-	if l.Target == "" { // a link to the note itself leads nowhere else
+	if l.Target == "" { // a heading or block of the note itself
+		a.goToSubpath(from, l.Subpath)
 		return
 	}
 	where, id := whereOf(w), a.vault.ID
@@ -251,6 +263,7 @@ func (a *App) followLink(l editor.Link, from string, w editor.Where) {
 				view.Mode = workspace.ModeEdit
 			}
 			a.Store.Update(func(w *workspace.Workspace) { w.Open(view, where) })
+			a.goToSubpath(*found[0].Path, l.Subpath)
 			return
 		}
 		a.openOrCreate(l.Target, where)

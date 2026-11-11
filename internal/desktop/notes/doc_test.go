@@ -580,3 +580,25 @@ func TestARenameDuringARestoreReadsTheNewPath(t *testing.T) {
 	}
 	next.answer <- func() (*api.Note, error) { return &api.Note{Content: "kept\n", Hash: d.Base()}, nil }
 }
+
+func TestAFailedFirstReadSaysSoAndRetriesTheRead(t *testing.T) {
+	f := newFixture(t)
+	f.Create("a.md", "text\n")
+	g := &gate{NoteAPI: f.client(), loop: f.loop, reads: make(chan *heldRead, 4), creates: make(chan chan struct{}, 4)}
+	g.held.Store(true)
+	d := NewDocument(f.loop, func() NoteAPI { return g }, f.Vault, "a.md")
+	d.Load()
+	r := f.nextRead(g)
+	r.answer <- func() (*api.Note, error) { return nil, &api.Error{Code: api.CodeUnavailable, Message: "busy"} }
+	f.loop.Until(t, "the notice", func() bool { return d.Notice() != nil })
+	if d.Notice().Kind != NoticeLoadFailed {
+		t.Fatalf("notice %+v", d.Notice())
+	}
+	d.RetryNow()
+	r = f.nextRead(g)
+	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	f.loop.Until(t, "the note", d.Loaded)
+	if d.Notice() != nil {
+		t.Fatalf("notice %+v", d.Notice())
+	}
+}

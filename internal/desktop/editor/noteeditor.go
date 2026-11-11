@@ -232,7 +232,7 @@ func (e *NoteEditor) input(ev ui.InputEvent) bool {
 				return true
 			}
 		}
-		if strings.HasSuffix(ev.Text, "[") || strings.HasSuffix(ev.Text, "#") || strings.HasSuffix(ev.Text, "^") {
+		if strings.HasSuffix(ev.Text, "[") || strings.HasSuffix(ev.Text, "#") || strings.HasSuffix(ev.Text, "^") || e.inOpenLink() {
 			e.completeNext = true // after the editor has typed it
 		}
 	}
@@ -362,6 +362,14 @@ func (e *NoteEditor) openCompletions(at int) {
 		}
 		e.State.ShowCompletions(start, items)
 	}
+}
+
+// inOpenLink reports whether the caret is in a link still being typed: the
+// list is asked for again as the query grows, as it holds the best few.
+func (e *NoteEditor) inOpenLink() bool {
+	text := e.b.Buffer().String()
+	at := max(0, min(e.State.Cursor(), len(text)))
+	return openLinkRe.MatchString(text[strings.LastIndexByte(text[:at], '\n')+1 : at])
 }
 
 // completeSubpath lists a note's headings or block IDs after [[target#.

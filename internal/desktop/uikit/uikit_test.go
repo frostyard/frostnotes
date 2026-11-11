@@ -116,3 +116,28 @@ func TestThePaneTabs(t *testing.T) {
 		t.Fatalf("%v %q", err, chosen)
 	}
 }
+
+func TestAManyTabsStripScrollsToTheActiveTab(t *testing.T) {
+	tabs := make([]Tab, 30)
+	for i := range tabs {
+		tabs[i] = Tab{ID: "t" + strconv.Itoa(i), Title: "Tab " + strconv.Itoa(i)}
+	}
+	active := 0
+	var revealed string
+	tt := ui.NewTester(func(c *ui.Context) {
+		TabStrip{Label: "Tabs", NewLabel: "New tab", ListLabel: "Tab list", CloseLabel: func(s string) string { return "Close " + s },
+			Tabs: tabs, Active: active, Revealed: &revealed, Activate: func(string) {}}.View(c)
+	}, 600, 200)
+	tt.Frame()
+	active = 25
+	for range 4 {
+		tt.Frame()
+	}
+	a, ok := tt.AccessByRole(ui.RoleTab, "Tab 25")
+	if !ok || a.Bounds.X < 0 || a.Bounds.X+a.Bounds.W > 600 {
+		t.Fatalf("the active tab is off the strip: %+v %v", a.Bounds, ok)
+	}
+	if a.Bounds.W < minTabWidth {
+		t.Fatalf("a tab shrank to %v", a.Bounds.W)
+	}
+}

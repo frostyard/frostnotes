@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/frostyard/frostui"
@@ -92,9 +93,16 @@ func (m *vaultManager) checkSync(a *App) {
 		_, err := c.Sync().Hubs(ctx, &api.SyncHubsParams{})
 		return err
 	}, func(err error) {
-		can := err == nil
+		can := !syncMissing(err)
 		m.canSync = &can
 	})
+}
+
+// syncMissing reports whether an answer says this notesd has no sync. Any
+// other failure, such as a lost connection, says nothing about it.
+func syncMissing(err error) bool {
+	var e *api.Error
+	return errors.As(err, &e) && (e.Code == api.CodeUnavailable || e.Code == api.CodeMethodNotFound)
 }
 
 func (m *vaultManager) parts(c *ui.Context, a *App) {
@@ -525,6 +533,36 @@ func (r *joinRun) join(id int64, wasPaired bool) error {
 	return err
 }
 
+// registered reports whether notesd already lists the folder to be made.
+func (r *joinRun) registered() bool {
+	bg, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	list, err := r.c.Vault().List(bg, &api.VaultListParams{})
+	return err != nil || slices.ContainsFunc(list, func(v api.Vault) bool { return v.Path == r.folder })
+}
+
+// forgetFolder removes the vault of the folder from the list, after a
+// cancel that may have landed once notesd had added it.
+func (r *joinRun) forgetFolder() {
+	bg, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	list, err := r.c.Vault().List(bg, &api.VaultListParams{})
+	if err != nil {
+		return
+	}
+	for _, v := range list {
+		if v.Path == r.folder {
+			_ = r.c.Vault().Remove(bg, &api.VaultRemoveParams{ID: v.ID})
+		}
+	}
+}
+
+// cleanupFailed says a join failed and its vault stayed on the list. It
+// does not wrap the join's error: a cancel would read as nothing to show.
+func cleanupFailed(err error, name string, rerr error) error {
+	return errors.New(err.Error() + `; could not remove the new vault "` + name + `" from the list: ` + rerr.Error() + ". Remove it in Manage vaults.")
+}
+
 // run returns the vault it made, nil when the vault existed.
 func (r *joinRun) run() (*api.Vault, error) {
 	if r.mode == modePair {
@@ -544,8 +582,13 @@ func (r *joinRun) run() (*api.Vault, error) {
 		return nil, r.join(r.vaultID, wasPaired)
 	}
 	create := true
+	known := r.registered()
 	v, err := r.c.Vault().Add(r.ctx, &api.VaultAddParams{Path: r.folder, Create: &create})
 	if err != nil {
+		// A cancel can land after notesd committed the vault.
+		if errors.Is(err, context.Canceled) && !known {
+			r.forgetFolder()
+		}
 		return nil, err
 	}
 	if err := r.join(v.ID, wasPaired); err != nil {
@@ -553,7 +596,7 @@ func (r *joinRun) run() (*api.Vault, error) {
 		bg, cancel := context.WithTimeout(context.Background(), 10_000_000_000)
 		defer cancel()
 		if rerr := r.c.Vault().Remove(bg, &api.VaultRemoveParams{ID: v.ID}); rerr != nil {
-			return nil, errors.Join(err, errors.New(`could not remove the new vault "`+r.name+`" from the list: `+rerr.Error()+". Remove it in Manage vaults."))
+			return nil, cleanupFailed(err, r.name, rerr)
 		}
 		return nil, err
 	}

@@ -63,12 +63,16 @@ type Catalog struct {
 	changed          []func()
 	reloading        bool
 	loaded           bool
+	generation       int
 }
 
 // New makes the catalog of a vault; Reload reads it.
 func New(env notes.Env, client func() API, vault int64) *Catalog {
 	return &Catalog{env: env, api: client, vault: vault, aliases: map[string][]string{}, LinkFormat: "shortest", AttachmentFolder: "/", Wikilinks: true}
 }
+
+// Generation changes whenever the files or their times may have.
+func (c *Catalog) Generation() int { return c.generation }
 
 // OnChange calls fn on the UI thread when the files, aliases or tags
 // change.
@@ -125,6 +129,7 @@ func (c *Catalog) Reload() {
 			return
 		}
 		c.files, c.folders, c.loaded = got.Files, got.Folders, true
+		c.generation++
 		slices.SortFunc(c.files, func(a, b api.VaultFile) int { return strings.Compare(a.Path, b.Path) })
 		c.named = make(map[string][]string, len(c.files))
 		for _, f := range c.files {
@@ -203,6 +208,8 @@ func (c *Catalog) Event(ev api.Event) {
 		}
 		if i, ok := slices.BinarySearchFunc(c.files, e.Path, func(f api.VaultFile, p string) int { return strings.Compare(f.Path, p) }); ok {
 			c.files[i].Hash = e.Hash
+			c.files[i].ModifiedAt = c.env.Now()
+			c.generation++
 			c.soon()
 			return
 		}
