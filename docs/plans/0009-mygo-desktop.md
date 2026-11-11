@@ -467,8 +467,8 @@ costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 `make desktop-bench` prints the figure on every run. MyGo's cost in
 `view.replacedLines` was fixed on the fork, with egoist/mygo#1655.
 
-**Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
-strike-through. Math stays as TeX source and audio and video as their embeds
+**Built:** per-line styles for heading sizes and completed-task strike-through,
+with source styles on selected lines ([app design](../design/app.md)). Math stays as TeX source and audio and video as their embeds
 (below, under Later). The owner used it with their real vault on Snow on
 2026-11-10, and waived the run of Orca that day; the Tester's checks of roles
 and names stand in for it.

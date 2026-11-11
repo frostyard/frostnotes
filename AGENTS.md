@@ -47,7 +47,7 @@ lodge's web app ([ADR-0038](docs/adr/0038-draw-the-desktop-app-natively-with-myg
 accepted on 2026-11-10). It is built on a draft pull request (2026-11-10):
 session, source mode, reading view, history and merges, the window on
 frostui's shell, the workspace and the panes. Phase 5's live preview draws
-marks, blocks and embeds; headings' sizes wait for MyGo's per-line styles
+marks, blocks and embeds; heading sizes and completed-task strike-through use MyGo's per-line styles
 ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The draft
 pull request's last commit replaces the Tauri shell.
 
