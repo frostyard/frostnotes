@@ -648,3 +648,32 @@ func TestAFrozenNoteSavesButTakesNoEdits(t *testing.T) {
 		t.Fatalf("still read-only for %q", d.ReadOnly())
 	}
 }
+
+type pendingBuffer struct {
+	*fakeBuffer
+	pending func()
+}
+
+func (b *pendingBuffer) Sync() {
+	if b.pending != nil {
+		f := b.pending
+		b.pending = nil
+		f()
+	}
+}
+func TestRenderedEditChecksAfterSynchronizingTheBuffer(t *testing.T) {
+	f := newFixture(t)
+	f.Create("Task.md", "- [ ] task\n")
+	d, b := f.open("Task.md")
+	source := d.Text()
+	pending := &pendingBuffer{fakeBuffer: b}
+	d.Attach(pending)
+	pending.pending = func() { b.typeAt(t, 0, 0, "another line\n") }
+	cs, _ := ChangesOf(len(source), Change{From: 3, To: 4, Insert: "x"})
+	if d.EditIfText(source, cs) {
+		t.Fatal("stale rendering accepted after buffer sync")
+	}
+	if d.Text() != "another line\n"+source {
+		t.Fatalf("text %q", d.Text())
+	}
+}

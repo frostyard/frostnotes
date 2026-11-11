@@ -791,6 +791,12 @@ export interface RenderedMarkdown {
    * written.
    */
   markdown: string;
+  /**
+   * For each rendered Markdown line, its 1-based source-note line; 0 for
+   * generated or embedded-note lines. Absent on older daemons. Used only with
+   * the exact content rendered.
+   */
+  sourceLines?: number[];
 }
 
 /** A version's content. */

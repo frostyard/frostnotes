@@ -207,7 +207,7 @@ file a step names before writing its frostnotes counterpart.
   also clix's), and for the native desktop app (plan 0009)
   `github.com/frostyard/frostui` v0.2.0 (frostyard's desktop UI kit) over
   `github.com/egoist/mygo` v0.8.3, replaced by the owner's fork
-  `github.com/bketelsen/mygo` until egoist/mygo#1654, #1655 and #1662 are in
+  `github.com/bketelsen/mygo` with task-action, block-anchor and line-style hooks until egoist/mygo#1654, #1655 and #1662 are in
   a release (plan 0009). Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as

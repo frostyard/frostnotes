@@ -189,7 +189,9 @@ Obsidian's syntax, so everything else reaches the view as written. A
 native view shows raw HTML as text, so nothing is sanitized.
 
 ```go
-func Markdown(note []byte, opts Options) string // note.renderMarkdown's markdown
+func Markdown(note []byte, opts Options) string
+func MarkdownWithSourceLines(note []byte, opts Options) NativeMarkdown
+// NativeMarkdown holds Markdown and SourceLines, its one-based original lines.
 
 const (
 	EmbedLanguage   = "frostnotes-embed"   // a note embed's fenced block
@@ -201,6 +203,19 @@ const (
 
 func NoteLink(href string) (path, subpath, tag string, ok bool) // reads note: and tag: links
 ```
+
+`note.renderMarkdown.sourceLines` maps each rendered line to its original
+one-based source line. Zero identifies generated or embedded text that cannot
+edit this note. Frontmatter and stripped comments retain original line offsets;
+callout bodies retain their source mapping inside generated fences. Older
+servers may omit this optional field, disabling source actions.
+
+The native reading view uses this map for task clicks and block anchors. A task
+click synchronizes any attached editor buffer, verifies that the rendered source
+is still current, and changes only the parsed task marker through the shared
+document's normal save path. Embedded tasks never edit the containing note.
+See [the reading-view design](../design/app.md#reading-view) and
+[plan 0009](../plans/0009-mygo-desktop.md).
 
 Rules, over `RenderSource`'s body (no frontmatter, comments gone):
 

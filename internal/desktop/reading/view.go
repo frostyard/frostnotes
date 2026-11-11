@@ -28,6 +28,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	noteMarkdown "github.com/frostyard/frostnotes/internal/markdown"
 	"github.com/frostyard/frostnotes/internal/render"
 )
 
@@ -77,7 +78,8 @@ type drawer struct {
 	// Options are the Markdown view's; the view fills in its hooks.
 	Options markdown.Options
 
-	folds map[string]bool // callouts the user opened or closed
+	baseLine int             // source-line offset while drawing a nested callout
+	folds    map[string]bool // callouts the user opened or closed
 
 	decoding sync.Mutex // images load on goroutines of their own
 	pixels   int64      // decoded so far, under decoding
@@ -104,19 +106,21 @@ type View struct {
 	env notes.Env
 	api func() Renderer
 
-	md       string
-	rendered string // the text md was rendered from
-	err      error
-	inFlight bool
-	stale    bool // the vault changed since the last rendering asked
-	stop     func()
-	changed  []func()
+	sourceLines []int64
+	md          string
+	rendered    string // the text md was rendered from
+	err         error
+	inFlight    bool
+	stale       bool // the vault changed since the last rendering asked
+	stop        func()
+	changed     []func()
 }
 
 // New makes the reading view of doc. blobs is notesd's blob store
 // (config.Paths.Blobs).
 func New(env notes.Env, client func() Renderer, doc *notes.Document, blobs string) *View {
 	v := &View{drawer: newDrawer(doc, blobs), env: env, api: client}
+	v.Options.AnchorBlock = v.anchorBlock
 	doc.OnChange(v.schedule)
 	v.render()
 	return v
@@ -128,14 +132,16 @@ func (v *View) OnChange(fn func()) { v.changed = append(v.changed, fn) }
 // Markdown is the latest rendering, "" before the first.
 func (v *View) Markdown() string { return v.md }
 
-// GoTo scrolls to a link's "#Heading". A block's "#^id" has no anchor in the
-// view, and stays where it is.
+// GoTo scrolls to a heading or an Obsidian block ID.
 func (v *View) GoTo(subpath string) {
 	name := subpath[strings.LastIndexByte(subpath, '#')+1:]
-	if name == "" || strings.HasPrefix(name, "^") {
+	if name == "" {
 		return
 	}
-	v.Options.Anchor = markdown.Slug(name)
+	v.Options.Anchor = name
+	if !strings.HasPrefix(name, "^") {
+		v.Options.Anchor = markdown.Slug(name)
+	}
 	v.Options.AnchorVersion++
 }
 
@@ -187,6 +193,7 @@ func (v *View) render() {
 				v.err = err
 			} else {
 				v.err, v.md, v.rendered = nil, res.Markdown, text
+				v.sourceLines = res.SourceLines
 			}
 			for _, fn := range v.changed {
 				fn()
@@ -200,6 +207,10 @@ func (v *View) render() {
 
 // View draws the note.
 func (v *View) View(c *ui.Context) ui.Element {
+	v.Options.OnTask = nil
+	if v.doc.Loaded() && v.doc.Text() == v.rendered && len(v.sourceLines) > 0 {
+		v.Options.OnTask = func(line int, checked bool) { v.toggleTask(v.baseLine+line, checked) }
+	}
 	return markdown.View(c, v.md, &v.Options)
 }
 
@@ -343,7 +354,10 @@ func (v *drawer) embed(c *ui.Context, b *markdown.CodeBlockView) {
 		if open.Clicked() && v.Links.Note != nil {
 			v.Links.Note(p, sub, false)
 		}
+		task, anchor := v.Options.OnTask, v.Options.AnchorBlock
+		v.Options.OnTask, v.Options.AnchorBlock = nil, nil
 		markdown.View(c.Key(b.Index), b.Code(), &v.Options)
+		v.Options.OnTask, v.Options.AnchorBlock = task, anchor
 	})
 }
 
@@ -407,7 +421,92 @@ func (v *drawer) calloutBody(c *ui.Context, b *markdown.CodeBlockView, key, titl
 			}
 		})
 		if open {
+			v.baseLine += b.SourceLine()
 			markdown.View(c.Key(b.Index), b.Code(), &v.Options)
+			v.baseLine -= b.SourceLine()
 		}
 	}
+}
+
+func (v *View) toggleTask(renderedLine int, checked bool) {
+	if !v.doc.Loaded() || v.doc.Text() != v.rendered || renderedLine < 1 || renderedLine > len(v.sourceLines) {
+		return
+	}
+	sourceLine := int(v.sourceLines[renderedLine-1])
+	if sourceLine <= 0 {
+		return
+	}
+	valid := false
+	for _, task := range noteMarkdown.Parse([]byte(v.rendered)).Tasks {
+		if task.Line == sourceLine && (task.Status == " " || task.Status == "x" || task.Status == "X") {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return
+	}
+	lines := strings.SplitAfter(v.rendered, "\n")
+	if sourceLine > len(lines) {
+		return
+	}
+	line := lines[sourceLine-1]
+	// The parser has confirmed a task on this line. The first task marker
+	// after the list/quote prefix is the one its checkbox represents.
+	at := -1
+	for _, mark := range []string{"[ ]", "[x]", "[X]"} {
+		if i := strings.Index(line, mark); i >= 0 && (at < 0 || i < at) {
+			at = i
+		}
+	}
+	if at < 0 {
+		return
+	}
+	offset := at + 1
+	for _, line := range lines[:sourceLine-1] {
+		offset += len(line)
+	}
+	mark := " "
+	if checked {
+		mark = "x"
+	}
+	cs, err := notes.ChangesOf(len(v.rendered), notes.Change{From: offset, To: offset + 1, Insert: mark})
+	if err == nil {
+		v.doc.EditIfText(v.rendered, cs)
+	}
+}
+
+func (v *View) anchorBlock(d *parser.Document, name string) int {
+	if !strings.HasPrefix(name, "^") || v.doc.Text() != v.rendered {
+		return -1
+	}
+	sourceLine := 0
+	for _, b := range noteMarkdown.Parse([]byte(v.rendered)).Blocks {
+		if b.ID == strings.TrimPrefix(name, "^") {
+			sourceLine = b.Line
+			break
+		}
+	}
+	if sourceLine == 0 {
+		return -1
+	}
+	target := 0
+	for i, line := range v.sourceLines {
+		if int(line) == sourceLine {
+			target = i + 1
+			break
+		}
+	}
+	if target == 0 {
+		return -1
+	}
+	best, bestFirst := -1, -1
+	for i := 1; i < d.Len(); i++ {
+		b := d.Block(i)
+		first := v.baseLine + strings.Count(d.Source()[:b.Start], "\n") + 1
+		if first <= target && first >= bestFirst {
+			best, bestFirst = i, first
+		}
+	}
+	return best
 }

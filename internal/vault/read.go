@@ -66,12 +66,12 @@ func (v *Vault) Render(ctx context.Context, p string, note []byte) (string, erro
 
 // RenderMarkdown renders note, the content of the note at p, as Markdown
 // for a native view (docs/specs/render.md#markdown-for-native-views).
-func (v *Vault) RenderMarkdown(ctx context.Context, p string, note []byte) (string, error) {
+func (v *Vault) RenderMarkdown(ctx context.Context, p string, note []byte) (render.NativeMarkdown, error) {
 	opts, err := v.renderOptions(ctx, p)
 	if err != nil {
-		return "", err
+		return render.NativeMarkdown{}, err
 	}
-	return render.Markdown(note, opts), nil
+	return render.MarkdownWithSourceLines(note, opts), nil
 }
 
 // renderOptions are how the note at p reaches what it links to and

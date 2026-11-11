@@ -490,7 +490,11 @@ func (n notes) RenderMarkdown(ctx context.Context, p *api.NoteRenderMarkdownPara
 	if err != nil {
 		return nil, err
 	}
-	return &api.RenderedMarkdown{Markdown: md}, nil
+	lines := make([]int64, len(md.SourceLines))
+	for i, line := range md.SourceLines {
+		lines[i] = int64(line)
+	}
+	return &api.RenderedMarkdown{Markdown: md.Markdown, SourceLines: lines}, nil
 }
 
 func (n notes) ReadVersion(ctx context.Context, p *api.NoteReadVersionParams) (*api.VersionContent, error) {

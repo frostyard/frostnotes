@@ -203,3 +203,57 @@ func TestABlockAsksForThePathItHadWhenDrawn(t *testing.T) {
 		t.Fatalf("asked for %q", got)
 	}
 }
+
+func TestReadingTaskClickEditsItsMappedSourceLine(t *testing.T) {
+	for _, source := range []string{"---\ntitle: Tasks\n---\n%%comment%%\n- [ ] water\n", "> [!note] Work\n> - [ ] water\n"} {
+		t.Run(source, func(t *testing.T) {
+			f := open(t, map[string]string{"Tasks.md": source}, "Tasks.md")
+			if err := f.tt.Click("Mark task done"); err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Replace(source, "[ ]", "[x]", 1)
+			if f.doc.Text() != want {
+				t.Fatalf("got %q, want %q; mapping %v of %q", f.doc.Text(), want, f.view.sourceLines, f.view.md)
+			}
+			f.doc.Save()
+			f.loop.Until(t, "save", func() bool { return f.doc.Status() == notes.StatusClean })
+			got, err := f.Other.Note().Read(t.Context(), &api.NoteReadParams{VaultID: f.Vault, Path: "Tasks.md"})
+			if err != nil || got.Content != want {
+				t.Fatalf("saved %+v: %v", got, err)
+			}
+		})
+	}
+}
+
+func TestObsoleteReadingTaskClickDoesNotEdit(t *testing.T) {
+	f := open(t, map[string]string{"Tasks.md": "- [ ] original\n"}, "Tasks.md")
+	cs, _ := notes.ChangesOf(len(f.doc.Text()), notes.Change{From: 0, To: 0, Insert: "new line\n"})
+	f.doc.Local(cs)
+	before := f.doc.Text()
+	_ = f.tt.Click("Mark task done") // the stale action may already be disabled
+	if f.doc.Text() != before {
+		t.Fatal("obsolete checkbox changed current text")
+	}
+}
+
+func TestBlockLinkScrollsToItsParagraph(t *testing.T) {
+	source := strings.Repeat("Earlier paragraph.\n\n", 60) + "Destination paragraph. ^target\n"
+	f := open(t, map[string]string{"Blocks.md": source}, "Blocks.md")
+	var scroll ui.ScrollState
+	f.tt = ui.NewTester(func(c *ui.Context) {
+		c.DisableAnimations()
+		ui.Scroll(c).Fill().TrackScroll(&scroll).Children(func() { f.view.View(c) })
+	}, 400, 160)
+	f.view.GoTo("#^target")
+	f.tt.Frame()
+	if scroll.Y <= 0 {
+		t.Fatal("block link left the view at the top")
+	}
+	scroll.Y = 0
+	f.tt.Frame()
+	f.view.GoTo("#^target")
+	f.tt.Frame()
+	if scroll.Y <= 0 {
+		t.Fatal("repeated block link did not scroll")
+	}
+}
