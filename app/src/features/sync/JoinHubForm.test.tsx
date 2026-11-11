@@ -66,7 +66,7 @@ describe("JoinHubForm", () => {
   });
 
   it("needs a folder for a new vault", async () => {
-    const { user } = setup({ location: { path: null, canPick: false, onBrowse: vi.fn(), onLocation: vi.fn() } });
+    const { user } = setup({ location: { path: null, onLocation: vi.fn() } });
     await user.type(screen.getByRole("textbox", { name: "Hub URL" }), "https://hub.example");
     await user.type(screen.getByRole("textbox", { name: "Hub vault name" }), "shared");
     expect(screen.getByRole("textbox", { name: "Location" })).toBeTruthy();
@@ -75,7 +75,7 @@ describe("JoinHubForm", () => {
 
   it("refuses a name that cannot name a folder, for a new vault", async () => {
     const { user } = setup({
-      location: { path: "/home/demo", canPick: false, onBrowse: vi.fn(), onLocation: vi.fn() },
+      location: { path: "/home/demo", onLocation: vi.fn() },
     });
     await user.type(screen.getByRole("textbox", { name: "Hub URL" }), "https://hub.example");
     const name = screen.getByRole("textbox", { name: "Hub vault name" });

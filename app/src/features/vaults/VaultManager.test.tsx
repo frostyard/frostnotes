@@ -16,7 +16,6 @@ function setup(props: Partial<VaultManagerProps> = {}) {
     vaults: VAULTS,
     current: 1,
     mode: "dialog",
-    canPick: true,
     onOpen: vi.fn(),
     onRemove: vi.fn(),
     onCreate: vi.fn(),
@@ -95,9 +94,9 @@ describe("VaultManager", () => {
     expect(props.onCreate).toHaveBeenCalledTimes(1);
     const openRow = screen.getByRole("region", { name: "Open folder as vault" });
     expect(within(openRow).getByText("Choose a folder of Markdown files.")).toBeTruthy();
-    expect(within(openRow).queryByRole("textbox")).toBeNull();
+    await user.type(within(openRow).getByRole("textbox", { name: "Folder path" }), "/home/wren/Notes");
     await user.click(within(openRow).getByRole("button", { name: "Open" }));
-    expect(props.onOpenFolder).toHaveBeenCalledWith();
+    expect(props.onOpenFolder).toHaveBeenCalledWith("/home/wren/Notes");
     const hubRow = screen.getByRole("region", { name: "Join a vault on a hub" });
     expect(within(hubRow).getByText(/^Sync a new vault with a vault on a hub\./)).toBeTruthy();
     await user.click(within(hubRow).getByRole("button", { name: "Join" }));
@@ -118,8 +117,8 @@ describe("VaultManager", () => {
     expect(within(hubRow).queryByRole("button", { name: "Join" })).toBeNull();
   });
 
-  it("takes a typed folder where there is no picker", async () => {
-    const { props, user } = setup({ canPick: false });
+  it("takes a typed folder path", async () => {
+    const { props, user } = setup();
     const openRow = screen.getByRole("region", { name: "Open folder as vault" });
     await user.click(within(openRow).getByRole("button", { name: "Open" }));
     expect(props.onOpenFolder).not.toHaveBeenCalled();
