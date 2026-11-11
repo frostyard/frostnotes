@@ -483,6 +483,35 @@ func TestTheCacheHoldsNoSubstringOfTheNote(t *testing.T) {
 			}
 		}
 	}
+	if len(s.shapes) == 0 {
+		t.Fatal("no line shapes were kept")
+	}
+	for text := range s.shapes {
+		if inside(text) {
+			t.Errorf("the shape of %q shares the note's memory", text)
+		}
+	}
+}
+
+func TestLineStylesFollowTheirLinesText(t *testing.T) {
+	var s Scanner
+	in := "# One\n> ## Quoted\n- [x] done\n- [ ] open\n> - [X] quoted done\ntext\n"
+	res := s.Scan(in, Options{})
+	want := []LineStyle{{Line: 0, Heading: 1}, {Line: 1, Heading: 2}, {Line: 2, Done: true}, {Line: 4, Done: true}}
+	if !slices.Equal(res.Styles, want) {
+		t.Fatalf("styles %v, want %v", res.Styles, want)
+	}
+	// From the cache, after the text moved: the same styles a line further on.
+	res = s.Scan("intro\n"+in, Options{})
+	for i := range want {
+		want[i].Line++
+	}
+	if !slices.Equal(res.Styles, want) {
+		t.Fatalf("cached styles %v, want %v", res.Styles, want)
+	}
+	if res = s.Scan(in, Options{Revealed: func(l int) bool { return l == 0 }}); res.Styles[0].Line != 1 {
+		t.Fatalf("a revealed heading kept its style: %v", res.Styles)
+	}
 }
 
 func TestACommentOpenedAfterText(t *testing.T) {

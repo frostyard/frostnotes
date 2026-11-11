@@ -143,7 +143,42 @@ const maxCache = 4
 // the line it changed. Keep one per editor. It is not safe for concurrent
 // use.
 type Scanner struct {
-	cache map[lineKey][]Piece
+	cache  map[lineKey][]Piece
+	shapes map[string]lineShape
+}
+
+// lineShape is what a line's text alone says of it. A keystroke scans every
+// line of the note, so it is worked out once for each text, not by regular
+// expressions on each line every time.
+type lineShape struct {
+	heading, rule, setext bool // the line as written
+	level                 int  // its heading's level inside its quotes, 0 for none
+	done                  bool // a done task inside its quotes
+}
+
+func shapeOf(content string) lineShape {
+	sh := lineShape{heading: headingRe.MatchString(content), rule: ruleRe.MatchString(content), setext: setextRe.MatchString(content)}
+	rest := content
+	if q := quoteRe.FindString(rest); q != "" {
+		rest = rest[len(q):]
+	}
+	if h := headingRe.FindString(rest); h != "" {
+		sh.level = strings.Count(h, "#")
+	}
+	if m := taskRe.FindStringSubmatch(rest); m != nil && m[3] != " " {
+		sh.done = true
+	}
+	return sh
+}
+
+// shape is content's shape, from the cache when it has it.
+func (s *Scanner) shape(content string) lineShape {
+	sh, ok := s.shapes[content]
+	if !ok {
+		sh = shapeOf(content)
+		s.shapes[strings.Clone(content)] = sh // a substring would keep the whole note alive
+	}
+	return sh
 }
 
 // lineKey is a line and what about the lines before it changes its pieces.
@@ -164,7 +199,7 @@ func (s *Scanner) Pieces(text string, revealed func(line int) bool, hideFront bo
 // Scan works out what shows of text.
 func (s *Scanner) Scan(text string, o Options) Result {
 	if s.cache == nil {
-		s.cache = map[lineKey][]Piece{}
+		s.cache, s.shapes = map[lineKey][]Piece{}, map[string]lineShape{}
 	}
 	var res Result
 	st := state{text: text, closedFront: closedFront(text)}
@@ -187,6 +222,7 @@ func (s *Scanner) Scan(text string, o Options) Result {
 			}
 		}
 		was := st.block
+		sh := s.shape(content)
 		indented := was == blockText && !st.afterText && codeIndent(content)
 		if indented {
 			st.structural = true
@@ -197,22 +233,17 @@ func (s *Scanner) Scan(text string, o Options) Result {
 			from := len(res.Pieces)
 			res.Pieces = s.line(res.Pieces, content, start, st, line, o.Revealed)
 			placeEmbeds(&res, from, text, content, start, min(next, len(text)), line, o)
-			if o.Revealed == nil || !o.Revealed(line) {
-				rest := content
-				if q := quoteRe.FindString(rest); q != "" {
-					rest = rest[len(q):]
+			if (sh.level > 0 || sh.done) && (o.Revealed == nil || !o.Revealed(line)) {
+				if sh.level > 0 {
+					res.Styles = append(res.Styles, LineStyle{Line: line, Heading: sh.level})
 				}
-				if h := headingRe.FindString(rest); h != "" {
-					res.Styles = append(res.Styles, LineStyle{Line: line, Heading: strings.Count(h, "#")})
-				}
-				if m := taskRe.FindStringSubmatch(rest); m != nil && m[3] != " " {
+				if sh.done {
 					res.Styles = append(res.Styles, LineStyle{Line: line, Done: true})
 				}
 			}
-
 		}
 		st.afterGap = strings.TrimSpace(content) == ""
-		st.afterText = was == blockText && !st.afterGap && !st.structural && !headingRe.MatchString(content) && !ruleRe.MatchString(content) && (!st.afterText || !setextRe.MatchString(content))
+		st.afterText = was == blockText && !st.afterGap && !st.structural && !sh.heading && !sh.rule && (!st.afterText || !sh.setext)
 		line, start = line+1, next
 		lines++
 	}
@@ -221,6 +252,9 @@ func (s *Scanner) Scan(text string, o Options) Result {
 	}
 	if len(s.cache) > maxCache*lines+64 {
 		clear(s.cache)
+	}
+	if len(s.shapes) > maxCache*lines+64 {
+		clear(s.shapes)
 	}
 	slices.SortStableFunc(res.Pieces, func(a, b Piece) int { return a.Start - b.Start })
 	res.Pieces = apart(res.Pieces)
