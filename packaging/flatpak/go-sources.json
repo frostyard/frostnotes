@@ -25,14 +25,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111005420-2088771701f7.mod",
+    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111072942-5fa528b3792a.mod",
     "sha256": "c5f553e2f93ddcff569f7fd95902e334f7a972d6819db1d5ca075b7e7c79cc18",
     "dest": "goproxy/github.com/bketelsen/mygo/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111005420-2088771701f7.zip",
-    "sha256": "e113fd5d3f7a80109da95b3c4cd90d358494bbd9a86a0932bbbfb531996f184e",
+    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111072942-5fa528b3792a.zip",
+    "sha256": "8c13bbbbcb7231cebb04277264ad6ffb472eb30cf55e4d9642ee227eb6af6f63",
     "dest": "goproxy/github.com/bketelsen/mygo/@v"
   },
   {
@@ -205,14 +205,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.2.0.mod",
-    "sha256": "b8dcd9ec887082dbf5f4c2872177a2f3cde8091fb6a8dae475f5ba9a291ed523",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.2.1-0.20261111070608-a6a2df5dd07d.mod",
+    "sha256": "5226178477a17479d5b1dacd763f9d62f3a1f62869e314fef473fa7b02ff7535",
     "dest": "goproxy/github.com/frostyard/frostui/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.2.0.zip",
-    "sha256": "a917a4d3dd6d69cb7e35b6c60865154787a4e87f884fc8b905683f588671aa90",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/@v/v0.2.1-0.20261111070608-a6a2df5dd07d.zip",
+    "sha256": "4ab0166c26b132799c9961a706fe9c8fe9866efdc2d2f4eede165c4dae9b5f54",
     "dest": "goproxy/github.com/frostyard/frostui/@v"
   },
   {
@@ -250,6 +250,18 @@
     "url": "https://proxy.golang.org/github.com/fsnotify/fsnotify/@v/v1.10.1.zip",
     "sha256": "b2c6a334e0d518da2e046066bdd9da34cb26bad6df9f17701802d3de522ab016",
     "dest": "goproxy/github.com/fsnotify/fsnotify/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.6.mod",
+    "sha256": "3f3e5119a976d643304f10432810c0117574ea92c9b8254f0ea60963ce7f0281",
+    "dest": "goproxy/github.com/gen2brain/gav1d/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.6.zip",
+    "sha256": "1c3c3b8247bd52b42ae9461debeb271861a82a8d8cb1f8be6bc32395b4c381fa",
+    "dest": "goproxy/github.com/gen2brain/gav1d/@v"
   },
   {
     "type": "file",

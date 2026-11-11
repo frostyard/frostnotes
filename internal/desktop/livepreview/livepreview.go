@@ -112,7 +112,13 @@ type Options struct {
 }
 
 // Result is what shows of a text.
+type LineStyle struct {
+	Line, Heading int
+	Done          bool
+}
+
 type Result struct {
+	Styles []LineStyle
 	// Pieces are sorted and apart.
 	Pieces []Piece
 	// Blocks are in the order of their lines.
@@ -191,6 +197,19 @@ func (s *Scanner) Scan(text string, o Options) Result {
 			from := len(res.Pieces)
 			res.Pieces = s.line(res.Pieces, content, start, st, line, o.Revealed)
 			placeEmbeds(&res, from, text, content, start, min(next, len(text)), line, o)
+			if o.Revealed == nil || !o.Revealed(line) {
+				rest := content
+				if q := quoteRe.FindString(rest); q != "" {
+					rest = rest[len(q):]
+				}
+				if h := headingRe.FindString(rest); h != "" {
+					res.Styles = append(res.Styles, LineStyle{Line: line, Heading: strings.Count(h, "#")})
+				}
+				if m := taskRe.FindStringSubmatch(rest); m != nil && m[3] != " " {
+					res.Styles = append(res.Styles, LineStyle{Line: line, Done: true})
+				}
+			}
+
 		}
 		st.afterGap = strings.TrimSpace(content) == ""
 		st.afterText = was == blockText && !st.afterGap && !st.structural && !headingRe.MatchString(content) && !ruleRe.MatchString(content) && (!st.afterText || !setextRe.MatchString(content))

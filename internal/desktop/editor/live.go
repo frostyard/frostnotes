@@ -46,6 +46,7 @@ func (e *NoteEditor) showLive(c *ui.Context) {
 			l.on = false
 			e.State.SetReplacements(nil)
 			e.State.SetBlocks(nil)
+			e.State.SetLineStyles(nil)
 		}
 		return
 	}
@@ -66,6 +67,16 @@ func (e *NoteEditor) showLive(c *ui.Context) {
 		out[i] = e.replacement(c, p, muted)
 	}
 	e.State.SetReplacements(out)
+	styles := make([]code.LineStyle, 0, len(res.Styles))
+	sizes := [...]float32{1, 2, 1.5, 1.25, 1.125, 1, 1}
+	for _, s := range res.Styles {
+		style := code.LineStyle{Line: s.Line, Strike: s.Done}
+		if s.Heading > 0 {
+			style.Font = ui.Font{Size: e.font().Size * sizes[s.Heading], Weight: 700}
+		}
+		styles = append(styles, style)
+	}
+	e.State.SetLineStyles(styles)
 	blocks := make([]code.Block, 0, len(res.Blocks))
 	for _, b := range res.Blocks {
 		blocks = append(blocks, e.block(b))
@@ -105,7 +116,7 @@ func (e *NoteEditor) embedKind(target string, wikilink bool) livepreview.EmbedKi
 }
 
 // imageExts are the images MyGo decodes.
-var imageExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true, ".webp": true, ".svg": true}
+var imageExts = map[string]bool{".avif": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true, ".webp": true, ".svg": true}
 
 // block turns a block of live preview into MyGo's.
 func (e *NoteEditor) block(b livepreview.Block) code.Block {

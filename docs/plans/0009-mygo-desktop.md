@@ -146,7 +146,7 @@ app-local package for the rest (below).
 
 | Today | Native | Phase |
 | --- | --- | --- |
-| 23 local preferences (`frostnotes.prefs.v1`: views, editing mode, inline title, readable line length, spellcheck, properties, line numbers, guides, folding, auto-pairs, smart lists, tabs, confirm delete, remote images, unsupported files, theme, font size, ribbon, zoom, last vault) | `$XDG_CONFIG_HOME/frostnotes/prefs.json`, versioned; the ribbon's preference goes, spellcheck stays unused (no checker) | 2 |
+| 23 local preferences (`frostnotes.prefs.v1`: views, editing mode, inline title, readable line length, spellcheck, properties, line numbers, guides, folding, auto-pairs, smart lists, tabs, confirm delete, remote images, unsupported files, theme, font size, ribbon, zoom, last vault) | `$XDG_CONFIG_HOME/frostnotes/prefs.json`, versioned; the ribbon's preference goes, the inactive spellcheck setting is removed ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md)) | 2 |
 | The workspace per vault (`frostnotes.workspace.v1:<path>`, 500 ms after a change and on close; moves and removals applied to other vaults' workspaces), the event resume point, recent commands | `$XDG_STATE_HOME/frostnotes/workspace/<hash of the path>.json` and `state.json`; not migrated from WebKitGTK ([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)) | 2 |
 | Vault settings (notesd's: `vault.settings`, `vault.configure`, `vault.configured`) | unchanged | 3 |
 
@@ -467,8 +467,8 @@ costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 `make desktop-bench` prints the figure on every run. MyGo's cost in
 `view.replacedLines` was fixed on the fork, with egoist/mygo#1655.
 
-**Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
-strike-through. Math stays as TeX source and audio and video as their embeds
+**Built:** per-line styles for heading sizes and completed-task strike-through,
+with source styles on selected lines ([app design](../design/app.md)). Math stays as TeX source and audio and video as their embeds
 (below, under Later). The owner used it with their real vault on Snow on
 2026-11-10, and waived the run of Orca that day; the Tester's checks of roles
 and names stand in for it.
