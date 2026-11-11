@@ -205,7 +205,7 @@ file a step names before writing its frostnotes counterpart.
   `notesctl`), `github.com/frostyard/lodge/kit` v0.4.0 (the RPC and app runtime),
   `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
   also clix's), and for the native desktop app (plan 0009)
-  `github.com/frostyard/frostui` v0.3.1 (frostyard's desktop UI kit) over
+  `github.com/frostyard/frostui` v0.4.0 (frostyard's desktop UI kit) over
   `github.com/egoist/mygo` v0.9.0, replaced by the owner's fork
   `github.com/bketelsen/mygo` (v0.9.0 with egoist/mygo#1662, per-line styles
   and the Markdown view's task actions and anchors) until those are in

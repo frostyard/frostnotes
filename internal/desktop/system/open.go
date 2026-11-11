@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/frostyard/frostui"
 )
 
 // Opening things outside the app (docs/design/app.md#window): a web link in
@@ -17,7 +19,8 @@ import (
 // the system's default app. A file must be a regular, non-executable file
 // inside the vault's folder, of a type that opens as a document, never one
 // a desktop runs (a script, a .desktop entry, HTML). These are the app's
-// rules; cmd/frostnotes then opens what passes through frostui's Opener.
+// rules: the window checks every link with WebURL, and cmd/frostnotes then
+// opens what passes through frostui's Opener, which checks it again.
 // The extension list guards a file's type, not the handler: the system may
 // pick one by the file's content. A vault on a CIFS mount whose file_mode has execute bits
 // (the kernel's default, 0755) shows every file executable, so Open in
@@ -34,8 +37,11 @@ func OpenableExtensions() []string {
 }
 
 // WebURL checks that raw may open in the system's browser and returns what
-// to open: a mailto link keeps only its addressees, subject and body, and
-// loses whatever else it asks of the mail client, such as attaching a file.
+// to open: an http or https link with a host, or a mailto link as
+// frostui.SanitizeMailto returns it (frostui's ADR-0010). That keeps only
+// its addressees, subject and body, and drops whatever else it asks of the
+// mail client, such as attaching a file, and its fragment, which a client
+// might read as more fields (#200).
 func WebURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -48,15 +54,7 @@ func WebURL(raw string) (string, error) {
 		}
 		return u.String(), nil
 	case "mailto":
-		var kept []string
-		for part := range strings.SplitSeq(u.RawQuery, "&") {
-			key, _, _ := strings.Cut(part, "=")
-			if slices.Contains([]string{"to", "cc", "bcc", "subject", "body"}, strings.ToLower(key)) {
-				kept = append(kept, part)
-			}
-		}
-		u.RawQuery = strings.Join(kept, "&")
-		return u.String(), nil
+		return frostui.SanitizeMailto(raw)
 	}
 	return "", fmt.Errorf("%s: links open outside the app only for http, https and mailto", u.Scheme)
 }
