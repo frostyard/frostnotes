@@ -495,7 +495,6 @@ func (a *App) settingsSections() []settingsSection {
 			toggle("inlineTitle", "Show inline title", "The file's name as an editable title above the note.", p.InlineTitle),
 			toggle("viewHeader", "Show view header", "The bar above a tab's view.", p.ViewHeader),
 			toggle("readableLineLength", "Readable line length", "Limit a note's width to 700 pixels.", p.ReadableLineLength),
-			toggle("spellcheck", "Spellcheck", "", p.Spellcheck),
 			choice("pref:properties", "Properties in document", p.Properties, option{"visible", "Visible"}, option{"hidden", "Hidden"}, option{"source", "Source"}),
 			toggle("lineNumbers", "Show line numbers", "", p.LineNumbers),
 			toggle("indentGuides", "Show indentation guides", "", p.IndentGuides),

@@ -241,6 +241,18 @@
   },
   {
     "type": "file",
+    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.6.mod",
+    "sha256": "3f3e5119a976d643304f10432810c0117574ea92c9b8254f0ea60963ce7f0281",
+    "dest": "goproxy/github.com/gen2brain/gav1d/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.6.zip",
+    "sha256": "1c3c3b8247bd52b42ae9461debeb271861a82a8d8cb1f8be6bc32395b4c381fa",
+    "dest": "goproxy/github.com/gen2brain/gav1d/@v"
+  },
+  {
+    "type": "file",
     "url": "https://proxy.golang.org/github.com/go-text/typesetting/@v/v0.3.5.mod",
     "sha256": "ce9f6b38a24e9733d328f122fd13c72678cd9d0ffdfb1ae7ae9eb3240ea03b80",
     "dest": "goproxy/github.com/go-text/typesetting/@v"

@@ -23,7 +23,6 @@ type Prefs struct {
 	InlineTitle        bool    `json:"inlineTitle"`
 	ViewHeader         bool    `json:"viewHeader"`
 	ReadableLineLength bool    `json:"readableLineLength"`
-	Spellcheck         bool    `json:"spellcheck"`
 	Properties         string  `json:"properties"` // visible, hidden, source
 	LineNumbers        bool    `json:"lineNumbers"`
 	IndentGuides       bool    `json:"indentGuides"`
@@ -47,7 +46,7 @@ type Prefs struct {
 func Default() Prefs {
 	return Prefs{
 		DefaultView: "edit", EditingMode: "live", InlineTitle: true, ViewHeader: true,
-		ReadableLineLength: true, Spellcheck: true, Properties: "visible", IndentGuides: true,
+		ReadableLineLength: true, Properties: "visible", IndentGuides: true,
 		FoldHeadings: true, FoldIndent: true, AutoPairBrackets: true, AutoPairMarkdown: true,
 		SmartLists: true, IndentWithTabs: true, TabSize: 4, ConfirmDelete: true,
 		LoadRemoteImages: true, Theme: "system", FontSize: 16, Zoom: 1,
