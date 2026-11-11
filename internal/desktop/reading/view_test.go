@@ -207,6 +207,28 @@ func TestABlockAsksForThePathItHadWhenDrawn(t *testing.T) {
 	}
 }
 
+func TestDecodeAVIF(t *testing.T) {
+	// A generated transparent 4 x 3 AVIF, with no external fixture.
+	encoded, err := base64.StdEncoding.DecodeString("AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAAGUbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAAAAAAAOcGl0bQAAAAAAAQAAACxpbG9jAAAAAEQAAAIAAQAAAAEAAAG8AAAAFQACAAAAAQAAAdEAAAAVAAAAQmlpbmYAAAAAAAIAAAAaaW5mZQIAAAAAAQAAYXYwMUNvbG9yAAAAABppbmZlAgAAAAACAABhdjAxQWxwaGEAAAAAGmlyZWYAAAAAAAAADmF1eGwAAgABAAEAAADRaXBycAAAAKtpcGNvAAAAFGlzcGUAAAAAAAAABAAAAAMAAAAQcGl4aQAAAAADCAgIAAAAE2F2MUOBAAwACgUYBHiBCAAAABNjb2xybmNseAABAA0ABoAAAAAOcGl4aQAAAAABCAAAABNhdjFDgQAcAAoFGAR4hUAAAAA4YXV4QwAAAAB1cm46bXBlZzptcGVnQjpjaWNwOnN5c3RlbXM6YXV4aWxpYXJ5OmFscGhhAAAAAB5pcG1hAAAAAAAAAAIAAQQBAoMEAAIEAQWGhwAAADJtZGF0EgAKBRgEeIEIMgoWYAAAAAHpuw3IEgAKBRgEeIVAMgoWYAAAAAYE0Hcg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := Decode(encoded, "avif")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bitmap, ok := src.(*ui.Bitmap)
+	if !ok {
+		t.Fatalf("decoded %T", src)
+	}
+	if w, h := bitmap.Size(); w != 4 || h != 3 {
+		t.Fatalf("size %v x %v", w, h)
+	}
+	if _, err := Decode([]byte("broken avif"), "avif"); err == nil {
+		t.Fatal("accepted corrupt AVIF")
+	}
+}
+
 func TestRemoteImagePreferenceRetriesRefusedImages(t *testing.T) {
 	requests := make(chan struct{}, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

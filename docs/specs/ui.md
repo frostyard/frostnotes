@@ -990,7 +990,7 @@ with frostui, which changes these:
   frontmatter's first line stays visible while the properties panel shows.
 - The status bar's editing mode opens a menu with Reading view, Live Preview
   and Source mode; choosing an editing mode also sets its default.
-- Spellcheck has no effect: MyGo's editor has none.
+- Spellcheck is absent from native Settings ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md)); the web app retains its browser setting.
 
 ## Rules
 
