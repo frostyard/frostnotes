@@ -324,6 +324,10 @@ after the last tab goes until what it holds is saved:
 
 ### Live preview
 
+Native inline and display math use bounded, cached SVG glyph paths from a
+pure-Go renderer ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md)).
+Invalid formulas retain their source; selected lines reveal it.
+
 The native Settings omit the inactive Spellcheck control
 ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md));
 this does not change the web editor's spelling preference.
@@ -1044,3 +1048,9 @@ a record holds the app ID `org.frostyard.Frostnotes`, the version, component
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check, its updates (gaps G2 and G3) and the move from a host notesd (G4) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
 - The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) (the desktop app on MyGo and frostui; the React app stays as lodge's web app)
+
+Native live preview uses MyGo's per-line styles for heading sizes and completed
+task strike-through. Selecting a line restores its source font and marks;
+source mode clears all preview styles. This completes the line-style portion
+of [plan 0009, Phase 5](../plans/0009-mygo-desktop.md), under
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).

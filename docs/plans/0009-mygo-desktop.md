@@ -264,15 +264,16 @@ other sessions are writing their pull requests:
   `Buffer.EditRemote` ([egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654))
   and uses MyGo's own undo.
 
-**A fork until the last lands.** MyGo v0.9.0 (2026-11-11) has #1654 and
+**A fork until the rest lands.** MyGo v0.9.0 (2026-11-11) has #1654 and
 [egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655). `go.mod`
 requires v0.9.0 and replaces it with `github.com/bketelsen/mygo`, branch
-`bk/editor-blocks-89d18f` at `24c98d35`: v0.9.0 and
-[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662), nothing else.
-The fork has no v0.9.0 tag, so its pseudo-version reads v0.8.4. The owner
-approved the fork on 2026-11-10 and the move to v0.9.0 on 2026-11-11. Once
-#1662 is in a MyGo release, `go.mod` requires that release and the `replace`
-goes. The fork also changes the MyGo frostui builds against here, and
+`frostyard/next` at `d97fd2e1`: v0.9.0 with
+[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662) (elements between
+lines), per-line styles (headings' sizes and done tasks) and the Markdown
+view's task actions and anchors, nothing else. The fork has no v0.9.0 tag, so
+its pseudo-version reads v0.8.4. The owner approved the fork on 2026-11-10 and
+the move to v0.9.0 on 2026-11-11. Once all of these are in a MyGo release,
+`go.mod` requires that release and the `replace` goes. The fork also changes the MyGo frostui builds against here, and
 frostui's CI tests only released MyGo, so `make verify` runs
 `go test github.com/frostyard/frostui/...` while the `replace` stays; the
 step goes with it. A failure there is reported to frostui.
@@ -470,8 +471,8 @@ costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 `make desktop-bench` prints the figure on every run. MyGo's cost in
 `view.replacedLines` was fixed on the fork, with egoist/mygo#1655.
 
-**Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
-strike-through. Math stays as TeX source and audio and video as their embeds
+**Built:** per-line styles for heading sizes and completed-task strike-through,
+with source styles on selected lines ([app design](../design/app.md)). Math stays as TeX source and audio and video as their embeds
 (below, under Later). The owner used it with their real vault on Snow on
 2026-11-10, and waived the run of Orca that day; the Tester's checks of roles
 and names stand in for it.
@@ -574,3 +575,7 @@ changed the required checks, on 2026-11-10. Once frostui has the
 - Roadmap: [plan 0002](0002-roadmap.md)
 - ChairLift's [ADR-0017](https://github.com/frostyard/chairlift/blob/feat/mygo/docs/adr/0017-mygo-command-center-window.md)
   and [design/frostui.md](https://github.com/frostyard/chairlift/blob/feat/mygo/docs/design/frostui.md)
+
+Native math rendering follows [ADR-0041](../adr/0041-render-native-math-as-vector-paths.md),
+with the reveal rule and source fallback described in the
+[UI spec](../specs/ui.md#in-the-native-desktop-app).

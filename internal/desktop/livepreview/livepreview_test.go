@@ -23,6 +23,8 @@ func show(text string, ps []Piece) string {
 		switch p.Kind {
 		case Link, Tag, Footnote, Dim:
 			b.WriteString(p.Label)
+		case Math:
+			b.WriteString(p.Label)
 		case Bullet:
 			b.WriteString("•")
 		case Quote:
@@ -62,7 +64,7 @@ func TestWhatShows(t *testing.T) {
 		{"[[Plan]] and [[Plan#Goals|the plan]]", "Plan and the plan"},
 		{"![[a.png]] stays", "![[a.png]] stays"},
 		{"![alt](a.png) stays", "![alt](a.png) stays"},
-		{"$x_1 * y_2$ stays", "$x_1 * y_2$ stays"},
+		{"$x_1 * y_2$ stays", "x_1 * y_2 stays"},
 		{"costs $5 and *more*", "costs $5 and more"},
 		{"see[^1] here", "see1 here"},
 		{"[^1]: a definition", "[^1]: a definition"},
@@ -481,6 +483,35 @@ func TestTheCacheHoldsNoSubstringOfTheNote(t *testing.T) {
 			}
 		}
 	}
+	if len(s.shapes) == 0 {
+		t.Fatal("no line shapes were kept")
+	}
+	for text := range s.shapes {
+		if inside(text) {
+			t.Errorf("the shape of %q shares the note's memory", text)
+		}
+	}
+}
+
+func TestLineStylesFollowTheirLinesText(t *testing.T) {
+	var s Scanner
+	in := "# One\n> ## Quoted\n- [x] done\n- [ ] open\n> - [X] quoted done\ntext\n"
+	res := s.Scan(in, Options{})
+	want := []LineStyle{{Line: 0, Heading: 1}, {Line: 1, Heading: 2}, {Line: 2, Done: true}, {Line: 4, Done: true}}
+	if !slices.Equal(res.Styles, want) {
+		t.Fatalf("styles %v, want %v", res.Styles, want)
+	}
+	// From the cache, after the text moved: the same styles a line further on.
+	res = s.Scan("intro\n"+in, Options{})
+	for i := range want {
+		want[i].Line++
+	}
+	if !slices.Equal(res.Styles, want) {
+		t.Fatalf("cached styles %v, want %v", res.Styles, want)
+	}
+	if res = s.Scan(in, Options{Revealed: func(l int) bool { return l == 0 }}); res.Styles[0].Line != 1 {
+		t.Fatalf("a revealed heading kept its style: %v", res.Styles)
+	}
 }
 
 func TestACommentOpenedAfterText(t *testing.T) {
@@ -514,5 +545,28 @@ func TestIndentedCodeOutsideParagraphs(t *testing.T) {
 	text := "paragraph\n    **continued**"
 	if got := show(text, s.Pieces(text, nil, false)); got != "paragraph\n    continued" {
 		t.Fatalf("paragraph continuation: %q", got)
+	}
+}
+
+func TestMathDrawsAndRevealsItsSource(t *testing.T) {
+	const source = "before $x_i$ after\n\n$$\n\\frac{a}{b}\n$$\n"
+	r := scanBlocks(source, nil)
+	found := false
+	for _, p := range r.Pieces {
+		if p.Kind == Math && p.Label == "x_i" {
+			found = true
+		}
+	}
+	if !found || len(r.Blocks) != 1 || r.Blocks[0].Label != "Math" {
+		t.Fatalf("math: %+v", r)
+	}
+	r = scanBlocks(source, func(line int) bool { return line == 0 || line == 3 })
+	for _, p := range r.Pieces {
+		if p.Kind == Math {
+			t.Fatal("selected inline math hidden")
+		}
+	}
+	if len(r.Blocks) != 0 {
+		t.Fatal("selected display math hidden")
 	}
 }

@@ -3,6 +3,7 @@ module github.com/frostyard/frostnotes
 go 1.27.4
 
 require (
+	github.com/d2lang/mathjax-go v0.1.0
 	github.com/egoist/mygo v0.9.0
 	github.com/frostyard/clix v0.5.0
 	github.com/frostyard/frostui v0.3.1
@@ -72,11 +73,12 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-// The native desktop app needs egoist/mygo#1662 (elements between lines),
-// which no MyGo release has yet. This is branch bk/editor-blocks-89d18f on a
-// fork: v0.9.0 and #1662, nothing else. The fork has no v0.9.0 tag, so its
-// pseudo-version reads v0.8.4. Once #1662 is in a MyGo release, require that
+// The native desktop app needs MyGo changes that no release has yet:
+// elements between lines (egoist/mygo#1662), per-line styles, and the
+// Markdown view's task actions and anchors. This is branch frostyard/next on
+// a fork: v0.9.0 and those, nothing else. The fork has no v0.9.0 tag, so its
+// pseudo-version reads v0.8.4. Once all are in a MyGo release, require that
 // release and drop this (docs/plans/0009-mygo-desktop.md). While it stays,
 // make verify also runs frostui's tests against it; the step and the replace
 // go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111112850-24c98d3547ea
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111132952-d97fd2e109b9

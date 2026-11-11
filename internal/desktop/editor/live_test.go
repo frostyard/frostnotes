@@ -321,3 +321,23 @@ func TestBlocksLeaveTheFileAlone(t *testing.T) {
 		t.Fatalf("file holds %q", got)
 	}
 }
+
+func TestLiveLineStylesFollowRevealAndMode(t *testing.T) {
+	f := openEditor(t, "a.md", "# Heading\n\n- [x] done\n\nlast\n")
+	f.tt.Frame()
+	styles := f.ed.State.LineStyles()
+	if len(styles) != 2 || styles[0].Line != 0 || styles[0].Font.Size != 2*f.ed.font().Size || !styles[1].Strike {
+		t.Fatalf("styles %+v", styles)
+	}
+	f.caret(3)
+	f.tt.Frame()
+	styles = f.ed.State.LineStyles()
+	if len(styles) != 1 || !styles[0].Strike {
+		t.Fatalf("revealed heading styles %+v", styles)
+	}
+	f.ed.Prefs.Live = false
+	f.tt.Frame()
+	if styles := f.ed.State.LineStyles(); len(styles) != 0 {
+		t.Fatalf("source styles %+v", styles)
+	}
+}

@@ -25,14 +25,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111112850-24c98d3547ea.mod",
+    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111132952-d97fd2e109b9.mod",
     "sha256": "c5f553e2f93ddcff569f7fd95902e334f7a972d6819db1d5ca075b7e7c79cc18",
     "dest": "goproxy/github.com/bketelsen/mygo/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111112850-24c98d3547ea.zip",
-    "sha256": "d3196c64767365fcc6a2099bf31fa9e70269c6148e9ad639e5ce52b5cc9534b7",
+    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261111132952-d97fd2e109b9.zip",
+    "sha256": "6ff03d73336b8f826e9dfe2218feb018a1be22a9ebe41254a51bf7ebd122b2ab",
     "dest": "goproxy/github.com/bketelsen/mygo/@v"
   },
   {
@@ -154,6 +154,18 @@
     "url": "https://proxy.golang.org/github.com/coder/websocket/@v/v1.8.15.zip",
     "sha256": "4f1d890bc5131f335737bbb6241e3958758c8774b3e6d1c905f713f604af6209",
     "dest": "goproxy/github.com/coder/websocket/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/d2lang/mathjax-go/@v/v0.1.0.mod",
+    "sha256": "b8a3ff80b4e63b08c12ed3bcbefcdaebec039551cf00b99b08c6ba6dec5abfc5",
+    "dest": "goproxy/github.com/d2lang/mathjax-go/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/d2lang/mathjax-go/@v/v0.1.0.zip",
+    "sha256": "315a73fb84841023d51a472744c3cf854187232bfc9839238eb87453b5c04867",
+    "dest": "goproxy/github.com/d2lang/mathjax-go/@v"
   },
   {
     "type": "file",
