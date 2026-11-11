@@ -8,12 +8,12 @@ import { defineConfig } from "vite";
 const poll = process.env.NSL === "1";
 
 // The web build (--mode web) is served by lodge at /app/notes/
-// (docs/design/app.md#in-a-browser); the desktop app's from its root.
+// (docs/design/app.md#in-a-browser); the development server's from its root.
 export default defineConfig(({ mode }) => ({
   base: mode === "web" ? "/app/notes/" : "/",
   plugins: [react(), tailwindcss()],
   clearScreen: false,
-  envPrefix: ["VITE_", "TAURI_ENV_"],
+  envPrefix: ["VITE_"],
   server: {
     // internal/devgw admits this origin only.
     host: "127.0.0.1",

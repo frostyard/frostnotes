@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Provision the nsl `frostnotes` machine (Debian 13) with the Tauri, WebKitGTK,
-# Node, Rust (with rustfmt and clippy) and Go toolchains the app build needs,
-# Xvfb, xdotool and vim for the built app's evidence runs (make m3-evidence),
-# and Firefox ESR with geckodriver for the web app's (make m4-evidence). The
+# Provision the nsl `frostnotes` machine (Debian 13) with the Node, Rust (with
+# rustfmt and clippy, for frostread's app-check) and Go toolchains, Xvfb, and
+# Firefox ESR with geckodriver for the web app's evidence (make m4-evidence). The
 # host is atomic and cannot install -dev packages; the engine itself builds
 # and tests on the host.
 #
@@ -17,8 +16,8 @@ set -euo pipefail
 
 NODE_VERSION=24.21.0
 NODE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
-GO_VERSION=1.27.3
-GO_SHA256=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
+GO_VERSION=1.27.4
+GO_SHA256=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
 RUSTUP_VERSION=1.29.1
 RUSTUP_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
 RUST_TOOLCHAIN=1.99.0
@@ -49,8 +48,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q --no-install-recommends \
 	build-essential ca-certificates curl file git make pkg-config wget xz-utils \
-	libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
-	librsvg2-dev webkit2gtk-driver xvfb xauth xdotool vim \
+	libssl-dev xvfb xauth vim \
 	libasound2t64 libdbus-glib-1-2 libx11-xcb1 libxtst6
 
 if [[ "$(/opt/node/bin/node --version 2>/dev/null)" != "v$NODE_VERSION" ]]; then

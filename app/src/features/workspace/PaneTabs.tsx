@@ -23,7 +23,7 @@ export interface PaneTabsProps {
 /** PaneTabs draws a sidebar's pane tabs. */
 export function PaneTabs(props: PaneTabsProps) {
   return (
-    <div role="tablist" aria-label={props.label} data-tauri-drag-region className="flex h-11 items-center gap-1 px-2">
+    <div role="tablist" aria-label={props.label} className="flex h-11 items-center gap-1 px-2">
       {props.panes.map((p) => (
         <button
           key={p.id}

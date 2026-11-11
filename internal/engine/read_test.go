@@ -178,6 +178,50 @@ func TestRenderDrawsEveryLinkOfTheManifest(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownLinksEveryLinkOfTheManifest(t *testing.T) {
+	av, m := generatedVault(t)
+	ctx := t.Context()
+	files, err := av.c.Note().Files(ctx, &api.NoteFilesParams{VaultID: av.id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hashes := map[string]string{}
+	for _, f := range files.Files {
+		hashes[f.Path] = f.Hash
+	}
+	rendered := map[string]string{}
+	for _, p := range m.Notes {
+		r, err := av.c.Note().RenderMarkdown(ctx, &api.NoteRenderMarkdownParams{VaultID: av.id, Path: p})
+		if err != nil {
+			t.Fatalf("RenderMarkdown(%s): %v", p, err)
+		}
+		rendered[p] = r.Markdown
+	}
+	for _, l := range m.Links {
+		if l.Want == "" {
+			continue
+		}
+		md := rendered[l.Source]
+		if strings.HasPrefix(l.Text, "!") && path.Ext(l.Want) != ".md" {
+			if !strings.Contains(md, "<blob:"+hashes[l.Want]+path.Ext(l.Want)+">") && !strings.Contains(md, "<note:"+l.Want) {
+				t.Errorf("%s: %s names neither the blob nor the file %s", l.Source, l.Text, l.Want)
+			}
+			continue
+		}
+		if !strings.Contains(md, "<note:"+l.Want) && !strings.Contains(md, "frostnotes-embed "+l.Want) {
+			t.Errorf("%s: %s draws no link to %s", l.Source, l.Text, l.Want)
+		}
+	}
+	content := "Unsaved [[Overview#Goals]] <script>alert(1)</script>\n"
+	r, err := av.c.Note().RenderMarkdown(ctx, &api.NoteRenderMarkdownParams{VaultID: av.id, Path: "New/Unsaved.md", Content: &content})
+	if err != nil || !strings.Contains(r.Markdown, "[Overview > Goals](<note:Garden/Overview.md#Goals>)") {
+		t.Errorf("RenderMarkdown(content) = %+v, %v", r, err)
+	}
+	if _, err := av.c.Note().RenderMarkdown(ctx, &api.NoteRenderMarkdownParams{VaultID: av.id, Path: m.Attachments[0]}); !errors.Is(err, api.ErrInvalidParams) {
+		t.Errorf("RenderMarkdown of an attachment: %v", err)
+	}
+}
+
 func TestReadVersionGivesEachVersionsContent(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{"Plan.md": "first\n", "bin.dat": "a\xffb"})

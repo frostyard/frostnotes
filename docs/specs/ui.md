@@ -141,7 +141,7 @@ it every `em` above.
 ```
 
 - **Window:** default 1200 × 780, minimum 640 × 400 (as
-  `app/src-tauri/src/main.rs` makes it), no system title bar.
+  `cmd/frostnotes` makes it), no system title bar.
 - **Panes:** the ribbon is 44 wide. The left sidebar defaults to 260
   wide and the right to 300, each between 200 and 600; the workspace
   takes the rest, at least 320. Sidebars, splits and the workspace are
@@ -162,9 +162,7 @@ it every `em` above.
 
 ### Title bar row
 
-44 high, `--bg-toolbar`, 1px `--separator` bottom: the window's drag
-region (Tauri's `data-tauri-drag-region` on it and on every empty part;
-a double click on empty space toggles maximize). It is split at the
+44 high, `--bg-toolbar`, 1px `--separator` bottom. It is split at the
 pane boundaries:
 
 1. Over the ribbon: Toggle left sidebar (`panel-left`, pressed while
@@ -364,7 +362,8 @@ padding, with buttons at its right (12/16 `--accent`, no background),
 refused base ("Not saved: notesd no longer has the version this text
 started from. Your text is kept." Compare), a deleted note ("This note
 was deleted." Restore, Close), a failed save ("Not saved: <reason>.
-Retrying." Retry now).
+Retrying." Retry now), a note that could not be read ("Cannot read this
+note: <reason>." Retry, in the native app).
 
 ### Editor and reading view
 
@@ -969,6 +968,30 @@ the editor and fields have had it. In a text field outside the editor,
 only presses with Ctrl or Alt, and F1 and F2, reach the table; Escape
 belongs to the field, a prompt or a menu.
 
+## In the native desktop app
+
+The native app ([plan 0009](../plans/0009-mygo-desktop.md#the-window),
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))
+has this spec's commands, keys, panes, settings and notices. It draws them
+with frostui, which changes these:
+
+- The title bar row is frostui's top bar, and tab strips sit under it, one
+  for each tab group. There is no ribbon.
+- [Connecting](#connecting) is frostui's connecting screen. Why notesd is not
+  running is behind its Details button.
+- The prompts are one palette with sources. Ctrl + K opens it, except in a
+  note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
+  opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
+- The status bar starts with the connection, "Local" or the hub's host.
+- Live preview draws what the web app's does, but: headings keep the editor's
+  font size and a done task is dimmed without a strike-through until MyGo has
+  per-line styles; math keeps its TeX source; audio and video keep their
+  embeds. An image within a line draws under it. In source mode, the
+  frontmatter's first line stays visible while the properties panel shows.
+- The status bar's editing mode toggles the reading view, and Live Preview or
+  Source mode comes from Settings: frostui's status items have no menu.
+- Spellcheck has no effect: MyGo's editor has none.
+
 ## Rules
 
 - No component draws literal colors or fonts; tokens only.
@@ -998,3 +1021,5 @@ belongs to the field, a prompt or a menu.
 - Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) (rooted links inside lodge); frostmail's `docs/specs/ui.md` for the tokens and the chrome
 - Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the vault manager's join, in the app, is G1, and the window's reasons for a refused permission (Connecting; the Flatpak's refused folder in the vault manager) are G5, of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)
+- Native live preview: [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)
+- The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) draw the desktop app natively; [how its screens differ](#in-the-native-desktop-app)

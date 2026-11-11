@@ -40,6 +40,12 @@ jobs:
           install: true
           install_args: golangci-lint
           cache: true
+      # The desktop app's tests render views headless with MyGo's Tester,
+      # which lays text out with Pango and cairo (no GTK, no display).
+      - name: Install the text runtime of the desktop app's tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends fonts-dejavu-core libpangocairo-1.0-0
       - name: Tidy, vet, format, lint and unit tests
         run: make verify
 
@@ -56,6 +62,12 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      # The desktop app's tests render views headless with MyGo's Tester,
+      # which lays text out with Pango and cairo (no GTK, no display).
+      - name: Install the text runtime of the desktop app's tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends fonts-dejavu-core libpangocairo-1.0-0
       # internal/synctest alone takes about 9.5 minutes under the race
       # detector here, so go test's default 10-minute timeout is too tight.
       - run: go test -race -timeout 25m ./...
@@ -132,44 +144,26 @@ jobs:
       - name: Build and check the snapshot .deb
         run: make deb
 
-  app:
-    name: App shell (make app-build, app-test)
+  desktop:
+    name: Native desktop app (make desktop-smoke)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     permissions:
       contents: read
-    env:
-      NODE_VERSION: "24.21.0"
-      RUST_TOOLCHAIN: "1.99.0"
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      CARGO_TARGET_DIR: ${{ github.workspace }}/build/cargo-target
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Tauri's system libraries (as dev/nsl/provision.sh installs them)
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends \
-            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: corepack enable
-      - name: Rust ${{ env.RUST_TOOLCHAIN }}
+          go-version-file: go.mod
+      - name: Install GTK, a software renderer and Xvfb
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-          rustup default "$RUST_TOOLCHAIN"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            build/cargo-target
-          key: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('app/src-tauri/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
-      - name: Release build of the app
-        run: make app-build IN_NSL='sh -c'
-      - name: The app shell's Rust tests
-        run: make app-test IN_NSL='sh -c'
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            xvfb xauth dbus libgtk-3-0t64 libgl1 libegl1 libgl1-mesa-dri libpangocairo-1.0-0 fonts-dejavu-core
+      - name: Build the release app and start it against a real notesd
+        run: make desktop-smoke
+      # Prints the typing cost on an ordinary machine (plan 0009, Phase 5).
+      - name: Time a keystroke in a long note
+        run: make desktop-bench

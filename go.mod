@@ -1,11 +1,11 @@
 module github.com/frostyard/frostnotes
 
-go 1.27.0
-
-toolchain go1.27.3
+go 1.27.4
 
 require (
+	github.com/egoist/mygo v0.8.3
 	github.com/frostyard/clix v0.5.0
+	github.com/frostyard/frostui v0.2.0
 	github.com/frostyard/lodge/kit v0.4.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
@@ -34,6 +34,8 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/ebitengine/purego v0.11.3 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -60,6 +62,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
@@ -67,3 +70,11 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
+
+// The native desktop app needs three MyGo changes that are not released yet:
+// egoist/mygo#1654 (Buffer.EditRemote), #1655 (State.SetReplacements) and
+// #1662 (elements between lines). This is branch integration/frostyard on a
+// fork, those three merged. It goes when all are in a MyGo release
+// (docs/plans/0009-mygo-desktop.md). While it stays, make verify also runs
+// frostui's tests against it; the step and the replace go together.
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111005420-2088771701f7

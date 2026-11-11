@@ -7,7 +7,6 @@ import type { MenuEntry as MenuItem } from "@frostyard/lodge-ui/react";
 import { openMenu, openMove } from "../data/overlays";
 import { setRenaming } from "../data/panes";
 import { usePrefs } from "../data/prefs";
-import { useNotes } from "../data/stores";
 import type { StatusCounts, StatusIdentity } from "../features/status/StatusBar";
 import type { Client, SyncConflict } from "../rpc/gen/api";
 import { tabTitle, type ViewState } from "../workspace/model";
@@ -189,11 +188,9 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
         case "reveal":
           if (file !== null) revealInFiles(file);
           return;
-        case "open-default": {
-          const vaultId = useNotes.getState().vaultId;
-          if (file !== null && vaultId !== null) void openOutside(c, vaultId, file);
+        case "open-default":
+          if (file !== null) void openOutside(c, file);
           return;
-        }
         case "rename":
           if (file !== null) {
             revealInFiles(file);

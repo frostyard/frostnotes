@@ -1237,6 +1237,16 @@ type RenderedNote struct {
 	HTML string `json:"html"`
 }
 
+// RenderedMarkdown: A note rendered as Markdown for a native view
+// (docs/specs/render.md#markdown-for-native-views).
+type RenderedMarkdown struct {
+	// CommonMark with GitHub's extensions: Obsidian's links as note: and tag:
+	// links, attachments as blob: images, highlights as <mark>, callouts and note
+	// embeds as fenced blocks of the frostnotes-callout and frostnotes-embed
+	// languages, comments and block IDs gone, the rest as written.
+	Markdown string `json:"markdown"`
+}
+
 // VersionContent: A version's content.
 type VersionContent struct {
 	Version Version `json:"version"`
@@ -1462,6 +1472,13 @@ type NoteRenderParams struct {
 	Content *string `json:"content,omitzero"`
 }
 
+// NoteRenderMarkdownParams holds the params of note.renderMarkdown.
+type NoteRenderMarkdownParams struct {
+	VaultID int64   `json:"vaultId"`
+	Path    string  `json:"path"`
+	Content *string `json:"content,omitzero"`
+}
+
 // NoteUploadParams holds the params of note.upload.
 type NoteUploadParams struct {
 	VaultID int64  `json:"vaultId"`
@@ -1612,6 +1629,13 @@ type NoteService interface {
 	// With content, that text is rendered as if it were the note at path, so an
 	// editor shows what was typed before it is saved.
 	Render(ctx context.Context, p *NoteRenderParams) (*RenderedNote, error)
+	// RenderMarkdown implements note.renderMarkdown. A note rendered as Markdown
+	// that a native view reads with CommonMark and GitHub's extensions, for the
+	// desktop app's reading view and embeds (ADR-0038): note.render's links,
+	// embeds and limits, with Obsidian's syntax written as links, <mark> and
+	// fenced blocks. With content, that text is rendered as if it were the note
+	// at path.
+	RenderMarkdown(ctx context.Context, p *NoteRenderMarkdownParams) (*RenderedMarkdown, error)
 	// Upload implements note.upload. Create an attachment from bytes, as
 	// note.create creates a note: it fails with conflict if the path exists
 	// (ADR-0023). data is base64, at most 10 MB decoded.
@@ -1809,6 +1833,16 @@ func registerNote(r *Router, s NoteService) {
 			return nil, err
 		}
 		return s.Render(ctx, &p)
+	})
+	r.handle("note.renderMarkdown", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteRenderMarkdownParams
+		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
+			return nil, err
+		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
+		return s.RenderMarkdown(ctx, &p)
 	})
 	r.handle("note.upload", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteUploadParams
@@ -2041,6 +2075,16 @@ func (x NoteClient) Resolve(ctx context.Context, p *NoteResolveParams) ([]Resolu
 func (x NoteClient) Render(ctx context.Context, p *NoteRenderParams) (*RenderedNote, error) {
 	var r RenderedNote
 	err := x.c.Call(ctx, "note.render", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// RenderMarkdown calls note.renderMarkdown.
+func (x NoteClient) RenderMarkdown(ctx context.Context, p *NoteRenderMarkdownParams) (*RenderedMarkdown, error) {
+	var r RenderedMarkdown
+	err := x.c.Call(ctx, "note.renderMarkdown", p, &r)
 	if err != nil {
 		return nil, err
 	}
@@ -3260,6 +3304,7 @@ var Methods = []string{
 	"note.files",
 	"note.resolve",
 	"note.render",
+	"note.renderMarkdown",
 	"note.upload",
 	"note.readVersion",
 	"note.tags",

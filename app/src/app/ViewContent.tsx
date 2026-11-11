@@ -2,7 +2,6 @@
 // commands; a note is its editor or its reading view; a file shows by its
 // hash; history and merge tabs are their views.
 
-import { isTauri } from "@tauri-apps/api/core";
 import { useCommands } from "../commands/registry";
 import { useFiles } from "../data/files";
 import { usePrefs } from "../data/prefs";
@@ -22,7 +21,7 @@ import { HistoryView } from "./HistoryView";
 import { useNarrow } from "./narrow";
 import { renameNote } from "./panes/files";
 
-import { openExternal, openInDefaultApp } from "./system";
+import { openExternal } from "./system";
 
 export interface ViewContentProps {
   tabId: string;
@@ -178,29 +177,12 @@ function FileView({ path }: { path: string }) {
       // biome-ignore lint/a11y/useMediaCaption: a vault's video has no captions to offer
       return <video src={url} controls className="mx-auto max-w-full p-8" />;
     default:
-      // In a browser a file opens by its content URL in a new tab; there
-      // is no default app (docs/specs/ui.md#in-a-browser).
-      if (!isTauri()) {
-        return url === "" ? (
-          <Message text={`${name} opens outside the app.`} />
-        ) : (
-          <ContentFile name={name} url={url} open={(u) => (shell ? shell.open(u) : void openExternal(u))} />
-        );
-      }
-      return (
-        <div className="flex flex-col items-center gap-3 p-8 text-secondary">
-          <p className="text-empty">{name} opens outside the app.</p>
-          <button
-            type="button"
-            className="rounded-md border border-separator px-3 py-1 text-sidebar-row text-primary hover:bg-code"
-            onClick={() => {
-              const vaultId = useNotes.getState().vaultId;
-              if (vaultId !== null) void openInDefaultApp(vaultId, path);
-            }}
-          >
-            Open in default app
-          </button>
-        </div>
+      // A file opens by its content URL in a new tab; there is no default
+      // app (docs/specs/ui.md#in-a-browser).
+      return url === "" ? (
+        <Message text={`${name} opens outside the app.`} />
+      ) : (
+        <ContentFile name={name} url={url} open={(u) => (shell ? shell.open(u) : void openExternal(u))} />
       );
   }
 }

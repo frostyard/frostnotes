@@ -15,7 +15,6 @@ import { vaultFolder } from "../lib/vaultName";
 import { ErrorCode } from "../rpc/gen/api";
 import { RPCError } from "../rpc/transport";
 import { JoinHub } from "./JoinHub";
-import { canPickFolders, pickFolder } from "./system";
 
 /** VaultsView draws the vault manager over the window's vaults. */
 export function VaultsView(props: { mode: "window" | "dialog" }) {
@@ -26,7 +25,6 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
   const [joining, setJoining] = useState(false);
   const [location, setLocation] = useState<string | null>(null);
   const [sync, setSync] = useState<SyncAvailability>("unknown");
-  const canPick = canPickFolders();
   // vault.add and vault.remove admit local callers only (lodge-app.md).
   const manage = useNotes((s) => s.hello?.caller !== "session");
 
@@ -68,12 +66,8 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
   const form = (
     <CreateVault
       location={location}
-      canPick={canPick}
-      onBrowse={() =>
-        void pickFolder("Choose where the new vault goes").then((p) => {
-          if (p !== null) setLocation(p);
-        })
-      }
+      canPick={false}
+      onBrowse={() => {}}
       onLocation={setLocation}
       onCreate={(name) => {
         if (location !== null) void addVault(client, vaultFolder(location, name), true).then(added);
@@ -87,7 +81,7 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
       vaults={vaults}
       current={current}
       mode={props.mode}
-      canPick={canPick}
+      canPick={false}
       manage={manage}
       syncAvailable={sync}
       panel={manage ? (creating ? form : joining ? join : undefined) : undefined}
@@ -107,11 +101,9 @@ export function VaultsView(props: { mode: "window" | "dialog" }) {
         setCreating(false);
         setJoining(true);
       }}
-      onOpenFolder={(path) =>
-        void (path !== undefined ? Promise.resolve(path) : pickFolder("Open folder as vault")).then((p) => {
-          if (p !== null) void addVault(client, p).then(added);
-        })
-      }
+      onOpenFolder={(path) => {
+        if (path !== undefined) void addVault(client, path).then(added);
+      }}
       onClose={close}
     />
   );

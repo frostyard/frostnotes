@@ -471,6 +471,28 @@ func (n notes) Render(ctx context.Context, p *api.NoteRenderParams) (*api.Render
 	return &api.RenderedNote{HTML: html}, nil
 }
 
+func (n notes) RenderMarkdown(ctx context.Context, p *api.NoteRenderMarkdownParams) (*api.RenderedMarkdown, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	var note string
+	if p.Content != nil {
+		note = *p.Content
+	} else {
+		got, err := v.Read(ctx, p.Path)
+		if err != nil {
+			return nil, err
+		}
+		note = got.Content
+	}
+	md, err := v.RenderMarkdown(ctx, p.Path, []byte(note))
+	if err != nil {
+		return nil, err
+	}
+	return &api.RenderedMarkdown{Markdown: md}, nil
+}
+
 func (n notes) ReadVersion(ctx context.Context, p *api.NoteReadVersionParams) (*api.VersionContent, error) {
 	v, err := n.m.Vault(p.VaultID)
 	if err != nil {

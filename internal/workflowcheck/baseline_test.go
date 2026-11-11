@@ -4,14 +4,12 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -382,13 +380,12 @@ var governedPaths = []string{
 	"internal/devgw/devgw.go",
 	"internal/devgw/blobs.go",
 	"internal/blobhttp/blobhttp.go",
-	"app/src-tauri/src/open.rs",
+	"internal/desktop/system/open.go",
 	"internal/vault/path.go",
 	"internal/vault/guard.go",
 	"api/scope.go",
 	"internal/lodgeapp/lodgeapp.go",
 	"internal/render/sanitize.go",
-	"app/src-tauri/tauri.conf.json",
 	"app/src/reading/sanitize.ts",
 	"internal/store/migrations/0001_init.sql",
 }
@@ -980,213 +977,4 @@ func readDependabot(t *testing.T) dependabotFile {
 		t.Fatalf(".github/dependabot.yml: %v", err)
 	}
 	return cfg
-}
-
-// internalGitCrates returns the name of each package of the Cargo.lock
-// text data whose source is a git repository of the frostyard organization
-// on GitHub, in the order of the file. The lock file, not Cargo.toml, is
-// read: cargo writes it in 1 fixed form, it names each git package once by
-// its package name (a renamed dependency too), whatever TOML form or section
-// Cargo.toml declares it in, and its source is a URL. Each [[package]] has
-// its name before its source; a source with no name, or a line of a
-// [[package]] that is no key = value outside its dependencies array, is an
-// error.
-func internalGitCrates(data string) ([]string, error) {
-	var crates []string
-	inPackage, inArray, name := false, false, ""
-	n := 0
-	for line := range strings.Lines(data) {
-		n++
-		line = strings.TrimSpace(line)
-		if inArray {
-			// The members of a multi-line array, such as dependencies:
-			// quoted package names, 1 for each line, up to its ].
-			inArray = line != "]"
-			continue
-		}
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			inPackage, name = line == "[[package]]", ""
-			continue
-		}
-		if !inPackage {
-			continue
-		}
-		key, value, ok := strings.Cut(line, " = ")
-		if !ok {
-			return nil, fmt.Errorf("line %d: %q is no key = value", n, line)
-		}
-		switch key {
-		case "dependencies":
-			inArray = value == "["
-		case "name":
-			str, err := strconv.Unquote(value)
-			if err != nil {
-				return nil, fmt.Errorf("line %d: name %s: %w", n, value, err)
-			}
-			name = str
-		case "source":
-			if name == "" {
-				return nil, fmt.Errorf("line %d: a source before the package's name", n)
-			}
-			src, err := strconv.Unquote(value)
-			if err != nil {
-				return nil, fmt.Errorf("line %d: source %s: %w", n, value, err)
-			}
-			frostyard, err := frostyardGitSource(src)
-			if err != nil {
-				return nil, fmt.Errorf("line %d: %w", n, err)
-			}
-			if frostyard {
-				crates = append(crates, name)
-			}
-		}
-	}
-	return crates, nil
-}
-
-// frostyardGitSource reports whether a Cargo.lock source is a git
-// repository whose owner on github.com is frostyard: the host and the first
-// path segment of the URL decide, not a substring. A registry or path
-// source is not one.
-func frostyardGitSource(src string) (bool, error) {
-	rest, ok := strings.CutPrefix(src, "git+")
-	if !ok {
-		return false, nil
-	}
-	u, err := url.Parse(rest)
-	if err != nil {
-		return false, fmt.Errorf("source %q: %w", src, err)
-	}
-	owner, _, _ := strings.Cut(strings.TrimPrefix(u.Path, "/"), "/")
-	return strings.EqualFold(u.Hostname(), "github.com") && strings.EqualFold(owner, "frostyard"), nil
-}
-
-// cargoIgnores returns the (directory, crate) pairs that the cargo entries
-// of cfg ignore completely: an ignore with versions or update types does
-// not count.
-func cargoIgnores(cfg dependabotFile) map[[2]string]bool {
-	ignored := make(map[[2]string]bool)
-	for _, u := range cfg.Updates {
-		if u.Ecosystem != "cargo" {
-			continue
-		}
-		for _, ig := range u.Ignore {
-			if len(ig.Versions) == 0 && len(ig.UpdateTypes) == 0 {
-				ignored[[2]string{normalizeDir(u.Directory), ig.Name}] = true
-			}
-		}
-	}
-	return ignored
-}
-
-// TestDependabotLeavesInternalGitCratesAlone: Dependabot cannot resolve a
-// cargo git dependency on a frostyard repository whose crate is not at the
-// root of every tag (frostyard-problems, from frostyard/std: its tag v0.3.0
-// holds no Cargo.toml, so the update job fails). Such a crate is bumped by
-// hand, so the cargo entry of its directory ignores it. The crates come from
-// the Cargo.lock beside each Cargo.toml (internalGitCrates).
-func TestDependabotLeavesInternalGitCratesAlone(t *testing.T) {
-	ignored := cargoIgnores(readDependabot(t))
-	crates := 0
-	for _, f := range repoFiles(t, "third_party", "docs") {
-		if path.Base(f) != "Cargo.toml" {
-			continue
-		}
-		lock := path.Join(path.Dir(f), "Cargo.lock")
-		data, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(lock)))
-		if err != nil {
-			t.Fatalf("%s has no Cargo.lock beside it: %v", f, err)
-		}
-		dir := "/" + path.Dir(f)
-		if path.Dir(f) == "." {
-			dir = "/"
-		}
-		names, err := internalGitCrates(string(data))
-		if err != nil {
-			t.Fatalf("%s: %v", lock, err)
-		}
-		for _, name := range names {
-			crates++
-			if !ignored[[2]string{dir, name}] {
-				t.Errorf("%s: the frostyard git crate %s has no ignore entry in the cargo entry for %s", f, name, dir)
-			}
-		}
-	}
-	if crates == 0 {
-		t.Fatal("no frostyard git crate found; app/src-tauri/Cargo.toml has frostyard-problems")
-	}
-	t.Logf("%d frostyard git crates checked", crates)
-}
-
-// TestInternalGitCrates checks which Cargo.lock packages are frostyard git
-// crates, and the lock files it refuses.
-func TestInternalGitCrates(t *testing.T) {
-	pkg := func(name, source string) string {
-		out := "[[package]]\nname = \"" + name + "\"\nversion = \"0.1.0\"\n"
-		if source != "" {
-			out += "source = \"" + source + "\"\n"
-		}
-		return out + "\n"
-	}
-	const head = "# This file is automatically @generated by Cargo.\nversion = 4\n\n"
-	for _, tc := range []struct {
-		name string
-		data string
-		want []string
-	}{
-		{"tag", head + pkg("frostyard-problems", "git+https://github.com/frostyard/std?tag=v0.5.0#f3858d0"), []string{"frostyard-problems"}},
-		{"branch, .git, ssh", head + pkg("a", "git+https://github.com/frostyard/a.git?branch=main#0") + pkg("b", "git+ssh://git@github.com/frostyard/b#0"), []string{"a", "b"}},
-		{"owner case", head + pkg("c", "git+https://GitHub.com/Frostyard/c#0"), []string{"c"}},
-		{"registry and path", head + pkg("serde", "registry+https://github.com/rust-lang/crates.io-index") + pkg("frostnotes", ""), nil},
-		{"another owner", head + pkg("d", "git+https://github.com/example/frostyard#0"), nil},
-		{"another host with the path", head + pkg("e", "git+https://example.org/github.com/frostyard/e#0"), nil},
-		{"the owner in the query", head + pkg("f", "git+https://github.com/example/f?branch=github.com/frostyard/f#0"), nil},
-		{"a user-info host", head + pkg("g", "git+https://github.com@example.org/frostyard/g#0"), nil},
-		{"metadata section", head + pkg("h", "git+https://github.com/frostyard/h#0") + "[metadata]\nsource = \"git+https://github.com/frostyard/x\"\n", []string{"h"}},
-		{"the real lock's form", head + "[[package]]\nname = \"frostnotes\"\nversion = \"0.0.0\"\ndependencies = [\n \"frostyard-problems\",\n \"serde\",\n]\n\n" + pkg("frostyard-problems", "git+https://github.com/frostyard/std?tag=v0.5.0#f3858d0"), []string{"frostyard-problems"}},
-	} {
-		got, err := internalGitCrates(tc.data)
-		if err != nil {
-			t.Errorf("%s: %v", tc.name, err)
-			continue
-		}
-		if !slices.Equal(got, tc.want) {
-			t.Errorf("%s: internalGitCrates = %q, want %q", tc.name, got, tc.want)
-		}
-	}
-	for _, tc := range []struct{ name, data string }{
-		{"a source before the name", "[[package]]\nsource = \"git+https://github.com/frostyard/std#0\"\nname = \"x\"\n"},
-		{"an unquoted name", "[[package]]\nname = x\n"},
-		{"a line with no value", "[[package]]\nname\n"},
-		{"a bad URL", "[[package]]\nname = \"x\"\nsource = \"git+https://github.com/%zz\"\n"},
-	} {
-		if _, err := internalGitCrates(tc.data); err == nil {
-			t.Errorf("%s: internalGitCrates gave no error", tc.name)
-		}
-	}
-}
-
-// TestCargoIgnores checks what counts as a full ignore of a crate.
-func TestCargoIgnores(t *testing.T) {
-	const crate = "frostyard-problems"
-	for _, tc := range []struct {
-		name string
-		u    dependabotUpdate
-		want bool
-	}{
-		{"full ignore", dependabotUpdate{Ecosystem: "cargo", Directory: "/app/src-tauri", Ignore: []dependabotIgnore{{Name: crate}}}, true},
-		{"full ignore, trailing slash", dependabotUpdate{Ecosystem: "cargo", Directory: "/app/src-tauri/", Ignore: []dependabotIgnore{{Name: crate}}}, true},
-		{"versions only", dependabotUpdate{Ecosystem: "cargo", Directory: "/app/src-tauri", Ignore: []dependabotIgnore{{Name: crate, Versions: []string{">= 1"}}}}, false},
-		{"update types only", dependabotUpdate{Ecosystem: "cargo", Directory: "/app/src-tauri", Ignore: []dependabotIgnore{{Name: crate, UpdateTypes: []string{"version-update:semver-major"}}}}, false},
-		{"another ecosystem", dependabotUpdate{Ecosystem: "npm", Directory: "/app/src-tauri", Ignore: []dependabotIgnore{{Name: crate}}}, false},
-		{"another directory", dependabotUpdate{Ecosystem: "cargo", Directory: "/web", Ignore: []dependabotIgnore{{Name: crate}}}, false},
-	} {
-		got := cargoIgnores(dependabotFile{Updates: []dependabotUpdate{tc.u}})[[2]string{"/app/src-tauri", crate}]
-		if got != tc.want {
-			t.Errorf("%s: ignored = %v, want %v", tc.name, got, tc.want)
-		}
-	}
 }

@@ -67,6 +67,16 @@ func WikilinkOf(n ast.Node) (Link, bool) {
 	return l, true
 }
 
+// WikilinkSpan returns where a wikilink or embed node is in the source it
+// was parsed from (RenderSource's body, for internal/render).
+func WikilinkSpan(n ast.Node) (start, end int, ok bool) {
+	w, ok := n.(*wikilinkNode)
+	if !ok {
+		return 0, 0, false
+	}
+	return w.link.Start, w.link.End, true
+}
+
 // TagOf returns a tag node's name, without '#'.
 func TagOf(n ast.Node) (string, bool) {
 	t, ok := n.(*tagNode)
@@ -74,6 +84,16 @@ func TagOf(n ast.Node) (string, bool) {
 		return "", false
 	}
 	return t.name, true
+}
+
+// TagSpan returns where a tag node's "#name" is in the source it was
+// parsed from.
+func TagSpan(n ast.Node) (start, end int, ok bool) {
+	t, ok := n.(*tagNode)
+	if !ok {
+		return 0, 0, false
+	}
+	return t.start, t.end, true
 }
 
 // MathOf returns a math node's TeX without its delimiters, read from

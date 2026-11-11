@@ -10,8 +10,6 @@ import { openSearchPanel } from "@codemirror/search";
 import type { EditorState, StateCommand } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { Command } from "../commands/registry";
 import { useFiles } from "../data/files";
@@ -677,8 +675,9 @@ export function workspaceCommands(c: Client): Command[] {
     {
       id: "workspace:close-window",
       name: "Close window",
-      applies: () => isTauri(),
-      run: () => getCurrentWindow().close(),
+      // A browser's window is the browser's to close.
+      applies: () => false,
+      run: () => {},
     },
     {
       id: "frostnotes:reset-workspace-layout",

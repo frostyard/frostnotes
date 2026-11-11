@@ -14,7 +14,7 @@ from gi.repository import GdkPixbuf
 
 
 def main():
-    icons = Path(__file__).resolve().parents[1] / "app/src-tauri/icons"
+    icons = Path(__file__).resolve().parents[1] / "packaging/icons"
     source = (icons / "icon.svg").read_bytes()
     for size, filename in ((32, "32x32.png"), (128, "128x128.png"), (512, "icon.png")):
         loader = GdkPixbuf.PixbufLoader.new_with_type("svg")

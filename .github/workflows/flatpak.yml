@@ -98,7 +98,7 @@ jobs:
           # The runtime and the SDK extensions come from the cache; the app
           # always rebuilds, and a change of the manifest or of a sources
           # file starts the cache afresh.
-          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/org.frostyard.Frostnotes.json', 'packaging/flatpak/cargo-sources.json', 'packaging/flatpak/node-sources.json', 'packaging/flatpak/go-sources.json') }}
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/org.frostyard.Frostnotes.json', 'packaging/flatpak/go-sources.json') }}
 
       - name: Export the OCI image
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

@@ -53,7 +53,7 @@ export interface Narrow {
 
 /**
  * WorkspaceView draws the window's workspace; reserve keeps the top-right
- * strip clear of the window controls. In a narrow window it draws the
+ * strip clear of the right sidebar's toggle. In a narrow window it draws the
  * active group's active tab alone, under the narrow view header; the
  * other groups stay in the stored workspace (docs/specs/ui.md#narrow-windows).
  */
@@ -227,7 +227,6 @@ function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
       {!props.narrow && (
         <div
           ref={strip}
-          data-tauri-drag-region={props.top ? true : undefined}
           className="relative shrink-0 overflow-hidden border-b border-separator bg-toolbar"
           style={{ paddingRight: props.top && props.rightmost ? props.reserve : 0 }}
         >
@@ -240,7 +239,6 @@ function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
               pinned: t.pinned,
             }))}
             focused={focused}
-            dragRegion={props.top}
             onCommand={(c) => {
               switch (c.kind) {
                 case "activate":

@@ -48,8 +48,7 @@ it fits: [design/overview.md](../design/overview.md).
   ends a connection that sends a longer line.
 - **Files' bytes travel beside the RPC,** by content hash
   ([ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md)):
-  the desktop app reads `notesblob://localhost/<sha256>.<ext>` from
-  notesd's blob store itself (`app/src-tauri/src/protocol.rs`), the
+  the desktop app reads notesd's blob store itself, by hash, the
   development gateway serves `GET /blobs/<sha256>.<ext>?token=…` on its
   listener (M3), and notesd serves `GET /content/blobs/<mac>/<sha256>.<ext>`
   on the lodge app socket to lodge-content, whose sign-in admits the
@@ -190,8 +189,7 @@ Clients ignore unknown fields and unknown events.
   `Client.<Domain>()` returns the typed methods; `Client.Notifications()`
   delivers events (the client fails with `ErrEventsOverflow` if 1024
   undelivered events pile up).
-- TypeScript: `JsonRpcSession` over a line channel; the Tauri transport uses
-  the bridge's `notesd_connect` and `notesd_send`, and the WebSocket
+- TypeScript: `JsonRpcSession` over a line channel; the WebSocket
   transport sends one line per frame (M0 Phase 4). In the web app,
   inside lodge, it connects to `wss://<the page's host>/app/notes/api`,
   with no token, and its blob URLs are lodge-client's `contentURL` (M4,

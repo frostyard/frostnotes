@@ -272,7 +272,7 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
           case "history":
             return update((w) => open(w, { type: "history", path: at }, "tab"));
           case "open-default":
-            return openOutside(c, vaultId, at);
+            return openOutside(c, at);
           case "delete":
             return folder ? deleteFolder(c, vaultId, at) : deleteFile(c, at);
         }

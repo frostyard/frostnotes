@@ -20,7 +20,6 @@ import {
   type JoinPhase,
 } from "../features/sync/JoinHubForm";
 import { vaultFolder } from "../lib/vaultName";
-import { canPickFolders, pickFolder } from "./system";
 
 export interface JoinHubProps {
   /** "join" joins a vault with a hub; "pair" pairs again with a new code (a vault in state revoked). */
@@ -178,12 +177,8 @@ export function JoinHub(props: JoinHubProps) {
   const withLocation = mode === "join" && vaultId === undefined;
   const folder: JoinLocation = {
     path: location,
-    canPick: canPickFolders(),
-    onBrowse: () => {
-      void pickFolder("Choose where the new vault goes").then((p) => {
-        if (p !== null) setLocation(p);
-      });
-    },
+    canPick: false,
+    onBrowse: () => {},
     onLocation: setLocation,
   };
 

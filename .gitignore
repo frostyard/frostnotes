@@ -11,7 +11,6 @@
 /.mcp.json
 /app/node_modules/
 /app/dist/
-/app/src-tauri/target/
 /.flatpak-builder/
 /flatpak_app/
 /repo/
