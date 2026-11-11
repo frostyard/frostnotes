@@ -458,7 +458,7 @@ shows them as MyGo's `Replacement`s and `Block`s
 as the reading view draws them (`reading.Blocks`), fences' headers with Copy,
 and links, tags, footnotes and task boxes a click reaches. Undo is MyGo's. A
 keystroke in a 10,000-line note with blocks, with a frame drawn on the CPU,
-costs 15 ms in live preview and 2.4 ms in source mode.
+costs 8 ms in live preview and 2.3 ms in source mode.
 
 **Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
 strike-through. Math stays as TeX source and audio and video as their embeds
