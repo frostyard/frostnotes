@@ -571,3 +571,7 @@ changed the required checks, on 2026-11-10. Once frostui has the
 - Roadmap: [plan 0002](0002-roadmap.md)
 - ChairLift's [ADR-0017](https://github.com/frostyard/chairlift/blob/feat/mygo/docs/adr/0017-mygo-command-center-window.md)
   and [design/frostui.md](https://github.com/frostyard/chairlift/blob/feat/mygo/docs/design/frostui.md)
+
+Native math rendering follows [ADR-0041](../adr/0041-render-native-math-as-vector-paths.md),
+with the reveal rule and source fallback described in the
+[UI spec](../specs/ui.md#in-the-native-desktop-app).

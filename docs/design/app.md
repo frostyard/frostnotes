@@ -324,6 +324,10 @@ after the last tab goes until what it holds is saved:
 
 ### Live preview
 
+Native inline and display math use bounded, cached SVG glyph paths from a
+pure-Go renderer ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md)).
+Invalid formulas retain their source; selected lines reveal it.
+
 Live preview is decoration over the source, never a transformation
 ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
 The framework (`editor/preview/`) owns:

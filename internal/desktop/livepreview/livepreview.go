@@ -36,6 +36,8 @@ const (
 	Footnote
 	// Dim shows Label, a done task's text, dimmed.
 	Dim
+	// Math draws Label as TeX.
+	Math
 
 	// embedMark marks an embed in a line's cached pieces, which placeEmbeds
 	// settles: what it draws as depends on the vault, not the line.
@@ -407,6 +409,26 @@ func wholeBlock(text, content string, start, next, line int, st state, o Options
 	}
 	var label string
 	switch {
+	case strings.HasPrefix(strings.TrimSpace(content), "$$"):
+		label = "Math"
+		trimmed := strings.TrimSpace(content)
+		if len(trimmed) > 2 && strings.HasSuffix(trimmed, "$$") {
+			lines, after = 1, next
+		} else {
+			closed := false
+			lines, after = runOfLines(text, start, func(i int, l string) bool {
+				if closed {
+					return false
+				}
+				if i > 0 && strings.TrimSpace(l) == "$$" {
+					closed = true
+				}
+				return true
+			})
+			if !closed {
+				return 0, 0
+			}
+		}
 	case strings.Contains(content, "[!") && calloutRe.MatchString(content):
 		label = "Callout"
 		lines, after = runOfLines(text, start, func(i int, l string) bool { return i == 0 || quotedRe.MatchString(l) })
@@ -715,7 +737,8 @@ func inline(ps []Piece, line string, at, end int, scan *linkScan) []Piece {
 			}
 		case c == '$':
 			if j := mathEnd(line, i, end); j >= 0 {
-				i = j + 1 // shown as written until the app draws TeX
+				ps = append(ps, Piece{Start: i, End: j + 1, Kind: Math, Label: line[i+1 : j]})
+				i = j + 1
 			} else {
 				i++
 			}

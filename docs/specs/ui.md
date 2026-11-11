@@ -985,7 +985,7 @@ with frostui, which changes these:
 - The status bar starts with the connection, "Local" or the hub's host.
 - Live preview draws what the web app's does, but: headings keep the editor's
   font size and a done task is dimmed without a strike-through until MyGo has
-  per-line styles; math keeps its TeX source; audio and video keep their
+  per-line styles; math draws as vector paths ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md)); audio and video keep their
   embeds. An image within a line draws under it. In source mode, the
   frontmatter's first line stays visible while the properties panel shows.
 - The status bar's editing mode toggles the reading view, and Live Preview or

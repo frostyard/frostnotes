@@ -9,6 +9,7 @@ import (
 	code "github.com/egoist/mygo/ui/editor"
 
 	"github.com/frostyard/frostnotes/internal/desktop/livepreview"
+	"github.com/frostyard/frostnotes/internal/desktop/mathview"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
@@ -21,6 +22,7 @@ type lineSpan struct{ first, last int }
 // liveState is what the editor showed last, so that a frame with the same
 // text and selected lines does no work.
 type liveState struct {
+	math    mathview.Cache
 	scanner livepreview.Scanner
 	on      bool
 	version uint64
@@ -177,6 +179,24 @@ func (e *NoteEditor) replacement(c *ui.Context, p livepreview.Piece, muted ui.Co
 		r.Text, r.Color = strings.Repeat("─", ruleWidth), muted
 	case livepreview.Dim:
 		r.Text, r.Color = p.Label, muted
+	case livepreview.Math:
+		if obj, ok := e.live.math.Inline(p.Label, e.font().Size, c.Theme().Text); ok {
+			r.Width = obj.Width
+			r.Label = p.Label
+			r.Content = func(_ *ui.Context, el ui.Element, _ code.Replacement) {
+				el.Draw(func(p *ui.Painter, rect ui.Rect) {
+					// Fit tall inline expressions inside the line; display math gets its own block.
+					width, height := obj.Width, obj.Height
+					if height > rect.H {
+						width *= rect.H / height
+						height = rect.H
+					}
+					obj.Draw(p, ui.Rect{X: rect.X, Y: rect.Y + (rect.H-height)/2, W: width, H: height})
+				})
+			}
+		} else {
+			r.Text = "$" + p.Label + "$"
+		}
 	case livepreview.Task:
 		return e.taskBox(p)
 	case livepreview.Link, livepreview.Tag, livepreview.Footnote:

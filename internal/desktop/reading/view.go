@@ -27,6 +27,7 @@ import (
 	"github.com/egoist/mygo/ui/markdown/parser"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/mathview"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/render"
 )
@@ -77,6 +78,7 @@ type drawer struct {
 	// Options are the Markdown view's; the view fills in its hooks.
 	Options markdown.Options
 
+	math  mathview.Cache
 	folds map[string]bool // callouts the user opened or closed
 
 	decoding sync.Mutex // images load on goroutines of their own
@@ -90,6 +92,7 @@ func newDrawer(doc *notes.Document, blobs string) *drawer {
 		Extensions: parser.GFM | parser.ExtFootnotes | parser.ExtMath | parser.ExtDollarMath,
 		OnLink:     d.link,
 		LoadImage:  d.loadImage,
+		Math:       d.math.View,
 		Code: map[string]func(*ui.Context, *markdown.CodeBlockView){
 			render.EmbedLanguage:   d.embed,
 			render.CalloutLanguage: d.callout,
@@ -200,6 +203,9 @@ func (v *View) render() {
 
 // View draws the note.
 func (v *View) View(c *ui.Context) ui.Element {
+	v.Options.InlineMath = func(tex string, size float32) (markdown.InlineObject, bool) {
+		return v.math.Inline(tex, size, c.Theme().Text)
+	}
 	return markdown.View(c, v.md, &v.Options)
 }
 
