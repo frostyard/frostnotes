@@ -105,8 +105,9 @@ type View struct {
 	// title names.
 	Compare func(text, title string)
 
-	source *code.State
-	diff   *code.DiffState
+	source   *code.State
+	diff     *code.DiffState
+	diffText string
 }
 
 // New makes the history of doc; hub is nil for a vault that is not
@@ -318,9 +319,10 @@ func (v *View) detail(c *ui.Context) {
 		}
 	})
 	if v.ShowChanges {
-		if v.diff == nil {
+		if v.diff == nil || v.diffText != v.doc.Text() {
+			v.diffText = v.doc.Text()
 			old := code.NewBuffer(v.content)
-			cur := code.NewBuffer(v.doc.Text())
+			cur := code.NewBuffer(v.diffText)
 			old.SetLanguage(editor.Language())
 			cur.SetLanguage(editor.Language())
 			v.diff = &code.DiffState{Old: old, New: cur, Layout: code.DiffUnified, Wrap: true}
