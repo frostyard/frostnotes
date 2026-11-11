@@ -205,9 +205,9 @@ file a step names before writing its frostnotes counterpart.
   `notesctl`), `github.com/frostyard/lodge/kit` v0.4.0 (the RPC and app runtime),
   `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
   also clix's), and for the native desktop app (plan 0009)
-  `github.com/frostyard/frostui` at the source-list/status-menu PR commit
+  `github.com/frostyard/frostui` at the merged source-list/status-menu commit
   (pinned by pseudo-version in `go.mod`) (frostyard's desktop UI kit) over
-  `github.com/egoist/mygo` v0.8.3, replaced by the owner's fork
+  `github.com/egoist/mygo` v0.9.0, replaced by the owner's fork
   `github.com/bketelsen/mygo` with task-action, block-anchor and line-style hooks until egoist/mygo#1654, #1655 and #1662 are in
   a release (plan 0009). Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
