@@ -194,6 +194,7 @@ func MarkdownWithSourceLines(note []byte, opts Options) NativeMarkdown
 // NativeMarkdown holds Markdown and SourceLines, its one-based original lines.
 
 const (
+	MediaLanguage   = "frostnotes-media"   // vault audio/video playback
 	EmbedLanguage   = "frostnotes-embed"   // a note embed's fenced block
 	CalloutLanguage = "frostnotes-callout" // a callout's fenced block
 	NoteScheme = "note:" // a vault file by path, with its subpath
@@ -231,8 +232,10 @@ Rules, over `RenderSource`'s body (no frontmatter, comments gone):
   An image with no alt text gets its destination too. Web links, references
   and links with no text stay as written.
 - **Embeds:** an image becomes `![name](<blob:hash.ext>)` (an alias
-  that is a size is dropped); another file becomes a `note:` link to
-  it. Note embeds alone in a paragraph become fenced blocks, each
+  that is a size is dropped). Standalone audio/video embeds (wiki or Markdown
+  image syntax) become fenced `frostnotes-media <filename>` blocks containing
+  `blob:<sha256>.<extension>`. They keep quote/list prefixes. Media within prose
+  and other files become `note:` links. Note embeds alone in a paragraph become fenced blocks, each
   ```` ```frostnotes-embed <path><subpath> ```` holding the embedded
   note's (or heading section's) Markdown, rewritten by these rules; a
   fence is one backtick longer than any run inside, or tildes, one longer

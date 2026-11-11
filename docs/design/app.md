@@ -324,6 +324,14 @@ after the last tab goes until what it holds is saved:
 
 ### Live preview
 
+Native inline and display math use bounded, cached SVG glyph paths from a
+pure-Go renderer ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md)).
+Invalid formulas retain their source; selected lines reveal it.
+
+The native Settings omit the inactive Spellcheck control
+([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md));
+this does not change the web editor's spelling preference.
+
 Live preview is decoration over the source, never a transformation
 ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
 The framework (`editor/preview/`) owns:
@@ -1049,3 +1057,19 @@ Task edits reject stale renderings after synchronizing the attached buffer and
 use the shared document's save/merge path. Tasks in embedded notes remain
 read-only. Block IDs resolve to rendered paragraph/list positions, and repeated
 links scroll again.
+
+Native audio/video attachment tabs and standalone media embeds use MyGo's
+playback APIs. [Rendered media fences](../specs/render.md#markdown-for-native-views)
+contain only blob identifiers. Playback accepts a full SHA-256 and a supported
+media extension, resolves it inside the local blob store, and opens a decoder
+only on Play. Controls pause, seek and stop; unmount closes the player and file.
+Attachment tabs retain Open in default app for unavailable system codecs.
+The Flatpak grants the PulseAudio socket for sound output.
+This completes media playback in [plan 0009](../plans/0009-mygo-desktop.md), under
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
+
+Native live preview uses MyGo's per-line styles for heading sizes and completed
+task strike-through. Selecting a line restores its source font and marks;
+source mode clears all preview styles. This completes the line-style portion
+of [plan 0009, Phase 5](../plans/0009-mygo-desktop.md), under
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).

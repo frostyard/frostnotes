@@ -147,3 +147,16 @@ func TestFolding(t *testing.T) {
 		}
 	}
 }
+
+func TestTagsIncludeCombiningMarks(t *testing.T) {
+	text := "#cafe\u0301/note!"
+	kinds := kindsOf(text)[0]
+	for i := 0; i < len(text)-1; i++ {
+		if kinds[i] != code.TokenType {
+			t.Fatalf("byte %d has kind %v", i, kinds[i])
+		}
+	}
+	if kinds[len(text)-1] == code.TokenType {
+		t.Fatal("punctuation included in tag")
+	}
+}

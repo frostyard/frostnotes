@@ -23,7 +23,6 @@ type Prefs struct {
 	InlineTitle        bool    `json:"inlineTitle"`
 	ViewHeader         bool    `json:"viewHeader"`
 	ReadableLineLength bool    `json:"readableLineLength"`
-	Spellcheck         bool    `json:"spellcheck"`
 	Properties         string  `json:"properties"` // visible, hidden, source
 	LineNumbers        bool    `json:"lineNumbers"`
 	IndentGuides       bool    `json:"indentGuides"`
@@ -47,7 +46,7 @@ type Prefs struct {
 func Default() Prefs {
 	return Prefs{
 		DefaultView: "edit", EditingMode: "live", InlineTitle: true, ViewHeader: true,
-		ReadableLineLength: true, Spellcheck: true, Properties: "visible", IndentGuides: true,
+		ReadableLineLength: true, Properties: "visible", IndentGuides: true,
 		FoldHeadings: true, FoldIndent: true, AutoPairBrackets: true, AutoPairMarkdown: true,
 		SmartLists: true, IndentWithTabs: true, TabSize: 4, ConfirmDelete: true,
 		LoadRemoteImages: true, Theme: "system", FontSize: 16, Zoom: 1,
@@ -148,8 +147,10 @@ func Save(path string, p Prefs) error {
 // State is what the app keeps between runs that is no preference: the
 // event resume point and the commands run lately.
 type State struct {
-	Seq            int64    `json:"seq"`
-	RecentCommands []string `json:"recentCommands"`
+	Pending        []WorkspaceEvent `json:"pending,omitzero"`
+	PendingSeq     int64            `json:"pendingSeq,omitzero"`
+	Seq            int64            `json:"seq"`
+	RecentCommands []string         `json:"recentCommands"`
 }
 
 // MaxRecentCommands is how many commands the palette remembers.
@@ -182,4 +183,12 @@ func (s *State) RanCommand(id string) {
 		}
 	}
 	s.RecentCommands = recent
+}
+
+// WorkspaceEvent is a move or removal held until the vault list is available.
+// To is empty for a removal; paths remain relative to VaultID.
+type WorkspaceEvent struct {
+	VaultID int64  `json:"vaultId"`
+	From    string `json:"from"`
+	To      string `json:"to,omitzero"`
 }

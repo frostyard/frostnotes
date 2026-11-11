@@ -198,7 +198,7 @@ func overlay(line string, kinds []code.TokenKind) (open bool) {
 }
 
 // tagRanges finds #tags as specs/markdown.md reads them: after the start
-// or a space, letters, digits, _, - and /, not only digits.
+// or a space, letters, combining marks, digits, _, - and /, not only digits.
 func tagRanges(line string) [][2]int {
 	var out [][2]int
 	for i := 0; i < len(line); i++ {
@@ -209,7 +209,7 @@ func tagRanges(line string) [][2]int {
 		digits := true
 		for j < len(line) {
 			r, size := utf8.DecodeRuneInString(line[j:])
-			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' && r != '/' {
+			if !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsDigit(r) && r != '_' && r != '-' && r != '/' {
 				break
 			}
 			if !unicode.IsDigit(r) {

@@ -36,6 +36,8 @@ const (
 	Footnote
 	// Dim shows Label, a done task's text, dimmed.
 	Dim
+	// Math draws Label as TeX.
+	Math
 
 	// embedMark marks an embed in a line's cached pieces, which placeEmbeds
 	// settles: what it draws as depends on the vault, not the line.
@@ -110,7 +112,13 @@ type Options struct {
 }
 
 // Result is what shows of a text.
+type LineStyle struct {
+	Line, Heading int
+	Done          bool
+}
+
 type Result struct {
+	Styles []LineStyle
 	// Pieces are sorted and apart.
 	Pieces []Piece
 	// Blocks are in the order of their lines.
@@ -142,7 +150,7 @@ type Scanner struct {
 type lineKey struct {
 	text      string
 	afterText bool // the line before is a paragraph's: "---" underlines it
-	afterGap  bool // the line before is blank: four spaces start code
+	afterGap  bool // the line before is blank
 }
 
 // Pieces lists what shows of text, sorted and apart, without blocks.
@@ -179,14 +187,32 @@ func (s *Scanner) Scan(text string, o Options) Result {
 			}
 		}
 		was := st.block
-		st.advance(content, line, start, next, min(next, len(text)), o, &res)
+		indented := was == blockText && !st.afterText && codeIndent(content)
+		if indented {
+			st.structural = true
+		} else {
+			st.advance(content, line, start, next, min(next, len(text)), o, &res)
+		}
 		if was == blockText && st.block == blockText && !st.structural {
 			from := len(res.Pieces)
 			res.Pieces = s.line(res.Pieces, content, start, st, line, o.Revealed)
 			placeEmbeds(&res, from, text, content, start, min(next, len(text)), line, o)
+			if o.Revealed == nil || !o.Revealed(line) {
+				rest := content
+				if q := quoteRe.FindString(rest); q != "" {
+					rest = rest[len(q):]
+				}
+				if h := headingRe.FindString(rest); h != "" {
+					res.Styles = append(res.Styles, LineStyle{Line: line, Heading: strings.Count(h, "#")})
+				}
+				if m := taskRe.FindStringSubmatch(rest); m != nil && m[3] != " " {
+					res.Styles = append(res.Styles, LineStyle{Line: line, Done: true})
+				}
+			}
+
 		}
 		st.afterGap = strings.TrimSpace(content) == ""
-		st.afterText = was == blockText && !st.afterGap && !st.structural
+		st.afterText = was == blockText && !st.afterGap && !st.structural && !headingRe.MatchString(content) && !ruleRe.MatchString(content) && (!st.afterText || !setextRe.MatchString(content))
 		line, start = line+1, next
 		lines++
 	}
@@ -397,11 +423,31 @@ func (st *state) endFence(close, limit int, res *Result) {
 // wholeBlock draws a callout or a table that starts at this line, unless a
 // selection touches it: how many lines it took and where the next starts.
 func wholeBlock(text, content string, start, next, line int, st state, o Options, res *Result) (lines, after int) {
-	if st.afterGap && (strings.HasPrefix(content, "    ") || strings.HasPrefix(content, "\t")) {
+	if !st.afterText && codeIndent(content) {
 		return 0, 0 // indented code
 	}
 	var label string
 	switch {
+	case strings.HasPrefix(strings.TrimSpace(content), "$$"):
+		label = "Math"
+		trimmed := strings.TrimSpace(content)
+		if len(trimmed) > 2 && strings.HasSuffix(trimmed, "$$") {
+			lines, after = 1, next
+		} else {
+			closed := false
+			lines, after = runOfLines(text, start, func(i int, l string) bool {
+				if closed {
+					return false
+				}
+				if i > 0 && strings.TrimSpace(l) == "$$" {
+					closed = true
+				}
+				return true
+			})
+			if !closed {
+				return 0, 0
+			}
+		}
 	case strings.Contains(content, "[!") && calloutRe.MatchString(content):
 		label = "Callout"
 		lines, after = runOfLines(text, start, func(i int, l string) bool { return i == 0 || quotedRe.MatchString(l) })
@@ -567,6 +613,7 @@ var (
 	quotedRe    = regexp.MustCompile(`^ {0,3}>`)
 	delimiterRe = regexp.MustCompile(`^ {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$`)
 	sizeRe      = regexp.MustCompile(`^(\d+)(?:x\d+)?$`)
+	setextRe    = regexp.MustCompile(`^ {0,3}(?:=+|-+)[ \t]*$`)
 	headingRe   = regexp.MustCompile(`^ {0,3}#{1,6}(?:[ \t]+|$)`)
 	quoteRe     = regexp.MustCompile(`^ {0,3}(?:> ?)+`)
 	taskRe      = regexp.MustCompile(`^[ \t]*([-*+]|\d+[.)])[ \t]+(\[(.)\])(?:[ \t]|$)`)
@@ -580,9 +627,14 @@ var (
 // link keeps to hidden marks.
 const maxObject = 80
 
+// codeIndent reports an indented code line outside a paragraph or list.
+func codeIndent(line string) bool {
+	return strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")
+}
+
 // linePieces are the pieces of a line of text, from its start.
 func linePieces(line string, afterText, afterGap bool) []Piece {
-	if afterGap && (strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")) && !taskRe.MatchString(line) && !bulletRe.MatchString(line) {
+	if !afterText && codeIndent(line) {
 		return nil // indented code
 	}
 	var ps []Piece
@@ -704,7 +756,8 @@ func inline(ps []Piece, line string, at, end int, scan *linkScan) []Piece {
 			}
 		case c == '$':
 			if j := mathEnd(line, i, end); j >= 0 {
-				i = j + 1 // shown as written until the app draws TeX
+				ps = append(ps, Piece{Start: i, End: j + 1, Kind: Math, Label: line[i+1 : j]})
+				i = j + 1
 			} else {
 				i++
 			}

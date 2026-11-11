@@ -257,3 +257,24 @@ func TestFollowingTheVault(t *testing.T) {
 		t.Error("a deleted file stayed in history")
 	}
 }
+
+func TestCloneOwnsMergeSides(t *testing.T) {
+	w := New()
+	v := View{Type: ViewMerge, Path: "a.md", Other: &MergeSide{Kind: "version", Version: 1}}
+	w.Root.Tabs[0].View = v
+	w.Root.Tabs[0].Back = []View{v}
+	w.Root.Tabs[0].Forward = []View{v}
+	w.Closed = []ClosedTab{{Tab: w.Root.Tabs[0]}}
+	clone := w.Clone()
+	for _, tab := range []*Tab{&clone.Root.Tabs[0], &clone.Closed[0].Tab} {
+		tab.View.Other.Version = 2
+		tab.Back[0].Other.Version = 3
+		tab.Forward[0].Other.Version = 4
+	}
+	if v.Other.Version != 1 {
+		t.Fatal("clone changed the original merge side")
+	}
+	if clone.Root.Tabs[0].View.Other.Version != 2 {
+		t.Fatal("cloned views share a merge side")
+	}
+}

@@ -25,8 +25,11 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 	"github.com/egoist/mygo/ui/markdown/parser"
+	_ "github.com/gen2brain/gav1d/avif" // register the pure-Go AVIF decoder
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/mathview"
+	"github.com/frostyard/frostnotes/internal/desktop/media"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	noteMarkdown "github.com/frostyard/frostnotes/internal/markdown"
 	"github.com/frostyard/frostnotes/internal/render"
@@ -80,6 +83,7 @@ type drawer struct {
 
 	baseLine int             // source-line offset while drawing a nested callout
 	folds    map[string]bool // callouts the user opened or closed
+	math     mathview.Cache
 
 	decoding sync.Mutex // images load on goroutines of their own
 	pixels   int64      // decoded so far, under decoding
@@ -92,8 +96,10 @@ func newDrawer(doc *notes.Document, blobs string) *drawer {
 		Extensions: parser.GFM | parser.ExtFootnotes | parser.ExtMath | parser.ExtDollarMath,
 		OnLink:     d.link,
 		LoadImage:  d.loadImage,
+		Math:       d.math.View,
 		Code: map[string]func(*ui.Context, *markdown.CodeBlockView){
 			render.EmbedLanguage:   d.embed,
+			render.MediaLanguage:   d.media,
 			render.CalloutLanguage: d.callout,
 		},
 	}
@@ -106,14 +112,15 @@ type View struct {
 	env notes.Env
 	api func() Renderer
 
-	sourceLines []int64
-	md          string
-	rendered    string // the text md was rendered from
-	err         error
-	inFlight    bool
-	stale       bool // the vault changed since the last rendering asked
-	stop        func()
-	changed     []func()
+	sourceLines     []int64
+	md              string
+	rendered        string // the text md was rendered from
+	err             error
+	inFlight        bool
+	stale           bool // the vault changed since the last rendering asked
+	stop            func()
+	changed         []func()
+	imageGeneration int
 }
 
 // New makes the reading view of doc. blobs is notesd's blob store
@@ -211,7 +218,11 @@ func (v *View) View(c *ui.Context) ui.Element {
 	if v.doc.Loaded() && v.doc.Text() == v.rendered && len(v.sourceLines) > 0 {
 		v.Options.OnTask = func(line int, checked bool) { v.toggleTask(v.baseLine+line, checked) }
 	}
-	return markdown.View(c, v.md, &v.Options)
+	v.Options.AnchorBlock = v.anchorBlock
+	v.Options.InlineMath = func(tex string, size float32) (markdown.InlineObject, bool) {
+		return v.math.Inline(tex, size, c.Theme().Text)
+	}
+	return markdown.View(c.Key(v.imageGeneration), v.md, &v.Options)
 }
 
 func (v *drawer) link(href string) {
@@ -509,4 +520,24 @@ func (v *View) anchorBlock(d *parser.Document, name string) int {
 		}
 	}
 	return best
+}
+
+func (v *drawer) media(c *ui.Context, b *markdown.CodeBlockView) {
+	label := strings.TrimSpace(strings.TrimPrefix(b.Info, render.MediaLanguage))
+	media.View(c, v.blobs, strings.TrimSpace(b.Code()), label)
+}
+
+// SetRemoteImages refreshes cached image results when the preference changes.
+func (v *View) SetRemoteImages(on bool) {
+	if v.RemoteImages == on {
+		return
+	}
+	v.drawer = v.withRemoteImages(on)
+	v.imageGeneration++
+}
+func (v *drawer) withRemoteImages(on bool) *drawer {
+	next := newDrawer(v.doc, v.blobs)
+	next.RemoteImages, next.Links, next.folds = on, v.Links, v.folds
+	next.Options.Anchor, next.Options.AnchorVersion = v.Options.Anchor, v.Options.AnchorVersion
+	return next
 }

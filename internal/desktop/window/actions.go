@@ -44,13 +44,14 @@ type heldMerge struct{ text, title string }
 // has its text.
 func (a *App) goToSubpath(p, sub string) {
 	if sub != "" {
-		a.pending = &pendingLine{path: p, subpath: sub}
+		a.pending = &pendingLine{tabID: a.Store.Workspace().ActiveTab().ID, path: p, subpath: sub}
 	}
 }
 
 // pendingLine is where a note opens once its editor has its text: a line,
 // or a link's "#Heading" or "#^block".
 type pendingLine struct {
+	tabID   string
 	subpath string
 	path    string
 	line    int
@@ -90,12 +91,12 @@ func (a *App) viewOf(p string) workspace.View {
 }
 
 func (a *App) open(p, where string) {
-	a.Store.Update(func(w *workspace.Workspace) { w.Open(a.viewOf(p), where) })
+	a.updateWorkspace(func(w *workspace.Workspace) { w.Open(a.viewOf(p), where) })
 }
 
 func (a *App) openAtLine(p string, line int, where string) {
-	a.Store.Update(func(w *workspace.Workspace) { w.Open(workspace.Note(p, workspace.ModeEdit), where) })
-	a.pending = &pendingLine{path: p, line: line}
+	a.updateWorkspace(func(w *workspace.Workspace) { w.Open(workspace.Note(p, workspace.ModeEdit), where) })
+	a.pending = &pendingLine{tabID: a.Store.Workspace().ActiveTab().ID, path: p, line: line}
 }
 
 // jumpToLine puts the active editor's caret on line, from 1.
@@ -180,7 +181,7 @@ func (a *App) createAndOpen(p, where string, then func(*workspace.Workspace)) {
 			a.notify("Cannot create " + p + ": " + err.Error())
 			return
 		}
-		a.Store.Update(func(w *workspace.Workspace) {
+		a.updateWorkspace(func(w *workspace.Workspace) {
 			if then != nil {
 				then(w)
 			}
@@ -219,7 +220,7 @@ func (a *App) searchFor(query string) {
 		return
 	}
 	a.search.Ask(query)
-	a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "search") })
+	a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "search") })
 }
 
 // followNote follows a link the reading view drew, which notesd resolved.
@@ -267,7 +268,7 @@ func (a *App) followLink(l editor.Link, from string, w editor.Where) {
 			if view.Type == workspace.ViewNote {
 				view.Mode = workspace.ModeEdit
 			}
-			a.Store.Update(func(w *workspace.Workspace) { w.Open(view, where) })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.Open(view, where) })
 			a.goToSubpath(*found[0].Path, l.Subpath)
 			return
 		}
@@ -364,7 +365,7 @@ func (a *App) openVaultFile(p string) error {
 }
 
 func (a *App) openHistory(p string) {
-	a.Store.Update(func(w *workspace.Workspace) {
+	a.updateWorkspace(func(w *workspace.Workspace) {
 		w.Open(workspace.View{Type: workspace.ViewHistory, Path: p}, workspace.NewTab)
 	})
 }
@@ -375,7 +376,7 @@ func (a *App) openMerge(p, text, title string) {
 }
 
 func (a *App) openMergeSide(p string, other *workspace.MergeSide) {
-	a.Store.Update(func(w *workspace.Workspace) {
+	a.updateWorkspace(func(w *workspace.Workspace) {
 		w.Open(workspace.View{Type: workspace.ViewMerge, Path: p, Other: other}, workspace.NewTab)
 	})
 }
@@ -723,7 +724,7 @@ func (a *App) renameActive() {
 	}
 	a.files.Reveal(v.Path)
 	a.files.Rename(v.Path)
-	a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
+	a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
 }
 
 func (a *App) searchAll() {
@@ -788,7 +789,7 @@ func (a *App) attachFile() {
 
 // commandActions gives each command of the table what it does.
 func (a *App) commandActions() map[string]func() {
-	up := func(op func(*workspace.Workspace)) func() { return func() { a.Store.Update(op) } }
+	up := func(op func(*workspace.Workspace)) func() { return func() { a.updateWorkspace(op) } }
 	onActive := func(op func(*workspace.Workspace, string)) func() {
 		return up(func(w *workspace.Workspace) { op(w, w.ActiveTab().ID) })
 	}

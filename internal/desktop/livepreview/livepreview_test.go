@@ -23,6 +23,8 @@ func show(text string, ps []Piece) string {
 		switch p.Kind {
 		case Link, Tag, Footnote, Dim:
 			b.WriteString(p.Label)
+		case Math:
+			b.WriteString(p.Label)
 		case Bullet:
 			b.WriteString("•")
 		case Quote:
@@ -62,7 +64,7 @@ func TestWhatShows(t *testing.T) {
 		{"[[Plan]] and [[Plan#Goals|the plan]]", "Plan and the plan"},
 		{"![[a.png]] stays", "![[a.png]] stays"},
 		{"![alt](a.png) stays", "![alt](a.png) stays"},
-		{"$x_1 * y_2$ stays", "$x_1 * y_2$ stays"},
+		{"$x_1 * y_2$ stays", "x_1 * y_2 stays"},
 		{"costs $5 and *more*", "costs $5 and more"},
 		{"see[^1] here", "see1 here"},
 		{"[^1]: a definition", "[^1]: a definition"},
@@ -492,5 +494,50 @@ func TestACommentOpenedAfterText(t *testing.T) {
 	code := "a `%%` b\n\nafter *x*\n"
 	if got, want := show(code, s.Pieces(code, nil, false)), "a %% b\n\nafter x\n"; got != want {
 		t.Fatalf("%q, want %q", got, want)
+	}
+}
+
+func TestIndentedCodeOutsideParagraphs(t *testing.T) {
+	for _, prefix := range []string{"", "# Heading\n", "Heading\n===\n", "```\ncode\n```\n", "text\n\n", "---\na: b\n---\n"} {
+		for _, code := range []string{"    **literal**\n    [[literal]]", "\t**literal**", "    %%comment\n    text", "    - [x] literal"} {
+			text := prefix + code
+			var s Scanner
+			for _, blocks := range []bool{false, true} {
+				got := s.Scan(text, Options{Blocks: blocks})
+				for _, p := range got.Pieces {
+					if p.End > len(prefix) {
+						t.Errorf("%q: code rewritten by %+v", text, p)
+					}
+				}
+			}
+		}
+	}
+	var s Scanner
+	text := "paragraph\n    **continued**"
+	if got := show(text, s.Pieces(text, nil, false)); got != "paragraph\n    continued" {
+		t.Fatalf("paragraph continuation: %q", got)
+	}
+}
+
+func TestMathDrawsAndRevealsItsSource(t *testing.T) {
+	const source = "before $x_i$ after\n\n$$\n\\frac{a}{b}\n$$\n"
+	r := scanBlocks(source, nil)
+	found := false
+	for _, p := range r.Pieces {
+		if p.Kind == Math && p.Label == "x_i" {
+			found = true
+		}
+	}
+	if !found || len(r.Blocks) != 1 || r.Blocks[0].Label != "Math" {
+		t.Fatalf("math: %+v", r)
+	}
+	r = scanBlocks(source, func(line int) bool { return line == 0 || line == 3 })
+	for _, p := range r.Pieces {
+		if p.Kind == Math {
+			t.Fatal("selected inline math hidden")
+		}
+	}
+	if len(r.Blocks) != 0 {
+		t.Fatal("selected display math hidden")
 	}
 }
