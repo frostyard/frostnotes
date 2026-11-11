@@ -3,7 +3,7 @@ module github.com/frostyard/frostnotes
 go 1.27.4
 
 require (
-	github.com/egoist/mygo v0.8.4-0.20261110203557-f5c3a6e111a3
+	github.com/egoist/mygo v0.9.0
 	github.com/frostyard/clix v0.5.0
 	github.com/frostyard/frostui v0.2.1-0.20261111070608-a6a2df5dd07d
 	github.com/frostyard/lodge/kit v0.4.0
@@ -72,10 +72,11 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-// The native desktop app needs three MyGo changes that are not released yet:
-// egoist/mygo#1654 (Buffer.EditRemote), #1655 (State.SetReplacements) and
-// #1662 (elements between lines). This is branch integration/frostyard on a
-// fork, those three merged. It goes when all are in a MyGo release
-// (docs/plans/0009-mygo-desktop.md). While it stays, make verify also runs
-// frostui's tests against it; the step and the replace go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111005420-2088771701f7
+// The native desktop app needs egoist/mygo#1662 (elements between lines),
+// which no MyGo release has yet. This is branch bk/editor-blocks-89d18f on a
+// fork: v0.9.0 and #1662, nothing else. The fork has no v0.9.0 tag, so its
+// pseudo-version reads v0.8.4. Once #1662 is in a MyGo release, require that
+// release and drop this (docs/plans/0009-mygo-desktop.md). While it stays,
+// make verify also runs frostui's tests against it; the step and the replace
+// go together.
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111112850-24c98d3547ea
