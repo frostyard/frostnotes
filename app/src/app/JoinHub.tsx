@@ -177,8 +177,6 @@ export function JoinHub(props: JoinHubProps) {
   const withLocation = mode === "join" && vaultId === undefined;
   const folder: JoinLocation = {
     path: location,
-    canPick: false,
-    onBrowse: () => {},
     onLocation: setLocation,
   };
 

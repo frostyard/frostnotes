@@ -27,11 +27,7 @@ export interface JoinFields {
 export interface JoinLocation {
   /** The folder the new vault goes in, once one is chosen. */
   path: string | null;
-  /** The system has a folder picker: Browse opens it. Else the folder is typed. */
-  canPick: boolean;
-  /** Browse: the container opens the picker and gives back the folder. */
-  onBrowse: () => void;
-  /** Where there is no picker, the folder as typed. */
+  /** The folder path as typed. */
   onLocation: (path: string) => void;
 }
 
@@ -173,29 +169,14 @@ export function JoinHubForm(props: JoinHubFormProps) {
           {location !== undefined && (
             <div className="space-y-1">
               <div>Location</div>
-              {location.canPick ? (
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-secondary text-xs leading-4">
-                    {location.path ?? "No folder chosen"}
-                  </span>
-                  <button
-                    type="button"
-                    className="h-7 shrink-0 rounded-md border border-separator px-3 hover:bg-selection-inactive"
-                    onClick={location.onBrowse}
-                  >
-                    Browse
-                  </button>
-                </div>
-              ) : (
-                <input
-                  type="text"
-                  aria-label="Location"
-                  value={location.path ?? ""}
-                  spellCheck={false}
-                  className="h-7 w-60 max-w-full rounded-md border border-separator bg-window px-2"
-                  onChange={(event) => location.onLocation(event.target.value)}
-                />
-              )}
+              <input
+                type="text"
+                aria-label="Location"
+                value={location.path ?? ""}
+                spellCheck={false}
+                className="h-7 w-60 max-w-full rounded-md border border-separator bg-window px-2"
+                onChange={(event) => location.onLocation(event.target.value)}
+              />
             </div>
           )}
           <button

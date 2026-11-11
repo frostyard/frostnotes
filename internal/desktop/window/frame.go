@@ -82,7 +82,7 @@ func (a *App) barEnd(c *ui.Context) {
 		a.run("file-explorer:new-file")
 	}
 	if frostui.IconButton(c, "sidebar-show-right", "Toggle right sidebar").Selected(a.Store.Workspace().Right.Open).Clicked() {
-		a.Store.Update(func(w *workspace.Workspace) { w.ToggleSidebar(workspace.SideRight) })
+		a.updateWorkspace(func(w *workspace.Workspace) { w.ToggleSidebar(workspace.SideRight) })
 	}
 }
 
@@ -169,7 +169,7 @@ func (a *App) statusEnd() []frostui.StatusItem {
 	if a.activeFile() != "" {
 		items = append(items, frostui.StatusItem{Text: plural(a.backlinks.Count(), "backlink"), Tooltip: "Open Backlinks", Progress: -1,
 			OnClick: func() {
-				a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideRight, "backlinks") })
+				a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideRight, "backlinks") })
 			}})
 	}
 	if words, chars, ok := a.textCounts(); ok {
@@ -237,10 +237,10 @@ func (a *App) layoutToWorkspace(drawn map[string]paneLayout) {
 	w := a.Store.Workspace()
 	sync := func(id, side string, s *workspace.Sidebar) {
 		if width := float64(a.panes.Layout.Widths[id]); width != 0 && a.panes.Layout.Widths[id] != drawn[id].width && width != s.Width {
-			a.Store.Update(func(w *workspace.Workspace) { w.SetSidebarWidth(side, width) })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.SetSidebarWidth(side, width) })
 		}
 		if collapsed := a.panes.Layout.Collapsed[id]; collapsed != drawn[id].collapsed && !collapsed != s.Open {
-			a.Store.Update(func(w *workspace.Workspace) { w.ToggleSidebar(side) })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.ToggleSidebar(side) })
 		}
 	}
 	sync(paneLeft, workspace.SideLeft, &w.Left)
@@ -279,7 +279,7 @@ func (a *App) sidebar(c *ui.Context, side string, s *workspace.Sidebar) {
 			label = "Right sidebar"
 		}
 		uikit.PaneTabs(c, label, tabs, s.Active, func(id string) {
-			a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(side, id) })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(side, id) })
 		})
 		ui.Column(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() { a.pane(c, s.Panes[s.Active]) })
 	})

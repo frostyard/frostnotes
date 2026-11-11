@@ -1071,3 +1071,151 @@ func TestStatusEditingModeMenuChoosesEachMode(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoryRestoresCaretAndScroll(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", strings.Repeat("A long line of text\n", 150))
+	f.Create("b.md", "second\n")
+	f.openVault()
+	e := f.openNoteTab("a.md")
+	e.State.Select(1200, 1200)
+	e.State.SetScrollY(500)
+	f.tt.Frame()
+	scroll := e.State.ScrollY()
+	f.a.open("b.md", workspace.Here)
+	f.until("b", func() bool {
+		e := f.a.activeEditor()
+		return e != nil && e.Binding().Document().Loaded() && f.a.activeFile() == "b.md"
+	})
+	f.a.updateWorkspace(func(w *workspace.Workspace) { w.Back() })
+	f.until("restored caret", func() bool { e := f.a.activeEditor(); return e != nil && e.State.Cursor() == 1200 })
+	if got := f.a.activeEditor().State.ScrollY(); got != scroll {
+		t.Fatalf("scroll %v, want %v", got, scroll)
+	}
+	f.a.updateWorkspace(func(w *workspace.Workspace) { w.Forward() })
+	f.tt.Frame()
+	if f.a.activeFile() != "b.md" {
+		t.Fatal("forward did not return to b")
+	}
+}
+
+func TestLineJumpTargetsTheNewTab(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "one\ntwo\nthree\n")
+	f.openVault()
+	first := f.openNoteTab("a.md")
+	before := first.State.Cursor()
+	f.a.openAtLine("a.md", 3, workspace.ToRight)
+	f.until("the jump", func() bool { return f.a.pending == nil })
+	if first.State.Cursor() != before {
+		t.Fatal("the earlier tab took the jump")
+	}
+	if f.a.activeEditor().State.CursorPos().Line != 2 {
+		t.Fatal("new tab missed the jump")
+	}
+}
+
+func TestHiddenPropertiesHideTheSource(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "---\na: b\n---\nbody\n")
+	f.openVault()
+	f.a.Prefs.Properties = "hidden"
+	e := f.openNoteTab("a.md")
+	f.tt.Frame()
+	if !e.HideFront {
+		t.Fatal("hidden properties left YAML visible")
+	}
+	tc := f.a.tabs[f.a.Store.Workspace().ActiveTab().ID]
+	if tc.ed.ShowProperties {
+		t.Fatal("hidden properties showed the panel")
+	}
+	f.a.setPref("properties", "source")
+	f.tt.Frame()
+	if e.HideFront {
+		t.Fatal("source mode hid YAML")
+	}
+}
+
+func TestClosingSettingsCommitsDraft(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.a.sets.show("daily")
+	f.tt.Frame()
+	f.a.sets.drafts["vault:dailyFolder"] = "Journal"
+	f.a.sets.layout.Open = false
+	f.tt.Frame()
+	f.until("the draft to reach notesd", func() bool { return f.a.settings.DailyFolder == "Journal" })
+}
+
+func TestHeldEventsAtZeroSurviveRestart(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "a\n")
+	f.openVault()
+	f.openNoteTab("a.md")
+	f.a.Store.Flush()
+	f.a.State.Seq, f.a.listed = 0, false
+	f.a.Session.OnSeq(7)
+	f.a.event(7, api.NoteMoved{VaultID: f.Vault, From: "a.md", To: "z.md"})
+	f.a.event(8, api.NoteRemoved{VaultID: f.Vault, Path: "gone.md"})
+	f.a.Session.OnSeq(8)
+	f.a.saveState()
+	next := New(f.a.cfg)
+	if len(next.early) != 2 || next.Session.Seq() != 8 {
+		t.Fatalf("held %v, resume %d", next.early, next.Session.Seq())
+	}
+	next.vaults = f.a.vaults
+	next.Store.Load(f.Dir)
+	for _, ev := range next.early {
+		next.followEarly(ev)
+	}
+	if got := next.Store.Workspace().ActiveTab().View.Path; got != "z.md" {
+		t.Fatalf("restored path %q", got)
+	}
+}
+
+func TestLostAddAnswerExplainsPossibleVault(t *testing.T) {
+	f := start(t)
+	if err := f.Other.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r := joinRun{c: f.Other, folder: "/made-up/vault"}
+	_, err := r.addVault()
+	if err == nil || !strings.Contains(err.Error(), "Manage vaults") || !strings.Contains(err.Error(), r.folder) {
+		t.Fatalf("lost answer: %v", err)
+	}
+}
+
+type heldJoinLoop struct {
+	*desktoptest.Loop
+	posted chan func()
+}
+
+func (l *heldJoinLoop) Post(fn func()) { l.posted <- fn }
+
+func TestAnOldJoinCannotFinishTheNewRun(t *testing.T) {
+	f := start(t)
+	loop := &heldJoinLoop{Loop: f.loop, posted: make(chan func(), 10)}
+	f.a.cfg.Env = loop
+	j := &joinFlow{mode: modePair, url: ":invalid"}
+	j.start(f.a)
+	var old func()
+	select {
+	case old = <-loop.posted:
+	case <-t.Context().Done():
+		t.Fatal("no join answer")
+	}
+	j.start(f.a)
+	old()
+	if j.phase != joinJoining || j.err != "" {
+		t.Fatal("old answer replaced the new join")
+	}
+	select {
+	case fn := <-loop.posted:
+		fn()
+	case <-t.Context().Done():
+		t.Fatal("no second answer")
+	}
+	if j.phase != joinForm || j.err == "" {
+		t.Fatal("current error not shown")
+	}
+}
