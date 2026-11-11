@@ -59,8 +59,6 @@ type rewriter struct {
 	left  *budget
 	body  []byte
 	edits []edit
-	// emptyFrom is past the last image with no alt text.
-	emptyFrom int
 }
 
 // rewrite rewrites a body (a note's, or a callout's inside) as Markdown.
@@ -277,45 +275,18 @@ func (r *rewriter) markdownLink(n ast.Node) {
 	r.add(start, end, dest(NoteScheme+resolved+l.Subpath))
 }
 
-// emptyAltAt finds where an image with no alt text has its "]": it has no
-// text to place it by, so it is the next "![](" in its block after what comes
-// before it. A reference image ("![][r]") has no such marker of its own, so a
-// marker whose destination is not this image's belongs to a later image.
-func (r *rewriter) emptyAltAt(n ast.Node, destination []byte) (int, bool) {
-	block := n.Parent()
-	for block != nil && block.Type() != ast.TypeBlock {
-		block = block.Parent()
-	}
-	if block == nil || block.Lines().Len() == 0 {
+// emptyAltAt uses the parser's source position, never a later image or
+// code span that happens to contain the same destination.
+func (r *rewriter) emptyAltAt(n ast.Node, _ []byte) (int, bool) {
+	image, ok := n.(*ast.Image)
+	if !ok || image.Reference != nil {
 		return 0, false
 	}
-	lines := block.Lines()
-	from, limit := max(r.emptyFrom, lines.At(0).Start), lines.At(lines.Len()-1).Stop
-	if prev := n.PreviousSibling(); prev != nil {
-		if _, e, ok := childSpan(prev); ok {
-			from = max(from, e)
-		}
-	}
-	if next := n.NextSibling(); next != nil {
-		if s, _, ok := childSpan(next); ok {
-			limit = min(limit, s) // what follows, a code span for one, is not this image
-		}
-	}
-	if from >= limit {
+	start := image.Pos()
+	if start < 0 || start+4 > len(r.body) || !bytes.HasPrefix(r.body[start:], []byte("![](")) {
 		return 0, false
 	}
-	const marker = "![]("
-	j := bytes.Index(r.body[from:limit], []byte(marker))
-	if j < 0 {
-		return 0, false
-	}
-	at := from + j + len("![")
-	start, end, ok := destinationAt(r.body, at)
-	if !ok || !bytes.Equal(bytes.Trim(r.body[start:end], "<>"), destination) {
-		return 0, false
-	}
-	r.emptyFrom = at
-	return at, true
+	return start + 2, true
 }
 
 // destinationAt finds the destination of an inline link whose text ends at

@@ -140,3 +140,18 @@ func TestRestoringTwiceKeepsTheSelection(t *testing.T) {
 	h.Restore()
 	f.loop.Until(t, "the second restore", func() bool { return f.Read("Plan.md").Content == "first\nline two\n" })
 }
+
+func TestShowChangesFollowsCurrentText(t *testing.T) {
+	f := open(t)
+	h := New(f.loop, f.history, nil, f.doc)
+	f.loop.Until(t, "the versions", func() bool { return len(h.Entries()) >= 2 && h.Content() != "" })
+	h.ShowChanges = true
+	tt := ui.NewTester(func(c *ui.Context) { h.View(c) }, 900, 500)
+	f.Write("Plan.md", f.Read("Plan.md").Hash, "new current text\n")
+	f.doc.Reload()
+	f.loop.Until(t, "the edit", func() bool { return f.doc.Text() == "new current text\n" })
+	tt.Frame()
+	if got := h.diff.New.Snapshot().String(); got != f.doc.Text() {
+		t.Fatalf("diff compares %q", got)
+	}
+}

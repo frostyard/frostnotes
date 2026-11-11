@@ -66,7 +66,7 @@ func benchTyping(b *testing.B, live bool) {
 		tt.Frame()
 	}
 	b.StopTimer()
-	if !strings.Contains(d.Text(), "x") {
-		b.Fatal("the document took no keystroke")
+	if got, want := len(d.Text()), len(content)+b.N; got != want {
+		b.Fatalf("document length = %d, want %d after %d keystrokes", got, want, b.N)
 	}
 }
