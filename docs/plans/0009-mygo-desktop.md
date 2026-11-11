@@ -468,8 +468,8 @@ costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 `view.replacedLines` was fixed on the fork, with egoist/mygo#1655.
 
 **Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
-strike-through. Math stays as TeX source and audio and video as their embeds
-(below, under Later). The owner used it with their real vault on Snow on
+strike-through. Audio/video now play from local blob attachments with explicit controls
+([app design](../design/app.md)). Math stays as TeX source (below, under Later). The owner used it with their real vault on Snow on
 2026-11-10, and waived the run of Orca that day; the Tester's checks of roles
 and names stand in for it.
 
