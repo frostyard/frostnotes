@@ -7,8 +7,6 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
-
-	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
 // Prefs are the editor's preferences (docs/specs/ui.md#settings-batch-2).
@@ -22,13 +20,14 @@ type Prefs struct {
 	IndentWithTabs   bool
 	IndentGuides     bool
 	TabSize          int
-	FontSize         int // 0 is the editor's own
+	FontSize         int  // 0 is the editor's own
+	Live             bool // live preview, else source mode
 }
 
 // DefaultPrefs are the web app's defaults (app/src/data/prefs.ts).
 func DefaultPrefs() Prefs {
 	return Prefs{SmartLists: true, AutoPairMarkdown: true, AutoPairBrackets: true,
-		FoldHeadings: true, FoldIndent: true, IndentWithTabs: true, IndentGuides: true, TabSize: 4}
+		FoldHeadings: true, FoldIndent: true, IndentWithTabs: true, IndentGuides: true, TabSize: 4, Live: true}
 }
 
 // Where a link opens.
@@ -81,8 +80,12 @@ type NoteEditor struct {
 	Clipboard Clipboard
 	OnError   func(error)
 	Now       func() time.Time
+	// HideFront hides the frontmatter in live preview, while the properties
+	// panel stands in for it.
+	HideFront bool
 
 	completeNext bool
+	live         liveState
 }
 
 // removed are the editor's keys Obsidian takes out of CodeMirror's
@@ -141,6 +144,7 @@ func (e *NoteEditor) View(c *ui.Context) ui.Element {
 		e.completeNext = false
 		e.openCompletions(st.Cursor())
 	}
+	e.showLive(c)
 	el := code.View(c, st)
 	e.acceptDrops(el)
 	return el
@@ -182,37 +186,24 @@ func (e *NoteEditor) Run(cmd func(text string, sels []Sel) Edit) bool {
 	return true
 }
 
-// Undo takes back the user's newest step, never another writer's change.
-func (e *NoteEditor) Undo() bool { return e.step(e.b.Document().Undo) }
+// Undo takes back the user's newest step, never another writer's change,
+// and puts the selections where they were.
+func (e *NoteEditor) Undo() bool { return e.step(code.Undo) }
 
 // Redo makes the newest undone step again.
-func (e *NoteEditor) Redo() bool { return e.step(e.b.Document().Redo) }
+func (e *NoteEditor) Redo() bool { return e.step(code.Redo) }
 
-func (e *NoteEditor) step(take func() (notes.ChangeSet, bool)) bool {
+func (e *NoteEditor) step(cmd code.Command) bool {
 	e.b.Sync()
-	cs, ok := take()
-	if !ok {
-		return false
-	}
-	if ch := cs.Changes(); len(ch) > 0 {
-		last := ch[len(ch)-1]
-		pos := cs.MapPos(last.To, 1)
-		e.State.Select(pos, pos)
-	}
-	return true
+	done := e.State.Run(cmd)
+	e.b.Sync()
+	return done
 }
 
 func (e *NoteEditor) input(ev ui.InputEvent) bool {
 	switch ev.Kind {
 	case ui.InputCommand:
-		switch ev.Text {
-		case "undo":
-			e.Undo()
-			return true
-		case "redo":
-			e.Redo()
-			return true
-		case "paste":
+		if ev.Text == "paste" {
 			return e.paste()
 		}
 	case ui.InputKeyDown:
@@ -238,12 +229,6 @@ func (e *NoteEditor) key(mods ui.Modifiers, key ui.Key) bool {
 	cmd, alt, shift := ui.Cmd, ui.Alt, ui.Shift
 	run := func(f func(string, []Sel) Edit) bool { e.Run(f); return true }
 	switch {
-	case mods == cmd && key == ui.KeyZ:
-		e.Undo()
-		return true
-	case mods == cmd|shift && key == ui.KeyZ, mods == cmd && key == ui.KeyY:
-		e.Redo()
-		return true
 	case mods == cmd && key == ui.KeyV, mods == shift && key == ui.KeyInsert:
 		return e.paste()
 	case mods == cmd && key == ui.KeyB:

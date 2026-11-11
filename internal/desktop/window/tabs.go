@@ -135,7 +135,7 @@ func (a *App) editorPrefs() editor.Prefs {
 	p := a.Prefs
 	return editor.Prefs{SmartLists: p.SmartLists, AutoPairMarkdown: p.AutoPairMarkdown, AutoPairBrackets: p.AutoPairBrackets,
 		LineNumbers: p.LineNumbers, FoldHeadings: p.FoldHeadings, FoldIndent: p.FoldIndent, IndentWithTabs: p.IndentWithTabs, TabSize: p.TabSize,
-		IndentGuides: p.IndentGuides, FontSize: p.FontSize}
+		IndentGuides: p.IndentGuides, FontSize: p.FontSize, Live: p.EditingMode == "live"}
 }
 
 func (a *App) noteEditor(d *notes.Document, v workspace.View) *editor.NoteEditor {
@@ -621,6 +621,9 @@ func countWords(s string) int {
 func (a *App) modeName(v workspace.View) string {
 	if v.Mode == workspace.ModeRead {
 		return "Reading view"
+	}
+	if a.Prefs.EditingMode == "live" {
+		return "Live Preview"
 	}
 	return "Source mode"
 }

@@ -128,25 +128,6 @@ func (cs ChangeSet) Apply(text string) (string, error) {
 	return b.String(), nil
 }
 
-// Invert returns the set that undoes cs on the text it makes; text is the
-// text cs applies to.
-func (cs ChangeSet) Invert(text string) ChangeSet {
-	out := ChangeSet{sections: append([]int(nil), cs.sections...)}
-	pos := 0
-	for i := 0; i < len(out.sections); i += 2 {
-		l, ins := out.sections[i], out.sections[i+1]
-		if ins >= 0 {
-			out.sections[i], out.sections[i+1] = ins, l
-			for len(out.inserted) < i/2 {
-				out.inserted = append(out.inserted, "")
-			}
-			out.inserted = append(out.inserted, text[pos:pos+l])
-		}
-		pos += l
-	}
-	return out
-}
-
 // Compose returns the set that applies cs, then next; next applies to the
 // text cs makes.
 func (cs ChangeSet) Compose(next ChangeSet) (ChangeSet, error) {

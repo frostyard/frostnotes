@@ -258,12 +258,16 @@ other sessions are writing their pull requests:
   then elements between lines, and per-line text styles after a design
   note. Phase 5 builds live preview on them.
 - [egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652): an edit outside the undo history that rebases it. MyGo's undo
-  will keep steps as inverse edits moved over a remote change, and drop
-  a step that overlaps one, as the app's own `notes.History` does.
-  Today MyGo's `Undo` restores a step's whole text before it, so undoing
-  any earlier step would take back a remote change made since. Until the
-  change lands, the app runs its own undo, and no key or menu reaches
-  MyGo's (on Linux, MyGo's editing menu has no Undo item).
+  keeps steps as inverse edits moved over a remote change, and drops a
+  step that overlaps one. The app applies remote changes with
+  `Buffer.EditRemote` ([egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654))
+  and uses MyGo's own undo.
+
+**A fork until those land.** `go.mod` replaces MyGo with
+`github.com/bketelsen/mygo`, branch `integration/frostyard`: #1654 and
+[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) merged
+together, 150 commits past v0.8.3. The owner approved it on 2026-11-10. The
+`replace` goes when both pull requests are in a MyGo release.
 
 Not filed yet: a hook for a click on a task's box in the Markdown view.
 
@@ -343,7 +347,7 @@ The parts that need no frostui piece, in the order the orchestrator set.
 - The documents, saves and merges
   ([ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md),
   [design/app.md](../design/app.md#documents-saves-and-merges)) over
-  MyGo's buffer, with the app's own undo.
+  MyGo's buffer.
 - Source mode: the highlighter, folding, completions, hovers (the page
   preview), links, formatting commands, smart lists, auto-pairs, find
   and replace, paste and drop
@@ -362,8 +366,7 @@ The parts that need no frostui piece, in the order the orchestrator set.
 - Each view tested headless with `ui.NewTester`, in `make verify`'s unit
   run.
 - **Built (2026-11-10):** `internal/desktop/notes` (a change set with
-  CodeMirror's compose, map and invert; the save loop; CRLF notes; the
-  undo history that remote changes never enter), `editor` (source mode,
+  CodeMirror's compose and map; the save loop; CRLF notes), `editor` (source mode,
   Obsidian's keys and formatting commands with the web app's test
   cases, smart lists, links, completions of `[[` and `#`), `reading`,
   `history` (and the merge view), `session`, `workspace` (the model and
@@ -443,21 +446,19 @@ The parts that need no frostui piece, in the order the orchestrator set.
 
 ## Phase 5 — Live preview (about 3 weeks)
 
-**Waiting (2026-11-10)** for a MyGo release with its pull requests
-[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) (hidden and
-replaced ranges) and [egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654)
-(edits outside the undo history), both open. Until then the editing mode
-is source mode, whatever the preference says. Elements between lines and
-per-line styles have no pull request yet.
-
-**Built (2026-11-10):** the logic, `internal/desktop/livepreview`, recorded in
+**Built (2026-11-10), on the fork above:** the logic,
+`internal/desktop/livepreview`, recorded in
 [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md): the
 marks of headings, emphasis, highlights, inline code, links and wikilinks,
 footnotes, comments and block IDs; bullets, tasks, quotes and rules; the
-frontmatter while the properties panel shows; and the reveal rule. A keystroke
-in a 10,000-line note costs about 1 ms. What remains is the adapter to MyGo's
-`Replacement`s, which needs a release to compile against, and the block
-constructs.
+frontmatter while the properties panel shows; and the reveal rule. The editor
+shows them as MyGo's `Replacement`s (`internal/desktop/editor/live.go`), a
+click on a task's box toggles it, and undo is MyGo's. A keystroke in a
+10,000-line note, with a frame drawn on the CPU, costs 13 ms in live preview
+and 2.6 ms in source mode.
+
+**Waiting** for elements between lines and per-line styles in MyGo, for the
+block constructs and headings' sizes.
 
 - Live preview on MyGo's editor, in the order its author is building
   [egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651): hidden and replaced ranges first (the marks hidden off the
@@ -467,8 +468,8 @@ constructs.
   (headings' sizes) once their design note settles. An ADR records the
   shape when the phase starts; Frostnotes' own editor widget is the
   fallback should the pull requests stall.
-- The app's undo gives way to MyGo's once [egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652) lands, with remote
-  changes applied outside the history.
+- The app's undo gives way to MyGo's, with remote changes applied outside
+  the history ([egoist/mygo#1652](https://github.com/egoist/mygo/issues/1652)). Done.
 - The constructs of [design/app.md](../design/app.md#live-preview), in
   M3's order: headings, emphasis, highlights and inline code; links and
   wikilinks; tasks and bullets; quotes and rules; code fences; images;

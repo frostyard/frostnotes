@@ -984,8 +984,13 @@ with frostui, which changes these:
   note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
   opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
 - The status bar starts with the connection, "Local" or the hub's host.
-- Until live preview is built, the editing view is source mode. The
-  frontmatter's first line stays visible while the properties panel shows.
+- Live preview hides marks and draws bullets, tasks, quotes and rules. Until
+  MyGo has elements between lines and per-line styles, images, embeds,
+  callouts, tables and math keep their source, and headings keep the editor's
+  font size. In source mode, the frontmatter's first line stays visible while
+  the properties panel shows.
+- The status bar's editing mode toggles the reading view, and Live Preview or
+  Source mode comes from Settings: frostui's status items have no menu.
 - Spellcheck has no effect: MyGo's editor has none.
 
 ## Rules

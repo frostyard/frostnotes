@@ -100,6 +100,38 @@ func TestUndoInTheEditorSkipsAnotherWritersChange(t *testing.T) {
 	}
 }
 
+func TestUndoMovesPastAMerge(t *testing.T) {
+	f := openEditor(t, "a.md", "one\ntwo\n")
+	f.caret(3)
+	f.tt.Type(" 1")
+	f.save()
+	f.caret(9)
+	f.tt.Type(" 2")
+	f.tt.Frame()
+	// Another writer adds a line at the top while the word is unsaved:
+	// notesd merges, and the answer comes back as a remote change.
+	hash := f.Write("a.md", f.doc.Base(), "zero\none 1\ntwo\n")
+	f.doc.Changed(hash)
+	f.loop.Until(t, "the merge", func() bool {
+		f.tt.Frame()
+		return f.text() == "zero\none 1\ntwo 2\n" && f.doc.Status() == notes.StatusClean
+	})
+	for _, want := range []string{"zero\none 1\ntwo\n", "zero\none\ntwo\n", "zero\none\ntwo\n"} {
+		f.tt.Key(ui.Cmd, ui.KeyZ)
+		if f.text() != want {
+			t.Fatalf("Ctrl+Z made %q, want %q", f.text(), want)
+		}
+	}
+	f.tt.Key(ui.Cmd|ui.Shift, ui.KeyZ)
+	if f.text() != "zero\none 1\ntwo\n" {
+		t.Fatalf("Ctrl+Shift+Z made %q", f.text())
+	}
+	f.save()
+	if got := f.Read("a.md").Content; got != "zero\none 1\ntwo\n" {
+		t.Fatalf("file holds %q", got)
+	}
+}
+
 func TestObsidianKeysInTheEditor(t *testing.T) {
 	f := openEditor(t, "a.md", "word\n")
 	f.ed.State.Select(0, 4)

@@ -105,9 +105,10 @@ React app has a TypeScript client and Lezer.
      lists, completions of links, tags and properties, hovers that
      preview a linked note, Ctrl-click to follow a link, and the find
      and replace bar; and the reading view on MyGo's Markdown view.
-     Until MyGo's buffer takes an edit outside its undo history, the
-     app keeps its own undo, so Ctrl + Z never takes back another
-     writer's change.
+     MyGo's buffer takes another writer's change outside its undo
+     history, so Ctrl + Z never takes it back
+     ([egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654), through
+     a fork until a release has it: [plan 0009](../plans/0009-mygo-desktop.md)).
   2. Live preview, which hides the syntax away from the caret and draws
      widgets (checkboxes, images, embeds, callouts, tables, math), as
      decorations on MyGo's editor: its author accepted

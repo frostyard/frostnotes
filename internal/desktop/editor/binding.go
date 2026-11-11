@@ -59,14 +59,23 @@ func (b *Binding) Sync() {
 	b.last = text
 	b.doc.Local(cs)
 	if b.doc.Text() != text {
-		// The document took no edit (it is read-only, or not loaded):
-		// the buffer shows the document again.
+		// The document took no edit (it is read-only, or not loaded): the
+		// buffer shows the document again, which overlaps the step and takes
+		// it out of the history.
 		b.Apply(notes.Diff(text, b.doc.Text()))
 	}
 }
 
-// Apply shows a change the document made; the buffer does not report it.
-func (b *Binding) Apply(cs notes.ChangeSet) {
+// Apply shows another writer's change or a merge, outside the buffer's
+// undo history: undo moves its steps past it (ADR-0022).
+func (b *Binding) Apply(cs notes.ChangeSet) { b.show(cs, b.buf.EditRemote) }
+
+// Edit shows a user's change made outside the editor, as one step of undo.
+func (b *Binding) Edit(cs notes.ChangeSet) { b.show(cs, b.buf.Edit) }
+
+// show makes a change the document made in the buffer; the buffer does not
+// report it.
+func (b *Binding) show(cs notes.ChangeSet, edit func(...code.Edit)) {
 	if cs.Empty() {
 		return
 	}
@@ -75,7 +84,7 @@ func (b *Binding) Apply(cs notes.ChangeSet) {
 	for i, c := range changes {
 		edits[i] = code.Edit{Start: c.From, End: c.To, Text: c.Insert}
 	}
-	b.buf.Edit(edits...)
+	edit(edits...)
 	if next, err := cs.Apply(b.last); err == nil {
 		b.last = next
 	}
@@ -83,6 +92,23 @@ func (b *Binding) Apply(cs notes.ChangeSet) {
 		b.last = s
 	}
 	b.version = b.buf.Version()
+}
+
+// Undo takes back the user's newest step, never another writer's change,
+// for a view without an editor of its own to run it.
+func (b *Binding) Undo() bool { return b.step(b.buf.Undo) }
+
+// Redo makes the newest undone step again.
+func (b *Binding) Redo() bool { return b.step(b.buf.Redo) }
+
+func (b *Binding) step(take func() bool) bool {
+	b.Sync()
+	if !b.doc.Loaded() || b.doc.ReadOnly() != "" {
+		return false
+	}
+	done := take()
+	b.Sync()
+	return done
 }
 
 // Close detaches the buffer from the document, which saves at once.

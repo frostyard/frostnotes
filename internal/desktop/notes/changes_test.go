@@ -44,15 +44,6 @@ func TestChangesOfAndApply(t *testing.T) {
 	}
 }
 
-func TestInvert(t *testing.T) {
-	doc := "one two three"
-	cs := mustChanges(t, len(doc), Change{From: 4, To: 7, Insert: "2"}, Change{From: 13, To: 13, Insert: " four"})
-	after := mustApply(t, cs, doc)
-	if back := mustApply(t, cs.Invert(doc), after); back != doc {
-		t.Fatalf("inverse made %q", back)
-	}
-}
-
 func TestComposeAndMap(t *testing.T) {
 	doc := "abc"
 	a := mustChanges(t, 3, Change{From: 1, To: 1, Insert: "X"}) // aXbc
@@ -166,9 +157,6 @@ func TestChangeAlgebraRandom(t *testing.T) {
 		da := mustApply(t, a, doc)
 		db := mustApply(t, b, doc)
 
-		if back := mustApply(t, a.Invert(doc), da); back != doc {
-			t.Fatalf("#%d invert", i)
-		}
 		next := randomChanges(r, len(da))
 		comp, err := a.Compose(next)
 		if err != nil {

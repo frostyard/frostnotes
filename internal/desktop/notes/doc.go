@@ -37,7 +37,7 @@ type Env interface {
 	Post(f func())
 	// After runs f on the UI thread after d; stop cancels it.
 	After(d time.Duration, f func()) (stop func())
-	// Now is the time, for joining typing into one step of undo.
+	// Now is the time.
 	Now() time.Time
 }
 
@@ -52,10 +52,13 @@ type NoteAPI interface {
 
 // Buffer is the editor's side of a document: the text the user edits.
 type Buffer interface {
-	// Apply shows a change the document made (another writer's, a merge,
-	// an undo, an edit from outside the editor) in the editor's text. The
-	// buffer does not report it back as the user's edit.
+	// Apply shows another writer's change or a merge in the editor's text,
+	// outside its undo history (ADR-0022). The buffer does not report it
+	// back as the user's edit.
 	Apply(cs ChangeSet)
+	// Edit shows a user's change made outside the editor, as one step of
+	// its undo. The buffer does not report it back either.
+	Edit(cs ChangeSet)
 	// Sync reports what the user typed since the last report, through
 	// Document.Local. The document calls it before it changes or sends
 	// the text, so its changes apply to the text the user sees.
@@ -117,7 +120,6 @@ type Document struct {
 	base     string // the hash notesd last confirmed: the next write's base
 	baseText string // what base names, as text is
 	buf      Buffer
-	history  History
 
 	loaded, missing, dirty, disposed bool
 	flight                           *flight
@@ -305,27 +307,22 @@ func (d *Document) Load() {
 // Local takes an edit the user made in the editor: the buffer already
 // shows it. cs applies to the document's text.
 func (d *Document) Local(cs ChangeSet) {
-	if d.change(cs, true) {
+	if d.change(cs) {
 		d.notify()
 	}
 }
 
-// change applies the user's change cs to the text: a typed edit, an edit
-// from outside the editor, an undo or a redo; record adds it to the
-// history.
-func (d *Document) change(cs ChangeSet, record bool) bool {
+// change applies the user's change cs to the text: a typed edit, an undo,
+// a redo or an edit from outside the editor.
+func (d *Document) change(cs ChangeSet) bool {
 	if cs.Empty() || !d.loaded || d.readOnly != "" {
 		return false
 	}
-	before := d.text
-	text, err := cs.Apply(before)
+	text, err := cs.Apply(d.text)
 	if err != nil {
 		return false // the buffer and the document disagree; the next sync diffs them
 	}
 	d.text = text
-	if record {
-		d.history.Record(cs, before, d.env.Now())
-	}
 	if d.flight != nil {
 		if since, err := d.flight.since.Compose(cs); err == nil {
 			d.flight.since = since
@@ -335,47 +332,16 @@ func (d *Document) change(cs ChangeSet, record bool) bool {
 	return true
 }
 
-// Edit makes a user's change from outside the editor, as a checkbox in the
-// reading view: undo takes it back, and the buffer shows it.
+// Edit makes a user's change from outside the editor, as a property in
+// the panel: the buffer shows it, and its undo takes it back.
 func (d *Document) Edit(cs ChangeSet) {
 	d.syncBuffer()
-	if d.change(cs, true) {
+	if d.change(cs) {
 		if d.buf != nil {
-			d.buf.Apply(cs)
+			d.buf.Edit(cs)
 		}
 		d.notify()
 	}
-}
-
-// CanUndo and CanRedo report whether undo or redo has a step to take.
-func (d *Document) CanUndo() bool { return d.history.CanUndo() }
-func (d *Document) CanRedo() bool { return d.history.CanRedo() }
-
-// Undo takes back the user's newest step and returns the change it made,
-// for the editor to put the caret after; ok is false with nothing to undo.
-func (d *Document) Undo() (cs ChangeSet, ok bool) {
-	return d.step(d.history.Undo)
-}
-
-// Redo makes the newest undone step again.
-func (d *Document) Redo() (cs ChangeSet, ok bool) {
-	return d.step(d.history.Redo)
-}
-
-func (d *Document) step(take func(string) (ChangeSet, bool)) (ChangeSet, bool) {
-	if !d.loaded || d.readOnly != "" {
-		return ChangeSet{}, false
-	}
-	d.syncBuffer()
-	cs, ok := take(d.text)
-	if !ok || !d.change(cs, false) {
-		return ChangeSet{}, false
-	}
-	if d.buf != nil {
-		d.buf.Apply(cs)
-	}
-	d.notify()
-	return cs, true
 }
 
 func (d *Document) markDirty() {
@@ -405,7 +371,6 @@ func (d *Document) applyRemote(cs ChangeSet) {
 		return
 	}
 	d.text = text
-	d.history.Remote(cs)
 	if d.buf != nil {
 		d.buf.Apply(cs)
 	}

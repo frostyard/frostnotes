@@ -386,7 +386,10 @@ evidence.
 
 The native app works out the same reveal rule in
 `internal/desktop/livepreview`
-([ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)).
+([ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)),
+and `internal/desktop/editor/live.go` shows its pieces as MyGo's
+`Replacement`s. Its tabs of a note share one buffer, so they share one undo
+history.
 
 ### Properties
 

@@ -67,13 +67,29 @@ func TestThePropertiesPanel(t *testing.T) {
 	if f.doc.Text() != "---\ndone: true\ntags:\n  - a\nowner: \"\"\n---\nbody\n" {
 		t.Fatalf("after adding: %q", f.doc.Text())
 	}
-	if _, ok := f.doc.Undo(); !ok {
+	if !v.Editor.Undo() {
 		t.Fatal("no undo")
 	}
 	f.loop.Advance(notes.SaveDelay)
 	f.loop.Until(t, "the save", func() bool { return f.doc.Status() == notes.StatusClean })
 	if got := f.Read("Plan.md").Content; got != "---\ndone: true\ntags:\n  - a\n---\nbody\n" {
 		t.Fatalf("file holds %q", got)
+	}
+}
+
+func TestANewTabStartsAfterTheFrontmatter(t *testing.T) {
+	content := "---\ntags: [a]\n---\nbody\n"
+	_, v, tt := openView(t, content)
+	v.Editor.State.Select(0, 0)
+	v.placed = ""
+	tt.Frame()
+	tt.Frame()
+	if got, want := v.Editor.State.Cursor(), len("---\ntags: [a]\n---\n"); got != want {
+		t.Fatalf("the caret is at %d, want %d", got, want)
+	}
+	rs := v.Editor.State.Replacements()
+	if len(rs) != 1 || rs[0].Start != 0 || rs[0].End != len("---\ntags: [a]\n---\n") {
+		t.Fatalf("replacements %+v", rs)
 	}
 }
 

@@ -29,11 +29,17 @@ func longNote(n int) string {
 	return b.String()
 }
 
-// BenchmarkTypingInALongNote measures a keystroke in a 10,000-line note in
-// source mode: MyGo's editor inserts it and draws a frame (on the CPU, in
-// the Tester), the binding reports it, and the document takes it. M3's
-// target is under 16 ms (plan 0009, Phase 2).
+// BenchmarkTypingInALongNote measures a keystroke in a 10,000-line note:
+// MyGo's editor inserts it and draws a frame (on the CPU, in the Tester),
+// the binding reports it, the document takes it and, in live preview, the
+// marks are worked out again. M3's target is under 16 ms (plan 0009,
+// Phases 2 and 5).
 func BenchmarkTypingInALongNote(b *testing.B) {
+	b.Run("source", func(b *testing.B) { benchTyping(b, false) })
+	b.Run("live", func(b *testing.B) { benchTyping(b, true) })
+}
+
+func benchTyping(b *testing.B, live bool) {
 	n := desktoptest.StartNotesd(b)
 	loop := desktoptest.NewLoop()
 	content := longNote(10000)
@@ -42,6 +48,7 @@ func BenchmarkTypingInALongNote(b *testing.B) {
 	d.Load()
 	loop.Until(b, "the note to load", d.Loaded)
 	ed := NewNoteEditor(Bind(d))
+	ed.Prefs.Live = live
 	tt := ui.NewTester(func(c *ui.Context) { ed.View(c).Fill() }, 1200, 800)
 	if err := tt.Click("Note"); err != nil {
 		b.Fatal(err)

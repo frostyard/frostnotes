@@ -25,6 +25,8 @@ func (b *fakeBuffer) Apply(cs ChangeSet) {
 	b.remote++
 }
 
+func (b *fakeBuffer) Edit(cs ChangeSet) { b.text, _ = cs.Apply(b.text) }
+
 // typeAt makes a user's edit in the buffer and reports it.
 func (b *fakeBuffer) typeAt(t *testing.T, from, to int, insert string) {
 	t.Helper()
@@ -350,48 +352,4 @@ func TestAnOutsideEditReachesTheDocument(t *testing.T) {
 		}
 	}
 	f.loop.Until(t, "the reload", func() bool { return b.text == "start\nvim\n" })
-}
-
-func TestUndoLeavesAnotherWritersChange(t *testing.T) {
-	f := newFixture(t)
-	f.Create("a.md", "one\ntwo\n")
-	d, b := f.open("a.md")
-	// The user types a word, a pause, then another.
-	b.typeAt(t, 3, 3, " 1")
-	f.loop.Advance(SaveDelay)
-	f.settle(d)
-	b.typeAt(t, 9, 9, " 2")
-	// Another writer adds a line at the top.
-	res, err := f.Other.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: f.Vault, Path: "a.md", Base: d.Base(), Content: "zero\none 1\ntwo\n"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	d.Changed(res.Hash) // dirty: saves, and notesd merges
-	f.settle(d)
-	if b.text != "zero\none 1\ntwo 2\n" {
-		t.Fatalf("after the merge the buffer holds %q", b.text)
-	}
-	if _, ok := d.Undo(); !ok {
-		t.Fatal("nothing to undo")
-	}
-	if b.text != "zero\none 1\ntwo\n" || d.Text() != b.text {
-		t.Fatalf("undo made %q", b.text)
-	}
-	if _, ok := d.Undo(); !ok {
-		t.Fatal("the first word cannot be undone")
-	}
-	if b.text != "zero\none\ntwo\n" {
-		t.Fatalf("second undo made %q", b.text)
-	}
-	if _, ok := d.Undo(); ok {
-		t.Fatal("undo took back the other writer's line")
-	}
-	if _, ok := d.Redo(); !ok || b.text != "zero\none 1\ntwo\n" {
-		t.Fatalf("redo made %q", b.text)
-	}
-	f.loop.Advance(SaveDelay)
-	f.settle(d)
-	if got := f.Read("a.md").Content; got != "zero\none 1\ntwo\n" {
-		t.Fatalf("file holds %q", got)
-	}
 }

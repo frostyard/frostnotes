@@ -31,6 +31,7 @@ type NoteView struct {
 	titleFor     string
 	titleFocused bool
 	folded       string // the text whose frontmatter was folded
+	placed       string // the note whose caret was placed after its frontmatter
 }
 
 // NewNoteView makes the view of an editor.
@@ -58,8 +59,13 @@ func (v *NoteView) View(c *ui.Context) ui.Element {
 			}
 			if v.ShowProperties {
 				v.Properties.View(c)
-				v.foldFrontmatter()
+				if v.Editor.Prefs.Live {
+					v.startAfterFrontmatter()
+				} else {
+					v.foldFrontmatter()
+				}
 			}
+			v.Editor.HideFront = v.ShowProperties
 			v.Editor.View(c).Grow(1).FillWidth()
 		})
 	})
@@ -74,6 +80,20 @@ func (v *NoteView) foldFrontmatter() {
 	}
 	v.folded = d.Path()
 	v.Editor.State.Fold(0)
+}
+
+// startAfterFrontmatter puts a new tab's caret after the frontmatter: on
+// its first line, the caret would show the source the panel stands in for.
+func (v *NoteView) startAfterFrontmatter() {
+	d := v.doc()
+	if !d.Loaded() || v.placed == d.Path() {
+		return
+	}
+	v.placed = d.Path()
+	text := d.Text()
+	if at := len(text) - len(Body(text)); at > 0 && v.Editor.State.Cursor() == 0 {
+		v.Editor.State.Select(at, at)
+	}
 }
 
 // inlineTitle draws the note's name above it: Enter or leaving the field
