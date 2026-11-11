@@ -195,6 +195,16 @@ func (a *App) connectionChanged() {
 }
 
 // reloadAll reads the vault list and everything of the window's vault.
+// listVault puts a vault notesd just added in the list. Its vault.added
+// event may have read the list again first, with the vault in it.
+func (a *App) listVault(v api.Vault) {
+	if i := slices.IndexFunc(a.vaults, func(x api.Vault) bool { return x.ID == v.ID }); i >= 0 {
+		a.vaults[i] = v
+		return
+	}
+	a.vaults = append(a.vaults, v)
+}
+
 func (a *App) reloadAll() {
 	var list []api.Vault
 	a.call(func(ctx context.Context, c *api.Client) (err error) {

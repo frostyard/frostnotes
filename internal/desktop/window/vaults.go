@@ -230,7 +230,7 @@ func (m *vaultManager) add(a *App, p string, create bool) {
 			m.err = err.Error()
 			return
 		}
-		a.vaults = append(a.vaults, *v)
+		a.listVault(*v)
 		m.open = false
 		m.cancelJoin()
 		m.reset()
@@ -417,7 +417,7 @@ func (j *joinFlow) start(a *App) {
 // joined ends a join that worked: a vault it made becomes the window's.
 func (a *App) joined(j *joinFlow, v *api.Vault) {
 	if v != nil {
-		a.vaults = append(a.vaults, *v)
+		a.listVault(*v)
 		a.vm.open = false
 		a.vm.reset()
 		a.showVault(v)

@@ -237,6 +237,16 @@ func TestAConnectionLostKeepsTheWorkspace(t *testing.T) {
 	}
 }
 
+func TestAVaultTheEventListedFirstIsListedOnce(t *testing.T) {
+	f := start(t)
+	f.waitText("Create new vault")
+	f.a.listVault(f.a.vaults[0]) // the answer to vault.add, after the event's reload
+	f.tt.Frame()                 // two rows with one key would panic
+	if len(f.a.vaults) != 1 {
+		t.Fatalf("%d vaults", len(f.a.vaults))
+	}
+}
+
 func TestCreatingOpeningAndRemovingVaults(t *testing.T) {
 	f := start(t)
 	f.waitText("Create new vault")
