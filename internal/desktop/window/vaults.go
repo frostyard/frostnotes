@@ -316,6 +316,8 @@ type joinFlow struct {
 	cancel     context.CancelFunc
 	onDone     func()
 	runID      uint64
+	// post is where the flow's answers go, the window's loop when nil.
+	post func(func())
 }
 
 func (j *joinFlow) stop() {
@@ -406,7 +408,10 @@ func (j *joinFlow) start(a *App) {
 	j.stop()
 	j.cancel, j.err, j.code, j.phase = cancel, "", "", joinJoining
 	runID := j.runID
-	post := a.cfg.Env.Post
+	post := j.post
+	if post == nil {
+		post = a.cfg.Env.Post
+	}
 	flow := joinRun{c: client, ctx: ctx, url: hubURL(j.url), name: strings.TrimSpace(j.name), device: strings.TrimSpace(j.device),
 		vaultID: j.vaultID, mode: j.mode, folder: "", onCode: func(code string) {
 			post(func() {
