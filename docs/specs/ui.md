@@ -660,8 +660,12 @@ Obsidian's vault chooser
   Cancel, while a call to `vault.add` or `sync.join` is under way. A
   failure shows in 12/16 `--flag-1` under the fields, and the fields
   return with what the person typed (a notice instead, where the panel
-  is gone). The settings' dialog holds the same panel, with no
-  Location, and a stop there is the same.
+  is gone). Closing the manager stops the flow too, even while
+  "Joining…" shows. A stopped flow's answer shows nothing, with one
+  exception: an answer saying the vault it made may stay on the list. That
+  is when `vault.remove` failed after the stop or `vault.add` lost its
+  answer, and the answer shows as a notice naming the vault. The settings'
+  dialog holds the same panel, with no Location, and a stop there is the same.
 - **What they do:** Open folder as vault registers the folder
   (`vault.add`); Create registers `<location>/<name>`, which notesd
   makes (`vault.add` with `create`). Either makes it the window's vault

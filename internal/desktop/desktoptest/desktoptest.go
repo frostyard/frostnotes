@@ -133,14 +133,21 @@ type Notesd struct {
 	Data string
 	// Down, while true, makes AppNotes return nil, as a lost connection.
 	Down bool
+	// opts are the server's options, which Restart keeps.
+	opts rpctest.Options
 }
 
 // StartNotesd starts a notesd with an empty vault.
-func StartNotesd(t testing.TB) *Notesd {
+func StartNotesd(t testing.TB) *Notesd { return StartNotesdWith(t, rpctest.Options{}) }
+
+// StartNotesdWith is StartNotesd with the server's options, such as a fake
+// domain (Options.Services). Its data directory is always a fresh one.
+func StartNotesdWith(t testing.TB, o rpctest.Options) *Notesd {
 	t.Helper()
 	data := t.TempDir()
-	srv := rpctest.StartWith(t, rpctest.Options{DataDir: data})
-	n := &Notesd{T: t, Srv: srv, App: srv.Dial(t), Other: srv.Dial(t), Dir: t.TempDir(), Blobs: filepath.Join(data, "blobs"), Data: data}
+	o.DataDir = data
+	srv := rpctest.StartWith(t, o)
+	n := &Notesd{T: t, Srv: srv, App: srv.Dial(t), Other: srv.Dial(t), Dir: t.TempDir(), Blobs: filepath.Join(data, "blobs"), Data: data, opts: o}
 	v, err := n.App.Vault().Add(t.Context(), &api.VaultAddParams{Path: n.Dir})
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +161,7 @@ func StartNotesd(t testing.TB) *Notesd {
 func (n *Notesd) Restart() {
 	n.T.Helper()
 	n.Srv.Stop()
-	n.Srv = rpctest.StartWith(n.T, rpctest.Options{DataDir: n.Data})
+	n.Srv = rpctest.StartWith(n.T, n.opts)
 	n.App, n.Other = n.Srv.Dial(n.T), n.Srv.Dial(n.T)
 }
 

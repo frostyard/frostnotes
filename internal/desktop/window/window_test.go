@@ -18,6 +18,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
 	"github.com/frostyard/frostui"
+	kitrpctest "github.com/frostyard/lodge/kit/rpctest"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
@@ -40,7 +41,13 @@ type fixture struct {
 // start draws the window on a real notesd, at a desktop size.
 func start(t *testing.T) *fixture {
 	t.Helper()
-	f := &fixture{Notesd: desktoptest.StartNotesd(t), t: t, loop: desktoptest.NewLoop()}
+	return startOn(t, desktoptest.StartNotesd(t))
+}
+
+// startOn draws the window on n.
+func startOn(t *testing.T, n *desktoptest.Notesd) *fixture {
+	t.Helper()
+	f := &fixture{Notesd: n, t: t, loop: desktoptest.NewLoop()}
 	f.a = New(Config{Env: f.loop, Version: "test",
 		Dial: func(ctx context.Context) (*api.Client, *api.Hello, error) {
 			return api.Dial(ctx, f.Srv.Socket, session.ClientName)
@@ -1273,6 +1280,9 @@ func TestLostAddAnswerExplainsPossibleVault(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Manage vaults") || !strings.Contains(err.Error(), r.folder) {
 		t.Fatalf("lost answer: %v", err)
 	}
+	if left := (*vaultLeft)(nil); !errors.As(err, &left) {
+		t.Fatal("a cancelled join would drop the lost answer")
+	}
 }
 
 // TestAnOldJoinCannotFinishTheNewRun holds the join's answers on a channel
@@ -1302,5 +1312,121 @@ func TestAnOldJoinCannotFinishTheNewRun(t *testing.T) {
 	}
 	if j.phase != joinForm || j.err == "" {
 		t.Fatal("current error not shown")
+	}
+}
+
+// heldSync is notesd's sync domain, paired with one hub, whose sync.join
+// holds until the test ends.
+type heldSync struct {
+	api.SyncService
+	url     string
+	joining chan<- struct{}
+	release <-chan struct{}
+}
+
+func (s heldSync) Hubs(context.Context, *api.SyncHubsParams) ([]api.SyncHub, error) {
+	return []api.SyncHub{{ID: 1, URL: s.url}}, nil
+}
+
+func (s heldSync) Join(ctx context.Context, _ *api.SyncJoinParams) (*api.SyncStatus, error) {
+	select {
+	case s.joining <- struct{}{}:
+	default:
+	}
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+	}
+	return nil, api.Errorf(api.CodeUnavailable, "the hub did not answer")
+}
+
+// stuckVault is notesd's vault domain, which cannot remove a vault.
+type stuckVault struct{ api.VaultService }
+
+func (stuckVault) Remove(_ context.Context, p *api.VaultRemoveParams) error {
+	return api.Errorf(api.CodeConflict, "vault %d is busy", p.ID)
+}
+
+// TestACancelledJoinStillTellsOfTheVaultItLeft closes the vault manager
+// while notesd joins, and notesd then cannot remove the vault the join
+// made: the warning must reach the user after the dialog is gone (X56,
+// #194).
+func TestACancelledJoinStillTellsOfTheVaultItLeft(t *testing.T) {
+	const hub = "https://hub.example.test/device/notes"
+	joining, release := make(chan struct{}, 1), make(chan struct{})
+	n := desktoptest.StartNotesdWith(t, rpctest.Options{Options: kitrpctest.Options[api.Services]{Services: func(s *api.Services) {
+		s.Sync = heldSync{SyncService: s.Sync, url: hub, joining: joining, release: release}
+		s.Vault = stuckVault{s.Vault}
+	}}})
+	t.Cleanup(func() { close(release) }) // before notesd stops
+	f := startOn(t, n)
+	f.openVault()
+	f.a.run("app:open-vault")
+	f.until("the sync check", func() bool { return f.a.vm.canSync != nil && *f.a.vm.canSync })
+	if err := f.tt.Click("Join"); err != nil {
+		t.Fatal(err)
+	}
+	f.tt.Frame()
+	j := &f.a.vm.join
+	j.url, j.name, j.location = hub, "Shared", t.TempDir()
+	f.tt.Frame()
+	if err := f.tt.Click("Join"); err != nil {
+		t.Fatal(err)
+	}
+	f.until("notesd's join", func() bool {
+		select {
+		case <-joining:
+			return true
+		default:
+			return false
+		}
+	})
+	f.tt.Key(0, ui.KeyEscape)
+	f.tt.Frame()
+	if f.a.vm.open {
+		t.Fatal("Escape left the dialog open")
+	}
+	told := func() bool {
+		return slices.ContainsFunc(f.a.toasts, func(t ui.Toast) bool { return strings.Contains(t.Title, `"Shared"`) })
+	}
+	f.loop.Until(t, "the warning", told) // drawn frames take the toasts
+	i := slices.IndexFunc(f.a.toasts, func(t ui.Toast) bool { return strings.Contains(t.Title, `"Shared"`) })
+	for _, want := range []string{"the join was cancelled", "could not remove", "Manage vaults"} {
+		if got := f.a.toasts[i].Title; !strings.Contains(got, want) {
+			t.Errorf("no %q in %q", want, got)
+		}
+	}
+}
+
+// TestAnAnswerFromBeforeTheDialogClosedIsStale closes the vault manager
+// between two joins. Closing it zeroes the join flow, and the older run's
+// answer must still not finish the newer one (#164).
+func TestAnAnswerFromBeforeTheDialogClosedIsStale(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	m := &f.a.vm
+	posted := make(chan func(), 10)
+	join := func() {
+		f.a.run("app:open-vault")
+		f.tt.Frame()
+		m.panel, m.join = "join", joinFlow{mode: modePair, phase: joinForm, url: ":invalid", post: func(fn func()) { posted <- fn }}
+		m.join.start(f.a)
+	}
+	join()
+	var old func()
+	select {
+	case old = <-posted:
+	case <-t.Context().Done():
+		t.Fatal("no join answer")
+	}
+	f.tt.Key(0, ui.KeyEscape)
+	f.tt.Frame()
+	if m.open {
+		t.Fatal("Escape left the dialog open")
+	}
+	join()
+	old()
+	if m.join.phase != joinJoining || m.join.err != "" {
+		t.Fatalf("the answer from before the dialog closed finished the new join: %q", m.join.err)
 	}
 }
