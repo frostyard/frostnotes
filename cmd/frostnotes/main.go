@@ -130,15 +130,9 @@ func pickFiles() []string {
 	return paths
 }
 
-// openURL opens a web link in the system's browser, behind the app's
-// rules and frostui's allow-list.
-func openURL(raw string) error {
-	target, err := system.WebURL(raw)
-	if err != nil {
-		return err
-	}
-	return frostui.Opener{}.OpenURL(target)
-}
+// openURL opens a web link the window checked (system.WebURL) in the
+// system's browser, through frostui's allow-list, which checks it again.
+func openURL(target string) error { return frostui.Opener{}.OpenURL(target) }
 
 // openFile opens a vault file in the system's default app, behind the
 // app's rules and frostui's allow-list.

@@ -45,8 +45,8 @@ type Config struct {
 	Close    func()
 	Quit     func()
 	// PickFolder asks for a folder, "" when cancelled; OpenURL and OpenFile
-	// open a web link and a vault file outside the app; Copy puts text on
-	// the clipboard.
+	// open a web link and a vault file outside the app, the link as
+	// system.WebURL returned it; Copy puts text on the clipboard.
 	PickFolder func(title string) string
 	OpenURL    func(url string) error
 	OpenFile   func(root, path string) error

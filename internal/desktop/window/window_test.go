@@ -616,14 +616,57 @@ func TestAPagePreviewsLinkFollowsTheOpenRules(t *testing.T) {
 	f.openVault()
 	var opened []string
 	f.a.cfg.OpenURL = func(u string) error { opened = append(opened, u); return nil }
-	f.a.previews["a.md\x00b"] = &preview{text: "see [mail](mailto:a@e.test?attach=/etc/passwd) here", done: true}
+	f.a.previews["a.md\x00b"] = &preview{text: "see [mail](" + hiddenAttach + ") here", done: true}
 	draw := f.a.linkPreview(func() string { return "a.md" })
 	tt := ui.NewTester(func(c *ui.Context) { draw(c, editor.Link{Target: "b"}) }, 400, 300)
 	if err := tt.Click("mail"); err != nil {
 		t.Fatal(err)
 	}
-	if len(opened) != 1 {
+	if len(opened) != 1 || opened[0] != hiddenAttachOpens {
 		t.Fatalf("the link did not go through the app's rules: %q", opened)
+	}
+}
+
+// hiddenAttach is a mailto link that asks for a file behind its fragment,
+// which a mail client might read as one more field (#200), and
+// hiddenAttachOpens what the app opens of it.
+const (
+	hiddenAttach      = "mailto:a@e.test?subject=x&attach=/etc/shadow#&attach=/etc/passwd"
+	hiddenAttachOpens = "mailto:a@e.test?subject=x"
+)
+
+// TestAMailtoLinkOpensWithoutWhatItHides clicks a mailto link in live
+// preview and in the reading view: each opens only its address and
+// subject, with no attach field and no fragment (#200).
+func TestAMailtoLinkOpensWithoutWhatItHides(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "see [mail]("+hiddenAttach+") here\n\nlast\n")
+	f.openVault()
+	var opened []string
+	f.a.cfg.OpenURL = func(u string) error { opened = append(opened, u); return nil }
+	f.until("the catalog", func() bool { return f.a.hasFile("a.md") })
+	f.a.open("a.md", workspace.NewTab)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil && f.a.activeEditor().Binding().Document().Loaded() })
+	e := f.a.activeEditor()
+	end := len(e.Binding().Document().Text())
+	e.State.Select(end, end) // off the link's line, so live preview draws it
+	f.waitText("mail")
+	if err := f.tt.Click("mail"); err != nil {
+		t.Fatal(err)
+	}
+	f.until("the editor's link", func() bool { return len(opened) == 1 })
+	f.a.run("markdown:toggle-preview")
+	f.until("the reading view", func() bool { return f.a.activeEditor() == nil })
+	f.loop.Advance(time.Second)
+	f.until("the rendering", func() bool { return f.a.activeContent().read.Markdown() != "" })
+	if err := f.tt.Click("mail"); err != nil {
+		t.Fatal(err)
+	}
+	f.until("the reading view's link", func() bool { return len(opened) == 2 })
+	for i, got := range opened {
+		if got != hiddenAttachOpens {
+			t.Errorf("link %d opened %q", i, got)
+		}
 	}
 }
 

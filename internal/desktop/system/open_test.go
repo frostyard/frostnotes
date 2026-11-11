@@ -16,6 +16,11 @@ func TestWebURLs(t *testing.T) {
 		{"mailto:a@e.test?attach=/home/u/.ssh/id_ed25519", "mailto:a@e.test"},
 		{"mailto:a@e.test?%61ttach=x&To=c@e.test", "mailto:a@e.test?To=c@e.test"},
 		{"mailto:a@e.test", "mailto:a@e.test"},
+		// A fragment a mail client might read as more fields (#200).
+		{"mailto:a@example.com?subject=x#&attach=/etc/passwd", "mailto:a@example.com?subject=x"},
+		{"mailto:a@e.test#attach=/etc/passwd", "mailto:a@e.test"},
+		{"mailto:a@e.test?subject&body=x", "mailto:a@e.test?body=x"},
+		{"mailto:a@e.test?", "mailto:a@e.test"},
 	} {
 		got, err := WebURL(tc.in)
 		if err != nil || got != tc.want {

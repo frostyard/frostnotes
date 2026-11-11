@@ -540,9 +540,11 @@ installed the Flatpak on Snow and used it with their vault on 2026-11-10.
 **Built (2026-11-10), as the draft pull request's last commit:** `app/src-tauri`,
 the Tauri transport, the window buttons and `@tauri-apps/*` are gone, and the
 React app builds only for lodge. The owner accepted ADR-0038 and ADR-0039, and
-changed the required checks, on 2026-11-10. Once frostui has the
-`mailto` rule (planned for its v0.2.1), `system.WebURL`'s filter goes and
-`Opener` does it alone.
+changed the required checks, on 2026-11-10. frostui v0.4.0 has the
+`mailto` rule (`SanitizeMailto`, frostui's ADR-0010), and on 2026-11-11
+`system.WebURL`'s own filter went: `WebURL` calls `SanitizeMailto`, which
+also drops the fragment (#200). The window checks every link with
+`WebURL`, and `Opener` checks it again.
 
 - The parity list above, checked item by item in the PR's body.
 - Delete `app/src-tauri`, the Tauri transport, the window buttons and

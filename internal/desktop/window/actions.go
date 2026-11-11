@@ -19,6 +19,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/panes"
 	"github.com/frostyard/frostnotes/internal/desktop/prefs"
+	"github.com/frostyard/frostnotes/internal/desktop/system"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 	"github.com/frostyard/frostnotes/internal/render"
 )
@@ -350,7 +351,14 @@ func (a *App) loadPreview(p *preview, from, target string) {
 	})
 }
 
-func (a *App) openExternal(target string) error {
+// openExternal opens a web link outside the app, as system.WebURL allows
+// it: every link the editor, the reading view and a page preview follow
+// comes here.
+func (a *App) openExternal(raw string) error {
+	target, err := system.WebURL(raw)
+	if err != nil {
+		return err
+	}
 	if a.cfg.OpenURL == nil {
 		return nil
 	}

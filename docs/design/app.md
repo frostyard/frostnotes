@@ -573,7 +573,9 @@ content type by extension, from one table:
   (`ViewBoundary`); the rest of the window works on.
 - Links to the web open in the system browser (`http`, `https`, `mailto`
   only). In the native app, `internal/desktop/system/open.go` checks a
-  link's scheme, and opens a vault file only when it is a regular,
+  link's scheme and passes a `mailto` link through frostui's
+  `SanitizeMailto`, which keeps only its addressees, subject and body and
+  drops its fragment. It opens a vault file only when it is a regular,
   non-executable file inside the vault folder, of a document or media type,
   never a script, a `.desktop` entry or HTML; what passes goes through
   frostui's allow-listed `Opener`. In a browser, a web link opens in a new
