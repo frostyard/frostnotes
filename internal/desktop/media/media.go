@@ -115,6 +115,9 @@ func View(c *ui.Context, blobs, url, label string) {
 		}
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			playing := p.transport != nil && p.transport.Playing()
+			if playing {
+				c.AnimationFrame()
+			}
 			name := "Play"
 			if playing {
 				name = "Pause"
