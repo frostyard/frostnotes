@@ -1,4 +1,4 @@
-.PHONY: help build desktop-build desktop-run desktop-smoke desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
+.PHONY: help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -30,6 +30,9 @@ desktop-run: ## Run the native desktop app against the running notesd
 desktop-smoke: desktop-build ## Start the native app under Xvfb against a real notesd (needs xvfb-run)
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
 	scripts/desktop-smoke.sh build
+
+desktop-bench: ## Time a keystroke in a 10,000-line note, in source mode and live preview
+	go test -bench BenchmarkTypingInALongNote -benchtime 100x ./internal/desktop/editor/
 
 desktop-evidence: ## Record the native app's evidence: a 10,000-note vault within a frame, a phone's edit within 2 s
 	go test -tags integration -count=1 -v -timeout 20m -run '^(TestALargeVaultStaysWithinAFrame|TestAnEditOnThePhoneReachesTheDesktop)$$' ./internal/desktop/window
@@ -116,6 +119,9 @@ verify: ## Tidy, generated files, vet, format, lint and unit tests
 	test -z "$$(gofmt -l $(GO_FILES))"
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test
+	# frostui's tests against the MyGo fork in go.mod: this module ships that
+	# pair, and frostui's CI tests only released MyGo. Goes with the replace.
+	env -u DISPLAY -u WAYLAND_DISPLAY CGO_ENABLED=0 go test github.com/frostyard/frostui/...
 
 check: fmt verify ## Format, then verify (the developer gate)
 

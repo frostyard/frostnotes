@@ -29,7 +29,8 @@ editor has no syntax tree, and a keystroke in a 10,000-line note has 16 ms.
   bar, a check box or a rule.
 - It reads a line at a time, with the blocks that span lines (frontmatter,
   fences, math, comments) followed in one pass, and keeps each line's pieces
-  by the line's text, so a keystroke reads only the line it changed.
+  by the line's text: a keystroke walks every line to follow the blocks, but
+  parses again only the line it changed.
 - The reveal rule stays: a line a selection touches shows its source, and a
   block that spans lines shows its source when a selection enters it.
 - The editor turns pieces into MyGo's `Replacement`s and blocks into its

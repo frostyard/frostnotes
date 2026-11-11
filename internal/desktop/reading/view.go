@@ -8,8 +8,10 @@
 package reading
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image"
 	"io"
 	"net/http"
 	"os"
@@ -34,6 +36,9 @@ const RenderDelay = 300 * time.Millisecond
 
 // maxRemoteImage bounds a remote image's bytes.
 const maxRemoteImage = 20 << 20
+
+// maxImagePixels bounds an image's size once decoded, at 4 bytes a pixel.
+const maxImagePixels = 64 << 20
 
 // Renderer is what the view needs of notesd; api.NoteClient has it.
 type Renderer interface {
@@ -193,7 +198,7 @@ func (v *drawer) loadImage(url string) (ui.ImageSource, error) {
 		if err != nil {
 			return nil, err
 		}
-		return decode(data, m[2])
+		return Decode(data, m[2])
 	}
 	if v.RemoteImages && (strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://")) {
 		return fetch(url)
@@ -201,9 +206,18 @@ func (v *drawer) loadImage(url string) (ui.ImageSource, error) {
 	return nil, os.ErrNotExist
 }
 
-func decode(data []byte, ext string) (ui.ImageSource, error) {
+// Decode reads an image of a note or the web. Its size in pixels is checked
+// from its header first, as a small file can declare a huge image.
+func Decode(data []byte, ext string) (ui.ImageSource, error) {
 	if strings.EqualFold(ext, "svg") {
 		return ui.ParseSVG(data)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if int64(cfg.Width)*int64(cfg.Height) > maxImagePixels {
+		return nil, errors.New("image: larger than " + strconv.Itoa(maxImagePixels>>20) + " megapixels")
 	}
 	return ui.DecodeBitmap(data)
 }
@@ -229,7 +243,7 @@ func fetch(url string) (ui.ImageSource, error) {
 	if strings.Contains(resp.Header.Get("Content-Type"), "svg") {
 		ext = "svg"
 	}
-	return decode(data, ext)
+	return Decode(data, ext)
 }
 
 // embed draws a note embed: a quiet box holding the embedded note, with

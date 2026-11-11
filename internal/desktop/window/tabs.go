@@ -296,11 +296,7 @@ func (a *App) loadFile(tc *tabContent) {
 		tc.err = err.Error()
 		return
 	}
-	if strings.EqualFold(filepath.Ext(tc.view.Path), ".svg") {
-		tc.img, err = ui.ParseSVG(data)
-	} else {
-		tc.img, err = ui.DecodeBitmap(data)
-	}
+	tc.img, err = reading.Decode(data, strings.TrimPrefix(filepath.Ext(tc.view.Path), "."))
 	if err != nil {
 		tc.err = err.Error()
 	}
@@ -355,7 +351,7 @@ func (a *App) strip(c *ui.Context, g *workspace.Node) {
 	for i, t := range g.Tabs {
 		tabs[i] = uikit.Tab{ID: t.ID, Title: t.View.Title(), Pinned: t.Pinned}
 	}
-	uikit.TabStrip{Label: "Tabs", Tabs: tabs, Active: g.Active, Dragging: &a.dragging,
+	uikit.TabStrip{Label: "Tabs", NewLabel: "New tab", ListLabel: "Tab list", CloseLabel: func(title string) string { return "Close " + title }, Tabs: tabs, Active: g.Active, Dragging: &a.dragging,
 		Activate: func(id string) { a.Store.Update(func(w *workspace.Workspace) { w.Activate(id) }) },
 		Close:    func(id string) { a.Store.Update(func(w *workspace.Workspace) { w.Close(id) }) },
 		New: func() {

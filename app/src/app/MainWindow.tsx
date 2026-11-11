@@ -422,7 +422,7 @@ export function MainWindow() {
               )}
             </div>
             {shown.left && sidebar("left")}
-            <WorkspaceView reserve={shown.right ? 0 : controls ? 140 : 44} />
+            <WorkspaceView reserve={shown.right ? 0 : 44} />
             {shown.right && sidebar("right")}
             {!shown.right && <div className="absolute top-0 right-0">{windowControls}</div>}
           </div>

@@ -98,9 +98,9 @@
       "why": "auth: the dev gateway's token and Origin checks, and the signed content URLs of blobs"
     },
     {
-      "glob": "{internal/render/sanitize.go,app/src/reading/sanitize.ts,internal/desktop/system/open.go}",
+      "glob": "{internal/render/sanitize.go,app/src/reading/sanitize.ts,internal/desktop/system/open.go,internal/desktop/reading/view.go,internal/desktop/editor/live.go}",
       "level": "L1",
-      "why": "auth: what a rendered note may reach (both sanitizers), and the links and files the app opens"
+      "why": "auth: what a rendered note may reach (both sanitizers, the native app's image loading and remote fetch, and which embeds it draws), and the links and files the app opens"
     },
     {
       "glob": "internal/vault/{path,guard}.go",

@@ -45,9 +45,7 @@ describe("TabStrip", () => {
     expect(tab("Garden plan").className).toContain("font-medium");
     expect(tab("Reading list").className).toContain("text-secondary");
     expect(tab("Reading list").className).not.toContain("bg-window");
-    view.rerender(
-      <TabStrip label="Tabs" tabs={TABS} focused={false} onCommand={vi.fn()} onDragStart={vi.fn()} />,
-    );
+    view.rerender(<TabStrip label="Tabs" tabs={TABS} focused={false} onCommand={vi.fn()} onDragStart={vi.fn()} />);
     expect(tab("Garden plan").className).toContain("bg-window");
     expect(tab("Garden plan").className).not.toContain("font-medium");
   });

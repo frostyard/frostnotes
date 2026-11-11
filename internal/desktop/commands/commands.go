@@ -1,8 +1,8 @@
 // Package commands is the desktop app's table of commands
 // (docs/specs/ui.md#keyboard-map): each command's ID, as Obsidian names it,
 // title, group, icon and keys. It is plain data: the window gives each
-// command its action and binds its keys (frostui's command table, from
-// v0.2.0). A test holds it to the spec's keyboard map.
+// command its action and binds its keys through frostui's command table. A
+// test holds it to the spec's keyboard map.
 package commands
 
 import "github.com/egoist/mygo/ui"
@@ -10,7 +10,7 @@ import "github.com/egoist/mygo/ui"
 // Scope says where a key works.
 type Scope uint8
 
-// The scopes, as frostui's KeyScope.
+// The scopes, the app's own: the window maps them to frostui's KeyScope.
 const (
 	// OutsideEditors keys step aside while a text editor has the focus.
 	OutsideEditors Scope = iota

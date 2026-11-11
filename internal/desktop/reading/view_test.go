@@ -1,7 +1,12 @@
 package reading
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/binary"
+	"hash/crc32"
+	"image"
+	"image/png"
 	"strings"
 	"testing"
 
@@ -96,5 +101,30 @@ func TestTheReadingViewShowsWhatWasTyped(t *testing.T) {
 	f.tt.Frame()
 	if !f.tt.HasText("first and second") {
 		t.Fatalf("the view shows %q", f.tt.Texts())
+	}
+}
+
+// hugePNG is a small file whose header declares a huge image.
+func hugePNG() []byte {
+	var b bytes.Buffer
+	b.WriteString("\x89PNG\r\n\x1a\n")
+	chunk := append([]byte("IHDR"), binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 100000), 100000)...)
+	chunk = append(chunk, 8, 6, 0, 0, 0) // 8 bits, RGBA
+	b.Write(binary.BigEndian.AppendUint32(nil, uint32(len(chunk)-4)))
+	b.Write(chunk)
+	b.Write(binary.BigEndian.AppendUint32(nil, crc32.ChecksumIEEE(chunk)))
+	return b.Bytes()
+}
+
+func TestDecodeRefusesAHugeImageFromItsHeader(t *testing.T) {
+	if _, err := Decode(hugePNG(), "png"); err == nil || !strings.Contains(err.Error(), "megapixels") {
+		t.Fatalf("a huge image: %v", err)
+	}
+	var small bytes.Buffer
+	if err := png.Encode(&small, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Decode(small.Bytes(), "png"); err != nil {
+		t.Fatalf("a small image: %v", err)
 	}
 }

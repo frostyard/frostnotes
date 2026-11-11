@@ -12,6 +12,10 @@ func TestWebURLs(t *testing.T) {
 		{"https://example.com/a?b=c", "https://example.com/a?b=c"},
 		{"http://example.com", "http://example.com"},
 		{"mailto:a@example.com?subject=hi&attach=/etc/passwd&body=x", "mailto:a@example.com?subject=hi&body=x"},
+		{"mailto:a@e.test?attach=/etc/passwd&subject=Hi%20there&Attachment=x&cc=b@e.test&ATTACH=y&body=a+b", "mailto:a@e.test?subject=Hi%20there&cc=b@e.test&body=a+b"},
+		{"mailto:a@e.test?attach=/home/u/.ssh/id_ed25519", "mailto:a@e.test"},
+		{"mailto:a@e.test?%61ttach=x&To=c@e.test", "mailto:a@e.test?To=c@e.test"},
+		{"mailto:a@e.test", "mailto:a@e.test"},
 	} {
 		got, err := WebURL(tc.in)
 		if err != nil || got != tc.want {

@@ -75,5 +75,6 @@ require (
 // egoist/mygo#1654 (Buffer.EditRemote), #1655 (State.SetReplacements) and
 // #1662 (elements between lines). This is branch integration/frostyard on a
 // fork, those three merged. It goes when all are in a MyGo release
-// (docs/plans/0009-mygo-desktop.md).
+// (docs/plans/0009-mygo-desktop.md). While it stays, make verify also runs
+// frostui's tests against it; the step and the replace go together.
 replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111005420-2088771701f7

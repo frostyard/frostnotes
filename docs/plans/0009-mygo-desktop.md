@@ -268,7 +268,10 @@ other sessions are writing their pull requests:
 [egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655) and
 [egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662) merged together,
 past v0.8.3. The owner approved it on 2026-11-10. The `replace` goes when all
-three pull requests are in a MyGo release.
+three pull requests are in a MyGo release. It also changes the MyGo frostui
+v0.2.0 builds against here, and frostui's CI tests only released MyGo, so
+`make verify` runs `go test github.com/frostyard/frostui/...` while the
+`replace` stays; the step goes with it. A failure there is reported to frostui.
 
 Not filed yet: a hook for a click on a task's box in the Markdown view.
 
@@ -458,7 +461,10 @@ shows them as MyGo's `Replacement`s and `Block`s
 as the reading view draws them (`reading.Blocks`), fences' headers with Copy,
 and links, tags, footnotes and task boxes a click reaches. Undo is MyGo's. A
 keystroke in a 10,000-line note with blocks, with a frame drawn on the CPU,
-costs 8 ms in live preview and 2.3 ms in source mode.
+costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
+395. The gate's reference machine is the CI runner: the `desktop` job's
+`make desktop-bench` prints the figure on every run. MyGo's cost in
+`view.replacedLines` was fixed on the fork, with egoist/mygo#1655.
 
 **Waiting** for per-line styles in MyGo, for headings' sizes and a done task's
 strike-through. Math stays as TeX source and audio and video as their embeds
@@ -521,7 +527,9 @@ Flatpak, on Snow with the owner's vault, is the owner's to check.
 **Built (2026-11-10), as the draft pull request's last commit:** `app/src-tauri`,
 the Tauri transport, the window buttons and `@tauri-apps/*` are gone, and the
 React app builds only for lodge. The ADRs stay Proposed until the owner accepts
-them. The required checks' names change with the owner.
+them. The required checks' names change with the owner. Once frostui has the
+`mailto` rule (planned for its v0.2.1), `system.WebURL`'s filter goes and
+`Opener` does it alone.
 
 - The parity list above, checked item by item in the PR's body.
 - Delete `app/src-tauri`, the Tauri transport, the window buttons and

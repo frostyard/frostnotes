@@ -23,9 +23,13 @@ type TabDrag struct{ ID string }
 // view: Up and the arrows are its own, a middle click closes a tab, and
 // the context menu key or a right click opens its menu.
 type TabStrip struct {
-	Label  string
-	Tabs   []Tab
-	Active int
+	Label string
+	// NewLabel and ListLabel name the New and List buttons, and CloseLabel a
+	// tab's close button, given its title.
+	NewLabel, ListLabel string
+	CloseLabel          func(title string) string
+	Tabs                []Tab
+	Active              int
 	// Activate chooses a tab, Close closes one, New adds one.
 	Activate func(id string)
 	Close    func(id string)
@@ -59,11 +63,11 @@ func (s TabStrip) View(c *ui.Context) ui.Element {
 			}
 		})
 		ui.Row(c).Gap(frostui.SpaceXS).Padding(0, frostui.SpaceXS).AlignItems(ui.Center).Children(func() {
-			if s.New != nil && ToolButton(c, "list-add", "New tab").Clicked() {
+			if s.New != nil && ToolButton(c, "list-add", s.NewLabel).Clicked() {
 				s.New()
 			}
 			if s.List != nil {
-				ToolButton(c, "pan-down", "Tab list").Menu(s.List)
+				ToolButton(c, "pan-down", s.ListLabel).Menu(s.List)
 			}
 		})
 	})
@@ -109,7 +113,7 @@ func (s TabStrip) tab(c *ui.Context, el ui.Element, index int, tab Tab) {
 			frostui.Icon(c, "view-pin").TextColor(t.TextMuted)
 		}
 		ui.Text(c, tab.Title).FontSize(13).SingleLine().Grow(1).Shrink(1).AccessHidden(true)
-		if !tab.Pinned && s.Close != nil && ToolButton(c, "window-close", "Close "+tab.Title).Size(20, 20).Clicked() {
+		if !tab.Pinned && s.Close != nil && ToolButton(c, "window-close", s.CloseLabel(tab.Title)).Size(20, 20).Clicked() {
 			s.Close(tab.ID)
 		}
 	})

@@ -164,3 +164,6 @@ jobs:
             xvfb xauth dbus libgtk-3-0t64 libgl1 libegl1 libgl1-mesa-dri libpangocairo-1.0-0 fonts-dejavu-core
       - name: Build the release app and start it against a real notesd
         run: make desktop-smoke
+      # Prints the typing cost on an ordinary machine (plan 0009, Phase 5).
+      - name: Time a keystroke in a long note
+        run: make desktop-bench

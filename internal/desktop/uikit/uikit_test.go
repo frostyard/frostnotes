@@ -46,7 +46,7 @@ func TestTheTabStrip(t *testing.T) {
 	var closed, moved []string
 	added := 0
 	strip := func() TabStrip {
-		return TabStrip{Label: "Tabs", Tabs: tabs, Active: active,
+		return TabStrip{Label: "Tabs", NewLabel: "New tab", ListLabel: "Tab list", CloseLabel: func(title string) string { return "Close " + title }, Tabs: tabs, Active: active,
 			Activate: func(id string) { active = slices.IndexFunc(tabs, func(x Tab) bool { return x.ID == id }) },
 			Close:    func(id string) { closed = append(closed, id) },
 			New:      func() { added++ },
