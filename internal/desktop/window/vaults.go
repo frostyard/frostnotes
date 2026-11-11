@@ -315,13 +315,20 @@ type joinFlow struct {
 	err        string
 	cancel     context.CancelFunc
 	onDone     func()
-	runID      uint64
+	// run is the current run's ticket; an answer that brings another is
+	// stale. A ticket rather than a count: the vault manager's reset zeroes
+	// the flow, and a count would start again at a number an older run holds.
+	run *joinTicket
 	// post is where the flow's answers go, the window's loop when nil.
 	post func(func())
 }
 
+// joinTicket is one run of a joinFlow. It has a size, because pointers to
+// distinct zero-size values may compare equal.
+type joinTicket struct{ _ byte }
+
 func (j *joinFlow) stop() {
-	j.runID++
+	j.run = nil
 	if j.cancel != nil {
 		j.cancel()
 		j.cancel = nil
@@ -406,8 +413,8 @@ func (j *joinFlow) start(a *App) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	j.stop()
-	j.cancel, j.err, j.code, j.phase = cancel, "", "", joinJoining
-	runID := j.runID
+	run := &joinTicket{}
+	j.cancel, j.err, j.code, j.phase, j.run = cancel, "", "", joinJoining, run
 	post := j.post
 	if post == nil {
 		post = a.cfg.Env.Post
@@ -415,13 +422,13 @@ func (j *joinFlow) start(a *App) {
 	flow := joinRun{c: client, ctx: ctx, url: hubURL(j.url), name: strings.TrimSpace(j.name), device: strings.TrimSpace(j.device),
 		vaultID: j.vaultID, mode: j.mode, folder: "", onCode: func(code string) {
 			post(func() {
-				if j.runID == runID && ctx.Err() == nil {
+				if j.run == run && ctx.Err() == nil {
 					j.code, j.phase = code, joinApprove
 				}
 			})
 		}, onJoining: func() {
 			post(func() {
-				if j.runID == runID && ctx.Err() == nil {
+				if j.run == run && ctx.Err() == nil {
 					j.phase = joinJoining
 				}
 			})
@@ -433,7 +440,17 @@ func (j *joinFlow) start(a *App) {
 		defer cancel()
 		v, err := flow.run()
 		post(func() {
-			if j.runID != runID || errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
+			if j.run != run {
+				// Cancelled or replaced: the flow is closed or shows another
+				// run, so a vault this one may have left on the list is told
+				// apart from it.
+				var left *vaultLeft
+				if errors.As(err, &left) {
+					a.notify(left.Error())
+				}
+				return
+			}
+			if errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
 				return
 			}
 			if err != nil {
@@ -553,16 +570,26 @@ func (r *joinRun) addVault() (*api.Vault, error) {
 	if err != nil {
 		var rpcErr *api.Error
 		if !errors.As(err, &rpcErr) {
-			return nil, fmt.Errorf("adding the vault lost its answer: %v; the vault at %q may remain on the list. Check Manage vaults and remove it before retrying", err, r.folder)
+			return nil, &vaultLeft{fmt.Sprintf("adding the vault lost its answer: %v; the vault at %q may remain on the list. Check Manage vaults and remove it before retrying", err, r.folder)}
 		}
 	}
 	return v, err
 }
 
+// vaultLeft is a join's failure that may leave its vault on the list. The
+// user hears of it even when the join was cancelled or replaced (#194).
+type vaultLeft struct{ msg string }
+
+func (e *vaultLeft) Error() string { return e.msg }
+
 // cleanupFailed says a join failed and its vault stayed on the list. It
 // does not wrap the join's error: a cancel would read as nothing to show.
 func cleanupFailed(err error, name string, rerr error) error {
-	return errors.New(err.Error() + `; could not remove the new vault "` + name + `" from the list: ` + rerr.Error() + ". Remove it in Manage vaults.")
+	why := err.Error()
+	if errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
+		why = "the join was cancelled"
+	}
+	return &vaultLeft{why + `; could not remove the new vault "` + name + `" from the list: ` + rerr.Error() + ". Remove it in Manage vaults."}
 }
 
 // run returns the vault it made, nil when the vault existed.
