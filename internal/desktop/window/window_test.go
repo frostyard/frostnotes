@@ -1185,22 +1185,17 @@ func TestLostAddAnswerExplainsPossibleVault(t *testing.T) {
 	}
 }
 
-type heldJoinLoop struct {
-	*desktoptest.Loop
-	posted chan func()
-}
-
-func (l *heldJoinLoop) Post(fn func()) { l.posted <- fn }
-
+// TestAnOldJoinCannotFinishTheNewRun holds the join's answers on a channel
+// of their own: the window's loop also carries the answers of calls still
+// in flight from the start, which a slow runner delivers late.
 func TestAnOldJoinCannotFinishTheNewRun(t *testing.T) {
 	f := start(t)
-	loop := &heldJoinLoop{Loop: f.loop, posted: make(chan func(), 10)}
-	f.a.cfg.Env = loop
-	j := &joinFlow{mode: modePair, url: ":invalid"}
+	posted := make(chan func(), 10)
+	j := &joinFlow{mode: modePair, url: ":invalid", post: func(fn func()) { posted <- fn }}
 	j.start(f.a)
 	var old func()
 	select {
-	case old = <-loop.posted:
+	case old = <-posted:
 	case <-t.Context().Done():
 		t.Fatal("no join answer")
 	}
@@ -1210,7 +1205,7 @@ func TestAnOldJoinCannotFinishTheNewRun(t *testing.T) {
 		t.Fatal("old answer replaced the new join")
 	}
 	select {
-	case fn := <-loop.posted:
+	case fn := <-posted:
 		fn()
 	case <-t.Context().Done():
 		t.Fatal("no second answer")
