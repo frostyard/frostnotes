@@ -726,6 +726,10 @@ The metainfo lists 4 screenshots in `docs/images`, taken by `make screenshots`
   and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`
   is the native app. `flatpak run --command=notesctl org.frostyard.Frostnotes`
   is the CLI on a desktop.
+- **Go.** The build uses Go's own tarball, pinned by version and checksum in
+  the manifest, as Flathub's Go extension can lag `go.mod` after a security
+  release. `GOTOOLCHAIN=local` makes a mismatch fail the build, and
+  `internal/workflowcheck` keeps the pin in step with `go.mod` and `mise.lock`.
 - **notesd** runs in its own sandbox of the same app, once per data
   directory: it takes an exclusive lock on `<data dir>/notesd.lock`, and a
   second notesd on that directory exits at once.
