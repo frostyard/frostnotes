@@ -912,6 +912,53 @@ func TestTheRightSidebarButtonWorksInAFrame(t *testing.T) {
 	}
 }
 
+// TestTheBarStaysReachableBesideANarrowRightSidebar guards
+// frostyard/frostui#11 in the app: with the right sidebar at its least, 200
+// DIPs, in a window 900 wide, the bar's end ran under the window controls
+// (the main menu ended at 836 with frostui v0.3.0), and narrower still it
+// shrank to a sliver.
+func TestTheBarStaysReachableBesideANarrowRightSidebar(t *testing.T) {
+	const width = 900
+	f := start(t)
+	f.tt = ui.NewTester(func(c *ui.Context) { f.a.View(c) }, width, 800)
+	controls := ui.TitleBar{Height: frostui.TopBarHeight, Left: 70, Right: 110} // as frostui's own test
+	f.tt.SetTitleBar(controls)
+	f.openVault()
+	f.a.updateWorkspace(func(w *workspace.Workspace) { w.SetSidebarWidth(workspace.SideRight, workspace.SidebarMin) })
+	f.a.layoutFromWorkspace()
+	f.tt.Frame()
+	f.tt.Frame()
+	if got := f.a.panes.Layout.Widths[paneRight]; got != workspace.SidebarMin {
+		t.Fatalf("the right sidebar is %v wide", got)
+	}
+	for _, name := range []string{"Main menu", "Search or run a command"} {
+		r, ok := f.tt.Find(name)
+		if !ok || r.W <= 0 || r.X < controls.Left || r.X+r.W > width-controls.Right {
+			t.Errorf("%s is at %+v, not between the window controls", name, r)
+		}
+	}
+	if err := f.tt.Click("Main menu"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(f.tt.Menu(), "Keyboard shortcuts") {
+		t.Errorf("the main menu shows %v", f.tt.Menu())
+	}
+	f.tt.CloseMenu()
+	if err := f.tt.Click("Search or run a command"); err != nil {
+		t.Fatal(err)
+	}
+	if !f.a.Shell.Palette.Open {
+		t.Error("a click did not open the palette")
+	}
+	f.a.Shell.Palette.Open = false
+	f.tt.Frame()
+	f.tt.Key(ui.Cmd, ui.KeyK)
+	f.tt.Frame()
+	if !f.a.Shell.Palette.Open {
+		t.Error("Ctrl K did not open the palette")
+	}
+}
+
 func TestAPressInAGroupMakesItActive(t *testing.T) {
 	f := start(t)
 	f.Create("a.md", "a\n")
