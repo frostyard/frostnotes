@@ -100,8 +100,12 @@ func validNode(n *Node, ids map[string]bool) *Node {
 			return nil
 		}
 		var tabs []Tab
-		for _, t := range n.Tabs {
+		active := 0
+		for i, t := range n.Tabs {
 			if v, ok := validTab(t, ids); ok {
+				if i == n.Active {
+					active = len(tabs)
+				}
 				tabs = append(tabs, v)
 			}
 		}
@@ -109,7 +113,6 @@ func validNode(n *Node, ids map[string]bool) *Node {
 			return nil
 		}
 		ids[n.ID] = true
-		active := n.Active
 		if active < 0 || active >= len(tabs) {
 			active = 0
 		}

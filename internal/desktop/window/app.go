@@ -126,7 +126,15 @@ func New(cfg Config) *App {
 	a.Prefs = prefs.Load(filepath.Join(cfg.ConfigAt, "prefs.json"))
 	a.State = prefs.LoadState(filepath.Join(cfg.StateAt, "state.json"))
 	a.Store = workspace.NewStore(cfg.Env, filepath.Join(cfg.StateAt, "workspace"))
-	a.Session = session.New(cfg.Env, cfg.Dial, a.State.Seq)
+	for _, ev := range a.State.Pending {
+		if ev.To == "" {
+			a.early = append(a.early, api.NoteRemoved{VaultID: ev.VaultID, Path: ev.From})
+		} else {
+			a.early = append(a.early, api.NoteMoved{VaultID: ev.VaultID, From: ev.From, To: ev.To})
+		}
+	}
+	a.earlySeq = a.State.PendingSeq
+	a.Session = session.New(cfg.Env, cfg.Dial, max(a.State.Seq, a.State.PendingSeq))
 	a.Session.OnSeq = func(seq int64) {
 		if a.listed {
 			a.State.Seq = seq
@@ -153,6 +161,7 @@ func (a *App) Start() { a.Session.Start() }
 // so (docs/design/app.md#operational-notes).
 func (a *App) RequestClose(done func()) {
 	a.commitDrafts()
+	a.updateWorkspace(func(*workspace.Workspace) {})
 	a.Store.Flush()
 	a.saveState()
 	a.Session.Flush(func() {
@@ -176,6 +185,7 @@ func (a *App) RequestClose(done func()) {
 
 // commitDrafts writes what the properties fields with the focus hold.
 func (a *App) commitDrafts() {
+	a.sets.commit(a)
 	for _, tc := range a.tabs {
 		if tc.ed != nil {
 			tc.ed.Properties.Commit()
@@ -185,6 +195,19 @@ func (a *App) commitDrafts() {
 
 func (a *App) savePrefs() { a.report(prefs.Save(filepath.Join(a.cfg.ConfigAt, "prefs.json"), a.Prefs)) }
 func (a *App) saveState() {
+	a.State.Pending, a.State.PendingSeq = nil, 0
+	if !a.listed && a.State.Seq == 0 {
+		for _, ev := range a.early {
+			switch e := ev.(type) {
+			case api.NoteMoved:
+				a.State.Pending = append(a.State.Pending, prefs.WorkspaceEvent{VaultID: e.VaultID, From: e.From, To: e.To})
+			case api.NoteRemoved:
+				a.State.Pending = append(a.State.Pending, prefs.WorkspaceEvent{VaultID: e.VaultID, From: e.Path})
+			}
+		}
+		a.State.PendingSeq = a.earlySeq
+	}
+
 	a.report(prefs.SaveState(filepath.Join(a.cfg.StateAt, "state.json"), a.State))
 }
 
