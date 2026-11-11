@@ -59,10 +59,13 @@ func (a *App) content(tab *workspace.Tab) *tabContent {
 		}
 		return tc
 	}
-	if tc := a.tabs[tab.ID]; tc != nil {
-		a.release(tc)
-	}
+	// Acquire the replacement before releasing the old view. Switching modes
+	// of the same note must retain its shared buffer and undo history.
+	previous := a.tabs[tab.ID]
 	tc := a.make(tab)
+	if previous != nil {
+		a.release(previous)
+	}
 	a.tabs[tab.ID] = tc
 	return tc
 }

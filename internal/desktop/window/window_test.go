@@ -1082,7 +1082,12 @@ func TestReadingTaskClickHasUndoAndRedoWithoutAnEditor(t *testing.T) {
 	if tc.doc.Text() != "- [x] water\n" {
 		t.Fatalf("redo: %q", tc.doc.Text())
 	}
+	f.a.toggleMode()
+	f.until("editor mode", func() bool { return f.a.activeEditor() != nil })
 	f.a.run("editor:undo")
+	if tc.doc.Text() != source {
+		t.Fatalf("undo after mode switch: %q", tc.doc.Text())
+	}
 	tc.doc.Save()
 	f.until("save", func() bool { return tc.doc.Status() == notes.StatusClean })
 	if got := f.Read("Tasks.md").Content; got != source {
