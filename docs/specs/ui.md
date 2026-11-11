@@ -985,7 +985,9 @@ with frostui, which changes these:
 - The status bar starts with the connection, "Local" or the hub's host.
 - Live preview draws headings at their hierarchy's size and dims/strikes
   completed tasks off selected lines; selection restores source styles.
-  Math keeps its TeX source; audio and video keep their embeds. An image within a line draws under it. In source mode, the
+  Math draws as vector paths ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md));
+  audio and video keep their embeds. An image within a line draws under it.
+  In source mode, the
   frontmatter's first line stays visible while the properties panel shows.
 - The status bar's editing mode opens a menu with Reading view, Live Preview
   and Source mode; choosing an editing mode also sets its default.

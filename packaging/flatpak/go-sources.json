@@ -157,6 +157,18 @@
   },
   {
     "type": "file",
+    "url": "https://proxy.golang.org/github.com/d2lang/mathjax-go/@v/v0.1.0.mod",
+    "sha256": "b8a3ff80b4e63b08c12ed3bcbefcdaebec039551cf00b99b08c6ba6dec5abfc5",
+    "dest": "goproxy/github.com/d2lang/mathjax-go/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/d2lang/mathjax-go/@v/v0.1.0.zip",
+    "sha256": "315a73fb84841023d51a472744c3cf854187232bfc9839238eb87453b5c04867",
+    "dest": "goproxy/github.com/d2lang/mathjax-go/@v"
+  },
+  {
+    "type": "file",
     "url": "https://proxy.golang.org/github.com/dustin/go-humanize/@v/v1.1.0.mod",
     "sha256": "73ef52590e41200a113c6f8fbffd10cc5eb90dc0dc11d79bc5d46d85bddf9c0d",
     "dest": "goproxy/github.com/dustin/go-humanize/@v"

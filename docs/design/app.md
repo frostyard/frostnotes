@@ -324,6 +324,10 @@ after the last tab goes until what it holds is saved:
 
 ### Live preview
 
+Native inline and display math use bounded, cached SVG glyph paths from a
+pure-Go renderer ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md)).
+Invalid formulas retain their source; selected lines reveal it.
+
 The native Settings omit the inactive Spellcheck control
 ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md));
 this does not change the web editor's spelling preference.
