@@ -110,3 +110,14 @@ func TestPropertyType(t *testing.T) {
 		}
 	}
 }
+
+func TestRenameKeepsNaNValues(t *testing.T) {
+	for _, value := range []string{".nan", "[.nan, 1]", "{nested: [.nan, .inf]}"} {
+		before := "---\na: " + value + " # keep\n---\nBody\n"
+		got, err := RenameProperty(before, "a", "b")
+		want := "---\nb: " + value + " # keep\n---\nBody\n"
+		if err != nil || got != want {
+			t.Fatalf("rename %s: %q, %v", value, got, err)
+		}
+	}
+}
