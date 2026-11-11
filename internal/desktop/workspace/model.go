@@ -252,7 +252,23 @@ func (n *Node) clone() *Node {
 }
 
 func (t Tab) clone() Tab {
-	t.Back = slices.Clone(t.Back)
-	t.Forward = slices.Clone(t.Forward)
+	t.View = t.View.clone()
+	t.Back = cloneViews(t.Back)
+	t.Forward = cloneViews(t.Forward)
 	return t
+}
+
+func (v View) clone() View {
+	if v.Other != nil {
+		other := *v.Other
+		v.Other = &other
+	}
+	return v
+}
+func cloneViews(in []View) []View {
+	out := slices.Clone(in)
+	for i := range out {
+		out[i] = out[i].clone()
+	}
+	return out
 }

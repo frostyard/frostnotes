@@ -22,6 +22,8 @@ type NoteView struct {
 	// ShowTitle and ShowProperties are the Show inline title and
 	// Properties in document preferences.
 	ShowTitle, ShowProperties bool
+	// HideProperties hides the panel and frontmatter in live preview.
+	HideProperties bool
 	// Readable limits the note's width (Readable line length).
 	Readable bool
 	// Rename moves the note: its new name, without ".md".
@@ -59,13 +61,15 @@ func (v *NoteView) View(c *ui.Context) ui.Element {
 			}
 			if v.ShowProperties {
 				v.Properties.View(c)
+			}
+			if v.ShowProperties || v.HideProperties {
 				if v.Editor.Prefs.Live {
 					v.startAfterFrontmatter()
 				} else {
 					v.foldFrontmatter()
 				}
 			}
-			v.Editor.HideFront = v.ShowProperties
+			v.Editor.HideFront = v.ShowProperties || v.HideProperties
 			v.Editor.View(c).Grow(1).FillWidth()
 		})
 	})

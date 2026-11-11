@@ -29,8 +29,6 @@ export interface VaultManagerProps {
   current: number | null;
   /** "window" fills its parent, without Close; "dialog" floats over the window. */
   mode: "window" | "dialog";
-  /** The system has a folder picker: Open opens it. Else a path is typed. */
-  canPick: boolean;
   /** When given, shown in the actions' place: the create form. */
   panel?: ReactNode;
   /**
@@ -45,8 +43,8 @@ export interface VaultManagerProps {
   onJoin: () => void;
   /** Whether this notesd syncs: the Join button shows for "yes" alone. */
   syncAvailable: SyncAvailability;
-  /** Open folder as vault: no path with a picker, else the typed path, trimmed. */
-  onOpenFolder: (path?: string) => void;
+  /** Open folder as vault using the typed path, trimmed. */
+  onOpenFolder: (path: string) => void;
   onClose: () => void;
 }
 
@@ -184,12 +182,11 @@ function VaultList({ vaults, current, manage, onOpen, onRemove }: VaultManagerPr
   );
 }
 
-function VaultActions({ canPick, onCreate, onJoin, syncAvailable, onOpenFolder }: VaultManagerProps) {
+function VaultActions({ onCreate, onJoin, syncAvailable, onOpenFolder }: VaultManagerProps) {
   const [path, setPath] = useState("");
 
   function openFolder() {
-    if (canPick) onOpenFolder();
-    else if (path.trim()) onOpenFolder(path.trim());
+    if (path.trim()) onOpenFolder(path.trim());
   }
 
   return (
@@ -201,22 +198,20 @@ function VaultActions({ canPick, onCreate, onJoin, syncAvailable, onOpenFolder }
         </button>
       </VaultAction>
       <VaultAction title="Open folder as vault" description="Choose a folder of Markdown files.">
-        {!canPick && (
-          <input
-            type="text"
-            aria-label="Folder path"
-            value={path}
-            spellCheck={false}
-            className="h-7 w-[240px] max-w-full rounded-md border border-separator bg-window px-2 focus:border-accent"
-            onChange={(event) => setPath(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                openFolder();
-              }
-            }}
-          />
-        )}
+        <input
+          type="text"
+          aria-label="Folder path"
+          value={path}
+          spellCheck={false}
+          className="h-7 w-[240px] max-w-full rounded-md border border-separator bg-window px-2 focus:border-accent"
+          onChange={(event) => setPath(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              openFolder();
+            }
+          }}
+        />
         <button
           type="button"
           className="h-7 rounded-md border border-separator px-3 hover:bg-selection-inactive"

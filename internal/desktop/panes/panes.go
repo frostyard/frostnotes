@@ -119,15 +119,16 @@ var propertyQuery = regexp.MustCompile(`^\[([^\]:]+)\]$`)
 
 // Search is the Search pane (docs/specs/ui.md#search-pane-batch-2).
 type Search struct {
-	Env   *Env
-	Query string
-	list  ui.ListState
-	hits  []api.SearchHit
-	asked string
-	done  string // the query hits answer
-	err   error
-	stop  func()
-	focus bool
+	Env        *Env
+	Query      string
+	list       ui.ListState
+	hits       []api.SearchHit
+	asked      string
+	done       string // the query hits answer
+	err        error
+	stop       func()
+	focus      bool
+	generation uint64
 }
 
 // Ask shows query in the pane and focuses it.
@@ -141,6 +142,7 @@ func (s *Search) schedule() {
 		s.stop()
 	}
 	q := strings.TrimSpace(s.Query)
+	s.generation++
 	s.asked = q
 	if q == "" {
 		s.hits, s.done, s.err = nil, "", nil
@@ -161,6 +163,7 @@ func (s *Search) Refresh() {
 }
 
 func (s *Search) run(q string) {
+	gen := s.generation
 	if s.Env.API() == nil {
 		s.done, s.err = q, errors.New("not connected to notesd")
 		return
@@ -180,7 +183,7 @@ func (s *Search) run(q string) {
 		hits, err = a.Search(ctx, &api.NoteSearchParams{VaultID: s.Env.Vault, Query: q, Limit: &limit})
 		return err
 	}, func(err error) {
-		if q != s.asked {
+		if gen != s.generation || q != s.asked {
 			return // an answer for another query is not shown
 		}
 		s.hits, s.done, s.err = hits, q, err
@@ -423,33 +426,59 @@ func (o *Outgoing) View(c *ui.Context) ui.Element {
 
 // Tags is the Tags pane: nested tags with counts; a click searches.
 type Tags struct {
-	Env     *Env
-	ByCount bool
-	state   ui.OutlineState[*TagNode]
-	chosen  int
-	roots   []*TagNode
-	counts  []api.TagCount
+	Env        *Env
+	ByCount    bool
+	state      ui.OutlineState[*TagNode]
+	chosen     int
+	roots      []*TagNode
+	counts     []api.TagCount
+	generation uint64
 }
 
 // Refresh reads the tags again.
 func (p *Tags) Refresh() {
+	p.generation++
+	gen := p.generation
 	var got []api.TagCount
 	p.Env.call(func(ctx context.Context, a API) (err error) {
 		got, err = a.Tags(ctx, &api.NoteTagsParams{VaultID: p.Env.Vault})
 		return err
 	}, func(err error) {
+		if gen != p.generation {
+			return
+		}
 		p.Env.report(err)
 		if err == nil {
 			p.counts = got
-			p.roots = TagTree(got, p.ByCount)
+			p.rebuild()
 		}
 	})
+}
+
+// rebuild carries expanded tags across refreshes by their canonical names.
+func (p *Tags) rebuild() {
+	open := map[string]bool{}
+	for n := range p.state.Open.All() {
+		open[strings.ToLower(n.Tag)] = true
+	}
+	p.roots = TagTree(p.counts, p.ByCount)
+	p.state.Open.Clear()
+	var restore func([]*TagNode)
+	restore = func(nodes []*TagNode) {
+		for _, n := range nodes {
+			if open[strings.ToLower(n.Tag)] {
+				p.state.Open.Add(n)
+			}
+			restore(n.Children)
+		}
+	}
+	restore(p.roots)
 }
 
 // View draws the pane.
 func (p *Tags) View(c *ui.Context) ui.Element {
 	return ui.Column(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		sortBar(c, &p.ByCount, func() { p.roots = TagTree(p.counts, p.ByCount) })
+		sortBar(c, &p.ByCount, p.rebuild)
 		if len(p.roots) == 0 {
 			frostui.Muted(c, "No tags.").Padding(frostui.SpaceS)
 			return
@@ -494,19 +523,25 @@ func sortBar(c *ui.Context, byCount *bool, changed func()) {
 
 // Properties is the All properties pane.
 type Properties struct {
-	Env     *Env
-	ByCount bool
-	list    ui.ListState
-	counts  []api.PropertyCount
+	Env        *Env
+	ByCount    bool
+	list       ui.ListState
+	counts     []api.PropertyCount
+	generation uint64
 }
 
 // Refresh reads the properties again.
 func (p *Properties) Refresh() {
+	p.generation++
+	gen := p.generation
 	var got []api.PropertyCount
 	p.Env.call(func(ctx context.Context, a API) (err error) {
 		got, err = a.Properties(ctx, &api.NotePropertiesParams{VaultID: p.Env.Vault})
 		return err
 	}, func(err error) {
+		if gen != p.generation {
+			return
+		}
 		p.Env.report(err)
 		if err == nil {
 			p.counts = got
@@ -672,10 +707,11 @@ func (o *Outline) View(c *ui.Context) ui.Element {
 
 // Tasks is the Tasks pane: the vault's open tasks, by note.
 type Tasks struct {
-	Env   *Env
-	tasks []api.TaskEntry
-	rows  []taskRow
-	list  ui.ListState
+	Env        *Env
+	tasks      []api.TaskEntry
+	rows       []taskRow
+	list       ui.ListState
+	generation uint64
 }
 
 // taskRow is a row of the list: a note's title, or one of its tasks.
@@ -699,11 +735,16 @@ func taskRows(tasks []api.TaskEntry) []taskRow {
 
 // Refresh reads the tasks again.
 func (p *Tasks) Refresh() {
+	p.generation++
+	gen := p.generation
 	var got []api.TaskEntry
 	p.Env.call(func(ctx context.Context, a API) (err error) {
 		got, err = a.Tasks(ctx, &api.NoteTasksParams{VaultID: p.Env.Vault})
 		return err
 	}, func(err error) {
+		if gen != p.generation {
+			return
+		}
 		p.Env.report(err)
 		if err == nil {
 			p.tasks = got

@@ -97,6 +97,7 @@ func (s *settingsDialog) view(c *ui.Context, a *App) {
 	}
 	if s.wasOpen && !s.layout.Open {
 		s.wasOpen = false
+		s.commit(a)
 		s.closed()
 	}
 }
@@ -266,6 +267,14 @@ func (s *settingsDialog) textField(c *ui.Context, a *App, r settingRow) {
 	}
 }
 
+// commit keeps unfinished text fields when Settings closes.
+func (s *settingsDialog) commit(a *App) {
+	for id, draft := range s.drafts {
+		delete(s.drafts, id)
+		a.settingChanged(id, draft)
+	}
+}
+
 // settingChanged applies a change a row made.
 func (a *App) settingChanged(id string, value any) {
 	where, key, _ := strings.Cut(id, ":")
@@ -307,12 +316,12 @@ func (a *App) prefsChanged() {
 	for _, tc := range a.tabs {
 		if tc.ed != nil {
 			tc.ed.Editor.Prefs = a.editorPrefs()
-			tc.ed.Editor.Rendered.RemoteImages = a.Prefs.LoadRemoteImages
+			tc.ed.Editor.Rendered.SetRemoteImages(a.Prefs.LoadRemoteImages)
 			tc.ed.Editor.Rendered.Changed()
 			tc.ed.Editor.RefreshLive()
 		}
 		if tc.read != nil {
-			tc.read.RemoteImages = a.Prefs.LoadRemoteImages
+			tc.read.SetRemoteImages(a.Prefs.LoadRemoteImages)
 		}
 	}
 }
@@ -495,7 +504,6 @@ func (a *App) settingsSections() []settingsSection {
 			toggle("inlineTitle", "Show inline title", "The file's name as an editable title above the note.", p.InlineTitle),
 			toggle("viewHeader", "Show view header", "The bar above a tab's view.", p.ViewHeader),
 			toggle("readableLineLength", "Readable line length", "Limit a note's width to 700 pixels.", p.ReadableLineLength),
-			toggle("spellcheck", "Spellcheck", "", p.Spellcheck),
 			choice("pref:properties", "Properties in document", p.Properties, option{"visible", "Visible"}, option{"hidden", "Hidden"}, option{"source", "Source"}),
 			toggle("lineNumbers", "Show line numbers", "", p.LineNumbers),
 			toggle("indentGuides", "Show indentation guides", "", p.IndentGuides),

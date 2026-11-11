@@ -324,6 +324,10 @@ after the last tab goes until what it holds is saved:
 
 ### Live preview
 
+The native Settings omit the inactive Spellcheck control
+([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md));
+this does not change the web editor's spelling preference.
+
 Live preview is decoration over the source, never a transformation
 ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
 The framework (`editor/preview/`) owns:

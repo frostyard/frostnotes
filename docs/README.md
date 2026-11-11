@@ -60,6 +60,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0036 — notesd and the app record problems in the journal](adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)
 - [0037 — Queries are Obsidian Bases, a subset that notesd compiles to SQL](adr/0037-queries-are-obsidian-bases-compiled-to-sql.md)
 - [0038 — Draw the desktop app natively with MyGo and frostui](adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)
+- [0040 — Remove the inactive native Spellcheck setting](adr/0040-remove-the-inactive-native-spellcheck-setting.md)
 - [0039 — Draw live preview as replacements over the source](adr/0039-live-preview-is-replacements-over-the-source.md)
 
 ### Design

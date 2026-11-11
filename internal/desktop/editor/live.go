@@ -114,7 +114,7 @@ func (e *NoteEditor) embedKind(target string, wikilink bool) livepreview.EmbedKi
 }
 
 // imageExts are the images MyGo decodes.
-var imageExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true, ".webp": true, ".svg": true}
+var imageExts = map[string]bool{".avif": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true, ".webp": true, ".svg": true}
 
 // block turns a block of live preview into MyGo's.
 func (e *NoteEditor) block(b livepreview.Block) code.Block {
