@@ -501,11 +501,12 @@ func (v *View) anchorBlock(d *parser.Document, name string) int {
 	if sourceLine == 0 {
 		return -1
 	}
-	target := 0
+	target, nearest := 0, 0
 	for i, line := range v.sourceLines {
-		if int(line) == sourceLine {
-			target = i + 1
-			break
+		// A standalone ID is removed from the rendered output. Its nearest
+		// preceding source line still identifies the block it follows.
+		if int(line) > nearest && int(line) <= sourceLine {
+			target, nearest = i+1, int(line)
 		}
 	}
 	if target == 0 {
@@ -517,6 +518,12 @@ func (v *View) anchorBlock(d *parser.Document, name string) int {
 		first := v.baseLine + strings.Count(d.Source()[:b.Start], "\n") + 1
 		if first <= target && first >= bestFirst {
 			best, bestFirst = i, first
+		}
+	}
+	source := strings.Split(v.rendered, "\n")
+	if sourceLine <= len(source) && strings.TrimSpace(source[sourceLine-1]) == name {
+		for best > 0 && d.Block(best).Parent > 0 {
+			best = d.Block(best).Parent
 		}
 	}
 	return best

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/markdown/parser"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
@@ -300,5 +301,23 @@ func TestRemoteImagePreferenceRetriesRefusedImages(t *testing.T) {
 	case <-requests:
 	case <-time.After(5 * time.Second):
 		t.Fatal("enabling remote images did not retry the cached refusal")
+	}
+}
+
+func TestStandaloneBlockIDsResolveTheirContainer(t *testing.T) {
+	for _, tc := range []struct {
+		source string
+		kind   parser.Kind
+	}{
+		{"- first\n- second\n\n^target\n", parser.List},
+		{"> quote\n\n^target\n", parser.Quote},
+		{"| a |\n| - |\n| 1 |\n\n^target\n", parser.Table},
+	} {
+		f := open(t, map[string]string{"Blocks.md": "Before.\n\n" + tc.source}, "Blocks.md")
+		d := parser.Parse(f.view.Markdown())
+		i := f.view.anchorBlock(d, "^target")
+		if i < 0 || d.Block(i).Kind != tc.kind {
+			t.Fatalf("%q: index %d in %q", tc.source, i, f.view.Markdown())
+		}
 	}
 }
