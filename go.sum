@@ -39,8 +39,8 @@ github.com/frankban/quicktest v1.14.6 h1:7Xjx+VpznH+oBnejlPUj8oUpdxnVs4f8XU8WnHk
 github.com/frankban/quicktest v1.14.6/go.mod h1:4ptaffx2x8+WTWXmUCuVU6aPUX1/Mz7zb5vbUoiM6w0=
 github.com/frostyard/clix v0.5.0 h1:Krzt2hcCoc/bRFNABKWNZMOZjU1cKtJy22e6rxlxQeo=
 github.com/frostyard/clix v0.5.0/go.mod h1:W0QNHnzoBz0KSwrMtWwKQmApJMrEy0DdOnJifYlH8WU=
-github.com/frostyard/frostui v0.2.0 h1:Yde2WuvTZDaGTPE/BU3XsNDXyP3+46nwmsRm0R1bRoM=
-github.com/frostyard/frostui v0.2.0/go.mod h1:3sELH7Ys+lsYb9laSeoQdWhAPfNgXUtwSW//KyJHwj8=
+github.com/frostyard/frostui v0.2.1-0.20261111070608-a6a2df5dd07d h1:B39RAKQsWCgHkm9j1yvCthV+1U2SkyIWQZwXP30obTk=
+github.com/frostyard/frostui v0.2.1-0.20261111070608-a6a2df5dd07d/go.mod h1:G05/yKfwaHyirmWLFgEZo8m5KGE6qX7ujTpv8EnR2Ao=
 github.com/frostyard/lodge/kit v0.4.0 h1:CIu9YWBi+7tob8mHl+Qr2yk80Qleo1iGn8mwKIPw1Jo=
 github.com/frostyard/lodge/kit v0.4.0/go.mod h1:u1oc0QWL29ZESg/nQlLs8q9hFDlteKHxcY/lFQcMZaU=
 github.com/frostyard/std v0.5.0 h1:SUmy+LnGpFAsfCrokeJc8Sa/M5pj3jpSlwHlgaIJR94=

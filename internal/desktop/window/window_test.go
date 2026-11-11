@@ -1052,6 +1052,26 @@ func TestACancelDoesNotCutTheAddShort(t *testing.T) {
 	}
 }
 
+func TestStatusEditingModeMenuChoosesEachMode(t *testing.T) {
+	f := start(t)
+	f.Create("a.md", "text\n")
+	f.openVault()
+	f.a.open("a.md", workspace.NewTab)
+	f.until("the note", func() bool { return f.a.activeEditor() != nil && f.a.activeEditor().Binding().Document().Loaded() })
+	for _, name := range []string{"Reading view", "Source mode", "Live Preview"} {
+		if err := f.tt.Click("Change the editing mode"); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.tt.ChooseMenuItem(name); err != nil {
+			t.Fatal(err)
+		}
+		f.tt.Frame()
+		if got := f.a.modeName(f.a.Store.Workspace().ActiveTab().View); got != name {
+			t.Fatalf("got %q, want %q", got, name)
+		}
+	}
+}
+
 func TestHistoryRestoresCaretAndScroll(t *testing.T) {
 	f := start(t)
 	f.Create("a.md", strings.Repeat("A long line of text\n", 150))

@@ -176,7 +176,7 @@ func (a *App) statusEnd() []frostui.StatusItem {
 		items = append(items, frostui.StatusItem{Text: plural(words, "word"), Progress: -1}, frostui.StatusItem{Text: plural(chars, "character"), Progress: -1})
 	}
 	if t := a.Store.Workspace().ActiveTab().View; t.Type == workspace.ViewNote {
-		items = append(items, frostui.StatusItem{Text: a.modeName(t), Tooltip: "Change the editing mode", Progress: -1, OnClick: a.toggleMode})
+		items = append(items, frostui.StatusItem{Text: a.modeName(t), Tooltip: "Change the editing mode", Progress: -1, Menu: a.editingModeMenu})
 	}
 	return items
 }
@@ -304,4 +304,32 @@ func (a *App) pane(c *ui.Context, id string) {
 	case "tasks":
 		a.tasks.View(c)
 	}
+}
+
+// editingModeMenu selects a specific view instead of cycling between two modes.
+func (a *App) editingModeMenu(m *ui.Menu) {
+	current := a.modeName(a.Store.Workspace().ActiveTab().View)
+	for _, mode := range []struct{ name, pref string }{{"Reading view", ""}, {"Live Preview", "live"}, {"Source mode", "source"}} {
+		if m.Item(mode.name).Checked(current == mode.name).Chosen() {
+			a.chooseEditingMode(mode.pref)
+		}
+	}
+}
+
+func (a *App) chooseEditingMode(pref string) {
+	if pref != "" {
+		a.setPref("editingMode", pref)
+	}
+	a.Store.Update(func(w *workspace.Workspace) {
+		tab := w.ActiveTab()
+		if tab.View.Type != workspace.ViewNote {
+			return
+		}
+		v := tab.View
+		v.Mode = workspace.ModeRead
+		if pref != "" {
+			v.Mode = workspace.ModeEdit
+		}
+		w.SetView(tab.ID, v)
+	})
 }
