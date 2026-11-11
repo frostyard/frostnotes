@@ -8,10 +8,13 @@ import (
 	"hash/crc32"
 	"image"
 	"image/png"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -201,5 +204,24 @@ func TestABlockAsksForThePathItHadWhenDrawn(t *testing.T) {
 	f.doc.Moved("Moved.md")
 	if got := <-r.asked; got != "Plan.md" {
 		t.Fatalf("asked for %q", got)
+	}
+}
+
+func TestRemoteImagePreferenceRetriesRefusedImages(t *testing.T) {
+	requests := make(chan struct{}, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(onePixel)
+		requests <- struct{}{}
+	}))
+	defer server.Close()
+	f := open(t, map[string]string{"a.md": "![remote](" + server.URL + "/a.png)"}, "a.md")
+	// The initial view has a cached refusal. A new identity must ask again.
+	f.view.SetRemoteImages(true)
+	f.tt.Frame()
+	select {
+	case <-requests:
+	case <-time.After(5 * time.Second):
+		t.Fatal("enabling remote images did not retry the cached refusal")
 	}
 }
