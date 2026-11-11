@@ -142,7 +142,7 @@ type Scanner struct {
 type lineKey struct {
 	text      string
 	afterText bool // the line before is a paragraph's: "---" underlines it
-	afterGap  bool // the line before is blank: four spaces start code
+	afterGap  bool // the line before is blank
 }
 
 // Pieces lists what shows of text, sorted and apart, without blocks.
@@ -179,14 +179,19 @@ func (s *Scanner) Scan(text string, o Options) Result {
 			}
 		}
 		was := st.block
-		st.advance(content, line, start, next, min(next, len(text)), o, &res)
+		indented := was == blockText && !st.afterText && codeIndent(content)
+		if indented {
+			st.structural = true
+		} else {
+			st.advance(content, line, start, next, min(next, len(text)), o, &res)
+		}
 		if was == blockText && st.block == blockText && !st.structural {
 			from := len(res.Pieces)
 			res.Pieces = s.line(res.Pieces, content, start, st, line, o.Revealed)
 			placeEmbeds(&res, from, text, content, start, min(next, len(text)), line, o)
 		}
 		st.afterGap = strings.TrimSpace(content) == ""
-		st.afterText = was == blockText && !st.afterGap && !st.structural
+		st.afterText = was == blockText && !st.afterGap && !st.structural && !headingRe.MatchString(content) && !ruleRe.MatchString(content) && (!st.afterText || !setextRe.MatchString(content))
 		line, start = line+1, next
 		lines++
 	}
@@ -397,7 +402,7 @@ func (st *state) endFence(close, limit int, res *Result) {
 // wholeBlock draws a callout or a table that starts at this line, unless a
 // selection touches it: how many lines it took and where the next starts.
 func wholeBlock(text, content string, start, next, line int, st state, o Options, res *Result) (lines, after int) {
-	if st.afterGap && (strings.HasPrefix(content, "    ") || strings.HasPrefix(content, "\t")) {
+	if !st.afterText && codeIndent(content) {
 		return 0, 0 // indented code
 	}
 	var label string
@@ -567,6 +572,7 @@ var (
 	quotedRe    = regexp.MustCompile(`^ {0,3}>`)
 	delimiterRe = regexp.MustCompile(`^ {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$`)
 	sizeRe      = regexp.MustCompile(`^(\d+)(?:x\d+)?$`)
+	setextRe    = regexp.MustCompile(`^ {0,3}(?:=+|-+)[ \t]*$`)
 	headingRe   = regexp.MustCompile(`^ {0,3}#{1,6}(?:[ \t]+|$)`)
 	quoteRe     = regexp.MustCompile(`^ {0,3}(?:> ?)+`)
 	taskRe      = regexp.MustCompile(`^[ \t]*([-*+]|\d+[.)])[ \t]+(\[(.)\])(?:[ \t]|$)`)
@@ -580,9 +586,14 @@ var (
 // link keeps to hidden marks.
 const maxObject = 80
 
+// codeIndent reports an indented code line outside a paragraph or list.
+func codeIndent(line string) bool {
+	return strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")
+}
+
 // linePieces are the pieces of a line of text, from its start.
 func linePieces(line string, afterText, afterGap bool) []Piece {
-	if afterGap && (strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t")) && !taskRe.MatchString(line) && !bulletRe.MatchString(line) {
+	if !afterText && codeIndent(line) {
 		return nil // indented code
 	}
 	var ps []Piece

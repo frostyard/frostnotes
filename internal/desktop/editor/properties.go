@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"reflect"
 	"regexp"
 	"slices"
@@ -381,10 +382,27 @@ func RenameProperty(text, from, to string) (string, error) {
 		return "", err
 	}
 	got := ReadFrontmatter(next).Properties
-	if j := slices.IndexFunc(got, func(x Property) bool { return x.Key == to }); j < 0 || !reflect.DeepEqual(got[j].Value, p.props[i].Value) {
+	if j := slices.IndexFunc(got, func(x Property) bool { return x.Key == to }); j < 0 || !equalPropertyValue(got[j].Value, p.props[i].Value) {
 		return "", fmt.Errorf("property %s cannot be renamed to %s", from, to)
 	}
 	return next, nil
+}
+
+// equalPropertyValue compares decoded YAML values, including nested NaNs.
+func equalPropertyValue(a, b any) bool {
+	switch x := a.(type) {
+	case float64:
+		y, ok := b.(float64)
+		return ok && (x == y || math.IsNaN(x) && math.IsNaN(y))
+	case []any:
+		y, ok := b.([]any)
+		return ok && slices.EqualFunc(x, y, equalPropertyValue)
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		return ok && maps.EqualFunc(x, y, equalPropertyValue)
+	default:
+		return reflect.DeepEqual(a, b)
+	}
 }
 
 // keyEnd is where the key that starts a line ends: past a quoted key's closing

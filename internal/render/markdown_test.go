@@ -176,3 +176,18 @@ func TestAReferenceImageTakesNoOtherImagesDestination(t *testing.T) {
 		t.Errorf("the image after a reference was not rewritten: %q", got)
 	}
 }
+
+func TestAdjacentReferenceImagesCannotRewriteCode(t *testing.T) {
+	for _, in := range []string{
+		"![][a]![][b] `![](photo.png)`\n\n[a]: photo.png\n[b]: photo.png\n",
+		"![][a]![][a] `![](photo.png)` ![](photo.png)\n\n[a]: photo.png\n",
+	} {
+		got := Markdown([]byte(in), mdVault())
+		if !strings.Contains(got, "`![](photo.png)`") {
+			t.Fatalf("code span rewritten: %q", got)
+		}
+		if strings.Contains(in, "` ![]") && !strings.Contains(got, "![](<blob:aaaa.png>)") {
+			t.Fatalf("real image not rewritten: %q", got)
+		}
+	}
+}

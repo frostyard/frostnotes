@@ -196,3 +196,10 @@ func TestFollowLeavesAnUnreadableWorkspaceAlone(t *testing.T) {
 		t.Fatalf("%q %v", got, err)
 	}
 }
+
+func TestValidationKeepsTheActiveTabAfterDroppingInvalidTabs(t *testing.T) {
+	w := Validate([]byte(`{"version":1,"root":{"kind":"tabs","id":"g1","active":1,"tabs":[{"id":"bad","view":{"type":"empty"}},{"id":"t2","view":{"type":"note","path":"chosen.md","mode":"edit"}},{"id":"t3","view":{"type":"empty"}}]}}`))
+	if got := w.ActiveTab().View.Path; got != "chosen.md" {
+		t.Fatalf("active path %q", got)
+	}
+}

@@ -39,6 +39,8 @@ type tabContent struct {
 	img      ui.ImageSource
 	fileRead bool
 	err      string
+	scroll   ui.ScrollState
+	restored bool
 }
 
 func sameContent(a, b workspace.View) bool {
@@ -66,6 +68,7 @@ func (a *App) content(tab *workspace.Tab) *tabContent {
 func (a *App) make(tab *workspace.Tab) *tabContent {
 	v := tab.View
 	tc := &tabContent{view: v}
+	tc.scroll.Y = float32(v.Scroll)
 	switch v.Type {
 	case workspace.ViewNote:
 		tc.doc = a.Session.Open(a.vault.ID, v.Path)
@@ -158,9 +161,7 @@ func (a *App) noteEditor(d *notes.Document, v workspace.View) *editor.NoteEditor
 	e.Rendered = reading.NewBlocks(a.cfg.Env, a.readingAPI, d, a.cfg.Blobs)
 	e.Rendered.RemoteImages = a.Prefs.LoadRemoteImages
 	e.Rendered.Links = a.readingLinks()
-	if v.Cursor > 0 {
-		e.State.Select(v.Cursor, v.Cursor)
-	}
+
 	return e
 }
 
@@ -279,7 +280,7 @@ func (a *App) mergeDone(tc *tabContent, tabID string) {
 			return c.Sync().Resolve(ctx, &api.SyncResolveParams{VaultID: id, Path: p})
 		}, nil)
 	}
-	a.Store.Update(func(w *workspace.Workspace) { w.Close(tabID) })
+	a.updateWorkspace(func(w *workspace.Workspace) { w.Close(tabID) })
 }
 
 // loadFile reads an image tab's bytes, once the catalog knows its hash: a
@@ -326,7 +327,7 @@ func (a *App) workspaceView(c *ui.Context) {
 	a.wasDrag, a.dragging = a.dragging, false
 	root := a.splitNode(a.Store.Workspace().Root)
 	uikit.SplitView(c, root, &a.split, func(id string, sizes []float64) {
-		a.Store.Update(func(w *workspace.Workspace) { w.Resize(id, sizes) })
+		a.updateWorkspace(func(w *workspace.Workspace) { w.Resize(id, sizes) })
 	})
 }
 
@@ -349,7 +350,7 @@ func (a *App) group(c *ui.Context, g *workspace.Node) {
 		if a.focusGroup != g.ID {
 			a.focusGroup = g.ID
 			if a.Store.Workspace().ActiveID != g.ID {
-				a.Store.Update(func(w *workspace.Workspace) { w.ActiveID = g.ID })
+				a.updateWorkspace(func(w *workspace.Workspace) { w.ActiveID = g.ID })
 			}
 		}
 	} else if a.focusGroup == g.ID {
@@ -365,7 +366,7 @@ func (a *App) group(c *ui.Context, g *workspace.Node) {
 			a.tabView(c, tab)
 			if a.wasDrag {
 				uikit.DropEdges(c, func(id, edge string) {
-					a.Store.Update(func(w *workspace.Workspace) { w.MoveTab(id, g.ID, 0, edge) })
+					a.updateWorkspace(func(w *workspace.Workspace) { w.MoveTab(id, g.ID, 0, edge) })
 				})
 			}
 		})
@@ -378,17 +379,17 @@ func (a *App) strip(c *ui.Context, g *workspace.Node) {
 		tabs[i] = uikit.Tab{ID: t.ID, Title: t.View.Title(), Pinned: t.Pinned}
 	}
 	uikit.TabStrip{Label: "Tabs", NewLabel: "New tab", ListLabel: "Tab list", CloseLabel: func(title string) string { return "Close " + title }, Tabs: tabs, Active: g.Active, Dragging: &a.dragging, Revealed: a.revealedTab(g.ID),
-		Activate: func(id string) { a.Store.Update(func(w *workspace.Workspace) { w.Activate(id) }) },
-		Close:    func(id string) { a.Store.Update(func(w *workspace.Workspace) { w.Close(id) }) },
+		Activate: func(id string) { a.updateWorkspace(func(w *workspace.Workspace) { w.Activate(id) }) },
+		Close:    func(id string) { a.updateWorkspace(func(w *workspace.Workspace) { w.Close(id) }) },
 		New: func() {
-			a.Store.Update(func(w *workspace.Workspace) { w.ActiveID = g.ID; w.Open(workspace.Empty(), workspace.NewTab) })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.ActiveID = g.ID; w.Open(workspace.Empty(), workspace.NewTab) })
 		},
-		Move: func(id string, i int) { a.Store.Update(func(w *workspace.Workspace) { w.MoveTab(id, g.ID, i, "") }) },
+		Move: func(id string, i int) { a.updateWorkspace(func(w *workspace.Workspace) { w.MoveTab(id, g.ID, i, "") }) },
 		Menu: func(m *ui.Menu, id string) { a.tabMenu(m, g, id) },
 		List: func(m *ui.Menu) {
 			for i, t := range g.Tabs {
 				if m.Item(t.View.Title()).Checked(i == g.Active).Chosen() {
-					a.Store.Update(func(w *workspace.Workspace) { w.Activate(t.ID) })
+					a.updateWorkspace(func(w *workspace.Workspace) { w.Activate(t.ID) })
 				}
 			}
 		},
@@ -409,7 +410,7 @@ func (a *App) revealedTab(group string) *string {
 }
 
 func (a *App) tabMenu(m *ui.Menu, g *workspace.Node, id string) {
-	up := a.Store.Update
+	up := a.updateWorkspace
 	if m.Item("Close").Chosen() {
 		up(func(w *workspace.Workspace) { w.Close(id) })
 	}
@@ -444,10 +445,10 @@ func (a *App) tabMenu(m *ui.Menu, g *workspace.Node, id string) {
 func (a *App) viewHeader(c *ui.Context, tab *workspace.Tab) {
 	ui.Row(c).Height(32).Padding(0, frostui.SpaceS).Gap(frostui.SpaceXS).AlignItems(ui.Center).Children(func() {
 		if uikit.ToolButton(c, "go-previous", "Navigate back").Disabled(len(tab.Back) == 0).Clicked() {
-			a.Store.Update(func(w *workspace.Workspace) { w.Activate(tab.ID); w.Back() })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.Activate(tab.ID); w.Back() })
 		}
 		if uikit.ToolButton(c, "go-next", "Navigate forward").Disabled(len(tab.Forward) == 0).Clicked() {
-			a.Store.Update(func(w *workspace.Workspace) { w.Activate(tab.ID); w.Forward() })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.Activate(tab.ID); w.Forward() })
 		}
 		ui.Row(c).Grow(1).Shrink(1).MinWidth(0).Justify(ui.Center).AlignItems(ui.Center).Gap(frostui.SpaceXS).Children(func() { a.breadcrumb(c, tab.View.Path) })
 		if tab.View.Type == workspace.ViewNote {
@@ -456,7 +457,7 @@ func (a *App) viewHeader(c *ui.Context, tab *workspace.Tab) {
 				icon, label = "document-open", "Current view: reading (Ctrl E)"
 			}
 			if uikit.ToolButton(c, icon, label).Clicked() {
-				a.Store.Update(func(w *workspace.Workspace) { w.Activate(tab.ID) })
+				a.updateWorkspace(func(w *workspace.Workspace) { w.Activate(tab.ID) })
 				a.toggleMode()
 			}
 		}
@@ -480,7 +481,7 @@ func (a *App) breadcrumb(c *ui.Context, p string) {
 		b.Children(func() { ui.Text(c, part).AccessHidden(true).FontSize(13).TextColor(t.TextMuted).SingleLine() })
 		if b.Clicked() {
 			a.files.Reveal(folder)
-			a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
+			a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
 		}
 		ui.Text(c.Key(folder+"/"), "/").FontSize(13).TextColor(t.TextMuted)
 	}
@@ -494,16 +495,16 @@ func (a *App) moreOptions(m *ui.Menu, tab *workspace.Tab) {
 	}
 	m.Separator()
 	if m.Item("Split right").Chosen() {
-		a.Store.Update(func(w *workspace.Workspace) { w.Split(tab.ID, workspace.ToRight) })
+		a.updateWorkspace(func(w *workspace.Workspace) { w.Split(tab.ID, workspace.ToRight) })
 	}
 	if m.Item("Split down").Chosen() {
-		a.Store.Update(func(w *workspace.Workspace) { w.Split(tab.ID, workspace.Below) })
+		a.updateWorkspace(func(w *workspace.Workspace) { w.Split(tab.ID, workspace.Below) })
 	}
 	m.Separator()
 	if m.Item("Rename…").Chosen() {
 		a.files.Reveal(p)
 		a.files.Rename(p)
-		a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
+		a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
 	}
 	if m.Item("Move file to…").Chosen() {
 		a.chooseFolder(p, false)
@@ -513,7 +514,7 @@ func (a *App) moreOptions(m *ui.Menu, tab *workspace.Tab) {
 	}
 	if m.Item("Reveal in Files").Chosen() {
 		a.files.Reveal(p)
-		a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
+		a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
 	}
 	if m.Item("Open in default app").Chosen() {
 		a.report(a.openVaultFile(p))
@@ -544,14 +545,22 @@ func (a *App) tabView(c *ui.Context, tab *workspace.Tab) {
 			editor.Notice(c, tc.doc, editor.NoticeActions{
 				CompareVersion: func(v int64) { a.openMergeSide(tc.doc.Path(), &workspace.MergeSide{Kind: "version", Version: v}) },
 				CompareText:    func(s string) { a.openMerge(tc.doc.Path(), s, "your text") },
-				Close:          func() { a.Store.Update(func(w *workspace.Workspace) { w.Close(tab.ID) }) },
+				Close:          func() { a.updateWorkspace(func(w *workspace.Workspace) { w.Close(tab.ID) }) },
 			})
 		}
 		switch {
 		case tc.ed != nil:
 			tc.ed.ShowTitle, tc.ed.ShowProperties, tc.ed.Readable = a.Prefs.InlineTitle, a.Prefs.Properties == "visible", a.Prefs.ReadableLineLength
+			tc.ed.HideProperties = a.Prefs.Properties == "hidden"
 			tc.ed.View(c)
-			if a.pending != nil && a.pending.path == tc.doc.Path() && tc.doc.Loaded() {
+			if !tc.restored && tc.doc.Loaded() {
+				tc.restored = true
+				if tab.View.Cursor > 0 {
+					tc.ed.Editor.State.Select(tab.View.Cursor, tab.View.Cursor)
+				}
+				tc.ed.Editor.State.SetScrollY(tab.View.Scroll)
+			}
+			if a.pending != nil && a.pending.tabID == tab.ID && a.pending.path == tc.doc.Path() && tc.doc.Loaded() {
 				line := a.pending.line
 				if a.pending.subpath != "" {
 					line = editor.SubpathLine(tc.doc.Text(), a.pending.subpath)
@@ -562,11 +571,11 @@ func (a *App) tabView(c *ui.Context, tab *workspace.Tab) {
 				a.pending = nil
 			}
 		case tc.read != nil:
-			if p := a.pending; p != nil && p.subpath != "" && p.path == tc.doc.Path() && tc.read.Markdown() != "" {
+			if p := a.pending; p != nil && p.subpath != "" && p.tabID == tab.ID && p.path == tc.doc.Path() && tc.read.Markdown() != "" {
 				tc.read.GoTo(p.subpath)
 				a.pending = nil
 			}
-			ui.Scroll(c).Grow(1).Fill().Padding(frostui.SpaceL, frostui.SpaceXL).Children(func() { tc.read.View(c) })
+			ui.Scroll(c).TrackScroll(&tc.scroll).Grow(1).Fill().Padding(frostui.SpaceL, frostui.SpaceXL).Children(func() { tc.read.View(c) })
 		case tc.hist != nil:
 			tc.hist.View(c)
 		case tc.merg != nil:
@@ -682,7 +691,7 @@ func (a *App) modeName(v workspace.View) string {
 }
 
 func (a *App) toggleMode() {
-	a.Store.Update(func(w *workspace.Workspace) {
+	a.updateWorkspace(func(w *workspace.Workspace) {
 		t := w.ActiveTab()
 		if t.View.Type != workspace.ViewNote {
 			return
@@ -695,4 +704,27 @@ func (a *App) toggleMode() {
 		}
 		w.SetView(t.ID, v)
 	})
+}
+
+// savePositions snapshots every mounted note before navigation changes its view.
+func (a *App) savePositions() {
+	for _, g := range workspace.Groups(a.Store.Workspace().Root) {
+		for i := range g.Tabs {
+			tab := &g.Tabs[i]
+			tc := a.tabs[tab.ID]
+			if tc == nil || !sameContent(tc.view, tab.View) {
+				continue
+			}
+			if tc.ed != nil && tc.restored {
+				tab.View.Cursor = tc.ed.Editor.State.Cursor()
+				tab.View.Scroll = tc.ed.Editor.State.ScrollY()
+			} else if tc.read != nil {
+				tab.View.Scroll = float64(tc.scroll.Y)
+			}
+		}
+	}
+}
+func (a *App) updateWorkspace(op func(*workspace.Workspace)) {
+	a.savePositions()
+	a.Store.Update(op)
 }

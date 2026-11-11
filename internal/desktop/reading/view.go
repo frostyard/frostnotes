@@ -105,13 +105,14 @@ type View struct {
 	env notes.Env
 	api func() Renderer
 
-	md       string
-	rendered string // the text md was rendered from
-	err      error
-	inFlight bool
-	stale    bool // the vault changed since the last rendering asked
-	stop     func()
-	changed  []func()
+	md              string
+	rendered        string // the text md was rendered from
+	err             error
+	inFlight        bool
+	stale           bool // the vault changed since the last rendering asked
+	stop            func()
+	changed         []func()
+	imageGeneration int
 }
 
 // New makes the reading view of doc. blobs is notesd's blob store
@@ -201,7 +202,7 @@ func (v *View) render() {
 
 // View draws the note.
 func (v *View) View(c *ui.Context) ui.Element {
-	return markdown.View(c, v.md, &v.Options)
+	return markdown.View(c.Key(v.imageGeneration), v.md, &v.Options)
 }
 
 func (v *drawer) link(href string) {
@@ -411,4 +412,19 @@ func (v *drawer) calloutBody(c *ui.Context, b *markdown.CodeBlockView, key, titl
 			markdown.View(c.Key(b.Index), b.Code(), &v.Options)
 		}
 	}
+}
+
+// SetRemoteImages refreshes cached image results when the preference changes.
+func (v *View) SetRemoteImages(on bool) {
+	if v.RemoteImages == on {
+		return
+	}
+	v.drawer = v.withRemoteImages(on)
+	v.imageGeneration++
+}
+func (v *drawer) withRemoteImages(on bool) *drawer {
+	next := newDrawer(v.doc, v.blobs)
+	next.RemoteImages, next.Links, next.folds = on, v.Links, v.folds
+	next.Options.Anchor, next.Options.AnchorVersion = v.Options.Anchor, v.Options.AnchorVersion
+	return next
 }

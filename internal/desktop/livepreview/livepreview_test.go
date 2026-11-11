@@ -494,3 +494,25 @@ func TestACommentOpenedAfterText(t *testing.T) {
 		t.Fatalf("%q, want %q", got, want)
 	}
 }
+
+func TestIndentedCodeOutsideParagraphs(t *testing.T) {
+	for _, prefix := range []string{"", "# Heading\n", "Heading\n===\n", "```\ncode\n```\n", "text\n\n", "---\na: b\n---\n"} {
+		for _, code := range []string{"    **literal**\n    [[literal]]", "\t**literal**", "    %%comment\n    text", "    - [x] literal"} {
+			text := prefix + code
+			var s Scanner
+			for _, blocks := range []bool{false, true} {
+				got := s.Scan(text, Options{Blocks: blocks})
+				for _, p := range got.Pieces {
+					if p.End > len(prefix) {
+						t.Errorf("%q: code rewritten by %+v", text, p)
+					}
+				}
+			}
+		}
+	}
+	var s Scanner
+	text := "paragraph\n    **continued**"
+	if got := show(text, s.Pieces(text, nil, false)); got != "paragraph\n    continued" {
+		t.Fatalf("paragraph continuation: %q", got)
+	}
+}

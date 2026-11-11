@@ -147,8 +147,10 @@ func Save(path string, p Prefs) error {
 // State is what the app keeps between runs that is no preference: the
 // event resume point and the commands run lately.
 type State struct {
-	Seq            int64    `json:"seq"`
-	RecentCommands []string `json:"recentCommands"`
+	Pending        []WorkspaceEvent `json:"pending,omitzero"`
+	PendingSeq     int64            `json:"pendingSeq,omitzero"`
+	Seq            int64            `json:"seq"`
+	RecentCommands []string         `json:"recentCommands"`
 }
 
 // MaxRecentCommands is how many commands the palette remembers.
@@ -181,4 +183,12 @@ func (s *State) RanCommand(id string) {
 		}
 	}
 	s.RecentCommands = recent
+}
+
+// WorkspaceEvent is a move or removal held until the vault list is available.
+// To is empty for a removal; paths remain relative to VaultID.
+type WorkspaceEvent struct {
+	VaultID int64  `json:"vaultId"`
+	From    string `json:"from"`
+	To      string `json:"to,omitzero"`
 }

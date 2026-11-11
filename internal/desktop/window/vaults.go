@@ -3,6 +3,7 @@ package window
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -314,9 +315,11 @@ type joinFlow struct {
 	err        string
 	cancel     context.CancelFunc
 	onDone     func()
+	runID      uint64
 }
 
 func (j *joinFlow) stop() {
+	j.runID++
 	if j.cancel != nil {
 		j.cancel()
 		j.cancel = nil
@@ -402,17 +405,18 @@ func (j *joinFlow) start(a *App) {
 	ctx, cancel := context.WithCancel(context.Background())
 	j.stop()
 	j.cancel, j.err, j.code, j.phase = cancel, "", "", joinJoining
+	runID := j.runID
 	post := a.cfg.Env.Post
 	flow := joinRun{c: client, ctx: ctx, url: hubURL(j.url), name: strings.TrimSpace(j.name), device: strings.TrimSpace(j.device),
 		vaultID: j.vaultID, mode: j.mode, folder: "", onCode: func(code string) {
 			post(func() {
-				if ctx.Err() == nil {
+				if j.runID == runID && ctx.Err() == nil {
 					j.code, j.phase = code, joinApprove
 				}
 			})
 		}, onJoining: func() {
 			post(func() {
-				if ctx.Err() == nil {
+				if j.runID == runID && ctx.Err() == nil {
 					j.phase = joinJoining
 				}
 			})
@@ -424,7 +428,7 @@ func (j *joinFlow) start(a *App) {
 		defer cancel()
 		v, err := flow.run()
 		post(func() {
-			if errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
+			if j.runID != runID || errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
 				return
 			}
 			if err != nil {
@@ -540,7 +544,14 @@ func (r *joinRun) addVault() (*api.Vault, error) {
 	bg, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	create := true
-	return r.c.Vault().Add(bg, &api.VaultAddParams{Path: r.folder, Create: &create})
+	v, err := r.c.Vault().Add(bg, &api.VaultAddParams{Path: r.folder, Create: &create})
+	if err != nil {
+		var rpcErr *api.Error
+		if !errors.As(err, &rpcErr) {
+			return nil, fmt.Errorf("adding the vault lost its answer: %v; the vault at %q may remain on the list. Check Manage vaults and remove it before retrying", err, r.folder)
+		}
+	}
+	return v, err
 }
 
 // cleanupFailed says a join failed and its vault stayed on the list. It
