@@ -1,7 +1,6 @@
 package syncer_test
 
 import (
-	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -66,7 +65,7 @@ func (d *crashy) down() {
 	d.t.Helper()
 	select {
 	case <-d.fired:
-	case <-time.After(settleWait):
+	case <-d.t.Context().Done():
 		d.t.Fatal("the crash point was not reached")
 	}
 	d.srv.Stop()
@@ -96,8 +95,7 @@ func (d *crashy) start() {
 // orIdle, it is idle.
 func (d *crashy) waitSyncError(text string, orIdle bool) {
 	d.t.Helper()
-	ctx, cancel := context.WithTimeout(d.t.Context(), settleWait)
-	defer cancel()
+	ctx := d.t.Context() // a stall ends at the binary's -timeout, as settle's
 	c, _, err := api.Dial(ctx, d.srv.Socket, "sync error watch")
 	if err != nil {
 		d.t.Fatal(err)
