@@ -10,6 +10,7 @@ import (
 
 	"github.com/frostyard/frostnotes/internal/desktop/livepreview"
 	"github.com/frostyard/frostnotes/internal/desktop/mathview"
+	"github.com/frostyard/frostnotes/internal/desktop/media"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
@@ -107,6 +108,8 @@ func (e *NoteEditor) embedKind(target string, wikilink bool) livepreview.EmbedKi
 	switch ext := strings.ToLower(path.Ext(p)); {
 	case p == "":
 		return livepreview.NoEmbed
+	case media.Kind(p) != "":
+		return livepreview.ImageEmbed
 	case imageExts[ext]:
 		return livepreview.ImageEmbed
 	case ext == ".md" && wikilink:

@@ -191,3 +191,18 @@ func TestAdjacentReferenceImagesCannotRewriteCode(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeMediaEmbeds(t *testing.T) {
+	o := mdVault()
+	o.Resolve = func(_, target string) string { return target }
+	o.File = func(string) (string, bool) { return strings.Repeat("a", 64), true }
+	for _, src := range []string{"![[song.mp3]]\n", "![music](song.mp3)\n", "![](song.mp3)\n", "> ![[song.mp3]]\n", "- ![[song.mp3]]\n"} {
+		got := Markdown([]byte(src), o)
+		if !strings.Contains(got, "```frostnotes-media song.mp3\n") || !strings.Contains(got, "blob:"+strings.Repeat("a", 64)+".mp3") {
+			t.Errorf("%q => %q", src, got)
+		}
+	}
+	if got := Markdown([]byte("listen ![[song.mp3]] here\n"), o); strings.Contains(got, MediaLanguage) {
+		t.Fatalf("inline media split a paragraph: %q", got)
+	}
+}

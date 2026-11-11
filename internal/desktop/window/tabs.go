@@ -14,6 +14,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/editor"
 	"github.com/frostyard/frostnotes/internal/desktop/history"
+	"github.com/frostyard/frostnotes/internal/desktop/media"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/panes"
 	"github.com/frostyard/frostnotes/internal/desktop/reading"
@@ -589,6 +590,17 @@ func (a *App) tabView(c *ui.Context, tab *workspace.Tab) {
 }
 
 func (a *App) fileTab(c *ui.Context, tc *tabContent) {
+	if media.Kind(tc.view.Path) != "" {
+		hash := a.fileHash(tc.view.Path)
+		ui.Column(c).Fill().Center().Children(func() {
+			media.View(c, a.cfg.Blobs, "blob:"+hash+strings.ToLower(filepath.Ext(tc.view.Path)), filepath.Base(tc.view.Path))
+			if frostui.LabeledButton(c, "document-open", "Open in default app", true).Clicked() {
+				a.report(a.openVaultFile(tc.view.Path))
+			}
+		})
+		return
+	}
+
 	ui.Column(c).Fill().Center().Gap(frostui.SpaceM).Children(func() {
 		frostui.Muted(c, filepath.Base(tc.view.Path)+" opens outside the app.")
 		if frostui.LabeledButton(c, "document-open", "Open in default app", true).Clicked() {

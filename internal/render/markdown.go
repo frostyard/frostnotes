@@ -23,6 +23,7 @@ import (
 const (
 	EmbedLanguage   = "frostnotes-embed"
 	CalloutLanguage = "frostnotes-callout"
+	MediaLanguage   = "frostnotes-media"
 )
 
 // The schemes of the links Markdown writes.
@@ -106,7 +107,7 @@ func (r *rewriter) visit(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if r.callout(n) {
 			return ast.WalkSkipChildren, nil
 		}
-	case ast.KindParagraph:
+	case ast.KindParagraph, ast.KindTextBlock:
 		if r.loneEmbed(n) {
 			return ast.WalkSkipChildren, nil
 		}
@@ -338,24 +339,35 @@ func destinationAt(body []byte, i int) (start, end int, ok bool) {
 // loneEmbed writes a paragraph of note embeds alone as fenced embed
 // blocks, each holding the embedded note's Markdown.
 func (r *rewriter) loneEmbed(p ast.Node) bool {
-	type embed struct {
-		l    markdown.Link
-		path string
-	}
-	var embeds []embed
+	var embeds []string
 	for c := p.FirstChild(); c != nil; c = c.NextSibling() {
 		if t, ok := c.(*ast.Text); ok && len(bytes.TrimSpace(t.Segment.Value(r.body))) == 0 {
 			continue
 		}
 		l, ok := markdown.WikilinkOf(c)
+		if img, isImage := c.(*ast.Image); isImage {
+			l, ok = markdownDestination(img.Destination)
+			l.Embed = true
+		}
 		if !ok || !l.Embed {
 			return false
 		}
 		resolved := r.resolve(l.Target)
-		if fileType(resolved) != "note" {
+		switch fileType(resolved) {
+		case "note":
+			embeds = append(embeds, r.embedBlock(l, resolved))
+		case "audio", "video":
+			if r.opts.File == nil {
+				return false
+			}
+			hash, found := r.opts.File(resolved)
+			if !found {
+				return false
+			}
+			embeds = append(embeds, fence(MediaLanguage+" "+path.Base(resolved), BlobScheme+hash+"."+fileExtension(resolved)))
+		default:
 			return false
 		}
-		embeds = append(embeds, embed{l, resolved})
 	}
 	start, end, ok := r.lineSpan(p)
 	if len(embeds) == 0 || !ok {
@@ -363,7 +375,7 @@ func (r *rewriter) loneEmbed(p ast.Node) bool {
 	}
 	var b strings.Builder
 	for _, e := range embeds {
-		b.WriteString(r.embedBlock(e.l, e.path))
+		b.WriteString(e)
 	}
 	first := string(r.body[start:p.Lines().At(0).Start])
 	r.add(start, end, inContainer(b.String(), first))

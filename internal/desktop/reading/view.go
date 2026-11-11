@@ -29,6 +29,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/mathview"
+	"github.com/frostyard/frostnotes/internal/desktop/media"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/render"
 )
@@ -96,6 +97,7 @@ func newDrawer(doc *notes.Document, blobs string) *drawer {
 		Math:       d.math.View,
 		Code: map[string]func(*ui.Context, *markdown.CodeBlockView){
 			render.EmbedLanguage:   d.embed,
+			render.MediaLanguage:   d.media,
 			render.CalloutLanguage: d.callout,
 		},
 	}
@@ -418,6 +420,11 @@ func (v *drawer) calloutBody(c *ui.Context, b *markdown.CodeBlockView, key, titl
 			markdown.View(c.Key(b.Index), b.Code(), &v.Options)
 		}
 	}
+}
+
+func (v *drawer) media(c *ui.Context, b *markdown.CodeBlockView) {
+	label := strings.TrimSpace(strings.TrimPrefix(b.Info, render.MediaLanguage))
+	media.View(c, v.blobs, strings.TrimSpace(b.Code()), label)
 }
 
 // SetRemoteImages refreshes cached image results when the preference changes.
