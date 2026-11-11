@@ -5,7 +5,7 @@ go 1.27.4
 require (
 	github.com/egoist/mygo v0.9.0
 	github.com/frostyard/clix v0.5.0
-	github.com/frostyard/frostui v0.2.1-0.20261111070608-a6a2df5dd07d
+	github.com/frostyard/frostui v0.3.0
 	github.com/frostyard/lodge/kit v0.4.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1

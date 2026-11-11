@@ -485,7 +485,8 @@ func TestTypingDuringARefusalIsHeld(t *testing.T) {
 	f.loop.Advance(SaveDelay)
 	r := f.nextRead(g)
 	b.typeAt(t, 5, 5, " more")
-	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	reply := f.Read("a.md") // finish the RPC before the test can enter cleanup
+	r.answer <- func() (*api.Note, error) { return reply, nil }
 	f.loop.Until(t, "the refusal", func() bool { return d.Notice() != nil })
 	if n := d.Notice(); n.Kind != NoticeRefused || n.Text != "typed more\n" {
 		t.Fatalf("notice %+v", n)
@@ -503,7 +504,8 @@ func TestTypingDuringARestoreStays(t *testing.T) {
 	d.Restore()
 	r := f.nextRead(g)
 	b.typeAt(t, 4, 4, " typed")
-	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	reply := f.Read("a.md") // finish the RPC before the test can enter cleanup
+	r.answer <- func() (*api.Note, error) { return reply, nil }
 	f.loop.Until(t, "the restore", func() bool { return d.Notice() == nil })
 	f.settle(d)
 	if b.text != "kept typed\n" {
@@ -543,8 +545,9 @@ func TestARecreationIsTheOneWriteInFlight(t *testing.T) {
 		t.Fatal("a second create during the first")
 	}
 	close(release)
-	r := f.nextRead(g) // the second removal is checked
-	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	r := f.nextRead(g)      // the second removal is checked
+	reply := f.Read("a.md") // finish the RPC before the test can enter cleanup
+	r.answer <- func() (*api.Note, error) { return reply, nil }
 	f.settle(d)
 	if got := f.Read("a.md").Content; got != "text more again\n" {
 		t.Fatalf("file holds %q", got)
@@ -573,7 +576,8 @@ func TestARenameDuringARestoreReadsTheNewPath(t *testing.T) {
 	d.Restore()
 	r := f.nextRead(g)
 	d.Moved("b.md")
-	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	reply := f.Read("a.md") // finish the RPC before the test can enter cleanup
+	r.answer <- func() (*api.Note, error) { return reply, nil }
 	next := f.nextRead(g)
 	if next.path != "b.md" {
 		t.Fatalf("read %q", next.path)
@@ -596,7 +600,8 @@ func TestAFailedFirstReadSaysSoAndRetriesTheRead(t *testing.T) {
 	}
 	d.RetryNow()
 	r = f.nextRead(g)
-	r.answer <- func() (*api.Note, error) { return f.Read("a.md"), nil }
+	reply := f.Read("a.md") // finish the RPC before the test can enter cleanup
+	r.answer <- func() (*api.Note, error) { return reply, nil }
 	f.loop.Until(t, "the note", d.Loaded)
 	if d.Notice() != nil {
 		t.Fatalf("notice %+v", d.Notice())
