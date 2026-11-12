@@ -326,15 +326,29 @@ func (a *App) prefsChanged() {
 	}
 }
 
-// applyAppearance applies the theme and the zoom.
+// applyAppearance applies the theme and the zoom. The theme is frostui's
+// Frostyard or Frostyard light (frostui ADR-0011): the one the Theme
+// setting picks, or for System the one of the desktop's light or dark, with
+// the desktop's high contrast and text size but never its accent. It is
+// set before anything reads the theme, so frostui.Adapt keeps it.
 func (a *App) applyAppearance(c *ui.Context) {
-	switch a.Prefs.Theme {
-	case "light":
-		c.SetTheme(ui.LightTheme())
-	case "dark":
-		c.SetTheme(ui.DarkTheme())
-	}
+	c.SetTheme(appearance(c, a.Prefs.Theme))
 	c.SetZoom(float32(a.Prefs.Zoom))
+}
+
+// appearance is the theme the Theme setting asks for: "light", "dark", or
+// anything else for the desktop's.
+func appearance(c *ui.Context, setting string) *ui.Theme {
+	dark := c.Theme().Dark // the desktop's, as MyGo resets it each frame
+	switch setting {
+	case "light":
+		dark = false
+	case "dark":
+		dark = true
+	}
+	p := c.Preferences()
+	p.Accent = ui.Color{}
+	return frostui.FrostyardTheme(dark).WithPreferences(p)
 }
 
 func (a *App) configure(field string, value any) {

@@ -111,14 +111,23 @@ type Options struct {
 	Embed func(target string, wikilink bool) EmbedKind
 }
 
-// Result is what shows of a text.
+// LineStyle draws a line no selection touches as a heading of its level, or
+// as a completed task.
 type LineStyle struct {
 	Line, Heading int
 	Done          bool
 }
 
+// Lines are the lines First through Last, from 0.
+type Lines struct{ First, Last int }
+
+// Result is what shows of a text.
 type Result struct {
 	Styles []LineStyle
+	// Code are the lines of code blocks, fenced (with their fences) or
+	// indented, whether or not a selection touches them: live preview
+	// draws them on the code color. They are in order and apart.
+	Code []Lines
 	// Pieces are sorted and apart.
 	Pieces []Piece
 	// Blocks are in the order of their lines.
@@ -215,7 +224,7 @@ func (s *Scanner) Scan(text string, o Options) Result {
 		content := strings.TrimSuffix(text[start:end], "\r")
 		if o.Blocks && st.block == blockText {
 			if n, after := wholeBlock(text, content, start, next, line, st, o, &res); n > 0 {
-				st.afterGap, st.afterText = false, false
+				st.afterGap, st.afterText, st.codeOpen = false, false, false
 				line, start = line+n, after
 				lines += n
 				continue
@@ -224,10 +233,15 @@ func (s *Scanner) Scan(text string, o Options) Result {
 		was := st.block
 		sh := s.shape(content)
 		indented := was == blockText && !st.afterText && codeIndent(content)
+		blank := strings.TrimSpace(content) == ""
 		if indented {
 			st.structural = true
+			if !blank { // a line of only spaces is blank, never code
+				st.indentedCode(line, &res)
+			}
 		} else {
 			st.advance(content, line, start, next, min(next, len(text)), o, &res)
+			st.codeOpen = st.codeOpen && blank
 		}
 		if was == blockText && st.block == blockText && !st.structural {
 			from := len(res.Pieces)
@@ -242,13 +256,16 @@ func (s *Scanner) Scan(text string, o Options) Result {
 				}
 			}
 		}
-		st.afterGap = strings.TrimSpace(content) == ""
+		st.afterGap = blank
 		st.afterText = was == blockText && !st.afterGap && !st.structural && !sh.heading && !sh.rule && (!st.afterText || !sh.setext)
 		line, start = line+1, next
 		lines++
 	}
-	if o.Blocks && st.block == blockFence && !spanRevealed(o.Revealed, st.fromLine, line-1) {
-		st.endFence(len(text), len(text), &res) // a fence that runs on to the end
+	if st.block == blockFence { // a fence that runs on to the end
+		res.Code = append(res.Code, Lines{st.fromLine, line - 1})
+		if o.Blocks && !spanRevealed(o.Revealed, st.fromLine, line-1) {
+			st.endFence(len(text), len(text), &res)
+		}
 	}
 	if len(s.cache) > maxCache*lines+64 {
 		clear(s.cache)
@@ -308,6 +325,9 @@ type state struct {
 	afterText  bool
 	afterGap   bool
 	structural bool // this line opened or closed a block
+	// codeOpen says the last of Result.Code is indented code and only
+	// blank lines followed it: more indented code joins it.
+	codeOpen bool
 	// closedFront says the note's first "---" has its closing line, without
 	// which it is no frontmatter.
 	closedFront bool
@@ -361,6 +381,7 @@ func (st *state) advance(content string, line, start, next, limit int, o Options
 		st.structural = true
 		if t := strings.TrimSpace(content); strings.HasPrefix(t, st.fence) && strings.Trim(t, st.fence[:1]) == "" {
 			st.block = blockText
+			res.Code = append(res.Code, Lines{st.fromLine, line})
 			if o.Blocks && !spanRevealed(revealed, st.fromLine, line) {
 				st.endFence(start, limit, res)
 			}
@@ -441,6 +462,17 @@ func openComment(line string) int {
 		}
 	}
 	return open
+}
+
+// indentedCode adds line, of indented code, to res.Code: to the indented
+// code before it when only blank lines part them, as they are one block.
+func (st *state) indentedCode(line int, res *Result) {
+	if n := len(res.Code); st.codeOpen && n > 0 {
+		res.Code[n-1].Last = line
+	} else {
+		res.Code = append(res.Code, Lines{line, line})
+	}
+	st.codeOpen = true
 }
 
 // endFence hides a fence's marks, whose closing line runs from close to

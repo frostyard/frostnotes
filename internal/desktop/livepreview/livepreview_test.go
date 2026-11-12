@@ -570,3 +570,26 @@ func TestMathDrawsAndRevealsItsSource(t *testing.T) {
 		t.Fatal("selected display math hidden")
 	}
 }
+
+// TestCodeBlocksKeepTheirLines lists the lines of fenced and indented code,
+// a fence's marks included, whether or not a selection touches them, so
+// that they stay on the code color as the caret moves into them.
+func TestCodeBlocksKeepTheirLines(t *testing.T) {
+	in := "a\n```go\nx := 1\n\ny\n```\nb\n\n    indented\n\n    more\n   \nc\n~~~\nopen to the end\n"
+	want := []Lines{{1, 5}, {8, 10}, {13, 15}}
+	for _, revealed := range []func(int) bool{nil, func(l int) bool { return l == 3 || l == 9 }} {
+		if got := scanBlocks(in, revealed).Code; !slices.Equal(got, want) {
+			t.Errorf("code lines %v, want %v", got, want)
+		}
+	}
+	var s Scanner
+	if got := s.Scan(in, Options{}).Code; !slices.Equal(got, want) {
+		t.Errorf("without blocks, code lines %v, want %v", got, want)
+	}
+	// Spaces alone are a blank line: no code starts there, and text after
+	// indented code ends it.
+	in = "a\n\n    \n    code\ntext\n    after text\n"
+	if got, want := s.Scan(in, Options{}).Code, []Lines{{3, 3}}; !slices.Equal(got, want) {
+		t.Errorf("code lines %v, want %v", got, want)
+	}
+}

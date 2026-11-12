@@ -100,6 +100,9 @@ func (v *NoteView) startAfterFrontmatter() {
 	}
 }
 
+// titleSize is frostui.Title's size, at the platform's usual text size.
+const titleSize = 24
+
 // inlineTitle draws the note's name above it: Enter or leaving the field
 // renames the file.
 func (v *NoteView) inlineTitle(c *ui.Context) {
@@ -108,7 +111,8 @@ func (v *NoteView) inlineTitle(c *ui.Context) {
 		v.title, v.titleFor = name, name
 	}
 	t := c.Theme()
-	in := ui.TextInputBase(c, &v.title).Label("Note title").FontSize(26).Bold().TextColor(t.Text).Padding(frostui.SpaceM, frostui.SpaceL, frostui.SpaceS)
+	// The size of frostui's Title, which an input cannot draw itself.
+	in := ui.TextInputBase(c, &v.title).Label("Note title").FontSize(frostui.TextSize(c, titleSize)).Bold().TextColor(t.Text).Padding(frostui.SpaceM, frostui.SpaceL, frostui.SpaceS)
 	focused := in.Focused()
 	if in.Submitted() || v.titleFocused && !focused {
 		v.commitTitle()

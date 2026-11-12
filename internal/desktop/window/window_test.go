@@ -36,6 +36,11 @@ type fixture struct {
 	loop *desktoptest.Loop
 	a    *App
 	tt   *ui.Tester
+	// theme and zoom are the theme the window's last frame was built in and
+	// its zoom, and inter and sans the widths of a sample in the kit's font
+	// and the default one.
+	theme             *ui.Theme
+	zoom, inter, sans float32
 }
 
 // start draws the window on a real notesd, at a desktop size.
@@ -53,7 +58,12 @@ func startOn(t *testing.T, n *desktoptest.Notesd) *fixture {
 			return api.Dial(ctx, f.Srv.Socket, session.ClientName)
 		},
 		Blobs: f.Blobs, ConfigAt: t.TempDir(), StateAt: t.TempDir()})
-	f.tt = ui.NewTester(func(c *ui.Context) { f.a.View(c) }, 1200, 800)
+	f.tt = ui.NewTester(func(c *ui.Context) {
+		f.a.View(c)
+		f.theme, f.zoom = c.Theme(), c.Zoom()
+		f.inter, _ = c.MeasureText(0, ui.Span{Text: fontSample, Font: frostui.FontFamily, Size: 14})
+		f.sans, _ = c.MeasureText(0, ui.Span{Text: fontSample, Font: "sans-serif", Size: 14})
+	}, 1200, 800)
 	f.a.Start()
 	t.Cleanup(f.a.Session.Close)
 	f.until("the connection", func() bool { return f.a.Session.State() == session.Connected })
