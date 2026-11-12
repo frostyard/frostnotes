@@ -75,8 +75,12 @@ type App struct {
 	vaultDataRun  uint64
 	syncInfo      *api.SyncStatus
 	// syncEvents counts the sync.changed events of the window's vault: a
-	// sync.status answer asked before one of them is older than it.
+	// sync.status answer asked before one of them may be older or newer
+	// than it, and only a status asked after it settles which.
 	syncEvents uint64
+	// syncAsking is the vault whose sync.status is asked again, 0 for
+	// none.
+	syncAsking int64
 	conflict   []api.SyncConflict
 
 	env        *panes.Env
@@ -388,18 +392,7 @@ func (a *App) loadVaultData() {
 		a.Catalog.LinkFormat = string(settings.LinkFormat)
 		a.Catalog.AttachmentFolder = settings.AttachmentFolder
 		a.Catalog.Wikilinks = settings.Wikilinks
-		// An event and an answer travel apart: a sync.changed that came
-		// while sync.status was asked can be newer than the answer, which
-		// would then show a state the loop has left, and no event would
-		// correct it until the next change.
-		if a.syncEvents == syncEvents {
-			a.syncInfo = nil
-			for i := range statuses {
-				if statuses[i].VaultID == id {
-					a.syncInfo = &statuses[i]
-				}
-			}
-		}
+		a.takeSyncStatus(id, syncEvents, statuses)
 		a.conflict = conflicts
 		waiting := a.afterSettings
 		a.afterSettings = nil
@@ -520,6 +513,49 @@ func (a *App) catalogChanged() {
 
 // syncChanged follows the window's vault's sync state, and reads the
 // conflicts again when their number changes.
+// takeSyncStatus shows a sync.status answer for vault id, asked when
+// syncEvents events had come. An event and an answer travel apart: a
+// sync.changed that came while the status was asked can be newer than the
+// answer (after a join, the answer would take the hub's address away), or
+// older (sent before a leave, it would bring the hub back), and no later
+// event need come to correct either. So the event's status stays, and the
+// status is asked again, until an answer comes with no event while it was
+// asked.
+func (a *App) takeSyncStatus(id int64, syncEvents uint64, statuses []api.SyncStatus) {
+	if a.syncEvents != syncEvents {
+		a.askSyncStatus(id)
+		return
+	}
+	a.syncInfo = nil
+	for i := range statuses {
+		if statuses[i].VaultID == id {
+			a.syncInfo = &statuses[i]
+		}
+	}
+}
+
+// askSyncStatus asks vault id's sync status again; one ask at a time.
+func (a *App) askSyncStatus(id int64) {
+	if a.syncAsking == id {
+		return // its answer sees the newer events and asks again
+	}
+	a.syncAsking = id
+	syncEvents := a.syncEvents
+	var statuses []api.SyncStatus
+	a.call(func(ctx context.Context, c *api.Client) (err error) {
+		statuses, err = c.Sync().Status(ctx, &api.SyncStatusParams{})
+		return err
+	}, func(err error) {
+		if a.syncAsking == id {
+			a.syncAsking = 0
+		}
+		if err != nil || a.vault == nil || a.vault.ID != id {
+			return // the event's status stays; the next load asks again
+		}
+		a.takeSyncStatus(id, syncEvents, statuses)
+	})
+}
+
 func (a *App) syncChanged(s api.SyncStatus) {
 	if a.vault == nil || s.VaultID != a.vault.ID {
 		return
