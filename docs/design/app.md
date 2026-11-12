@@ -781,9 +781,14 @@ and [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-sh
 built in [M6](../plans/0002-roadmap.md) (core's
 [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)).
 The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/`.
-The metainfo lists 4 screenshots in `docs/images`, taken by `make screenshots`
-(`dev/screenshots/vault`, a made-up vault, drawn by MyGo's Tester), and
-`internal/packagecheck` checks them.
+The metainfo lists 4 screenshots in `docs/images`: the editor, search and
+the Tasks pane in Frostyard light, and the reading view in Frostyard. The
+README shows them under a fifth, the editor in Frostyard
+(`editor-dark.png`), which the metainfo does not list. `make screenshots`
+takes all 5 at 1280 x 800 (`TestMetainfoScreenshots`, on
+`dev/screenshots/vault`, a made-up vault, drawn by MyGo's Tester with the
+app's logo in the brand tile, as `cmd/frostnotes` registers it), and
+`internal/packagecheck` checks the metainfo's 4.
 
 - **What is inside.** `/app/bin/frostnotes` is the launcher, `/app/bin/notesd`
   and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`

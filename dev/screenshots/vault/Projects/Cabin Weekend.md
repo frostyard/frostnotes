@@ -3,7 +3,7 @@ status: planning
 dates: 2026-11-20
 tags: [trip, winter]
 ---
-Three nights at the lake cabin before the first big snow. The plan is slow mornings, one long hike and a lot of soup.
+Three nights at the lake cabin before the first big snow.
 
 ## Plan
 
