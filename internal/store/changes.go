@@ -52,7 +52,9 @@ func (d *DB) ChangesSince(ctx context.Context, seq int64) ([]api.EventEnvelope, 
 	return out, rows.Err()
 }
 
-// PruneChanges keeps the newest keep durable events.
+// PruneChanges keeps the newest keep durable events. Nothing calls it yet:
+// it stays for a later retention step, and until then the log is never
+// pruned (frostyard/frostnotes#219).
 func (d *DB) PruneChanges(ctx context.Context, keep int) error {
 	return d.Tx(ctx, func(tx *Tx) error {
 		_, err := tx.ExecContext(ctx,
