@@ -16,6 +16,8 @@ serves them to a web app and to agents.
 
 **Documentation:** [docs/README.md](docs/README.md)
 
+![The desktop app in the Frostyard dark theme: a trip note in live preview with its properties, tasks and a table, the vault's folders on the left and the note's backlinks on the right](docs/images/editor-dark.png)
+
 ## What it does
 
 - **Your files are the notes.** A note is a `.md` file with YAML
@@ -31,8 +33,8 @@ serves them to a web app and to agents.
   notesd in a hub role, which keeps every revision and merges concurrent
   edits. No conflict copies. [Sync design](docs/design/sync.md)
 - **The desktop app** is a native Go app on MyGo and frostui with live
-  preview, a sibling of
-  [Frostmail](https://github.com/frostyard/frostmail). [App design](docs/design/app.md)
+  preview, drawn in frostui's Frostyard look, dark or light. It is a
+  sibling of [Frostmail](https://github.com/frostyard/frostmail). [App design](docs/design/app.md)
 - **The web app** is a React UI with a CodeMirror 6 editor, served by
   [lodge](https://github.com/frostyard/lodge), frostyard's tailnet-only
   web shell, with Obsidian's phone layout on a narrow screen.
@@ -41,6 +43,13 @@ serves them to a web app and to agents.
   locally, or lodge's `/mcp/notes` with a scoped token. [MCP tools](docs/specs/mcp.md)
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties. [Markdown dialect](docs/specs/markdown.md)
+
+| | |
+| --- | --- |
+| ![The trip note in live preview, in the Frostyard light theme](docs/images/editor.png) | ![A search for “soup” across the vault, beside a recipe whose note callout is drawn as a banner](docs/images/search.png) |
+| ![The Tasks pane: every open task in the vault, grouped by note, beside the trip note](docs/images/tasks.png) | ![A book note in the reading view, in the Frostyard dark theme, with its outline in the right pane](docs/images/dark.png) |
+
+<sub>The screenshots show a made-up vault (`dev/screenshots/vault`).</sub>
 
 ## Install
 

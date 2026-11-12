@@ -55,7 +55,8 @@ who chose an accent on the desktop no longer sees it in Frostnotes. Live
 preview mixes two families: Inter on heading lines, through MyGo's per-line
 styles, and the monospaced font on the rest, at the Font size setting, which
 the desktop's text size does not change. The Flatpak's metainfo screenshots
-(`make screenshots`) show the former look until they are taken again.
+and the README's (`make screenshots`) show this look; they were taken again
+in it on 2026-11-11.
 
 ## Alternatives considered
 

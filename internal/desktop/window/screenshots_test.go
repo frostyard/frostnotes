@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,19 +16,26 @@ import (
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 )
 
-// TestMetainfoScreenshots takes the Flatpak metainfo's screenshots (make
-// screenshots) at 1280 x 800, on a notesd with a copy of the made-up vault
-// in dev/screenshots/vault: no real person, address or note.
+// TestMetainfoScreenshots takes the Flatpak metainfo's screenshots and the
+// README's dark editor (make screenshots) at 1280 x 800, on a notesd with a
+// copy of the made-up vault in dev/screenshots/vault: no real person,
+// address or note.
 func TestMetainfoScreenshots(t *testing.T) {
 	dir := os.Getenv("FROSTNOTES_SCREENSHOTS")
 	if dir == "" {
 		t.Skip("make screenshots sets FROSTNOTES_SCREENSHOTS")
 	}
-	frostui.SetIcons(frostui.NewIcons(nil))
+	// The brand tile draws the app's logo, as cmd/frostnotes registers it,
+	// rather than the kit's stand-in for an unknown icon.
+	logo, err := os.ReadFile(filepath.Join("..", "..", "..", "cmd", "frostnotes", "logo.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	frostui.SetIcons(frostui.NewIcons(map[string][]byte{"org.frostyard.Frostnotes-symbolic": logo}))
 	f := start(t)
 	f.tt.SetSize(1280, 800)
 	root := filepath.Join("..", "..", "..", "dev", "screenshots", "vault")
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -68,7 +76,9 @@ func TestMetainfoScreenshots(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	open := func(p string) {
+	// open opens p with the caret just after the first after in its text,
+	// or at its end when after is empty, and shows its top.
+	open := func(p, after string) {
 		t.Helper()
 		f.a.open(p, workspace.Here)
 		f.until(p, func() bool {
@@ -76,20 +86,30 @@ func TestMetainfoScreenshots(t *testing.T) {
 			return f.a.activeFile() == p && e != nil && e.Binding().Document().Loaded()
 		})
 		e := f.a.activeEditor()
-		end := len(e.Binding().Document().Text())
-		e.State.Select(end, end)
+		text := e.Binding().Document().Text()
+		at := len(text)
+		if after != "" {
+			i := strings.Index(text, after)
+			if i < 0 {
+				t.Fatalf("no %q in %s", after, p)
+			}
+			at = i + len(after)
+		}
+		e.State.Select(at, at)
 		settle()
 		e.State.ScrollTo(0)
 	}
 
-	open("Projects/Cabin Weekend.md")
+	open("Projects/Cabin Weekend.md", "")
 	shot("editor")
 
-	open("Recipes/Winter Squash Soup.md")
+	// The caret ends the last step: on the empty line after the callout,
+	// the caret's line would draw as an empty band.
+	open("Recipes/Winter Squash Soup.md", "black pepper.")
 	f.a.searchFor("soup")
 	shot("search")
 
-	open("Projects/Cabin Weekend.md")
+	open("Projects/Cabin Weekend.md", "")
 	f.a.Store.Update(func(w *workspace.Workspace) {
 		w.SelectPane(workspace.SideLeft, "files")
 		w.SelectPane(workspace.SideRight, "tasks")
@@ -97,7 +117,11 @@ func TestMetainfoScreenshots(t *testing.T) {
 	shot("tasks")
 
 	f.tt.SetDark(true)
-	open("Reading/The Quiet Orchard.md")
+	open("Projects/Cabin Weekend.md", "")
+	f.a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideRight, "backlinks") })
+	shot("editor-dark")
+
+	open("Reading/The Quiet Orchard.md", "")
 	f.a.run("markdown:toggle-preview")
 	f.a.Store.Update(func(w *workspace.Workspace) { w.SelectPane(workspace.SideRight, "outline") })
 	f.until("the reading view", func() bool { return f.a.activeEditor() == nil })
