@@ -4,6 +4,7 @@
 # Frostnotes
 
 [![CI](https://github.com/frostyard/frostnotes/actions/workflows/ci.yml/badge.svg)](https://github.com/frostyard/frostnotes/actions/workflows/ci.yml)
+[![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/frostnotes)
 
 **Plain markdown notes on your own computer.**
 
