@@ -187,10 +187,28 @@ func (l *loop) run(ctx context.Context) {
 // watchLocal marks the paths the device's own writers change, and wakes
 // the loop.
 func (l *loop) watchLocal(ctx context.Context) {
+	backoff := l.s.cfg.Backoff
+	missed := false // a failed Subscribe may have dropped events
 	for ctx.Err() == nil {
 		sub, _, err := l.s.cfg.Broker.Subscribe(ctx, nil)
 		if err != nil {
-			return
+			if ctx.Err() != nil {
+				return
+			}
+			l.s.cfg.Log.Warn("subscribe to local changes", "vault", l.vaultID, "err", err)
+			missed = true
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return
+			}
+			backoff = min(backoff*2, l.s.cfg.MaxBackoff)
+			continue
+		}
+		backoff = l.s.cfg.Backoff
+		if missed {
+			missed = false
+			l.kick() // events may have been missed: look at everything
 		}
 		_ = sub.Run(ctx, func(ev api.EventEnvelope) error {
 			e, err := api.DecodeEvent(ev.Event, ev.Data)
@@ -547,7 +565,11 @@ func (l *loop) upload(ctx context.Context, sess *session, remote store.Remote, s
 	var hashes []string
 	for _, p := range sends {
 		if p.Hash != "" && !slices.Contains(hashes, p.Hash) {
-			if ok, err := l.s.cfg.Blobs.Has(p.Hash); err == nil && ok {
+			ok, err := l.s.cfg.Blobs.Has(p.Hash)
+			if err != nil {
+				return fmt.Errorf("check blob %s: %w", p.Hash, err)
+			}
+			if ok {
 				hashes = append(hashes, p.Hash)
 			}
 		}
