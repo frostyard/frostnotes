@@ -218,17 +218,62 @@ func (d *DB) FileCounts(ctx context.Context, vaultID int64) (notes, attachments 
 	return notes, attachments, nil
 }
 
-// ResolveLink returns the file that a link from note source to target
-// names, by markdown.Resolve over vault's files as this transaction sees
-// them, and false when the link is unresolved. Task card T-0014.
-func (t *Tx) ResolveLink(ctx context.Context, vaultID int64, source, target string) (File, bool, error) {
+// linkResolver resolves links against the files of one vault as a
+// transaction sees them, and caches each name lookup and each path lookup,
+// so a batch of links reads the table once for each name and once for each
+// path instead of once for each link. The cache is safe only while the files
+// table does not change: a caller makes 1 resolver for a loop that writes
+// other rows only, such as links rows, and drops it when the loop ends. An
+// error is never cached, and no resolver outlives the loop that made it. A
+// cached answer still fails as its query would once ctx is done.
+type linkResolver struct {
+	t       *Tx
+	vaultID int64
+	names   map[string][]string
+	paths   map[string]fileLookup
+}
+
+// fileLookup is a cached FileByPath result: the file, and whether the vault
+// has a file at the path.
+type fileLookup struct {
+	file File
+	ok   bool
+}
+
+// newLinkResolver returns an empty resolver for vault vaultID.
+func newLinkResolver(t *Tx, vaultID int64) *linkResolver {
+	return &linkResolver{
+		t:       t,
+		vaultID: vaultID,
+		names:   map[string][]string{},
+		paths:   map[string]fileLookup{},
+	}
+}
+
+// resolve returns the file that a link from note source to target names, by
+// markdown.Resolve over the vault's files, and false when the link is
+// unresolved.
+func (r *linkResolver) resolve(ctx context.Context, source, target string) (File, bool, error) {
 	var lookupErr error
 	resolved := markdown.Resolve(source, target, func(name string) []string {
 		if lookupErr != nil {
 			return nil
 		}
-		var paths []string
-		paths, lookupErr = t.filePathsByName(ctx, vaultID, name)
+		paths, ok := r.names[name]
+		if !ok {
+			paths, lookupErr = r.t.filePathsByName(ctx, r.vaultID, name)
+			if lookupErr != nil {
+				return nil
+			}
+			r.names[name] = paths
+			return paths
+		}
+		// The query that filled the cache checked ctx first; a cached
+		// answer fails as that query would now.
+		if err := ctx.Err(); err != nil {
+			lookupErr = fmt.Errorf("find files named %s: %w", name, err)
+			return nil
+		}
 		return paths
 	})
 	if lookupErr != nil {
@@ -237,14 +282,34 @@ func (t *Tx) ResolveLink(ctx context.Context, vaultID int64, source, target stri
 	if resolved == "" {
 		return File{}, false, nil
 	}
-	f, err := t.FileByPath(ctx, vaultID, resolved)
-	if errors.Is(err, ErrNotFound) {
+	lookup, cached := r.paths[resolved]
+	if !cached {
+		f, err := r.t.FileByPath(ctx, r.vaultID, resolved)
+		if errors.Is(err, ErrNotFound) {
+			r.paths[resolved] = fileLookup{}
+			return File{}, false, nil
+		}
+		if err != nil {
+			return File{}, false, fmt.Errorf("resolve link %s: %w", target, err)
+		}
+		lookup = fileLookup{file: f, ok: true}
+		r.paths[resolved] = lookup
+	} else if err := ctx.Err(); err != nil {
+		// The cached answer fails as fileByPath's query would now.
+		getErr := fmt.Errorf("get file %s: %w", resolved, err)
+		return File{}, false, fmt.Errorf("resolve link %s: %w", target, getErr)
+	}
+	if !lookup.ok {
 		return File{}, false, nil
 	}
-	if err != nil {
-		return File{}, false, fmt.Errorf("resolve link %s: %w", target, err)
-	}
-	return f, true, nil
+	return lookup.file, true, nil
+}
+
+// ResolveLink returns the file that a link from note source to target
+// names, by markdown.Resolve over vault's files as this transaction sees
+// them, and false when the link is unresolved. Task card T-0014.
+func (t *Tx) ResolveLink(ctx context.Context, vaultID int64, source, target string) (File, bool, error) {
+	return newLinkResolver(t, vaultID).resolve(ctx, source, target)
 }
 
 const fileColumns = `id, vault_id, path, size, mtime, hash`
@@ -335,8 +400,9 @@ func (t *Tx) resolveFileLinks(ctx context.Context, vaultID int64, oldPath, newPa
 	if err != nil {
 		return err
 	}
+	r := newLinkResolver(t, vaultID)
 	for _, link := range links {
-		f, ok, err := t.ResolveLink(ctx, vaultID, link.source, link.target)
+		f, ok, err := r.resolve(ctx, link.source, link.target)
 		if err != nil {
 			return err
 		}
