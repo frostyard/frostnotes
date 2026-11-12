@@ -475,7 +475,13 @@ and links, tags, footnotes and task boxes a click reaches. Undo is MyGo's. A
 keystroke in a 10,000-line note with blocks, with a frame drawn on the CPU,
 costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
 395. The gate's reference machine is the CI runner: the `desktop` job's
-`make desktop-bench` prints the figure on every run. MyGo's cost in
+`make desktop-bench` prints the figure on every run. The runner's CPU
+changes from run to run, so a figure names its CPU. With per-line styles,
+on 2026-11-12, it measured 14.2 ms in live preview and 3.7 ms in source
+mode on an AMD EPYC 9V74, under the gate, once the scan hashed each line
+once ([#193](https://github.com/frostyard/frostnotes/issues/193)); `main`
+before it measured 15.1 and 15.4 ms in live preview on the same CPU, and
+12.9 ms on an AMD EPYC 9V45. MyGo's cost in
 `view.replacedLines` was fixed on the fork, with egoist/mygo#1655.
 
 **Built:** heading sizes, completed-task strike-through, native inline/display
