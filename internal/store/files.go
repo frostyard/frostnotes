@@ -224,7 +224,8 @@ func (d *DB) FileCounts(ctx context.Context, vaultID int64) (notes, attachments 
 // path instead of once for each link. The cache is safe only while the files
 // table does not change: a caller makes 1 resolver for a loop that writes
 // other rows only, such as links rows, and drops it when the loop ends. An
-// error is never cached, and no resolver outlives the loop that made it.
+// error is never cached, and no resolver outlives the loop that made it. A
+// cached answer still fails as its query would once ctx is done.
 type linkResolver struct {
 	t       *Tx
 	vaultID int64
@@ -265,6 +266,13 @@ func (r *linkResolver) resolve(ctx context.Context, source, target string) (File
 				return nil
 			}
 			r.names[name] = paths
+			return paths
+		}
+		// The query that filled the cache checked ctx first; a cached
+		// answer fails as that query would now.
+		if err := ctx.Err(); err != nil {
+			lookupErr = fmt.Errorf("find files named %s: %w", name, err)
+			return nil
 		}
 		return paths
 	})
@@ -274,8 +282,8 @@ func (r *linkResolver) resolve(ctx context.Context, source, target string) (File
 	if resolved == "" {
 		return File{}, false, nil
 	}
-	lookup, ok := r.paths[resolved]
-	if !ok {
+	lookup, cached := r.paths[resolved]
+	if !cached {
 		f, err := r.t.FileByPath(ctx, r.vaultID, resolved)
 		if errors.Is(err, ErrNotFound) {
 			r.paths[resolved] = fileLookup{}
@@ -286,6 +294,10 @@ func (r *linkResolver) resolve(ctx context.Context, source, target string) (File
 		}
 		lookup = fileLookup{file: f, ok: true}
 		r.paths[resolved] = lookup
+	} else if err := ctx.Err(); err != nil {
+		// The cached answer fails as fileByPath's query would now.
+		getErr := fmt.Errorf("get file %s: %w", resolved, err)
+		return File{}, false, fmt.Errorf("resolve link %s: %w", target, getErr)
 	}
 	if !lookup.ok {
 		return File{}, false, nil
