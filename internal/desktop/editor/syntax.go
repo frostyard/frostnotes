@@ -128,7 +128,9 @@ var (
 )
 
 // overlay sets Obsidian's inline syntax in kinds, leaving code spans be;
-// it reports whether a %% comment stays open at the end of the line.
+// it reports whether a %% comment stays open at the end of the line. Each
+// pattern is tried only when the literal its own match needs is there:
+// most lines have none of them.
 func overlay(line string, kinds []code.TokenKind) (open bool) {
 	free := func(s, e int) bool {
 		for i := s; i < e; i++ {
@@ -143,27 +145,37 @@ func overlay(line string, kinds []code.TokenKind) (open bool) {
 			kinds[i] = k
 		}
 	}
-	if m := calloutRe.FindStringSubmatchIndex(line); m != nil {
-		set(m[2], m[3], code.TokenKeyword)
-	}
-	for _, m := range wikiRe.FindAllStringIndex(line, -1) {
-		if free(m[0], m[1]) {
-			set(m[0], m[1], code.TokenLink)
+	if strings.Contains(line, "[!") { // a callout, > [!note]
+		if m := calloutRe.FindStringSubmatchIndex(line); m != nil {
+			set(m[2], m[3], code.TokenKeyword)
 		}
 	}
-	for _, m := range footnoteRe.FindAllStringIndex(line, -1) {
-		if free(m[0], m[1]) {
-			set(m[0], m[1], code.TokenLink)
+	if strings.Contains(line, "[[") { // a wikilink or embed, [[Note]]
+		for _, m := range wikiRe.FindAllStringIndex(line, -1) {
+			if free(m[0], m[1]) {
+				set(m[0], m[1], code.TokenLink)
+			}
 		}
 	}
-	for _, m := range highRe.FindAllStringIndex(line, -1) {
-		if free(m[0], m[1]) {
-			set(m[0], m[1], code.TokenInserted)
+	if strings.Contains(line, "[^") { // a footnote, [^1]
+		for _, m := range footnoteRe.FindAllStringIndex(line, -1) {
+			if free(m[0], m[1]) {
+				set(m[0], m[1], code.TokenLink)
+			}
 		}
 	}
-	for _, m := range mathRe.FindAllStringIndex(line, -1) {
-		if free(m[0], m[1]) {
-			set(m[0], m[1], code.TokenString)
+	if strings.Contains(line, "==") { // a highlight, ==text==
+		for _, m := range highRe.FindAllStringIndex(line, -1) {
+			if free(m[0], m[1]) {
+				set(m[0], m[1], code.TokenInserted)
+			}
+		}
+	}
+	if strings.Contains(line, "$") { // math, $x$
+		for _, m := range mathRe.FindAllStringIndex(line, -1) {
+			if free(m[0], m[1]) {
+				set(m[0], m[1], code.TokenString)
+			}
 		}
 	}
 	for _, t := range tagRanges(line) {
@@ -171,8 +183,10 @@ func overlay(line string, kinds []code.TokenKind) (open bool) {
 			set(t[0], t[1], code.TokenType)
 		}
 	}
-	if m := blockIDRe.FindStringSubmatchIndex(line); m != nil && free(m[2], m[3]) {
-		set(m[2], m[3], code.TokenComment)
+	if strings.Contains(line, "^") { // a block ID, ^block-1
+		if m := blockIDRe.FindStringSubmatchIndex(line); m != nil && free(m[2], m[3]) {
+			set(m[2], m[3], code.TokenComment)
+		}
 	}
 	// %% comments last: they hide the rest.
 	for i := 0; i < len(line); {
