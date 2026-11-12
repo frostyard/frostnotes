@@ -474,3 +474,31 @@ func TestPruneThinsTheHubsLog(t *testing.T) {
 		t.Fatal("a pruned revision's blob, which nothing else names, survived")
 	}
 }
+
+// A head the file already holds changes nothing on disk, so Apply records it
+// in a transaction of its own. That record is kept when the session ends as
+// it is written: it says the file is agreed, and losing it makes the device
+// push the head back to its hub.
+func TestApplyRecordsAHeadTheFileHoldsWithASessionThatEnded(t *testing.T) {
+	tv := newTestVault(t, map[string]string{"a.md": "one\n"}, nil)
+	tv.scan()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	a := tv.row("a.md")
+	recorded, closed := false, false
+	rec := func(ctx context.Context, tx *store.Tx, f store.File) error {
+		cancel() // the session ends while the answer is recorded
+		ok, err := tx.FileExists(ctx, f.ID)
+		if err != nil {
+			return err
+		}
+		recorded, closed = ok, ctx.Err() == nil
+		return nil
+	}
+	if _, err := tv.v.Apply(ctx, Expect{Path: "a.md", Hash: a.Hash}, Head{Path: "a.md", Hash: a.Hash}, fromHub, rec); err != nil {
+		t.Fatalf("Apply of a head the file holds = %v; want it recorded whatever the caller does", err)
+	}
+	if !recorded || !closed {
+		t.Fatalf("the record ran with file %v and an open context %v; want both", recorded, closed)
+	}
+}
