@@ -186,6 +186,11 @@ file a step names before writing its frostnotes counterpart.
   `make vulncheck` runs govulncheck (pinned in the Makefile; needs the
   network). It is not part of `check`, `verify` or `ci`; the CI job
   "Vulnerabilities (make vulncheck)" runs it.
+  `make desktop-bench` is the desktop app's typing gate: a keystroke in a
+  10,000-line note fails over 16 ms on a developer machine and over 25 ms
+  on CI, whose runner CPU varies about twofold
+  ([ADR-0043](docs/adr/0043-the-typing-gate-is-looser-on-ci.md)). Run it
+  after a change to the editor or live preview.
 
 - Unit and race runs filter no test names (frostyard/core ADR-0038, [ADR-0035](docs/adr/0035-unit-runs-filter-no-test-names.md)): integration tests carry the `integration` build tag instead; `internal/repocheck` fails if a unit run in the Makefile or a workflow gets `-run` or `-skip`.
 - Fix a lint finding rather than loosening `.golangci.yml`.

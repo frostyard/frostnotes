@@ -403,7 +403,8 @@ The parts that need no frostui piece, in the order the orchestrator set.
   document and editor in a test with a real notesd (vim, MCP and a hub
   writing while the app types lose no token, and the caret stays),
   typing in a 10,000-line note stays under 16 ms a keystroke in source
-  mode, the render fixtures pass for both formats, and `make check`
+  mode (25 ms on CI,
+  [ADR-0043](../adr/0043-the-typing-gate-is-looser-on-ci.md)), the render fixtures pass for both formats, and `make check`
   passes. The branch is then pushed and its PR opened as a draft.
 
 ## Phase 3 — The frame (done 2026-11-10)
@@ -474,9 +475,12 @@ as the reading view draws them (`reading.Blocks`), fences' headers with Copy,
 and links, tags, footnotes and task boxes a click reaches. Undo is MyGo's. A
 keystroke in a 10,000-line note with blocks, with a frame drawn on the CPU,
 costs 8 ms in live preview and 2.3 ms in source mode, on an AMD Ryzen AI MAX+
-395. The gate's reference machine is the CI runner: the `desktop` job's
-`make desktop-bench` prints the figure on every run. The runner's CPU
-changes from run to run, so a figure names its CPU. With per-line styles,
+395. `make desktop-bench` is the gate: it fails a keystroke over 16 ms on a
+developer machine and over 25 ms on CI, where the `desktop` job runs it on
+every run
+([ADR-0043](../adr/0043-the-typing-gate-is-looser-on-ci.md)). The runner's
+CPU changes from run to run, and the slowest is about twice as slow as the
+fastest, so a figure names its CPU. With per-line styles,
 on 2026-11-12 ([#193](https://github.com/frostyard/frostnotes/issues/193)),
 once live preview's scan hashed each line once and the highlighter tried
 each pattern only on a line that can match it, it measured 10.4 ms in live
@@ -512,7 +516,8 @@ and names stand in for it.
 - IME, accessible text, and undo that leaves out remote changes.
 - **Done when:** each construct has a Tester snapshot in both states,
   typing in a 10,000-line note in live preview stays under 16 ms a
-  keystroke, every note of the user's vault opens in live preview, and
+  keystroke on a developer machine and under 25 ms on CI
+  ([ADR-0043](../adr/0043-the-typing-gate-is-looser-on-ci.md)), every note of the user's vault opens in live preview, and
   Orca reads and edits a note.
 
 ## Phase 6 — Packaging, CI and evidence (about 1 week)
