@@ -473,23 +473,31 @@ func TestTheCacheHoldsNoSubstringOfTheNote(t *testing.T) {
 		p := uintptr(unsafe.Pointer(unsafe.StringData(x)))
 		return p >= start && p < start+uintptr(len(note))
 	}
-	for key, pieces := range s.cache {
-		if inside(key.text) {
-			t.Errorf("the key %q shares the note's memory", key.text)
+	if len(s.cache) == 0 {
+		t.Fatal("no lines were kept")
+	}
+	for text, e := range s.cache {
+		if inside(text) || inside(e.text) {
+			t.Errorf("the key %q shares the note's memory", text)
 		}
-		for _, p := range pieces {
-			if inside(p.Label) || inside(p.Target) {
-				t.Errorf("a piece of %q shares the note's memory", key.text)
+		for i := range e.pieces {
+			if !e.held[i] {
+				continue
+			}
+			for _, p := range e.pieces[i] {
+				if inside(p.Label) || inside(p.Target) {
+					t.Errorf("a piece of %q shares the note's memory", text)
+				}
 			}
 		}
 	}
-	if len(s.shapes) == 0 {
-		t.Fatal("no line shapes were kept")
-	}
-	for text := range s.shapes {
-		if inside(text) {
-			t.Errorf("the shape of %q shares the note's memory", text)
-		}
+}
+
+func TestEachLineIsCachedOnce(t *testing.T) {
+	var s Scanner
+	s.Scan("# One\ntext\n# One\ntext", Options{})
+	if got, want := len(s.cache), 2; got != want {
+		t.Fatalf("cache holds %d lines, want %d: one for each text", got, want)
 	}
 }
 

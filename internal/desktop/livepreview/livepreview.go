@@ -148,12 +148,42 @@ const (
 // maxCache bounds the cached lines, as a multiple of the note's.
 const maxCache = 4
 
-// Scanner keeps each line's pieces, so that a keystroke reads again only
-// the line it changed. Keep one per editor. It is not safe for concurrent
-// use.
+// Scanner keeps each line's shape and pieces, so that a keystroke reads
+// again only the line it changed. Keep one per editor. It is not safe for
+// concurrent use.
 type Scanner struct {
-	cache  map[lineKey][]Piece
-	shapes map[string]lineShape
+	// cache holds a line's entry by its text: one hash for the shape and
+	// the pieces of every line.
+	cache map[string]*lineEntry
+	// last holds the last Result's lengths, to size the next one.
+	last sizes
+}
+
+// sizes are the lengths of a Result's slices.
+type sizes struct{ pieces, styles, code, blocks int }
+
+// lineEntry is what the cache keeps of a line.
+type lineEntry struct {
+	text  string // the line, in a copy of its own
+	shape lineShape
+	// pieces are the line's pieces for each of the four combinations of
+	// afterText and afterGap, at combo's index, and held says which were
+	// worked out: no pieces is a result too.
+	pieces [4][]Piece
+	held   [4]bool
+}
+
+// combo is the index of a line's pieces for the lines before it: 1 for
+// afterText, 1 for afterGap.
+func combo(afterText, afterGap bool) int {
+	i := 0
+	if afterText {
+		i += 2
+	}
+	if afterGap {
+		i++
+	}
+	return i
 }
 
 // lineShape is what a line's text alone says of it. A keystroke scans every
@@ -180,21 +210,16 @@ func shapeOf(content string) lineShape {
 	return sh
 }
 
-// shape is content's shape, from the cache when it has it.
-func (s *Scanner) shape(content string) lineShape {
-	sh, ok := s.shapes[content]
+// entry is content's entry, from the cache when it has it.
+func (s *Scanner) entry(content string) *lineEntry {
+	e, ok := s.cache[content]
 	if !ok {
-		sh = shapeOf(content)
-		s.shapes[strings.Clone(content)] = sh // a substring would keep the whole note alive
+		// A copy: a substring in the cache would keep the whole note alive,
+		// a new note each edit.
+		e = &lineEntry{text: strings.Clone(content), shape: shapeOf(content)}
+		s.cache[e.text] = e
 	}
-	return sh
-}
-
-// lineKey is a line and what about the lines before it changes its pieces.
-type lineKey struct {
-	text      string
-	afterText bool // the line before is a paragraph's: "---" underlines it
-	afterGap  bool // the line before is blank
+	return e
 }
 
 // Pieces lists what shows of text, sorted and apart, without blocks.
@@ -208,9 +233,16 @@ func (s *Scanner) Pieces(text string, revealed func(line int) bool, hideFront bo
 // Scan works out what shows of text.
 func (s *Scanner) Scan(text string, o Options) Result {
 	if s.cache == nil {
-		s.cache, s.shapes = map[lineKey][]Piece{}, map[string]lineShape{}
+		s.cache = map[string]*lineEntry{}
 	}
-	var res Result
+	// Sized as the last one was: a keystroke changes few lines, so the
+	// slices grow no further, and no append copies them.
+	res := Result{
+		Pieces: make([]Piece, 0, s.last.pieces),
+		Styles: make([]LineStyle, 0, s.last.styles),
+		Code:   make([]Lines, 0, s.last.code),
+		Blocks: make([]Block, 0, s.last.blocks),
+	}
 	st := state{text: text, closedFront: closedFront(text)}
 	line, start := 0, 0
 	lines := 0
@@ -231,7 +263,8 @@ func (s *Scanner) Scan(text string, o Options) Result {
 			}
 		}
 		was := st.block
-		sh := s.shape(content)
+		e := s.entry(content)
+		sh := e.shape
 		indented := was == blockText && !st.afterText && codeIndent(content)
 		blank := strings.TrimSpace(content) == ""
 		if indented {
@@ -245,7 +278,7 @@ func (s *Scanner) Scan(text string, o Options) Result {
 		}
 		if was == blockText && st.block == blockText && !st.structural {
 			from := len(res.Pieces)
-			res.Pieces = s.line(res.Pieces, content, start, st, line, o.Revealed)
+			res.Pieces = e.piecesOf(res.Pieces, start, st.afterText, st.afterGap, line, o.Revealed)
 			placeEmbeds(&res, from, text, content, start, min(next, len(text)), line, o)
 			if (sh.level > 0 || sh.done) && (o.Revealed == nil || !o.Revealed(line)) {
 				if sh.level > 0 {
@@ -270,13 +303,16 @@ func (s *Scanner) Scan(text string, o Options) Result {
 	if len(s.cache) > maxCache*lines+64 {
 		clear(s.cache)
 	}
-	if len(s.shapes) > maxCache*lines+64 {
-		clear(s.shapes)
+	if !slices.IsSortedFunc(res.Pieces, byStart) {
+		slices.SortStableFunc(res.Pieces, byStart)
 	}
-	slices.SortStableFunc(res.Pieces, func(a, b Piece) int { return a.Start - b.Start })
 	res.Pieces = apart(res.Pieces)
+	s.last = sizes{len(res.Pieces), len(res.Styles), len(res.Code), len(res.Blocks)}
 	return res
 }
+
+// byStart orders pieces by where they start.
+func byStart(a, b Piece) int { return a.Start - b.Start }
 
 // apart drops pieces that overlap one before them.
 func apart(ps []Piece) []Piece {
@@ -292,18 +328,17 @@ func apart(ps []Piece) []Piece {
 	return out
 }
 
-func (s *Scanner) line(out []Piece, content string, start int, st state, line int, revealed func(int) bool) []Piece {
+// piecesOf are the pieces of the line's text, moved to start, unless a
+// selection touches the line: the cache's when it has them.
+func (e *lineEntry) piecesOf(out []Piece, start int, afterText, afterGap bool, line int, revealed func(int) bool) []Piece {
 	if revealed != nil && revealed(line) {
 		return out
 	}
-	key := lineKey{content, st.afterText, st.afterGap}
-	ps, ok := s.cache[key]
-	if !ok {
-		// A copy: a substring in the cache would keep the whole note alive,
-		// a new note each edit.
-		key.text = strings.Clone(content)
-		ps = linePieces(key.text, st.afterText, st.afterGap)
-		s.cache[key] = ps
+	i := combo(afterText, afterGap)
+	ps := e.pieces[i]
+	if !e.held[i] {
+		ps = linePieces(e.text, afterText, afterGap)
+		e.pieces[i], e.held[i] = ps, true
 	}
 	for _, p := range ps {
 		p.Start += start
