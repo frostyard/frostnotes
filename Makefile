@@ -31,7 +31,7 @@ desktop-smoke: desktop-build ## Start the native app under Xvfb against a real n
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
 	scripts/desktop-smoke.sh build
 
-desktop-bench: ## Time a keystroke in a 10,000-line note, in source mode and live preview
+desktop-bench: ## Time a keystroke in a 10,000-line note; fails over 16 ms (25 ms with CI=true, ADR-0043)
 	go test -bench BenchmarkTypingInALongNote -benchtime 100x ./internal/desktop/editor/
 
 desktop-evidence: ## Record the native app's evidence: a 10,000-note vault within a frame, a phone's edit within 2 s
