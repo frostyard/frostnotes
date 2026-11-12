@@ -213,7 +213,21 @@ A later ADR or the spec grows the subset.
   and `limit` (1–1000, default 200).
 - Output: `files: [{path, title, url, properties, writable}]`, `total` and
   `notice`. For an attachment, `title` is `file.basename`. `writable`
-  appears under a limited scope, as in `list_notes`.
+  appears under a limited scope, as in `list_notes`. `notice` is the
+  sentence every read tool's result carries
+  ([MCP results](../specs/mcp.md#results)), never a view's notice.
+
+**A view that shows a notice is a tool error in `query_notes`.** In the
+app, a view with `groupOrder` or a view type outside the subset shows a
+notice in place of its rows. `query_notes` with `path` and that `view`, or
+with no `view` when the base's first view is such a view, returns a tool
+error result, as for a refused filter. Its text names the view and the
+key or view type outside the subset, at its location, for example
+`views[1]: view type kanban is outside the subset`. It never returns
+empty `files` with a `total` of 0: an agent would read that as a view
+that matches no rows, which is a wrong answer without warning, as a
+partial result is. `query_notes` with only `filters` has no view, so it
+never meets this case.
 
 It calls `note.query`. With only `filters` and no `path`, there is no
 `this`; a filter that uses `this` is refused. It returns the named
@@ -263,7 +277,9 @@ carries the content of a note not asked about gains a clause:
 6. Benchmark a `tools/vaultgen` vault with `b.Loop`, against a time budget
    the plan names.
 7. Test `query_notes` in the MCP read tool list and under a read scope,
-   with `notice`, pinned to the scope's vault through lodge.
+   with `notice`, pinned to the scope's vault through lodge. Test that a
+   view with `groupOrder` and a view type outside the subset each give a
+   tool error that names the view, and no `files`.
 8. Test rendering: base views render values as text through the existing
    sanitizer, never script, per
    [ADR-0007](0007-edit-in-codemirror-6-with-live-preview.md).
