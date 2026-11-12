@@ -125,8 +125,9 @@ func (t *Tx) indexTags(ctx context.Context, id int64, tags []markdown.Tag) error
 }
 
 func (t *Tx) indexLinks(ctx context.Context, f File, links []markdown.Link) error {
+	r := newLinkResolver(t, f.VaultID)
 	for ord, link := range links {
-		dest, ok, err := t.ResolveLink(ctx, f.VaultID, f.Path, link.Target)
+		dest, ok, err := r.resolve(ctx, f.Path, link.Target)
 		if err != nil {
 			return err
 		}
