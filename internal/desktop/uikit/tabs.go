@@ -130,7 +130,7 @@ func (s TabStrip) tab(c *ui.Context, el ui.Element, index int, tab Tab) {
 		if tab.Pinned {
 			frostui.Icon(c, "view-pin").TextColor(t.TextMuted)
 		}
-		ui.Text(c, tab.Title).FontSize(13).SingleLine().Grow(1).Shrink(1).AccessHidden(true)
+		frostui.Body(c, tab.Title).SingleLine().Grow(1).Shrink(1).AccessHidden(true)
 		if !tab.Pinned && s.Close != nil && ToolButton(c, "window-close", s.CloseLabel(tab.Title)).Size(20, 20).Clicked() {
 			s.Close(tab.ID)
 		}
@@ -176,16 +176,23 @@ type PaneTab struct {
 
 // PaneTabs is a row of icon tabs choosing a side panel's pane.
 func PaneTabs(c *ui.Context, label string, panes []PaneTab, active int, choose func(id string)) ui.Element {
+	t := c.Theme()
+	k := frostui.ColorsOf(t)
 	selected := active
 	tabs := ui.TabsBase(c, &selected, len(panes))
 	el := tabs.List.Gap(frostui.SpaceXS).Padding(frostui.SpaceXS, frostui.SpaceS).AlignItems(ui.Center).Label(label)
 	el.Children(func() {
 		for i, p := range panes {
-			tab := tabs.Tab(i).Size(28, 28).Center().Radius(6).Label(p.Title).Tooltip(p.Title)
-			if i == active {
-				tab.Background(c.Theme().Surface)
+			tab := tabs.Tab(i).Size(28, 28).Center().Radius(t.Radius).Label(p.Title).Tooltip(p.Title)
+			color := t.TextMuted
+			switch {
+			case i == active:
+				tab.Background(k.SelectedFill)
+				color = k.SelectedText
+			case tab.Hovered():
+				color = k.HoverText
 			}
-			tab.Children(func() { frostui.Icon(c, p.Icon) })
+			tab.Children(func() { frostui.Icon(c, p.Icon).TextColor(color) })
 		}
 	})
 	if selected != active && selected >= 0 && selected < len(panes) && choose != nil {
@@ -199,8 +206,17 @@ func PaneTabs(c *ui.Context, label string, panes []PaneTab, active int, choose f
 func ToolButton(c *ui.Context, icon, label string) ui.Element {
 	t := c.Theme()
 	b := ui.ButtonBase(c).Size(26, 26).Center().Radius(frostui.RadiusChip).Cursor(ui.CursorPointer).Label(label).Tooltip(label)
+	color := t.TextMuted
 	if b.Hovered() {
-		b.Background(t.SurfaceHover)
+		color = frostui.ColorsOf(t).HoverText // the brand's hover: the face stays
 	}
-	return b.Children(func() { frostui.Icon(c, icon).TextColor(t.TextMuted) })
+	return b.Children(func() { frostui.Icon(c, icon).TextColor(color) })
+}
+
+// SelectedRow draws e as frostui's selected row (ADR-0011 of frostui): the
+// selected fill, a 1px accent rule on its leading edge, and the selected
+// text.
+func SelectedRow(e ui.Element, t *ui.Theme) ui.Element {
+	k := frostui.ColorsOf(t)
+	return e.Background(k.SelectedFill).BorderWidth(0, 0, 0, 1).BorderColor(t.Accent).TextColor(k.SelectedText)
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/catalog"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	"github.com/frostyard/frostnotes/internal/desktop/uikit"
 	"github.com/frostyard/frostnotes/internal/markdown"
 )
 
@@ -91,12 +92,15 @@ func row(c *ui.Context, label string, selected bool) ui.Element {
 	r := ui.Row(c).Gap(frostui.SpaceXS).Padding(3, frostui.SpaceS).Radius(frostui.RadiusChip).AlignItems(ui.Center).
 		Role(ui.RoleButton).Focusable().Cursor(ui.CursorPointer).Label(label)
 	if selected {
-		r.Background(t.Surface)
+		uikit.SelectedRow(r, t)
 	} else if r.Hovered() {
-		r.Background(t.SurfaceHover)
+		r.TextColor(frostui.ColorsOf(t).HoverText)
 	}
 	return r
 }
+
+// mutedSize is frostui.Muted's size, at the platform's usual text size.
+const mutedSize = 12.5
 
 // snippet draws text with its matches in bold.
 func snippet(c *ui.Context, parts []api.SnippetPart) ui.Element {
@@ -107,7 +111,8 @@ func snippet(c *ui.Context, parts []api.SnippetPart) ui.Element {
 			spans[i].Weight = 700
 		}
 	}
-	return ui.RichText(c, spans...).FontSize(12).TextColor(c.Theme().TextMuted).Wrap()
+	// frostui's Muted, which takes no spans.
+	return ui.RichText(c, spans...).FontSize(frostui.TextSize(c, mutedSize)).TextColor(c.Theme().TextMuted).Wrap()
 }
 
 func titleOf(p string) string { return strings.TrimSuffix(path.Base(p), ".md") }

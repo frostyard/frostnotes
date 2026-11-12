@@ -7,6 +7,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
+	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/internal/desktop/livepreview"
 	"github.com/frostyard/frostnotes/internal/desktop/mathview"
@@ -30,6 +31,8 @@ type liveState struct {
 	lines   []lineSpan
 	front   bool
 	muted   ui.Color
+	code    ui.Color    // the code color the code blocks' lines are on
+	theme   *code.Theme // the editor's theme in live preview
 
 	resolved   map[string]bool // links' targets, until the vault changes
 	widths     map[string]float32
@@ -48,17 +51,21 @@ func (e *NoteEditor) showLive(c *ui.Context) {
 			e.State.SetReplacements(nil)
 			e.State.SetBlocks(nil)
 			e.State.SetLineStyles(nil)
+			e.State.LineBackgrounds = nil
+			e.State.Theme = nil
 		}
 		return
 	}
 	buf := e.b.Buffer()
 	lines := e.selectedLines(buf)
-	muted := c.Theme().TextMuted
+	t := c.Theme()
+	e.State.Theme = l.editorTheme(t)
+	muted, codeColor := t.TextMuted, frostui.ColorsOf(t).Code
 	version := buf.Version()
-	if l.on && l.version == version && l.front == e.HideFront && l.muted == muted && slices.Equal(l.lines, lines) {
+	if l.on && l.version == version && l.front == e.HideFront && l.muted == muted && l.code == codeColor && slices.Equal(l.lines, lines) {
 		return
 	}
-	l.on, l.version, l.front, l.muted, l.lines = true, version, e.HideFront, muted, lines
+	l.on, l.version, l.front, l.muted, l.code, l.lines = true, version, e.HideFront, muted, codeColor, lines
 	revealed := func(line int) bool {
 		return slices.ContainsFunc(lines, func(s lineSpan) bool { return s.first <= line && line <= s.last })
 	}
@@ -69,20 +76,52 @@ func (e *NoteEditor) showLive(c *ui.Context) {
 	}
 	e.State.SetReplacements(out)
 	styles := make([]code.LineStyle, 0, len(res.Styles))
-	sizes := [...]float32{1, 2, 1.5, 1.25, 1.125, 1, 1}
 	for _, s := range res.Styles {
 		style := code.LineStyle{Line: s.Line, Strike: s.Done}
 		if s.Heading > 0 {
-			style.Font = ui.Font{Size: e.font().Size * sizes[s.Heading], Weight: 700}
+			style.Font = headingFont(e.font(), s.Heading)
 		}
 		styles = append(styles, style)
 	}
 	e.State.SetLineStyles(styles)
+	backgrounds := make([]code.LineBackground, len(res.Code))
+	for i, r := range res.Code {
+		backgrounds[i] = code.LineBackground{First: r.First, Last: r.Last, Color: codeColor}
+	}
+	e.State.LineBackgrounds = backgrounds
 	blocks := make([]code.Block, 0, len(res.Blocks))
 	for _, b := range res.Blocks {
 		blocks = append(blocks, e.block(b))
 	}
 	e.State.SetBlocks(blocks)
+}
+
+// editorTheme is the editor's theme in live preview: MyGo's for the
+// window's theme t, but headings in the text color, as the reading view
+// and frostui's headings draw them. Source mode keeps MyGo's. Its colors
+// are zero, which the editor fills in from t each frame, but the heading's;
+// its tokens keep MyGo's weights and slants, which no color changes.
+func (l *liveState) editorTheme(t *ui.Theme) *code.Theme {
+	if l.theme == nil || l.theme.Tokens[code.TokenHeading].Color != t.Text {
+		def := code.DefaultTheme(t)
+		l.theme = &code.Theme{}
+		for k, s := range def.Tokens {
+			l.theme.Tokens[k] = code.TokenStyle{Bold: s.Bold, Italic: s.Italic}
+		}
+		l.theme.Tokens[code.TokenHeading].Color = t.Text
+	}
+	return l.theme
+}
+
+// headingSizes are the headings' sizes, levels 1 to 6, as multiples of the
+// editor's text size.
+var headingSizes = [...]float32{1, 2, 1.5, 1.25, 1.125, 1, 1}
+
+// headingFont is the font of a heading of level in live preview: frostui's
+// font (Inter), bold, at its level's multiple of the editor's text size f,
+// as the reading view sets headings in the theme's font.
+func headingFont(f ui.Font, level int) ui.Font {
+	return ui.Font{Family: frostui.FontFamily, Size: f.Size * headingSizes[min(max(level, 0), 6)], Weight: 700}
 }
 
 // RefreshLive works out what live preview shows again, as what an embed
@@ -161,10 +200,18 @@ func (e *NoteEditor) codeHeader(b livepreview.Block) code.Block {
 			}
 			t := c.Theme()
 			el.Children(func() {
-				ui.Row(c).FillWidth().Height(28).Padding(0, 8).AlignItems(ui.Center).Background(t.Surface).Radius(4).Children(func() {
-					ui.Text(c, b.Language).FontSize(12).TextColor(t.TextMuted).Grow(1)
-					copyCode := ui.ButtonBase(c).KeepFocus().Cursor(ui.CursorPointer).Label("Copy code").Padding(2, 6)
-					copyCode.Children(func() { ui.Text(c, "Copy").FontSize(12).TextColor(t.TextMuted) })
+				// Over the code's lines, which are on the code color: the editor
+				// puts a block within the text's width, narrower than a line's
+				// background, so the header keeps the editor's ground. As the
+				// reading view's header, the language and Copy are small and muted.
+				ui.Row(c).FillWidth().Height(28).Padding(0, frostui.SpaceS).AlignItems(ui.Center).Children(func() {
+					frostui.Caption(c, b.Language).Grow(1)
+					copyCode := ui.ButtonBase(c).KeepFocus().Cursor(ui.CursorPointer).Label("Copy code").Padding(2, 6).Radius(frostui.RadiusChip)
+					color := t.TextMuted
+					if copyCode.Hovered() {
+						color = frostui.ColorsOf(t).HoverText // the brand's hover: the face stays
+					}
+					copyCode.Children(func() { frostui.Caption(c, "Copy").TextColor(color) })
 					if copyCode.Clicked() {
 						c.WriteClipboard(b.Code)
 					}

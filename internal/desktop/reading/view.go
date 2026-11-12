@@ -25,6 +25,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/markdown"
 	"github.com/egoist/mygo/ui/markdown/parser"
+	"github.com/frostyard/frostui"
 	_ "github.com/gen2brain/gav1d/avif" // register the pure-Go AVIF decoder
 
 	"github.com/frostyard/frostnotes/api"
@@ -80,6 +81,7 @@ type drawer struct {
 	RemoteImages bool
 	// Options are the Markdown view's; the view fills in its hooks.
 	Options markdown.Options
+	look    markdown.Theme // Options.Theme, for the window's theme
 
 	baseLine int             // source-line offset while drawing a nested callout
 	folds    map[string]bool // callouts the user opened or closed
@@ -212,8 +214,18 @@ func (v *View) render() {
 	}()
 }
 
+// setLook sets the Markdown view's look for theme t: what MyGo draws by
+// default, but code blocks on frostui's code color inside a hairline, at a
+// chip's corners (frostui ADR-0011). Headings and text take the theme's
+// font, Inter, at its text size.
+func (v *drawer) setLook(t *ui.Theme) {
+	v.look = markdown.Theme{CodeBlockBackground: frostui.ColorsOf(t).Code, CodeBlockBorder: t.Border, CodeBlockRadius: frostui.RadiusChip}
+	v.Options.Theme = &v.look
+}
+
 // View draws the note.
 func (v *View) View(c *ui.Context) ui.Element {
+	v.setLook(c.Theme())
 	v.Options.OnTask = nil
 	if v.doc.Loaded() && v.doc.Text() == v.rendered && len(v.sourceLines) > 0 {
 		v.Options.OnTask = func(line int, checked bool) { v.toggleTask(v.baseLine+line, checked) }
@@ -360,8 +372,8 @@ func (v *drawer) embed(c *ui.Context, b *markdown.CodeBlockView) {
 		sub = "#" + sub
 	}
 	name := strings.TrimSuffix(filepath.Base(p), ".md")
-	ui.Column(c).Gap(6).Padding(10, 14).Radius(8).Border(1, t.Border).AlignSelf(ui.Stretch).Children(func() {
-		open := ui.Text(c, name).FontSize(12).TextColor(t.TextMuted).Role(ui.RoleLink).Label("Open " + name).Cursor(ui.CursorPointer)
+	ui.Column(c).Gap(6).Padding(10, 14).Radius(frostui.RadiusCard).Border(1, t.Border).AlignSelf(ui.Stretch).Children(func() {
+		open := frostui.Muted(c, name).Role(ui.RoleLink).Label("Open " + name).Cursor(ui.CursorPointer)
 		if open.Clicked() && v.Links.Note != nil {
 			v.Links.Note(p, sub, false)
 		}
@@ -372,18 +384,18 @@ func (v *drawer) embed(c *ui.Context, b *markdown.CodeBlockView) {
 	})
 }
 
-// calloutColors are the callouts' colors by type, as the web app's
+// calloutTone is a callout's tone by type, as the web app's colors
 // (app/src/styles/editor.css), for the types Obsidian names.
-func calloutTone(t *ui.Theme, typ string) ui.Color {
+func calloutTone(typ string) frostui.Tone {
 	switch typ {
 	case "warning", "caution", "attention":
-		return t.Warning
+		return frostui.Warning
 	case "danger", "error", "bug", "failure", "fail", "missing":
-		return t.Danger
+		return frostui.Danger
 	case "success", "check", "done", "tip", "hint", "important":
-		return t.Success
+		return frostui.Success
 	}
-	return t.Accent
+	return frostui.Accent
 }
 
 // callout draws a callout: its title in its type's color over its text,
@@ -404,10 +416,14 @@ func (v *drawer) callout(c *ui.Context, b *markdown.CodeBlockView) {
 	if !set {
 		open = fold != "-"
 	}
-	tone := calloutTone(t, head)
-	ui.Row(c).Radius(8).Background(tone.Alpha(0.1)).AlignSelf(ui.Stretch).AlignItems(ui.Stretch).Clip().Children(func() {
-		ui.Box(c).Width(3).Background(tone)
-		ui.Column(c).Grow(1).Gap(6).Padding(10, 14).Children(func() { v.calloutBody(c, b, key, title, fold, tone, open) })
+	// As frostui's banner: the tone's fill and line at a chip's corners, with
+	// the tone's bar along it.
+	tone := calloutTone(head)
+	color := frostui.ToneColor(t, tone)
+	ui.Row(c).Radius(frostui.RadiusChip).Background(frostui.ToneFill(t, tone)).Border(1, frostui.ToneLine(t, tone)).
+		AlignSelf(ui.Stretch).AlignItems(ui.Stretch).Clip().Children(func() {
+		ui.Box(c).Width(3).Background(color)
+		ui.Column(c).Grow(1).Gap(6).Padding(10, 14).Children(func() { v.calloutBody(c, b, key, title, fold, color, open) })
 	})
 }
 

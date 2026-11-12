@@ -16,10 +16,12 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
+	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/editor"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	"github.com/frostyard/frostnotes/internal/desktop/uikit"
 )
 
 // API is what the history needs of notesd; api.NoteClient has it.
@@ -280,14 +282,14 @@ func (v *View) View(c *ui.Context) ui.Element {
 				e := v.entries[i]
 				row := ui.Column(c).Padding(6, 12).Gap(2).Role(ui.RoleButton).Focusable().Cursor(ui.CursorPointer).Label(e.Title())
 				if i == v.selected {
-					row.Background(t.Surface)
+					uikit.SelectedRow(row, t)
 				}
 				if row.Clicked() {
 					v.Select(i)
 				}
 				row.Children(func() {
 					ui.Text(c, e.Title()).SingleLine()
-					ui.Text(c, e.Detail()).FontSize(12).TextColor(t.TextMuted).SingleLine()
+					frostui.Muted(c, e.Detail()).SingleLine()
 				})
 			}).Grow(1)
 		})

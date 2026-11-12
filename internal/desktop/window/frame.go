@@ -86,14 +86,19 @@ func (a *App) barEnd(c *ui.Context) {
 	}
 }
 
+// brand draws the top bar's brand as frostui's command-center shell does:
+// the tile on the brand's gradient at the theme's corner, and the name in
+// the wordmark's weight and spacing.
 func (a *App) brand(c *ui.Context) {
 	t := c.Theme()
+	k := frostui.ColorsOf(t)
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		ui.Box(c).Size(30, 30).Radius(8).Background(t.Accent).Center().Children(func() {
-			frostui.Icon(c, "org.frostyard.Frostnotes-symbolic").TextColor(t.AccentText)
+		tile := ui.Box(c).Size(30, 30).Radius(t.Radius).Center()
+		tile.LinearGradient(ui.LinearGradient{From: k.GradientFrom, To: k.GradientTo, Angle: 135}).Children(func() {
+			frostui.Icon(c, "org.frostyard.Frostnotes-symbolic").TextColor(k.OnGradient)
 		})
 		ui.Column(c).Children(func() {
-			ui.Text(c, "Frostnotes").Bold().SingleLine()
+			ui.Text(c, "Frostnotes").FontWeight(720).LetterSpacing(-0.04 * t.FontSize).SingleLine()
 			if a.vault != nil {
 				frostui.Caption(c, a.vault.Name).SingleLine().Role(ui.RoleButton).Focusable().Cursor(ui.CursorPointer).
 					Label("Vault: " + a.vault.Name).Tooltip("Switch vault").Menu(a.vaultMenu)

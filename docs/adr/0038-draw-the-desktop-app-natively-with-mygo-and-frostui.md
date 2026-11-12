@@ -249,3 +249,5 @@ React app has a TypeScript client and Lezer.
   [ADR-0036](0036-notesd-and-the-app-record-problems-in-the-journal.md);
   ChairLift's [ADR-0017](https://github.com/frostyard/chairlift/blob/feat/mygo/docs/adr/0017-mygo-command-center-window.md)
   and [design/frostui.md](https://github.com/frostyard/chairlift/blob/feat/mygo/docs/design/frostui.md)
+- Superseded in part by: [ADR-0042](0042-the-desktop-app-takes-frostuis-frostyard-look.md)
+  (the theme is frostui's Frostyard or Frostyard light; the desktop's accent no longer applies)

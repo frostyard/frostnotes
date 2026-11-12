@@ -59,6 +59,7 @@ func (b *Blocks) Changed() {
 // View draws source, within width when it is not 0; its source, dimmed,
 // until notesd has answered.
 func (b *Blocks) View(c *ui.Context, source string, width int) {
+	b.setLook(c.Theme())
 	b.Options.InlineMath = func(tex string, size float32) (markdown.InlineObject, bool) {
 		return b.math.Inline(tex, size, c.Theme().Text)
 	}

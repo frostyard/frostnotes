@@ -484,14 +484,14 @@ func (a *App) breadcrumb(c *ui.Context, p string) {
 	for i, part := range parts[:len(parts)-1] {
 		folder := strings.Join(parts[:i+1], "/")
 		b := ui.ButtonBase(c.Key(folder)).Cursor(ui.CursorPointer).Label("Reveal " + part)
-		b.Children(func() { ui.Text(c, part).AccessHidden(true).FontSize(13).TextColor(t.TextMuted).SingleLine() })
+		b.Children(func() { frostui.Body(c, part).AccessHidden(true).TextColor(t.TextMuted).SingleLine() })
 		if b.Clicked() {
 			a.files.Reveal(folder)
 			a.updateWorkspace(func(w *workspace.Workspace) { w.SelectPane(workspace.SideLeft, "files") })
 		}
-		ui.Text(c.Key(folder+"/"), "/").FontSize(13).TextColor(t.TextMuted)
+		frostui.Body(c.Key(folder+"/"), "/").TextColor(t.TextMuted)
 	}
-	ui.Text(c, parts[len(parts)-1]).FontSize(13).SingleLine()
+	frostui.Body(c, parts[len(parts)-1]).SingleLine()
 }
 
 func (a *App) moreOptions(m *ui.Menu, tab *workspace.Tab) {

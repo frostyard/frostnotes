@@ -13,6 +13,7 @@ import (
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/uikit"
 )
 
 // The join flow's phases.
@@ -134,9 +135,9 @@ func (m *vaultManager) list(c *ui.Context, a *App) {
 				v := &a.vaults[i]
 				row := ui.ButtonBase(c.Key(v.ID)).Column().Padding(8, 12).Radius(frostui.RadiusChip).AlignItems(ui.Stretch).Cursor(ui.CursorPointer).Label(v.Name)
 				if a.vault != nil && a.vault.ID == v.ID {
-					row.Background(t.Accent.Alpha(0.16))
+					uikit.SelectedRow(row, t)
 				} else if row.Hovered() {
-					row.Background(t.SurfaceHover)
+					row.TextColor(frostui.ColorsOf(t).HoverText)
 				}
 				row.ContextMenu(func(menu *ui.Menu) {
 					if menu.Item("Remove from list").Chosen() {
@@ -196,7 +197,7 @@ func action(c *ui.Context, title, body string, fn func()) {
 }
 
 func (m *vaultManager) actions(c *ui.Context, a *App) {
-	ui.Text(c, "Frostnotes").FontSize(20).Bold()
+	frostui.Title(c, "Frostnotes")
 	if m.err != "" {
 		frostui.Problem(c, m.err)
 	}
@@ -265,7 +266,7 @@ func (m *vaultManager) createForm(c *ui.Context, a *App) {
 	if ui.Button(c, "Back").Clicked() {
 		m.panel, m.err = "", ""
 	}
-	ui.Text(c, "Create new vault").FontSize(18).Bold()
+	frostui.Title(c, "Create new vault")
 	frostui.Body(c, "Vault name")
 	ui.TextInput(c, &m.name).Label("Vault name").AutoFocus()
 	problem := ""
@@ -358,7 +359,7 @@ func (j *joinFlow) view(c *ui.Context, a *App, back func()) {
 		back()
 		return
 	}
-	ui.Text(c, title).FontSize(18).Bold()
+	frostui.Title(c, title)
 	switch j.phase {
 	case joinForm:
 		j.form(c, a)

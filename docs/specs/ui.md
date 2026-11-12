@@ -979,6 +979,14 @@ The native app ([plan 0009](../plans/0009-mygo-desktop.md#the-window),
 has this spec's commands, keys, panes, settings and notices. It draws them
 with frostui, which changes these:
 
+- The look is frostui's Frostyard (dark) or Frostyard light, not this
+  spec's tokens ([ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md),
+  [the native look](../design/app.md#the-native-look)): Appearance's Theme
+  Light or Dark picks one, System the one of the desktop's light or dark.
+  The desktop's high contrast and text size apply, its accent does not.
+  Text is Inter in frostui's styles, corners nearly square, and the
+  selected row of the vault list, the history and the panes is frostui's
+  (the selected fill and a 1px accent rule).
 - The title bar row is frostui's top bar, and tab strips sit under it, one
   for each tab group. There is no ribbon.
 - [Connecting](#connecting) is frostui's connecting screen. Why notesd is not
@@ -987,8 +995,11 @@ with frostui, which changes these:
   note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
   opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
 - The status bar starts with the connection, "Local" or the hub's host.
-- Live preview draws headings at their hierarchy's size and dims/strikes
-  completed tasks off selected lines; selection restores source styles.
+- Live preview draws headings in Inter, bold, at their hierarchy's multiple
+  of the editor's font size, and dims/strikes completed tasks off selected
+  lines; selection restores source styles. Code blocks' lines, fences
+  included, sit on frostui's code color, selected or not; the reading view
+  draws code blocks on it inside a hairline.
   Math draws as vector paths ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md));
   audio and video have playback controls in standalone embeds and attachment tabs. An image within a line draws under it.
   In source mode, the
@@ -1030,4 +1041,5 @@ with frostui, which changes these:
 - Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the vault manager's join, in the app, is G1, and the window's reasons for a refused permission (Connecting; the Flatpak's refused folder in the vault manager) are G5, of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)
 - Native live preview: [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)
+- The native look: [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) (frostui's Frostyard themes)
 - The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) draw the desktop app natively; [how its screens differ](#in-the-native-desktop-app)
