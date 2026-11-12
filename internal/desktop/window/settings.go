@@ -397,8 +397,13 @@ func (a *App) configure(field string, value any) {
 		_, err := c.Vault().Configure(ctx, p)
 		return err
 	}, func(err error) {
-		a.report(err)
-		a.loadVaultData()
+		// A change notesd made comes back as vault.configured, which loads
+		// the vault's data (event): a load here too would do it twice. A
+		// refused change loads it, so the rows show what holds.
+		if err != nil {
+			a.report(err)
+			a.loadVaultData()
+		}
 	})
 }
 
