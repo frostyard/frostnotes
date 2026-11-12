@@ -188,7 +188,9 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 				// vault's log: missing, as if the hub lacked it.
 				a := store.PushAnswer{ReplicaID: rep.ID, PushID: it.Push, Status: api.PushStatusRefused,
 					Reason: api.RefuseReasonMissing}
-				if err := s.h.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return tx.RecordPush(ctx, a) }); err != nil {
+				// The answer is recorded whatever the session does next.
+				bg := context.WithoutCancel(ctx)
+				if err := s.h.cfg.DB.Tx(bg, func(tx *store.Tx) error { return tx.RecordPush(bg, a) }); err != nil {
 					return nil, err
 				}
 				prior[i] = &a
@@ -285,7 +287,11 @@ func (s logService) apply(ctx context.Context, v *vault.Vault, rep store.Replica
 	}
 	a := store.PushAnswer{ReplicaID: rep.ID, PushID: it.Push, FileID: out.FileID, Status: out.Status,
 		Reason: out.Reason, Conflicts: out.Conflicts, BasePruned: out.BasePruned}
-	err = s.h.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return tx.RecordPush(ctx, a) })
+	// The push is applied: record its answer whatever the caller does.
+	// The transaction and its statement take a context that nothing
+	// cancels, since database/sql checks the context of each statement.
+	bg := context.WithoutCancel(ctx)
+	err = s.h.cfg.DB.Tx(bg, func(tx *store.Tx) error { return tx.RecordPush(bg, a) })
 	return a, err
 }
 

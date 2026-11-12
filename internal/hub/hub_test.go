@@ -2,12 +2,14 @@ package hub_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/frostyard/frostnotes/internal/blobs"
 	"github.com/frostyard/frostnotes/internal/hub"
 	"github.com/frostyard/frostnotes/internal/rpctest"
+	"github.com/frostyard/frostnotes/internal/store"
 )
 
 // testHub is a hub serving one vault with a.md.
@@ -340,5 +343,75 @@ func TestARepeatedPushGetsItsFirstAnswer(t *testing.T) {
 	as, err := c.Log().Push(ctx, &api.LogPushParams{Vault: h.vault.Sync, Replica: rep.ID, Items: []api.PushItem{bad}})
 	if err != nil || as[0].Status != api.PushStatusRefused || as[0].Reason == nil || *as[0].Reason != api.RefuseReasonInvalid {
 		t.Fatalf("a push out of the vault = %+v, %v", as, err)
+	}
+}
+
+// A push whose context ends after the hub applied it keeps its answer: a
+// session that closed between the change and the answer left the device
+// with an unanswered push, which it sent again as a new push.
+func TestAPushAnswerIsRecordedWhenTheCallersContextEnds(t *testing.T) {
+	ctx := t.Context()
+	var (
+		armed  atomic.Bool
+		cancel context.CancelFunc
+	)
+	h := newHubWith(t, func(point string) bool {
+		if point != "renamed" || !armed.CompareAndSwap(true, false) {
+			return false
+		}
+		cancel() // the session ends after the vault's change, before its answer
+		return false
+	})
+	token, device := h.pair("laptop")
+	c, err := h.dial(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := c.Log().Join(ctx, &api.LogJoinParams{Vault: h.vault.Sync})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("from a closing session\n")
+	hash := blobs.ID(content)
+	if resp := h.do(http.MethodPut, "/sync/blobs/"+hash, token, bytes.NewReader(content), nil); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("upload = %s", resp.Status)
+	}
+	want, err := h.srv.DB.Device(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pushCtx, stop := context.WithCancel(ctx)
+	cancel = stop
+	item := api.PushItem{Push: 1, Path: "new.md", Hash: &hash, Source: api.VersionSourceEditor, Author: "app", At: time.Now()}
+	armed.Store(true)
+	// The call itself may end in an error: what this test checks is the
+	// answer it recorded.
+	_, _ = h.srv.Hub.PushAs(pushCtx, want, &api.LogPushParams{Vault: h.vault.Sync, Replica: rep.ID, Items: []api.PushItem{item}})
+	if pushCtx.Err() == nil {
+		t.Fatal("the crash point did not end the push's context")
+	}
+	var rec store.PushAnswer
+	if err := h.srv.DB.Tx(ctx, func(tx *store.Tx) error {
+		var err error
+		rec, err = tx.PushAnswer(ctx, rep.ID, item.Push)
+		return err
+	}); err != nil {
+		t.Fatalf("the hub lost the answer to the push: %v", err)
+	}
+	if rec.Status != api.PushStatusAccepted || rec.FileID == 0 {
+		t.Fatalf("recorded answer = %+v; want an accepted push of a file", rec)
+	}
+	// The device sends the same push again: it gets that answer, and the
+	// hub appends nothing.
+	vs, err := c.Log().Vaults(ctx, &api.LogVaultsParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := c.Log().Push(ctx, &api.LogPushParams{Vault: h.vault.Sync, Replica: rep.ID, Items: []api.PushItem{item}})
+	if err != nil || len(again) != 1 || again[0].File == nil || again[0].File.File != rec.FileID {
+		t.Fatalf("a repeated push = %+v, %v; want the recorded answer %+v", again, err, rec)
+	}
+	if after, err := c.Log().Vaults(ctx, &api.LogVaultsParams{}); err != nil || after[0].Seq != vs[0].Seq {
+		t.Fatalf("a repeated push appended to the log: %+v, %v", after, err)
 	}
 }

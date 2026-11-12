@@ -107,7 +107,11 @@ func (v *Vault) recordOnly(ctx context.Context, f store.File, rec Record) error 
 	if rec == nil {
 		return nil
 	}
-	return v.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return rec(ctx, tx, f) })
+	// The vault holds what the caller asked for: record it whatever the
+	// caller does, in a transaction and with statements that its end does
+	// not cancel.
+	ctx = context.WithoutCancel(ctx)
+	return v.cfg.DB.Tx(ctx, func(tx *store.Tx) error { return rec(ctx, tx, f) })
 }
 
 // expectAt brings the index up to date with p on disk and checks that p

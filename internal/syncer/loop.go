@@ -704,13 +704,17 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 	if a.Reason != nil {
 		reason = *a.Reason
 	}
+	// The hub answered: the answer is recorded whatever the session does
+	// next, so the transaction and its statements take a context that its
+	// end does not cancel.
+	bg := context.WithoutCancel(ctx)
 	answerOnly := func(drop int64) error {
-		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
-			if err := tx.AnswerPush(ctx, l.vaultID, p.PushID, a.Status, reason); err != nil {
+		return db.Tx(bg, func(tx *store.Tx) error {
+			if err := tx.AnswerPush(bg, l.vaultID, p.PushID, a.Status, reason); err != nil {
 				return err
 			}
 			if drop != 0 {
-				return tx.DeleteAgreed(ctx, l.vaultID, drop)
+				return tx.DeleteAgreed(bg, l.vaultID, drop)
 			}
 			return nil
 		})
@@ -718,14 +722,14 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 	l.clean(p.Path)
 	if p.Conflict {
 		// A conflict item changes the file's flag, not its head.
-		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
-			if err := tx.AnswerPush(ctx, l.vaultID, p.PushID, a.Status, reason); err != nil {
+		return db.Tx(bg, func(tx *store.Tx) error {
+			if err := tx.AnswerPush(bg, l.vaultID, p.PushID, a.Status, reason); err != nil {
 				return err
 			}
-			if prev, err := tx.AgreedByHubFileTx(ctx, l.vaultID, p.HubFile); err == nil && a.File != nil &&
+			if prev, err := tx.AgreedByHubFileTx(bg, l.vaultID, p.HubFile); err == nil && a.File != nil &&
 				prev.Revision == a.File.Revision {
 				prev.Seq, prev.Conflicted = a.File.Seq, a.File.Conflicted
-				return tx.PutAgreed(ctx, prev)
+				return tx.PutAgreed(bg, prev)
 			}
 			return nil
 		})
@@ -765,7 +769,7 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 		exp.Path = pk.to
 	}
 	if exp.Path == head.Path && exp.Hash == head.Hash {
-		return db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return l.agree(in)(ctx, tx, store.File{}) })
+		return db.Tx(bg, func(tx *store.Tx) error { return l.agree(in)(bg, tx, store.File{}) })
 	}
 	if !head.Deleted && head.Path != exp.Path {
 		if err := l.makeRoom(ctx, v, b, head.Path); err != nil {
@@ -815,8 +819,9 @@ func (l *loop) answer(ctx context.Context, sess *session, remote store.Remote, p
 // changes once more (docs/specs/sync-protocol.md, Pulling and applying).
 func (l *loop) refuseHere(ctx context.Context, p store.LocalPush, at string, reason api.RefuseReason) error {
 	l.skip(at)
-	return l.s.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
-		return tx.AnswerPush(ctx, l.vaultID, p.PushID, api.PushStatusRefused, reason)
+	bg := context.WithoutCancel(ctx)
+	return l.s.cfg.DB.Tx(bg, func(tx *store.Tx) error {
+		return tx.AnswerPush(bg, l.vaultID, p.PushID, api.PushStatusRefused, reason)
 	})
 }
 
@@ -833,7 +838,8 @@ func (l *loop) dropOther(ctx context.Context, prev store.Agreed) error {
 	_, err = l.applying(ctx, v, in, vault.Expect{Path: prev.Path, Hash: prev.Hash},
 		vault.Author{Source: api.VersionSourceSync, Name: "sync"})
 	if errors.Is(err, vault.ErrChanged) {
-		return l.s.cfg.DB.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error { return l.agree(in)(ctx, tx, store.File{}) })
+		bg := context.WithoutCancel(ctx)
+		return l.s.cfg.DB.Tx(bg, func(tx *store.Tx) error { return l.agree(in)(bg, tx, store.File{}) })
 	}
 	return err
 }
@@ -898,8 +904,9 @@ func (l *loop) applying(ctx context.Context, v *vault.Vault, in store.Applying, 
 			return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
 		})
 	if notApplied(err) {
-		if derr := db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
-			return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
+		bg := context.WithoutCancel(ctx)
+		if derr := db.Tx(bg, func(tx *store.Tx) error {
+			return tx.DeleteApplying(bg, l.vaultID, in.HubFile)
 		}); derr != nil {
 			return f, derr
 		}
@@ -1012,8 +1019,9 @@ func (l *loop) deletesExplain(ctx context.Context, rows []store.Applying) (bool,
 func (l *loop) finishOne(ctx context.Context, v *vault.Vault, in store.Applying) (bool, error) {
 	db := l.s.cfg.DB
 	discard := func() (bool, error) {
-		return false, db.Tx(context.WithoutCancel(ctx), func(tx *store.Tx) error {
-			return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
+		bg := context.WithoutCancel(ctx)
+		return false, db.Tx(bg, func(tx *store.Tx) error {
+			return tx.DeleteApplying(bg, l.vaultID, in.HubFile)
 		})
 	}
 	seq := int64(0)
