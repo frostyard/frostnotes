@@ -87,6 +87,14 @@ func (l *Loop) Advance(d time.Duration) {
 }
 
 // Until runs what workers post until cond holds, for at most 10 s.
+//
+// Like the UI thread, which runs everything posted and then draws one
+// frame, it runs every function waiting in the queue before it checks
+// cond again. A cond that draws a frame thus draws one for each batch, not
+// one for each function: when frames are slow (the race detector, a busy
+// runner), more work waits, and one frame covers it all. A frame for each
+// function made the wait grow with the frames' cost times the number of
+// answers, past the limit on a slow runner.
 func (l *Loop) Until(t testing.TB, what string, cond func() bool) {
 	t.Helper()
 	l.UntilWithin(t, what, 10*time.Second, cond)
@@ -100,9 +108,19 @@ func (l *Loop) UntilWithin(t testing.TB, what string, limit time.Duration, cond 
 		select {
 		case f := <-l.posted:
 			f()
+			l.runWaiting()
 		case <-deadline:
 			t.Fatalf("timed out waiting for %s", what)
 		}
+	}
+}
+
+// runWaiting runs the functions in the queue now, but not those they
+// post: a function that posts itself again cannot keep Until from its
+// deadline.
+func (l *Loop) runWaiting() {
+	for range len(l.posted) {
+		(<-l.posted)()
 	}
 }
 
