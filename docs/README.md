@@ -63,6 +63,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0039 — Draw live preview as replacements over the source](adr/0039-live-preview-is-replacements-over-the-source.md)
 - [0040 — Remove the inactive native Spellcheck setting](adr/0040-remove-the-inactive-native-spellcheck-setting.md)
 - [0041 — Render native math as vector paths](adr/0041-render-native-math-as-vector-paths.md)
+- [0042 — The desktop app takes frostui's Frostyard look](adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md)
 
 ### Design
 

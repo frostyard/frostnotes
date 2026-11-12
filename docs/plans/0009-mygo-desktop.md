@@ -585,3 +585,12 @@ also drops the fragment (#200). The window checks every link with
 Native math rendering follows [ADR-0041](../adr/0041-render-native-math-as-vector-paths.md),
 with the reveal rule and source fallback described in the
 [UI spec](../specs/ui.md#in-the-native-desktop-app).
+
+The window moved to frostui v0.5.0 and its Frostyard look on 2026-11-11
+(frostui's [plan, phase 5](https://github.com/frostyard/frostui/blob/main/docs/plans/frostyard-look.md#phase-5--frostnotes-small);
+[ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md),
+[the native look](../design/app.md#the-native-look)): the Theme setting
+picks Frostyard or Frostyard light, live preview sets headings in Inter and
+code on the code color, and the app's literal font sizes and corners became
+frostui's styles and metrics. `TestTheWindowDrawsInTheFrostyardThemes`
+checks the window in both themes.

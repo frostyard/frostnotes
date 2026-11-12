@@ -583,6 +583,59 @@ content type by extension, from one table:
 - View's Zoom in, Zoom out and Reset zoom step through a browser's zoom
   levels with the webview's own zoom, kept as a preference.
 
+## The native look
+
+The native app draws frostui's Frostyard look
+([ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md);
+frostui's [ADR-0011](https://github.com/frostyard/frostui/blob/main/docs/adr/0011-draw-the-frostyard-brand-in-a-dark-and-a-light-theme.md)
+and [theme spec](https://github.com/frostyard/frostui/blob/main/docs/specs/frostyard-theme.md)),
+from frostui v0.5.0 on:
+
+- **The theme.** `applyAppearance` (`internal/desktop/window/settings.go`)
+  sets `frostui.FrostyardTheme(dark)` at the start of every frame, with the
+  desktop's preferences but not its accent, so every view and frostui's
+  `Adapt` see the same theme. The Theme setting's Light and Dark pick
+  Frostyard light or Frostyard; System takes the one of the desktop's light
+  or dark. High contrast and the desktop's text size apply; the accent is
+  the brand's. Zoom (Ctrl + = / - / 0) stays MyGo's zoom of the whole
+  window, which scales the kit's text with the rest.
+- **Text and corners.** The app's own text uses frostui's styles: the vault
+  manager's titles are `Title`, tab titles and the breadcrumb `Body`, the
+  history's details and note embeds' names `Muted`; the inline title and
+  search snippets take `Title`'s and `Muted`'s sizes through `TextSize`.
+  Corners are the theme's `Radius` (the brand tile, pane tabs),
+  `RadiusChip` (rows, tool buttons, callouts, code) or `RadiusCard` (note
+  embeds). The brand tile is the brand's gradient, as frostui's shell
+  draws it.
+- **Live preview** (`internal/desktop/editor/live.go`) sets heading lines
+  in Inter, bold, in the text color, at 2, 1.5, 1.25, 1.125, 1 and 1 times
+  the editor's text size (the Font size setting) for levels 1 to 6; the
+  rest of the editor stays monospaced. The scanner reports the lines of
+  every code block, fenced (with its fences) or indented, whether or not
+  the caret is in it (`livepreview.Result.Code`), and the editor puts them
+  on frostui's code color. A fence's header (its language and Copy) sits
+  on the editor's ground above them, since MyGo places a block within the
+  text's width and a line's background runs to the editor's edge. Source
+  mode keeps MyGo's colors and no backgrounds.
+- **The reading view** and live preview's rendered blocks draw code blocks
+  on the code color inside a hairline at a chip's corners
+  (`drawer.setLook`), callouts as frostui's banners (the tone's fill and
+  line, with the tone's bar), and note embeds square inside a hairline.
+- **Rows.** The vault list, the history and the panes' rows mark the
+  selected one with frostui's selected row (`uikit.SelectedRow`: the
+  selected fill, a 1px accent rule on the leading edge, the selected text);
+  pane tabs take the selected fill. Hovered rows, pane tabs and tool
+  buttons change their text to the hover text and keep their face.
+
+`TestTheWindowDrawsInTheFrostyardThemes` (`internal/desktop/window/look_test.go`)
+draws the window over a vault in both themes, as the desktop picks them and
+as the Theme setting overrides it, and checks the ground and chrome it
+draws, that its text is Inter, live preview's headings and code lines, the
+reading view's code blocks, and that a zoom keeps the theme.
+With `FROSTNOTES_SCREENS` set it keeps its pictures, as
+`TestEveryScreenDraws` does, for a review by eye against the Frostyard
+Desktop design system.
+
 ## In a browser
 
 M4 runs the app inside lodge, in a frame of lodge's shell, in Firefox on
@@ -1049,7 +1102,7 @@ a record holds the app ID `org.frostyard.Frostnotes`, the version, component
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check, its updates (gaps G2 and G3) and the move from a host notesd (G4) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
-- The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) (the desktop app on MyGo and frostui; the React app stays as lodge's web app)
+- The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) (the desktop app on MyGo and frostui; the React app stays as lodge's web app); [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) ([its look](#the-native-look), frostui's Frostyard themes)
 
 Native reading task clicks and `#^block` navigation use the original source-line
 map from [renderMarkdown](../specs/render.md#markdown-for-native-views), built in
@@ -1070,8 +1123,8 @@ The Flatpak grants the PulseAudio socket for sound output.
 This completes media playback in [plan 0009](../plans/0009-mygo-desktop.md), under
 [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
 
-Native live preview uses MyGo's per-line styles for heading sizes and completed
-task strike-through. Selecting a line restores its source font and marks;
+Native live preview uses MyGo's per-line styles for heading sizes (in Inter,
+[the native look](#the-native-look)) and completed task strike-through. Selecting a line restores its source font and marks;
 source mode clears all preview styles. This completes the line-style portion
 of [plan 0009, Phase 5](../plans/0009-mygo-desktop.md), under
 [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
