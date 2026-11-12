@@ -74,14 +74,13 @@ type App struct {
 	settingsAsked bool
 	vaultDataRun  uint64
 	syncInfo      *api.SyncStatus
-	// syncEvents counts the sync.changed events of the window's vault: a
-	// sync.status answer asked before one of them may be older or newer
-	// than it, and only a status asked after it settles which.
-	syncEvents uint64
-	// syncAsking is the vault whose sync.status is asked again, 0 for
-	// none.
-	syncAsking int64
-	conflict   []api.SyncConflict
+	// syncAsk numbers the asks of sync.status: only the answer to the last
+	// one shows (takeSyncStatus).
+	syncAsk uint64
+	// syncWaiting says the last ask runs; syncCrossed, that a sync.changed
+	// of the window's vault came while it ran.
+	syncWaiting, syncCrossed bool
+	conflict                 []api.SyncConflict
 
 	env        *panes.Env
 	files      *panes.Files
@@ -364,7 +363,7 @@ func (a *App) loadVaultData() {
 	a.Catalog.Reload()
 	a.refreshPanes()
 	a.settingsAsked = true
-	syncEvents := a.syncEvents
+	ask := a.askingSyncStatus()
 	var settings *api.VaultSettings
 	var statuses []api.SyncStatus
 	var conflicts []api.SyncConflict
@@ -381,6 +380,7 @@ func (a *App) loadVaultData() {
 			return
 		}
 		a.settingsAsked = false
+		a.takeSyncStatus(id, ask, statuses, err)
 		if err != nil {
 			if a.settings == nil && len(a.afterSettings) > 0 {
 				a.afterSettings = nil
@@ -392,7 +392,6 @@ func (a *App) loadVaultData() {
 		a.Catalog.LinkFormat = string(settings.LinkFormat)
 		a.Catalog.AttachmentFolder = settings.AttachmentFolder
 		a.Catalog.Wikilinks = settings.Wikilinks
-		a.takeSyncStatus(id, syncEvents, statuses)
 		a.conflict = conflicts
 		waiting := a.afterSettings
 		a.afterSettings = nil
@@ -511,18 +510,32 @@ func (a *App) catalogChanged() {
 	}
 }
 
-// syncChanged follows the window's vault's sync state, and reads the
-// conflicts again when their number changes.
-// takeSyncStatus shows a sync.status answer for vault id, asked when
-// syncEvents events had come. An event and an answer travel apart: a
-// sync.changed that came while the status was asked can be newer than the
-// answer (after a join, the answer would take the hub's address away), or
-// older (sent before a leave, it would bring the hub back), and no later
-// event need come to correct either. So the event's status stays, and the
-// status is asked again, until an answer comes with no event while it was
-// asked.
-func (a *App) takeSyncStatus(id int64, syncEvents uint64, statuses []api.SyncStatus) {
-	if a.syncEvents != syncEvents {
+// askingSyncStatus numbers a new ask of sync.status: the answers to the
+// asks before it no longer show.
+func (a *App) askingSyncStatus() uint64 {
+	a.syncAsk++
+	a.syncWaiting, a.syncCrossed = true, false
+	return a.syncAsk
+}
+
+// takeSyncStatus shows the answer to ask, the sync statuses, for vault id.
+// Only the last ask's answer shows: an older one can come later, and would
+// bring back a hub the vault has left since, or take away one it joined. An
+// event and an answer also travel apart: a sync.changed that came while the
+// last ask ran can be newer than its answer (after a join, the answer would
+// take the hub's address away) or older (sent before a leave, it would bring
+// the hub back), and no later event need come to correct either. So then
+// the event's status stays, and the status is asked again, until an answer
+// comes with no event while it was asked.
+func (a *App) takeSyncStatus(id int64, ask uint64, statuses []api.SyncStatus, err error) {
+	if ask != a.syncAsk || a.vault == nil || a.vault.ID != id {
+		return
+	}
+	a.syncWaiting = false
+	if err != nil {
+		return // the status shown stays; the next load asks again
+	}
+	if a.syncCrossed {
 		a.askSyncStatus(id)
 		return
 	}
@@ -534,33 +547,27 @@ func (a *App) takeSyncStatus(id int64, syncEvents uint64, statuses []api.SyncSta
 	}
 }
 
-// askSyncStatus asks vault id's sync status again; one ask at a time.
+// askSyncStatus asks vault id's sync status again.
 func (a *App) askSyncStatus(id int64) {
-	if a.syncAsking == id {
-		return // its answer sees the newer events and asks again
-	}
-	a.syncAsking = id
-	syncEvents := a.syncEvents
+	ask := a.askingSyncStatus()
 	var statuses []api.SyncStatus
 	a.call(func(ctx context.Context, c *api.Client) (err error) {
 		statuses, err = c.Sync().Status(ctx, &api.SyncStatusParams{})
 		return err
 	}, func(err error) {
-		if a.syncAsking == id {
-			a.syncAsking = 0
-		}
-		if err != nil || a.vault == nil || a.vault.ID != id {
-			return // the event's status stays; the next load asks again
-		}
-		a.takeSyncStatus(id, syncEvents, statuses)
+		a.takeSyncStatus(id, ask, statuses, err)
 	})
 }
 
+// syncChanged follows the window's vault's sync state, and reads the
+// conflicts again when their number changes.
 func (a *App) syncChanged(s api.SyncStatus) {
 	if a.vault == nil || s.VaultID != a.vault.ID {
 		return
 	}
-	a.syncEvents++
+	if a.syncWaiting {
+		a.syncCrossed = true
+	}
 	stale := a.syncInfo == nil || a.syncInfo.Conflicts != s.Conflicts
 	a.syncInfo = &s
 	if !stale {
