@@ -80,9 +80,13 @@ else records pending changes, so a crash or an outage loses none
 1. **Detect.** Local writes and scanned outside edits change the index,
    and the loop compares it with the agreed state. It pushes a changed
    file after 2 seconds without another change to it, and at most 30
-   seconds after its first unpushed change.
+   seconds after its first unpushed change. The loop learns of local
+   writes from notesd's own events; when it cannot subscribe to them, it
+   logs why and subscribes again after a backoff.
 2. **Upload.** It asks the hub which of the changed contents it lacks,
-   and uploads those ([blob transfer](#blob-transfer)).
+   and uploads those ([blob transfer](#blob-transfer)). A content it
+   cannot check in its own blob store ends the session with that error,
+   and the loop retries after its backoff.
 3. **Push** `{file ID or none, base, path, hash or deleted, push ID}` for
    each changed file. The hub answers each with `accepted`, `merged`,
    `conflicted` or `refused`, and the head that results. A repeated push
