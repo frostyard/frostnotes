@@ -52,7 +52,8 @@ const localTypingBudget = 16 * time.Millisecond
 const ciTypingBudget = 25 * time.Millisecond
 
 // typingBudget is the gate for the machine the benchmark runs on: CI's when
-// the CI variable is true (GitHub Actions sets CI=true), else the local one.
+// strconv.ParseBool reads the CI variable as true (GitHub Actions sets
+// CI=true), else the local one.
 func typingBudget(getenv func(string) string) time.Duration {
 	if ci, err := strconv.ParseBool(getenv("CI")); err == nil && ci {
 		return ciTypingBudget

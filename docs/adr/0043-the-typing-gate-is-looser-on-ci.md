@@ -38,15 +38,15 @@ about 10 ms in live preview and 2.4 ms in source mode.
 - **16 ms on a developer machine.** `make desktop-bench` fails when a
   keystroke, in source mode or in live preview, costs more than
   `localTypingBudget`, 16 ms. Plan 0009's done-when lines use this gate.
-- **25 ms on CI.** When the environment variable `CI` is true (GitHub
-  Actions sets `CI=true`), the benchmark fails over `ciTypingBudget`, 25
+- **25 ms on CI.** When the environment variable `CI` is true, as
+  `strconv.ParseBool` reads it (GitHub Actions sets `CI=true`), the benchmark fails over `ciTypingBudget`, 25
   ms, instead. 25 ms is the highest figure seen, 21.1 ms, plus a margin of
   about a fifth for the spread of runs on one CPU (up to 8%) and for a CPU
   not seen yet.
 - **Two named values.** The two limits are separate constants beside the
   benchmark. `TestTypingBudgets` fails if the local gate is not 16 ms, if
-  the CI limit is not above it, or if anything but `CI=true` selects the CI
-  limit.
+  the CI limit is not above it, or if a `CI` value that `strconv.ParseBool`
+  does not read as true (empty, `false`, `0`, `yes`) selects the CI limit.
 
 ## Consequences
 

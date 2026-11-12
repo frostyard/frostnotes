@@ -6,8 +6,8 @@ import (
 )
 
 // TestTypingBudgets holds the typing gate's two values apart: the local gate
-// stays at 16 ms, CI's is a separate, looser value, and only CI=true selects
-// it (ADR-0043). A change that moved CI's limit into the local gate, or made
+// stays at 16 ms, CI's is a separate, looser value, and only a CI value that
+// strconv.ParseBool reads as true selects it (ADR-0043). A change that moved CI's limit into the local gate, or made
 // the two one value, fails here.
 func TestTypingBudgets(t *testing.T) {
 	if localTypingBudget != 16*time.Millisecond {
