@@ -16,18 +16,11 @@ const connect: Connect = gateway
       return new MockTransport(mockVaults(), { latency: 15, files: mockFiles() });
     };
 
-/** runDesktop renders the app, or the spike ?spike=NAME names (with &run to start measuring at once), into root. */
-export async function runDesktop(root: HTMLElement): Promise<void> {
-  const query = new URLSearchParams(window.location.search);
-  const spike = query.get("spike");
-  if (spike) {
-    const { Spike } = await import("./spike/Spike");
-    createRoot(root).render(<Spike name={spike} auto={query.has("run")} />);
-  } else {
-    createRoot(root).render(
-      <StrictMode>
-        <App connect={connect} />
-      </StrictMode>,
-    );
-  }
+/** runDesktop renders the app into root. */
+export function runDesktop(root: HTMLElement): void {
+  createRoot(root).render(
+    <StrictMode>
+      <App connect={connect} />
+    </StrictMode>,
+  );
 }

@@ -152,9 +152,9 @@ file a step names before writing its frostnotes counterpart.
   app inside lodge's frame (lodge-client, the lodge transport, content
   URLs), and `app/src/features/mobile/` holds the narrow layout's
   components. `make web-build` builds it for lodge (`/app/notes/`), and
-  `make lodge-app` lays it out with `packaging/lodge/app.json`. `app/src/spike/` is M0's
-  CodeMirror spike. The icon's master is `packaging/icons/icon.svg`
-  (`scripts/render-icons.py`, ADR-0013).
+  `make lodge-app` lays it out with `packaging/lodge/app.json`. The
+  icon's master is `packaging/icons/icon.svg` (`scripts/render-icons.py`,
+  ADR-0013).
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
   the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
 - `packaging/flatpak/`: the desktop app's Flatpak (manifest, launcher,

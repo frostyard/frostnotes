@@ -14,5 +14,5 @@ if (import.meta.env.MODE === "web") {
   await runInLodge(root);
 } else {
   const { runDesktop } = await import("./desktop");
-  await runDesktop(root);
+  runDesktop(root);
 }

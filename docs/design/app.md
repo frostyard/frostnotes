@@ -25,8 +25,9 @@ Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md) 
 (the syntax both parsers read).
 
 **Status: M0's shell is built** ([plan 0001](../plans/0001-m0-foundations.md#phase-4--app-shell)):
-the transports, the mock, the title bar, the status bar, and the
-CodeMirror spike (`app/src/spike`); so are M3's `notesblob://` and the
+the transports, the mock, the title bar and the status bar (M0's
+CodeMirror spike was removed once the editor's live preview, below,
+took its place); so are M3's `notesblob://` and the
 dev gateway's `/blobs/` (Phase 3), and M3's data layer, workspace, layout,
 commands, editor core, reading view, merge view and history below
 (Phase 5), and Phase 6's menus, notices, prompts, status bar and
@@ -71,7 +72,7 @@ dev gateway ([In a browser](#in-a-browser)).
 | Path | What | Owner |
 | --- | --- | --- |
 | `main.tsx` | starts the `web` build from `lodge/main.tsx` and every other from `desktop.tsx`, each branch's imports out of the other's bundle | planner |
-| `desktop.tsx` | the development browser's start: picks the transport (`VITE_NOTESD_WS`, else the mock), runs a spike (`FROSTNOTES_SPIKE`), renders `App` | planner |
+| `desktop.tsx` | the development browser's start: picks the transport (`VITE_NOTESD_WS`, else the mock), renders `App` | planner |
 | `lodge/` | the web build inside lodge: lodge-client's handshake and `connectApi` (`main.tsx`), the `LodgeBridge` (route, context, navigate, theme, open), and canonical routes (`routes.ts`) | planner |
 | `rpc/` | `transport.ts` (JSON-RPC over lines), `transport/ws.ts`, `gen/api.ts` (generated) | planner |
 | `rpc/mock/` | `MockTransport`: an in-memory notesd with notesd's semantics and a vault of made-up notes | planner |
@@ -87,7 +88,6 @@ dev gateway ([In a browser](#in-a-browser)).
 | `lib/` | pure helpers: the keymap, fuzzy matching, the file tree, the outline, formatting | cards |
 | `styles/` | `tokens.css` (Frostnotes' own two tokens), `app.css` (Tailwind entry, imports the shared look), `editor.css` (the editor's and the reading view's styles) | planner |
 | `testing/` | Testing Library setup and render helpers | planner |
-| `spike/` | M0's CodeMirror spike and its measurement of the editor, in a browser (`?spike=cm6`) | planner |
 
 Presentational components take data and callbacks as props, hold only
 transient state (hover, an open menu, a field being typed), and import
@@ -370,7 +370,7 @@ The framework (`editor/preview/`) owns:
   (its hash's blob URL), the Load remote images preference, and
   rendering markdown into an element.
 
-M0's spike (`app/src/spike/livePreview.ts`) is its first draft: hidden
+M0's spike (removed since) was its first draft: hidden
 marks, headings, links, wikilinks and checkboxes, measured at 9 ms at p95
 a keystroke on a 10,000-line note. Its decorations are the framework's
 first providers (`editor/preview/basic.ts`); the framework is
@@ -654,8 +654,8 @@ desktop's, with a different transport and frame:
     the manifest at the build's version. `make lodge-package` stages
     the same tree with the binaries and units under `usr/`
     ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs)).
-  - In that mode `main.tsx` connects through lodge, and the mock, the
-    spikes and the shell's commands stay out of the bundle.
+  - In that mode `main.tsx` connects through lodge, and the mock and
+    the shell's commands stay out of the bundle.
   - The build carries `icon.svg`, from the icon's master, for lodge's
     rail.
   - `index.html`'s viewport has `viewport-fit=cover`, so the safe-area
