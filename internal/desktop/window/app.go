@@ -74,7 +74,10 @@ type App struct {
 	settingsAsked bool
 	vaultDataRun  uint64
 	syncInfo      *api.SyncStatus
-	conflict      []api.SyncConflict
+	// syncEvents counts the sync.changed events of the window's vault: a
+	// sync.status answer asked before one of them is older than it.
+	syncEvents uint64
+	conflict   []api.SyncConflict
 
 	env        *panes.Env
 	files      *panes.Files
@@ -357,6 +360,7 @@ func (a *App) loadVaultData() {
 	a.Catalog.Reload()
 	a.refreshPanes()
 	a.settingsAsked = true
+	syncEvents := a.syncEvents
 	var settings *api.VaultSettings
 	var statuses []api.SyncStatus
 	var conflicts []api.SyncConflict
@@ -384,10 +388,16 @@ func (a *App) loadVaultData() {
 		a.Catalog.LinkFormat = string(settings.LinkFormat)
 		a.Catalog.AttachmentFolder = settings.AttachmentFolder
 		a.Catalog.Wikilinks = settings.Wikilinks
-		a.syncInfo = nil
-		for i := range statuses {
-			if statuses[i].VaultID == id {
-				a.syncInfo = &statuses[i]
+		// An event and an answer travel apart: a sync.changed that came
+		// while sync.status was asked can be newer than the answer, which
+		// would then show a state the loop has left, and no event would
+		// correct it until the next change.
+		if a.syncEvents == syncEvents {
+			a.syncInfo = nil
+			for i := range statuses {
+				if statuses[i].VaultID == id {
+					a.syncInfo = &statuses[i]
+				}
 			}
 		}
 		a.conflict = conflicts
@@ -514,6 +524,7 @@ func (a *App) syncChanged(s api.SyncStatus) {
 	if a.vault == nil || s.VaultID != a.vault.ID {
 		return
 	}
+	a.syncEvents++
 	stale := a.syncInfo == nil || a.syncInfo.Conflicts != s.Conflicts
 	a.syncInfo = &s
 	if !stale {
