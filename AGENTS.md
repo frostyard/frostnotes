@@ -22,8 +22,9 @@ app ([plan 0005](docs/plans/0005-m3-desktop-app.md); the app's design is
 [docs/design/app.md](docs/design/app.md)), are done: their 7-day trials
 ended on 2026-10-24 and 2026-10-25, and the user accepted both on
 2026-10-25. M4, notes
-inside lodge (frostyard's tailnet web shell), is in progress
-([plan 0006](docs/plans/0006-m4-notes-inside-lodge.md); notesd's side
+inside lodge (frostyard's tailnet web shell), is done
+([plan 0006](docs/plans/0006-m4-notes-inside-lodge.md), marked done on
+2026-11-13, with its leftovers in issues #228, #229 and #230; notesd's side
 of lodge's app contract is
 [docs/specs/lodge-app.md](docs/specs/lodge-app.md)):
 - **Built:** Phases 2 to 5 (notesd as lodge's notes app, `/mcp` and the
@@ -38,8 +39,9 @@ of lodge's app contract is
   move on 2026-10-26, was checked live on 2026-10-29, and the user
   accepted it the same day. So Phase 4, and with it plan 0007, is
   done.
-- **Phase 7** moved the user's hub behind lodge on 2026-10-26; the 7
-  days of sync through lodge run to 2026-11-02.
+- **Phase 7** moved the user's hub behind lodge on 2026-10-26. In the 7
+  days of sync through lodge, to 2026-11-02, no lost edit was reported;
+  the daily checks were not recorded.
 
 Next, [plan 0009](docs/plans/0009-mygo-desktop.md) moves the desktop
 app to a native Go app on MyGo and frostui, and keeps the React app as
@@ -358,3 +360,7 @@ anchors valid) and add the back-links on the targets. Use relative paths.
 - New significant decision ⇒ new ADR *first*, then update the affected design
   docs/specs in the same change.
 - Convert relative dates ("next weekend") to absolute dates in all docs.
+- A plan's record claims only what its evidence shows. Keep "reported"
+  apart from "verified", and "a sample" apart from "the whole period":
+  when a check was not run or not recorded, say so, and list what the
+  record does hold.
