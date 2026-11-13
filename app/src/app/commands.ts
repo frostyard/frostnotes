@@ -67,6 +67,7 @@ import {
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { revealInFiles } from "./menus";
+import { isNarrow } from "./narrow";
 import { searchFor } from "./panes/counts";
 import { openExternal } from "./system";
 
@@ -643,14 +644,18 @@ export function workspaceCommands(c: Client): Command[] {
       applies: () => activeTab(ws()).forward.length > 0,
       run: () => update(forward),
     },
+    // A narrow window draws one group, so a split there would not show
+    // (docs/specs/ui.md#narrow-windows).
     {
       id: "workspace:split-vertical",
       name: "Split right",
+      applies: () => !isNarrow(),
       run: () => update((w) => split(w, activeTab(w).id, "right")),
     },
     {
       id: "workspace:split-horizontal",
       name: "Split down",
+      applies: () => !isNarrow(),
       run: () => update((w) => split(w, activeTab(w).id, "down")),
     },
     { id: "workspace:toggle-pin", name: "Toggle pin", run: () => update((w) => pin(w, activeTab(w).id)) },

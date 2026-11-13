@@ -43,7 +43,7 @@ import {
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { editorCommands, workspaceCommands } from "./commands";
-import { useEditorFocus, useKeyboardInset } from "./keyboard";
+import { useKeyboardInset, useTextFocus } from "./keyboard";
 import { NARROW_BACKLINKS, openConflictsMenu, openEditingModeMenu, openIdentityMenu, openNarrowMenu } from "./menus";
 import { useNarrow } from "./narrow";
 import { Overlays } from "./Overlays";
@@ -146,7 +146,7 @@ export function MainWindow() {
   const backlinks = useBacklinkCount(activeNote?.path ?? null);
   const counts = useNoteCounts(docs);
   const narrow = useNarrow();
-  const editing = useEditorFocus();
+  const focus = useTextFocus();
   const keyboard = useKeyboardInset();
   // A narrow window's sidebars are drawers, one open at a time, closed
   // when the active tab shows another view (a note opened from one).
@@ -279,14 +279,16 @@ export function MainWindow() {
                 narrow={{ onLeft: () => setDrawer("left"), onRight: () => setDrawer("right") }}
               />
             </div>
-            {editing ? (
+            {focus === "editor" ? (
               // The toolbar takes the bottom bar's place while an editor has
               // the focus, docked to the keyboard where there is one.
               <>
                 <div className="h-[52px] shrink-0" />
                 <EditingToolbar bottom={keyboard} onRun={(c) => registry.run(c)} />
               </>
-            ) : (
+            ) : focus === "field" ? null : (
+              // The bottom bar hides while a text field has the focus, which
+              // opens the on-screen keyboard.
               <BottomBar
                 canBack={active.back.length > 0}
                 canForward={active.forward.length > 0}

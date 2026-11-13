@@ -36,6 +36,7 @@ import type { SwitcherNote } from "../lib/switcher";
 import { type OpenWhere, open } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { insertTemplate, openOrCreate, viewOf } from "./commands";
+import { useKeyboardInset, usePromptsEndAtKeyboard } from "./keyboard";
 import { useNarrow } from "./narrow";
 import { move } from "./panes/files";
 import { SettingsContainer } from "./Settings";
@@ -54,6 +55,9 @@ export function Overlays() {
   const templates = useOverlays((s) => s.templates);
   const preview = useOverlays((s) => s.preview);
   const vaults = useOverlays((s) => s.vaults);
+  // A narrow window's prompts end at the keyboard (docs/specs/ui.md#narrow-windows).
+  const keyboard = useKeyboardInset();
+  usePromptsEndAtKeyboard(narrow ? keyboard : 0, prompt ?? (moving ? "move" : templates ? "templates" : null));
   return (
     <>
       <SettingsContainer />

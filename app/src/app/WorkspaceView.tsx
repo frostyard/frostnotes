@@ -285,7 +285,9 @@ function GroupView(props: NodeProps & { group: TabGroup; narrow?: Narrow }) {
               view.type === "note" ? setView(w, tab.id, { ...view, mode: view.mode === "edit" ? "read" : "edit" }) : w,
             )
           }
-          onMore={(x, y) => openMoreOptions(client, tab.id, view, x, y)}
+          // An empty tab's More options would hold only the splits, which a
+          // narrow window does not offer.
+          onMore={view.type === "empty" ? undefined : (x, y) => openMoreOptions(client, tab.id, view, x, y)}
         />
       )}
       {viewHeader && !props.narrow && (
