@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-03",
+  "scope": "repocheck test-name filter",
+  "correction": "The guard against -run and -skip on unit runs read only single-line workflow run values and searched whole lines, so a multi-line run: | block or a compound command escaped it; it now reads each parsed run value and splits it into commands.",
+  "evidence": "frostnotes#126, cross-review (openai/gpt-6.1-sol) of head fe297c0, findings A1 and A2",
+  "promoted_to": "internal/repocheck/testfilter_test.go TestUnitRunsFilterNoTestNames"
+}

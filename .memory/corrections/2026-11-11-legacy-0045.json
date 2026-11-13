@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "render",
+  "correction": "An image with no alt text finds its marker inside its own block, and only one holding its own destination: a reference image has no marker.",
+  "evidence": "frostnotes#145 re-review 1, N3",
+  "promoted_to": "internal/render/markdown_test.go"
+}

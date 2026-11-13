@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "render",
+  "correction": "An image with no alt text still gets its destination rewritten; embeds the app inserts without wikilinks have none.",
+  "evidence": "frostnotes#145 cross-review X16",
+  "promoted_to": "internal/render/markdown_test.go"
+}

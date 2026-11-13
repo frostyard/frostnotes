@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-system",
+  "correction": "A mailto filter drops the fragment as well as the fields it does not keep, since a mail client may read #&attach= as a field. The app uses frostui.SanitizeMailto, and the window checks every link it opens, so a test sees what each link path opens.",
+  "evidence": "frostnotes#200: mailto:a@example.com?subject=x#&attach=/etc/passwd passed WebURL; TestWebURLs and TestAMailtoLinkOpensWithoutWhatItHides fail on 812bc59",
+  "promoted_to": "internal/desktop/system/open_test.go"
+}

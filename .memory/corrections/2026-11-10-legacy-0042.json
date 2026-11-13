@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-prefs",
+  "correction": "A null in the preferences keeps the default.",
+  "evidence": "frostnotes#145 cross-review X74",
+  "promoted_to": "internal/desktop/prefs/prefs_test.go"
+}

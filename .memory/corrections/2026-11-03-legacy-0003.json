@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-03",
+  "scope": "repocheck test-name filter",
+  "correction": "Quoted echo text was searched again as a script, so the matcher saw a go test run that never runs; only scripts that run ($(IN_NSL) '...', sh -lc '...') are searched again.",
+  "evidence": "frostnotes#126, cross-review (openai/gpt-6.1-sol) re-review 2 of head f3f83e9, finding A-R3",
+  "promoted_to": "internal/repocheck/testfilter_test.go TestFiltersTestNames"
+}

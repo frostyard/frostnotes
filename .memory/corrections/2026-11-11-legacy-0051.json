@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-reading",
+  "correction": "Image files are read through a size limit, and a view's decoded images share a budget, as MyGo keeps them for the view's life.",
+  "evidence": "frostnotes#145 re-review 1, X3, X46",
+  "promoted_to": "internal/desktop/reading/view_test.go"
+}

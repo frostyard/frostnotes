@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "toolchain",
+  "correction": "The Flatpak builds with Go's own tarball, pinned in its manifest, so a Go bump no longer waits for Flathub's extension; this replaces the 2026-11-11 toolchain line's last clause.",
+  "evidence": "frostnotes#145 review of 4d4c55f",
+  "promoted_to": "internal/workflowcheck/gopins_test.go"
+}

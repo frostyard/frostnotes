@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-workspace",
+  "correction": "Reset gives the new tab a fresh ID, or the window keeps the old tab's editor.",
+  "evidence": "frostnotes#145 cross-review X59",
+  "promoted_to": "internal/desktop/workspace/store_test.go"
+}

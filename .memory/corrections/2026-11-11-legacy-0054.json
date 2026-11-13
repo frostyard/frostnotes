@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-editor",
+  "correction": "While a note is read-only, the property panel and the merge view are disabled, so a change is not dropped with no sign.",
+  "evidence": "frostnotes#145 re-review 2, X40",
+  "promoted_to": "internal/desktop/editor/noteview_test.go"
+}

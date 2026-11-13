@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-editor",
+  "correction": "Frontmatter aliases share one expansion budget across the note, or many aliases of one large value exhaust memory.",
+  "evidence": "frostnotes#145 re-review 1, X33",
+  "promoted_to": "internal/desktop/editor/review_test.go"
+}

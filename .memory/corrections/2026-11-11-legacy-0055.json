@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-editor",
+  "correction": "A rename changes only the key: value lines can hold anchors, aliases and comments that a value read back cannot write.",
+  "evidence": "frostnotes#145 re-review 2, N4",
+  "promoted_to": "internal/desktop/editor/review_test.go"
+}

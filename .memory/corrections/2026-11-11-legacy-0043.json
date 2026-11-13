@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "toolchain",
+  "correction": "A Go bump moves go.mod, mise.lock and the nsl script together, with their checksums; the Flatpak builds with Flathub's SDK extension under GOTOOLCHAIN=local, so it can't build until Flathub publishes that release.",
+  "evidence": "frostnotes#145 review of 982772d, GO-2026-6859",
+  "promoted_to": "internal/workflowcheck/gopins_test.go"
+}

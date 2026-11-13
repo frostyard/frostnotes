@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "render",
+  "correction": "An image with no alt text ends where its next sibling starts, so a code span after it is not its marker.",
+  "evidence": "frostnotes#145 re-review 2, N3",
+  "promoted_to": "internal/render/markdown_test.go"
+}

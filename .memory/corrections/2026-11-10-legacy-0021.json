@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-notes",
+  "correction": "A document's requests take the path on the UI thread and read again if it moved meanwhile, an error included.",
+  "evidence": "frostnotes#145 cross-review X14",
+  "promoted_to": "internal/desktop/notes/doc_test.go"
+}

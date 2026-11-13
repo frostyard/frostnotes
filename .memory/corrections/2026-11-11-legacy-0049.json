@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-window",
+  "correction": "Every answer about a vault checks the vault first, a create's as well as a resolve's; a new note waits for the vault's settings.",
+  "evidence": "frostnotes#145 re-review 1, X39, X44",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

@@ -138,17 +138,17 @@ func relativeSymlink(t *testing.T, name string) (string, bool) {
 	return got, true
 }
 
-// correctionsMember names the 5 members a line of .memory/corrections.jsonl
-// carries (row B2).
+// correctionsMember names the 5 members of a correction record, in the order
+// of its canonical form (row B2).
 var correctionsMember = []string{"date", "scope", "correction", "evidence", "promoted_to"}
 
 // datePattern is the form of a correction's date.
 var datePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-// correctionProblems returns the problems of 1 line of
-// .memory/corrections.jsonl, after frostyard/core scripts/check-corrections.mjs
-// (row B2); no problem means a valid line. promoted_to may be empty, the way an
-// unpromoted correction has it.
+// correctionProblems returns the content problems of 1 correction record, the
+// text of 1 file of .memory/corrections/, after frostyard/core
+// scripts/check-corrections.mjs (row B2); no problem means valid content.
+// promoted_to may be empty, the way an unpromoted correction has it.
 func correctionProblems(line string) []string {
 	if strings.TrimSpace(line) == "" {
 		return []string{"blank line"}
@@ -204,33 +204,7 @@ func correctionProblems(line string) []string {
 	return problems
 }
 
-// TestCorrectionsInbox guards row B2 of frostyard/core
-// docs/specs/repository-baseline.md: .memory/corrections.jsonl holds one JSON
-// object per line, with exactly the 5 fields of a correction.
-func TestCorrectionsInbox(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", ".memory", "corrections.jsonl"))
-	if err != nil {
-		t.Fatalf(".memory/corrections.jsonl: %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal(".memory/corrections.jsonl is empty")
-	}
-	lines := strings.Split(string(data), "\n")
-	if n := len(lines); lines[n-1] == "" {
-		lines = lines[:n-1]
-	}
-	if len(lines) == 0 {
-		t.Fatal(".memory/corrections.jsonl holds no line")
-	}
-	for i, line := range lines {
-		for _, problem := range correctionProblems(line) {
-			t.Errorf("line %d: %s", i+1, problem)
-		}
-	}
-	t.Logf("%d corrections lines", len(lines))
-}
-
-// TestCorrectionProblems checks the line rules of row B2 on the cases
+// TestCorrectionProblems checks the content rules of row B2 on the cases
 // frostyard/core scripts/check-corrections.mjs names.
 func TestCorrectionProblems(t *testing.T) {
 	const valid = `{"date": "2026-11-05", "scope": "socket", "correction": "c", "evidence": "e", "promoted_to": ""}`
