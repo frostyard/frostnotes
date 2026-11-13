@@ -363,4 +363,7 @@ anchors valid) and add the back-links on the targets. Use relative paths.
 - A plan's record claims only what its evidence shows. Keep "reported"
   apart from "verified", and "a sample" apart from "the whole period":
   when a check was not run or not recorded, say so, and list what the
-  record does hold.
+  record does hold. When an issue's "Done when" asks for evidence that
+  the record lacks, a record that closes the item names the gap and
+  who accepts closing without it; it never calls the item done in
+  silence.

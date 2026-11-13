@@ -560,7 +560,9 @@ lodge's phase 2.
     failure. This record stands on the owner's report: no agent saw
     the run, and the iOS and Safari versions, the payloads used and
     how the result was observed (Web Inspector or a visible payload)
-    were not recorded.
+    were not recorded. #230 asked for the versions and the way of
+    observation; the check is closed without them, on the owner's
+    report, and the owner's merge of this record accepts that gap.
   - Chrome's PDF viewer under lodge-content's sandbox (review 12, an
     open question): *answered 2026-11-13*, Chromium shows it
     ([open questions](#open-questions)).
