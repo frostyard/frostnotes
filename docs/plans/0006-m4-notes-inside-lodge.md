@@ -40,7 +40,36 @@ Work is split per
   `relocate` commands, the phone layout's components, the Hub settings'
   lists, and the editing commands the phone toolbar lacks.
 
-Status (2026-10-21):
+Status (2026-11-13): **Done.** All 7 phases are done or accepted. The
+leftovers were checked against `main` at 851670a on 2026-11-13; three
+real gaps stay open as issues:
+
+- [#228](https://github.com/frostyard/frostnotes/issues/228): a narrow
+  window offers Split right and Split down (Phase 5).
+- [#229](https://github.com/frostyard/frostnotes/issues/229): a narrow
+  window follows the editor's focus, not the on-screen keyboard
+  (Phase 5).
+- [#230](https://github.com/frostyard/frostnotes/issues/230): the XSS
+  check in Safari on the iPhone (Phase 6), which needs the user's phone.
+
+What the check found for each leftover:
+
+- *Phase 4's live run with Claude Code:* done on 2026-10-19
+  ([its result](#phase-4--agents-through-lodge-planner)), and again
+  through the user's hub on 2026-10-26 (Phase 7's evidence 3).
+- *Phase 5's `make m4-evidence`:* recorded on 2026-10-19
+  ([Phase 5](#phase-5--the-web-app-inside-lodge-planner-with-cards)).
+- *Phase 5's narrow and browser items of ui.md:* checked item by item
+  ([the record](#leftovers-checked-2026-11-13)); #228 and #229 are the
+  gaps.
+- *Phase 6's Chrome PDF viewer:* answered on 2026-11-13: Chromium shows
+  a PDF under lodge-content's sandbox
+  ([open questions](#open-questions)).
+- *Phase 6's XSS on the phone:* #230.
+- *Phase 7's 7 days of sync through lodge:* the daily checks were not
+  recorded; [what is recorded](#the-7-days-of-sync-through-lodge-to-2026-11-02).
+
+Status (2026-10-21), kept as the record:
 - **Phase 1 is done.** M4's first drafts became lodge's ADRs 0004 to
   0008. The user accepted ADR-0026 and ADR-0027, with lodge's ADRs, on
   2026-10-21.
@@ -396,6 +425,44 @@ Needs lodge's phase 1 (lodge-client) and phase 2's development build.
   - a narrow window's bottom bar shows once no editor has the focus, as
     after a tap elsewhere.
 
+### Leftovers checked (2026-11-13)
+
+The status of 2026-10-21 said some of ui.md's narrow and browser items
+were still to come. On 2026-11-13, each item of
+[specs/ui.md, In a browser](../specs/ui.md#in-a-browser) and
+[Narrow windows](../specs/ui.md#narrow-windows) (52 items) was read
+against `app/src` at `main` 851670a and against
+`@frostyard/lodge-ui` v0.6.0, which draws the menus, prompts and icon
+buttons. No build or test ran for this check; the code was read.
+
+- **Built:** the frame's title, the connection item and its menu, the
+  vault manager without local actions, Open in new browser tab, Attach
+  file, links and rooted links through `open`, the zoom commands left
+  out, `beforeunload`, the Hub settings' lists, `viewport-fit=cover` and
+  the icon; the switch below 600 pixels (lodge-ui's `NARROW_QUERY`,
+  `(max-width: 599px)`), the view header, drawers, the bottom bar, the
+  tab switcher, the menu, the editing toolbar's 20 commands in
+  Obsidian's order, menus as sheets and long presses, full-screen
+  Settings, notices, the stacked merge view; touch sizes under a coarse
+  pointer (notes' own and lodge-ui's `pointer-coarse:` rules).
+- **Gaps, as issues:**
+  - [#228](https://github.com/frostyard/frostnotes/issues/228): More
+    options and the command palette offer the split commands in a
+    narrow window, where the spec says they do not apply.
+  - [#229](https://github.com/frostyard/frostnotes/issues/229): the
+    bottom bar hides while an editor has the focus, not while the
+    keyboard is open (the inline title and properties leave it drawn),
+    and lodge-ui's prompt ends at `100dvh`, not at the keyboard.
+- **Differences kept, no issue:**
+  - the file view offers both Open in new tab and Download for a file
+    the app does not draw, as this plan's open question on PDFs
+    decided to keep;
+  - the vault manager says vaults are added "on the machine that runs
+    notesd, with notesctl vault", without naming `notesctl hub serve`;
+  - the switcher's key is caught by lodge-client before the window's
+    keymap ([design/app.md](../design/app.md#in-a-browser)); the
+    2026-10-19 run above showed it reaching the shell.
+
 ## Phase 6 — Security review (planner, an independent agent)
 
 Checks [specs/lodge-app.md](../specs/lodge-app.md) and
@@ -479,9 +546,12 @@ lodge's phase 2.
     and sound".
 
   **Pending:**
-  - XSS in the phone's browser, on the user's phone (Phase 7);
+  - XSS in the phone's browser, on the user's phone (Phase 7): not run
+    at Phase 7; [#230](https://github.com/frostyard/frostnotes/issues/230)
+    (2026-11-13).
   - Chrome's PDF viewer under lodge-content's sandbox (review 12, an
-    open question).
+    open question): *answered 2026-11-13*, Chromium shows it
+    ([open questions](#open-questions)).
 
   *Done:* lodge's own review of sign-in, sessions, tokens and headers
   lists no open XSS, CSRF or session finding
@@ -914,6 +984,28 @@ on both devices continues to 2026-11-02.
 | 3. Claude Code through `/mcp/notes` with a scoped token | Accepted on the user's checks of both tokens; the revoke test skipped (the user's decision) | `claude-code-notes-read` (`vault=1`) works from Claude Code (the user's confirmation; its tool list is not recorded). With `claude-code-notes` (`vault=1;write`), Claude Code created a new note: notesd logged "an MCP write" with author `claude-code-notes` at 13:39:18Z; the hub's log has it as seq 773, a create with author `claude-code-notes` and source `agent`; the laptop applied it at 13:39:18.389Z; and at seq 773 `verify` says ok (690 files) on the laptop and the device VM. The user's check created a note rather than appending to the daily note, and did not run the call after `lodgectl token revoke`. On the user's answers, no item of evidence 3 stays open. |
 | 4. No open issue in the reviews | Unchanged | As [Phase 6](#phase-6--security-review-planner-an-independent-agent) records. |
 
+### The 7 days of sync through lodge (to 2026-11-02)
+
+Recorded on 2026-11-13, from what exists. The daily `notesctl sync
+verify` on both devices from 2026-10-26 to 2026-11-02 was not recorded
+here, and no result of the check planned for 2026-11-02 is recorded.
+What is recorded:
+
+- On 2026-10-30, before the device VM moved to notesd v0.3.1,
+  `notesctl sync verify` on it, through lodge's `/device/notes`, said
+  ok (679 files, cursor at the hub's seq 1048, 0 pending, 0
+  conflicted), and again after the upgrade.
+- No lost edit was reported on a device, and no issue names one.
+- On 2026-10-30,
+  [#121](https://github.com/frostyard/frostnotes/pull/121) fixed a lost
+  write that sync's simulation found (a conflict version lost when a
+  pulled delete came first); it was not seen on a device. It shipped in
+  [v0.3.1](https://github.com/frostyard/frostnotes/releases/tag/v0.3.1)
+  the same day.
+
+So the 7 days show no lost edit, on less evidence than the daily checks
+would have given.
+
 ## Later / ideas
 
 - claude.ai, Claude Desktop's connectors and the Claude apps as MCP
@@ -930,16 +1022,26 @@ on both devices continues to 2026-11-02.
 
 ## Open questions
 
-- **The phone and its browser:** Firefox for Android, Chrome or Safari
-  on iOS changes how lodge's page installs, and the size the evidence
-  drives. By Phase 7. Lodge's log shows the phone is an iPhone
-  (2026-10-25); the browser is still the user's to say.
-- **Chrome's PDF viewer under lodge-content's sandbox** (the platform
-  review's L12): does Chrome show a PDF that lodge-content serves with
-  `sandbox`? The docs say the download URL serves where a browser will
-  not show a file in a sandboxed page, but a file's view offers both
-  Open in new tab and Download for every file the app does not draw
-  itself. The code stays as it is until a check in Chrome says which.
+- *Answered 2026-10-25:* **The phone and its browser:** Firefox for
+  Android, Chrome or Safari on iOS changes how lodge's page installs,
+  and the size the evidence drives. Lodge's log shows the phone is an
+  iPhone, and the user named Safari before the move; Phase 7 used
+  Safari on the iPhone.
+- *Answered 2026-11-13:* **Chrome's PDF viewer under lodge-content's
+  sandbox** (the platform review's L12): does Chrome show a PDF that
+  lodge-content serves with `sandbox`? A file's view offers both Open in
+  new tab and Download for every file the app does not draw itself.
+  The check: a 1-page PDF served on loopback with lodge-content's
+  headers exactly as
+  [lodge-http.md](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-http.md)
+  gives them (its `Content-Security-Policy` with `sandbox`,
+  `X-Content-Type-Options`, `Referrer-Policy`,
+  `Cross-Origin-Resource-Policy` and `Cross-Origin-Opener-Policy`),
+  opened as a top-level page in Chromium 156 on Linux. The viewer drew
+  the page as it does without the headers; only its page thumbnail
+  stayed blank. So the code stays as it is. The check ran in Chromium,
+  not in the user's Chrome, and not through lodge; lodge's own decision
+  on a PDF exception stays in its spec.
 - *Answered 2026-10-18:* **the vault's mount for `frostnotes`.** The
   mount's `uid=` and `gid=` give the user the files, with no change on
   the file server; Phase 7 sets them.
