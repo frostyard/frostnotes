@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-editor",
+  "correction": "Indented code runs on until a line that isn't indented: list markup inside it does not continue.",
+  "evidence": "frostnotes#145 re-review 1, X31",
+  "promoted_to": "internal/desktop/editor/review_test.go"
+}

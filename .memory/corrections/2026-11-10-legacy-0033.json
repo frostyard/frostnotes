@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-editor",
+  "correction": "Frontmatter ends at its first closing line, '---' or '...'.",
+  "evidence": "frostnotes#145 cross-review X35",
+  "promoted_to": "internal/desktop/editor/review_test.go"
+}

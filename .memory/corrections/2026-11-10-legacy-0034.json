@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "A page preview's links go through the app's open rules, as the reading view's do.",
+  "evidence": "frostnotes#145 cross-review X38",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

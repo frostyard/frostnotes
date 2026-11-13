@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-editor",
+  "correction": "An upload holds its note open until it answers: a mode switch could dispose the document and lose the embed.",
+  "evidence": "frostnotes#145 cross-review X27",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

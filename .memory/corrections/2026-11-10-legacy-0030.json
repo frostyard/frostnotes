@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "Closing commits a focused property field, and syncs every editor before asking whether anything is unsaved.",
+  "evidence": "frostnotes#145 cross-review X28, X42",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-session",
+  "correction": "Releasing a document whose save failed must keep it until a retry lands: Flush also finishes while a retry waits, and Dispose stopped that retry and lost the text.",
+  "evidence": "frostnotes#145 cross-review X10",
+  "promoted_to": "internal/desktop/session/session_test.go"
+}

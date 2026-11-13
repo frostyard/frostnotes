@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-09",
+  "scope": "test-harness",
+  "correction": "A crash hook that waits for a notesd's stop must wait for a signal closed after the server context's cancel returns, not for that context's own Done channel: Go closes a parent's Done channel before it cancels the derived contexts, so the sync loop can still see its context alive and settle the record the crash left. rpctest.Server.Done closes after cancel; TestDoneClosesAfterDerivedContextsEnd checks it.",
+  "evidence": "frostnotes#142, cross-review (openai/gpt-6.1-sol) of head 10def79, blocking finding on internal/rpctest/rpctest.go: Done returned ctx.Done(), and the loop's child context of internal/syncer/syncer.go could still be live when the crash hook resumed",
+  "promoted_to": "internal/rpctest/rpctest_test.go"
+}

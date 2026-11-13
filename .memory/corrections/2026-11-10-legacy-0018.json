@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-notes",
+  "correction": "A refusal's held text and a restore's result must include what was typed during their reads.",
+  "evidence": "frostnotes#145 cross-review X11",
+  "promoted_to": "internal/desktop/notes/doc_test.go"
+}

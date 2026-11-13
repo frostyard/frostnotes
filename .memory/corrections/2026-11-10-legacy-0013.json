@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "render",
+  "correction": "destinationAt must stop at the link's own closing bracket: searching the line for any '](' rewrote the next link's destination for a reference link.",
+  "evidence": "frostnotes#145 cross-review X4",
+  "promoted_to": "internal/render/markdown_test.go"
+}

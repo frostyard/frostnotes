@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "render",
+  "correction": "A fence whose info has a backtick must use tildes: CommonMark does not allow it after a backtick fence, and the closing fence then opens a code block.",
+  "evidence": "frostnotes#145 cross-review X6",
+  "promoted_to": "internal/render/markdown_test.go"
+}

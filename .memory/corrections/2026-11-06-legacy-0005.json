@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "risk-paths",
+  "correction": "dev/nsl/provision.sh runs as root and installs downloaded toolchains, but the first risk-path list missed it; it is listed now (update verification), and TestRiskPaths requires it.",
+  "evidence": "frostnotes#131, cross-review (openai/gpt-6.1-sol) of head 9bd07ac, finding 2",
+  "promoted_to": "internal/workflowcheck/baseline_test.go governedPaths"
+}

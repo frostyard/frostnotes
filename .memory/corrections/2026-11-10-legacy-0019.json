@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-notes",
+  "correction": "Re-creating a deleted note is a write in flight like any other: without the flight a Save or a second removal overlapped it.",
+  "evidence": "frostnotes#145 cross-review X12",
+  "promoted_to": "internal/desktop/notes/doc_test.go"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "A delete saves the open notes under it first, or their unsaved text makes them again through note.removed.",
+  "evidence": "frostnotes#145 cross-review X40",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

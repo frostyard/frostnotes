@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-workspace",
+  "correction": "A workspace whose write failed stays held for its vault and retried after the window moves to another.",
+  "evidence": "frostnotes#145 re-review 2, X61",
+  "promoted_to": "internal/desktop/workspace/store_test.go"
+}

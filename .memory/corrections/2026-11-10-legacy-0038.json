@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "The focus coming into a tab group, or a press on its shown tab, makes it the active group.",
+  "evidence": "frostnotes#145 cross-review X47",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

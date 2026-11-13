@@ -280,10 +280,15 @@ The repository follows core's baseline (frostyard/core ADR-0071, its spec
 `internal/workflowcheck` fails `make verify` when one of these files breaks:
 
 - The instruction symlinks above (B1). Edit `AGENTS.md`, never a link.
-- `.memory/corrections.jsonl` (B2): 1 JSON object per line with exactly
-  `date`, `scope`, `correction`, `evidence` and `promoted_to`. Append only:
-  never edit or remove a line (no test checks this). A fix of a blocking
-  review point adds its guard and 1 line.
+- `.memory/corrections/` (B2, core ADR-0081): 1 file for each correction
+  record, named `<date>-<slug>.json` (from a PR: `<date>-pr-<N>-<words>.json`),
+  with exactly `date`, `scope`, `correction`, `evidence` and `promoted_to`, in
+  canonical form (`JSON.stringify(record, null, 2)` and a newline; core's
+  `scripts/new-correction.mjs` writes it). The old single corrections file
+  must not come back (the test fails while it exists); its lines are the
+  `legacy-` records. A record is permanent: never remove or rename a file,
+  and change only an empty `promoted_to` (no test checks this). A fix of a
+  blocking review point adds its guard and 1 record file.
 - `.github/risk-paths.json` (B6, core ADR-0068, ADR-0078): schema version
   2, where each glob has a level, `L1` to `L4`, and the default level is
   `L3`. Its caller `.github/workflows/risk-paths.yml` runs core's

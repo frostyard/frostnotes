@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-editor",
+  "correction": "Frontmatter aliases are bounded: a cycle or repeated aliases in a synced note must not hang or exhaust the app.",
+  "evidence": "frostnotes#145 cross-review X33",
+  "promoted_to": "internal/desktop/editor/review_test.go"
+}

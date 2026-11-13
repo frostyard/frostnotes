@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-window",
+  "correction": "A stale join answer is dropped, except one saying its vault may stay on the list, which shows as a notice. A join run is a ticket, not a count, because the vault manager's reset zeroes the flow and a count restarts at a number an older run holds.",
+  "evidence": "frostnotes#194: #182 dropped every answer after a cancel, X56 again; TestACancelledJoinStillTellsOfTheVaultItLeft and TestAnAnswerFromBeforeTheDialogClosedIsStale fail on 812bc59",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

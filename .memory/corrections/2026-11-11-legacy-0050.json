@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-window",
+  "correction": "A delete stops when a note under it could not be saved, and those notes take no edits until it answers.",
+  "evidence": "frostnotes#145 re-review 1, X40",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

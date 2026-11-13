@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "app-tests",
+  "correction": "A wrapper of document.dispatchEvent in the test setup swallowed every selectionchange: happy-dom's dispatch calls dispatchEvent again on each target of the event's path, so the wrapper must pass the event it is delivering straight through. app/src/testing/setup.test.ts checks that the event reaches a listener.",
+  "evidence": "frostnotes#139, cross-review (openai/gpt-6.1-sol) of head d3b62dc, low finding on app/src/testing/setup.ts; with that head's guard, the new tests saw 0 events",
+  "promoted_to": "app/src/testing/setup.test.ts"
+}

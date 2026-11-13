@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-history",
+  "correction": "A history's selection is an entry, not an index: a restore adds a version and shifts the rows, and the next Restore took the wrong one.",
+  "evidence": "frostnotes#145 cross-review X15",
+  "promoted_to": "internal/desktop/history/history_test.go"
+}
