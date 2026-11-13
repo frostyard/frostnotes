@@ -756,7 +756,12 @@ desktop's, with a different transport and frame:
   - Touch sizes come from a `(pointer: coarse)` media query over the
     tokens.
   - The editing toolbar follows the visual viewport to sit on the
-    on-screen keyboard.
+    on-screen keyboard, and prompts end there (`app/keyboard.ts`).
+  - The bottom bar hides while a text field has the focus, the signal
+    that the on-screen keyboard is open; the editing toolbar takes its
+    place while that field is an editor.
+  - The split commands do not apply, so menus and the palette leave them
+    out.
 - **Hub settings** (`app/Settings.tsx`'s `hubSection`, drawn as the
   settings dialog's rows) list the hub's devices and pending pairings,
   with Revoke where the caller may ([hub.md](hub.md#hub-settings-in-the-app)).

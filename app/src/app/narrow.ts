@@ -9,3 +9,8 @@ import { NARROW_QUERY } from "@frostyard/lodge-ui/theme";
 export const NARROW = NARROW_QUERY;
 
 export { useNarrow };
+
+/** isNarrow reports whether the window is narrow now, for code outside a component (a command's applies, a menu). */
+export function isNarrow(): boolean {
+  return window.matchMedia?.(NARROW).matches === true;
+}

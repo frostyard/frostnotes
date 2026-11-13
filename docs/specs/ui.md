@@ -833,13 +833,16 @@ person makes in Obsidian; notes keeps the full-width bar.
 - **What goes:** the ribbon, the title bar row, tab strips, splits and
   the status bar. The workspace draws the active tab group's active tab
   under its view header; other groups stay in the stored workspace,
-  undrawn, and the split commands do not apply.
+  undrawn, and the split commands do not apply: Split right and Split
+  down are not in More options, a tab's menu or the command palette, and
+  their keys do nothing.
 - **The view header** is 44 high: Open left sidebar (`panel-left`) at
   the left; the note's title in the middle (a tap shows its folders as
   the breadcrumb does, and a tap on a folder reveals it in Files, in the
   left drawer); Reading view or Editing view, More options, and Open
-  right sidebar (`panel-right`) at the right. Back and forward move to
-  the bottom bar.
+  right sidebar (`panel-right`) at the right. An empty tab has no More
+  options: without the split items it would list nothing. Back and
+  forward move to the bottom bar.
 - **Drawers:** a sidebar opens over the workspace from its own edge,
   84% of the width and at most 450, `--bg-sidebar`, with its pane tabs
   in a row at its top and, in the left one, the vault row at its foot.
@@ -856,7 +859,11 @@ person makes in Obsidian; notes keeps the full-width bar.
     tab switcher;
   - Menu (`menu`).
 
-  It hides while the on-screen keyboard is open.
+  It hides while the on-screen keyboard is open, which is while a text
+  field has the focus: an editor (the editing toolbar takes its place),
+  or a field such as the inline title, a property or a search field.
+  Browsers share no signal of the keyboard itself, and a pinch zoom
+  also shrinks the visual viewport; the focus is what opens it.
 - **The tab switcher** is a full-screen list of the group's tabs: each
   row with its title and folder, a tap to activate it and Close at its
   right; New tab and Close all at its foot.
@@ -880,7 +887,8 @@ person makes in Obsidian; notes keeps the full-width bar.
   Commands the registry lacks are added with it.
 - **Prompts** (the quick switcher, the palette, the folder chooser) take
   the whole width, start under the top safe area, and end at the
-  keyboard; rows are 44 high.
+  keyboard (the visual viewport's bottom, as for the editing toolbar);
+  rows are 44 high.
 - **Menus** are sheets from the bottom, the whole width, items 44 high,
   and open on a long press (500 ms) as well as a right click.
 - **Settings** are full screen: the list of sections, then a section

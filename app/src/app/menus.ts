@@ -27,6 +27,7 @@ import {
 } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
 import { copyPath, deleteFile } from "./commands";
+import { isNarrow } from "./narrow";
 import { openOutside, openOutsideLabel } from "./system";
 
 const update = (op: Parameters<ReturnType<typeof useWorkspace.getState>["update"]>[0]) =>
@@ -38,12 +39,21 @@ const item = (id: string, label: string, extra: Partial<Extract<MenuItem, { kind
   ...extra,
 });
 const SEP: MenuItem = { kind: "separator" };
+// The split items, none in a narrow window, which draws one group
+// (docs/specs/ui.md#narrow-windows).
+const splitItems = (): MenuItem[] =>
+  isNarrow() ? [] : [item("split-right", "Split right"), item("split-down", "Split down")];
+// splitTab splits a tab, unless the window became narrow after its menu opened.
+const splitTab = (tabId: string, where: "right" | "down") => {
+  if (!isNarrow()) update((w) => split(w, tabId, where));
+};
 
 /** openTabMenu opens a tab's context menu at (x, y). */
 export function openTabMenu(tabId: string, x: number, y: number): void {
   const found = findTab(useWorkspace.getState().ws, tabId);
   if (!found) return;
   const { group, index, tab } = found;
+  const splits = splitItems();
   openMenu({
     label: "Tab",
     x,
@@ -55,9 +65,7 @@ export function openTabMenu(tabId: string, x: number, y: number): void {
       item("close-all", "Close all"),
       SEP,
       item("pin", tab.pinned ? "Unpin" : "Pin"),
-      SEP,
-      item("split-right", "Split right"),
-      item("split-down", "Split down"),
+      ...(splits.length > 0 ? [SEP, ...splits] : []),
     ],
     onChoose: (id) => {
       switch (id) {
@@ -72,9 +80,9 @@ export function openTabMenu(tabId: string, x: number, y: number): void {
         case "pin":
           return update((w) => pin(w, tabId));
         case "split-right":
-          return update((w) => split(w, tabId, "right"));
+          return splitTab(tabId, "right");
         case "split-down":
-          return update((w) => split(w, tabId, "down"));
+          return splitTab(tabId, "down");
       }
     },
   });
@@ -150,12 +158,13 @@ export function revealInFiles(path?: string): void {
 export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: number, y: number): void {
   const file = view.type === "empty" ? null : view.path;
   const items: MenuItem[] = [];
-  if (file !== null) items.push(item("history", "Open version history"), SEP);
-  items.push(item("split-right", "Split right"), item("split-down", "Split down"));
+  if (file !== null) items.push(item("history", "Open version history"));
+  const splits = splitItems();
+  if (splits.length > 0) items.push(...(items.length > 0 ? [SEP] : []), ...splits);
   if (file !== null) {
     const outside = openOutsideLabel(file);
     items.push(
-      SEP,
+      ...(items.length > 0 ? [SEP] : []),
       item("rename", "Rename…", { keys: "F2" }),
       item("move", "Move file to…"),
       item("copy-path", "Copy path"),
@@ -165,6 +174,7 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
       item("delete", "Delete file"),
     );
   }
+  if (items.length === 0) return;
   openMenu({
     label: "More options",
     x,
@@ -176,9 +186,9 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
           if (file !== null) update((w) => open(activate(w, tabId), { type: "history", path: file }, "tab"));
           return;
         case "split-right":
-          return update((w) => split(w, tabId, "right"));
+          return splitTab(tabId, "right");
         case "split-down":
-          return update((w) => split(w, tabId, "down"));
+          return splitTab(tabId, "down");
         case "copy-path":
           if (file !== null) void copyPath(file);
           return;

@@ -90,6 +90,8 @@ describe("a narrow window", () => {
     await user.click(screen.getByRole("button", { name: "Open quick switcher" }));
     expect(useOverlays.getState().prompt).toBe("switcher");
     act(() => useOverlays.setState({ prompt: null }));
+    // The prompt's field had the focus, and the keyboard with it: the bottom bar comes back.
+    await screen.findByRole("navigation", { name: "Bottom bar" });
     const count = () =>
       Number(/\((\d+)\)/.exec(screen.getByRole("button", { name: /^Tabs / }).getAttribute("aria-label") ?? "")?.[1]);
     const before = count();
@@ -123,6 +125,44 @@ describe("a narrow window", () => {
     expect(names).toHaveLength(20);
     await user.click(within(toolbar).getByRole("button", { name: "Bold" }));
     await waitFor(() => expect(editorText()).toBe("**Alpha**\n"));
+  });
+
+  it("hides the bottom bar while a text field outside the editor has the focus", async () => {
+    await start();
+    // In reading view, so no editor takes the focus.
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    const title = await screen.findByRole("textbox", { name: "Title" });
+    expect(screen.getByRole("navigation", { name: "Bottom bar" })).toBeTruthy();
+    act(() => title.focus());
+    await waitFor(() => expect(screen.queryByRole("navigation", { name: "Bottom bar" })).toBeNull());
+    // The field is not the editor: the editing toolbar stays away.
+    expect(screen.queryByRole("toolbar", { name: "Editing toolbar" })).toBeNull();
+    act(() => title.blur());
+    await screen.findByRole("navigation", { name: "Bottom bar" });
+  });
+
+  it("ends a prompt at the on-screen keyboard", async () => {
+    // A keyboard 344 pixels high: the visual viewport ends above the layout viewport's 844.
+    const resized = new Set<() => void>();
+    const viewport = {
+      height: 500,
+      offsetTop: 0,
+      addEventListener: (type: string, fn: () => void) => type === "resize" && resized.add(fn),
+      removeEventListener: (_: string, fn: () => void) => resized.delete(fn),
+    };
+    vi.stubGlobal("visualViewport", viewport);
+    vi.stubGlobal("innerHeight", 844);
+    await start();
+    act(() => useOverlays.setState({ prompt: "switcher" }));
+    const dialog = await screen.findByRole("dialog", { name: "Quick switcher" });
+    // Under its top margin, the top safe area, it ends at the keyboard.
+    expect(dialog.style.maxHeight).toBe("calc(100dvh - env(safe-area-inset-top, 0px) - 344px)");
+    // The keyboard closes: the prompt takes lodge-ui's height again.
+    viewport.height = 844;
+    act(() => {
+      for (const fn of resized) fn();
+    });
+    expect(dialog.style.maxHeight).toBe("");
   });
 
   it("opens the right drawer on the Backlinks pane from the Menu's backlinks", async () => {
@@ -184,5 +224,73 @@ describe("a narrow window", () => {
     expect(within(screen.getByRole("dialog", { name: "Tabs" })).getAllByRole("listitem")).toHaveLength(1);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Tabs" })).toBeNull();
+  });
+});
+
+describe("the split commands", () => {
+  // A narrow window draws one group: a split there would not show.
+  it.each([
+    ["a narrow window", true],
+    ["a wide window", false],
+  ])("in %s", async (_, narrow) => {
+    narrowWindow(narrow);
+    const user = userEvent.setup();
+    await start();
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(await screen.findByRole("button", { name: "More options" }));
+    const menu = (useOverlays.getState().menu?.items ?? []).flatMap((i) => (i.kind === "item" ? [i.label] : []));
+    expect(menu).toContain("Copy path");
+    expect(menu.includes("Split right")).toBe(!narrow);
+    expect(menu.includes("Split down")).toBe(!narrow);
+    act(() => useOverlays.setState({ menu: null, prompt: "palette" }));
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    const names = within(palette)
+      .getAllByRole("option")
+      .map((o) => o.textContent ?? "");
+    expect(names.some((n) => n.startsWith("Toggle pin"))).toBe(true);
+    expect(names.some((n) => n.startsWith("Split right"))).toBe(!narrow);
+    expect(names.some((n) => n.startsWith("Split down"))).toBe(!narrow);
+  });
+});
+
+describe("a menu opened in a wide window", () => {
+  it("splits nothing once the window is narrow", async () => {
+    narrowWindow(false);
+    const user = userEvent.setup();
+    await start();
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(await screen.findByRole("button", { name: "More options" }));
+    const menu = useOverlays.getState().menu;
+    expect(menu?.items.some((i) => i.kind === "item" && i.id === "split-right")).toBe(true);
+    // The window turns narrow (a rotation) with the menu still open.
+    narrowWindow(true);
+    const before = JSON.stringify(useWorkspace.getState().ws.root);
+    act(() => {
+      menu?.onChoose("split-right");
+      menu?.onChoose("split-down");
+    });
+    expect(JSON.stringify(useWorkspace.getState().ws.root)).toBe(before);
+  });
+
+  it("closes when the window turns narrow", async () => {
+    let matches = false;
+    const changed = new Set<(event: { matches: boolean }) => void>();
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: q === NARROW ? matches : false,
+      media: q,
+      addEventListener: (_: string, fn: (event: { matches: boolean }) => void) => q === NARROW && changed.add(fn),
+      removeEventListener: (_: string, fn: (event: { matches: boolean }) => void) => changed.delete(fn),
+    }));
+    const user = userEvent.setup();
+    await start();
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(await screen.findByRole("button", { name: "More options" }));
+    expect(useOverlays.getState().menu?.label).toBe("More options");
+    matches = true;
+    act(() => {
+      for (const fn of changed) fn({ matches });
+    });
+    await screen.findByRole("navigation", { name: "Bottom bar" });
+    expect(useOverlays.getState().menu).toBeNull();
   });
 });

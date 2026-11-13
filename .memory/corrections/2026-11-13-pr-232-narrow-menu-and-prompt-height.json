@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "app-narrow-window",
+  "correction": "A rule that depends on the window's width holds when the action runs, not only when its menu opens: a menu opened wide checks the width again before it splits, and closes when the window crosses the narrow width. A height that ends at the keyboard also leaves out the margin above it (the top safe area).",
+  "evidence": "frostnotes#232: the cross-review at beca68e found that More options opened in a wide window still split after a turn to narrow, and that a narrow prompt capped at 100dvh less the keyboard ran under the keyboard by its top safe-area margin; fixed with tests in app/src/app/narrow.test.tsx",
+  "promoted_to": ""
+}

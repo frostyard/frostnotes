@@ -18,7 +18,8 @@ export interface NarrowHeaderProps {
   onLeft: () => void;
   onRight: () => void;
   onToggleMode: () => void;
-  onMore: (x: number, y: number) => void;
+  /** Opens More options; absent where it would list nothing (an empty tab), which hides the button. */
+  onMore?: (x: number, y: number) => void;
   /** A folder the title showed was tapped: reveal it. */
   onFolder?: (folder: string) => void;
 }
@@ -73,14 +74,16 @@ export function NarrowHeader(props: NarrowHeaderProps) {
           onClick={props.onToggleMode}
         />
       )}
-      <TouchButton
-        label="More options"
-        icon={Ellipsis}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          props.onMore(r.left, r.bottom);
-        }}
-      />
+      {props.onMore && (
+        <TouchButton
+          label="More options"
+          icon={Ellipsis}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            props.onMore?.(r.left, r.bottom);
+          }}
+        />
+      )}
       <TouchButton label="Open right sidebar" icon={PanelRight} onClick={props.onRight} />
     </div>
   );
