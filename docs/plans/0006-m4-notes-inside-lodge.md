@@ -66,8 +66,9 @@ What the check found for each leftover:
   a PDF under lodge-content's sandbox
   ([open questions](#open-questions)).
 - *Phase 6's XSS on the phone:* #230.
-- *Phase 7's 7 days of sync through lodge:* the daily checks were not
-  recorded; [what is recorded](#the-7-days-of-sync-through-lodge-to-2026-11-02).
+- *Phase 7's 7 days of sync through lodge:* no lost edit was reported,
+  but the daily checks were not recorded, so the trial is not verified
+  in full; [what is recorded](#the-7-days-of-sync-through-lodge-to-2026-11-02).
 
 Status (2026-10-21), kept as the record:
 - **Phase 1 is done.** M4's first drafts became lodge's ADRs 0004 to
@@ -1003,8 +1004,9 @@ What is recorded:
   [v0.3.1](https://github.com/frostyard/frostnotes/releases/tag/v0.3.1)
   the same day.
 
-So the 7 days show no lost edit, on less evidence than the daily checks
-would have given.
+So no lost edit was reported during the 7 days, but the records do not
+verify the whole trial: they hold no check of both devices through
+2026-11-02.
 
 ## Later / ideas
 
