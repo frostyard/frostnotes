@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-livepreview",
+  "correction": "Link parsing has a depth cap and a work budget per line: nested or unclosed brackets in a synced note must not stall typing.",
+  "evidence": "frostnotes#145 re-review 1, X19",
+  "promoted_to": "internal/desktop/livepreview/livepreview_test.go"
+}

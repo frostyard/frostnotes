@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-livepreview",
+  "correction": "The line cache keeps copies: a substring in a key or a label pins the whole note, a new note each edit.",
+  "evidence": "frostnotes#145 cross-review X20",
+  "promoted_to": "internal/desktop/livepreview/livepreview_test.go"
+}

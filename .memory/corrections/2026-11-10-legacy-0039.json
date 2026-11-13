@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "Remove from list says what is forgotten, as specs/ui.md does.",
+  "evidence": "frostnotes#145 cross-review X53",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

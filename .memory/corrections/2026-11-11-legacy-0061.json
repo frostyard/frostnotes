@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "syncer-tests",
+  "correction": "Sync tests set no wall-clock budget of their own for work that grows with the vault: a slow runner ran out of 30 s (PR #191) as it had of 30 s under the race detector (PR #25). A stall ends at the test binary's -timeout, which prints every goroutine.",
+  "evidence": "frostnotes#191, CI run 43014900508: TestAGeneratedVaultSyncsBothWays, WaitIdle: context deadline exceeded, on a runner where synctest took 315 s against its usual 70 s",
+  "promoted_to": "internal/syncer/sync_test.go"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-catalog",
+  "correction": "An upload's worker takes the vault's settings as values before it starts; the window writes them on the UI thread.",
+  "evidence": "frostnotes#145 cross-review X17",
+  "promoted_to": "internal/desktop/catalog/catalog_test.go"
+}

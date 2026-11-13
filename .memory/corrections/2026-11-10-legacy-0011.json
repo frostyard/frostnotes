@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-reading",
+  "correction": "A reading view must render again when the vault changes, not only when its own note's text does: an embedded note's edit changes what it shows; View.Changed forces it.",
+  "evidence": "frostnotes#145 cross-review X1: window refreshed only the editors' blocks",
+  "promoted_to": "internal/desktop/reading/view_test.go"
+}

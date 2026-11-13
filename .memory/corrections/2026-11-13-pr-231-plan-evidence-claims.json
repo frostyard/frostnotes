@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "docs-plans",
+  "correction": "A plan's record claims only what its evidence shows: a lost edit that nobody reported is not a trial verified without one, and 1 sample is not the whole period. When a check was not run or not recorded, the record says so and lists what it holds.",
+  "evidence": "frostnotes#231: the cross-review at 3d6821b found that plan 0006 said the 7 days of sync through lodge 'show no lost edit', while the records hold only 1 device's sync verify on 2026-10-30; fixed at d0c6547",
+  "promoted_to": "AGENTS.md (Documentation rules, Housekeeping)"
+}

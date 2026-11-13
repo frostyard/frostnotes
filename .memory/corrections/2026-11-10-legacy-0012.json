@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-reading",
+  "correction": "A worker goroutine must not read Document.Path: Moved writes it on the UI thread. Build the request's params before go func().",
+  "evidence": "frostnotes#145 cross-review X2: reading/blocks.go read it in the goroutine; TestABlockAsksForThePathItHadWhenDrawn shows the race",
+  "promoted_to": "internal/desktop/reading/view_test.go"
+}

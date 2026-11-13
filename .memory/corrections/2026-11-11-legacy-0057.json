@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-window",
+  "correction": "What waits for settings asks again when no request is running; events held for the vault list keep the saved sequence behind them; a reading view scrolls to a link's heading.",
+  "evidence": "frostnotes#145 re-review 2, N5, X43, X41",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

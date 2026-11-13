@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "ci-flatpak",
+  "correction": "The Flatpak job must re-create the image's /var/lib/flatpak in the container's layer before flatpak-builder updates the runtimes, because overlayfs without redirect_dir=on answers EXDEV for a rename of a lower-layer directory; TestFlatpakJobMovesTheInstallationBeforeTheBuild requires the copy step before the build and with no if.",
+  "evidence": "frostnotes#129: runs 41817714447 and 41775715654 attempt 1 failed on AWS-hosted runners with 'Failed to update org.gnome.Sdk: Invalid cross-device link'; reproduced under podman in the same image, and gone after the copy",
+  "promoted_to": "internal/workflowcheck/workflows_test.go"
+}

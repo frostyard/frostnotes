@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "render",
+  "correction": "A fenced block written for an embed or callout keeps its quote or list prefix on each line, or the container around it splits.",
+  "evidence": "frostnotes#145 cross-review X5",
+  "promoted_to": "internal/render/markdown_test.go"
+}

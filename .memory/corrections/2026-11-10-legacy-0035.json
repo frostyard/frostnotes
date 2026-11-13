@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "An answer about a vault is dropped once the window has moved to another.",
+  "evidence": "frostnotes#145 cross-review X39",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

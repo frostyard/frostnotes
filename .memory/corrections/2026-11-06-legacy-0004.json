@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "risk-paths",
+  "correction": "The first risk-path list named only the hub's token check and lodge's socket as auth; the router's write admission, the hub's withdraw and relocate checks, the dev gateway, signed blob URLs, the MCP HTTP token check and the shell's open.rs were missing; all are listed now, and TestRiskPaths requires them.",
+  "evidence": "frostnotes#131, cross-review (openai/gpt-6.1-sol) of head 9bd07ac, finding 1",
+  "promoted_to": "internal/workflowcheck/baseline_test.go governedPaths"
+}

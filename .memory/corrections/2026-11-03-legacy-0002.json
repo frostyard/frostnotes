@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-03",
+  "scope": "repocheck test-name filter",
+  "correction": "An inline # comment could exempt a filtered go test run, and echo text that names go test counted as a run; comments are dropped and a run counts only at a command's start.",
+  "evidence": "frostnotes#126, cross-review (openai/gpt-6.1-sol) re-review 1 of head be64f67, finding A-R1",
+  "promoted_to": "internal/repocheck/testfilter_test.go TestFiltersTestNames"
+}

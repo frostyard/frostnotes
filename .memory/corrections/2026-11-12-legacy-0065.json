@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": "store-index",
+  "correction": "A cache in front of a query in a transaction keeps the query's context check: a cache hit returns the error the query would give once ctx is done, so errors stay the same.",
+  "evidence": "frostnotes#215, cross-review at 370d5ab: a cached link lookup returned after ctx was cancelled; TestACachedLinkLookupStillSeesACancelledContext fails without the check",
+  "promoted_to": "internal/store/resolve_test.go"
+}

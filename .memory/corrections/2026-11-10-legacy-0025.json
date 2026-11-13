@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-livepreview",
+  "correction": "A link's label is parsed once: parsing it for the label and again as a fallback doubled the work at each nesting level.",
+  "evidence": "frostnotes#145 cross-review X19",
+  "promoted_to": "internal/desktop/livepreview/livepreview_test.go"
+}

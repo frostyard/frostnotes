@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-window",
+  "correction": "A join's vault add runs to its answer even through a cancel, so no cleanup has to guess whether it committed.",
+  "evidence": "frostnotes#145 re-review 2, X54, X56",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

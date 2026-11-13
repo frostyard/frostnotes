@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-notes",
+  "correction": "Only the newest Reload's answer counts: an older read landing last set old text and an old base.",
+  "evidence": "frostnotes#145 cross-review X13",
+  "promoted_to": "internal/desktop/notes/doc_test.go"
+}

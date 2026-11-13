@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-window",
+  "correction": "The layout copied back after a frame is only what the panes changed in it: a button that changed the workspace in the frame was undone.",
+  "evidence": "frostnotes#145 cross-review X45",
+  "promoted_to": "internal/desktop/window/window_test.go"
+}

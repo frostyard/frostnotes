@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "desktop-editor",
+  "correction": "A Markdown link's destination allows balanced parentheses, and '#' splits before unescaping so %23 stays in the name.",
+  "evidence": "frostnotes#145 cross-review X25; also internal/render/links.go",
+  "promoted_to": "internal/desktop/editor/review_test.go"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": "desktop-window",
+  "correction": "A sync.status answer shows only when it answers the last ask and no sync.changed of the vault came while it ran; otherwise the event's status stays and the status is asked again. An event and an answer travel apart and either can be the newer: a late event from before a leave, or an older ask's answer, would bring back the hub the vault left, and no event follows a leave.",
+  "evidence": "frostnotes#214: the cross-review found a late pre-leave event kept for good at 08883d8, and an older ask's answer shown after a newer load at 6c5c745; TestAnEventWhileTheStatusIsAskedIsSettledByAStatusAskedAfterIt, TestAnOlderSyncStatusAnswerDoesNotShow and TestASyncStatusAnswerFromBeforeAVaultSwitchDoesNotShow fail with the fix reverted",
+  "promoted_to": "internal/desktop/window/syncstatus_test.go"
+}

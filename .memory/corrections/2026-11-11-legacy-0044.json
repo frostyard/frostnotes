@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-session",
+  "correction": "Text notesd refused lives only in its notice, so it counts as unsaved: a released document stays until the user merges or dismisses it.",
+  "evidence": "frostnotes#145 re-review 1, X10",
+  "promoted_to": "internal/desktop/session/session_test.go"
+}

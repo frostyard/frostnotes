@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "desktop-livepreview",
+  "correction": "A closing %% can be followed on its line by one that opens another comment.",
+  "evidence": "frostnotes#145 re-review 2, X22",
+  "promoted_to": "internal/desktop/livepreview/livepreview_test.go"
+}

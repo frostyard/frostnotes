@@ -35,4 +35,4 @@ Risk tier: 1 — <!-- justification -->
 - [ ] `make flatpak-sources` run, for a change to `go.mod` or `go.sum`
 - [ ] Revert test for a fix: the new test fails with the fix reverted; command: <!-- name it -->
 - [ ] Workflows changed: every action is SHA-pinned with `# vX.Y.Z`, `permissions: {}`, and `persist-credentials: false`
-- [ ] Blocking review point fixed: guard added and 1 `.memory/corrections.jsonl` line added
+- [ ] Blocking review point fixed: guard added and 1 file added under `.memory/corrections/`
