@@ -43,6 +43,10 @@ const SEP: MenuItem = { kind: "separator" };
 // (docs/specs/ui.md#narrow-windows).
 const splitItems = (): MenuItem[] =>
   isNarrow() ? [] : [item("split-right", "Split right"), item("split-down", "Split down")];
+// splitTab splits a tab, unless the window became narrow after its menu opened.
+const splitTab = (tabId: string, where: "right" | "down") => {
+  if (!isNarrow()) update((w) => split(w, tabId, where));
+};
 
 /** openTabMenu opens a tab's context menu at (x, y). */
 export function openTabMenu(tabId: string, x: number, y: number): void {
@@ -76,9 +80,9 @@ export function openTabMenu(tabId: string, x: number, y: number): void {
         case "pin":
           return update((w) => pin(w, tabId));
         case "split-right":
-          return update((w) => split(w, tabId, "right"));
+          return splitTab(tabId, "right");
         case "split-down":
-          return update((w) => split(w, tabId, "down"));
+          return splitTab(tabId, "down");
       }
     },
   });
@@ -182,9 +186,9 @@ export function openMoreOptions(c: Client, tabId: string, view: ViewState, x: nu
           if (file !== null) update((w) => open(activate(w, tabId), { type: "history", path: file }, "tab"));
           return;
         case "split-right":
-          return update((w) => split(w, tabId, "right"));
+          return splitTab(tabId, "right");
         case "split-down":
-          return update((w) => split(w, tabId, "down"));
+          return splitTab(tabId, "down");
         case "copy-path":
           if (file !== null) void copyPath(file);
           return;

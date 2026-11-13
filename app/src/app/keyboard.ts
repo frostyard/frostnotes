@@ -91,7 +91,8 @@ export function useKeyboardInset(): number {
  * usePromptsEndAtKeyboard makes the open prompts (lodge-ui's Prompt: a
  * modal dialog led by its query field) end at the keyboard, inset high
  * above the layout viewport's bottom. lodge-ui gives a narrow prompt
- * 100dvh, which iOS Safari does not shrink for the keyboard. open names
+ * 100dvh under a top margin of the top safe area, and iOS Safari does not
+ * shrink 100dvh for the keyboard. open names
  * what is open, so that a prompt that opens is fitted too.
  */
 export function usePromptsEndAtKeyboard(inset: number, open: string | null): void {
@@ -100,6 +101,8 @@ export function usePromptsEndAtKeyboard(inset: number, open: string | null): voi
     const prompts = [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')].filter(
       (d) => d.firstElementChild?.matches('input[role="combobox"]') === true,
     );
-    for (const d of prompts) d.style.maxHeight = inset > 0 ? `calc(100dvh - ${inset}px)` : "";
+    // The prompt starts under the top safe area: its height leaves that out too.
+    const height = `calc(100dvh - env(safe-area-inset-top, 0px) - ${inset}px)`;
+    for (const d of prompts) d.style.maxHeight = inset > 0 ? height : "";
   }, [inset, open]);
 }

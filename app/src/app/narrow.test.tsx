@@ -155,7 +155,8 @@ describe("a narrow window", () => {
     await start();
     act(() => useOverlays.setState({ prompt: "switcher" }));
     const dialog = await screen.findByRole("dialog", { name: "Quick switcher" });
-    expect(dialog.style.maxHeight).toBe("calc(100dvh - 344px)");
+    // Under its top margin, the top safe area, it ends at the keyboard.
+    expect(dialog.style.maxHeight).toBe("calc(100dvh - env(safe-area-inset-top, 0px) - 344px)");
     // The keyboard closes: the prompt takes lodge-ui's height again.
     viewport.height = 844;
     act(() => {
@@ -249,5 +250,47 @@ describe("the split commands", () => {
     expect(names.some((n) => n.startsWith("Toggle pin"))).toBe(true);
     expect(names.some((n) => n.startsWith("Split right"))).toBe(!narrow);
     expect(names.some((n) => n.startsWith("Split down"))).toBe(!narrow);
+  });
+});
+
+describe("a menu opened in a wide window", () => {
+  it("splits nothing once the window is narrow", async () => {
+    narrowWindow(false);
+    const user = userEvent.setup();
+    await start();
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(await screen.findByRole("button", { name: "More options" }));
+    const menu = useOverlays.getState().menu;
+    expect(menu?.items.some((i) => i.kind === "item" && i.id === "split-right")).toBe(true);
+    // The window turns narrow (a rotation) with the menu still open.
+    narrowWindow(true);
+    const before = JSON.stringify(useWorkspace.getState().ws.root);
+    act(() => {
+      menu?.onChoose("split-right");
+      menu?.onChoose("split-down");
+    });
+    expect(JSON.stringify(useWorkspace.getState().ws.root)).toBe(before);
+  });
+
+  it("closes when the window turns narrow", async () => {
+    let matches = false;
+    const changed = new Set<(event: { matches: boolean }) => void>();
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: q === NARROW ? matches : false,
+      media: q,
+      addEventListener: (_: string, fn: (event: { matches: boolean }) => void) => q === NARROW && changed.add(fn),
+      removeEventListener: (_: string, fn: (event: { matches: boolean }) => void) => changed.delete(fn),
+    }));
+    const user = userEvent.setup();
+    await start();
+    act(() => useWorkspace.getState().update((w) => open(w, { type: "note", path: "a.md", mode: "read" }, "here")));
+    await user.click(await screen.findByRole("button", { name: "More options" }));
+    expect(useOverlays.getState().menu?.label).toBe("More options");
+    matches = true;
+    act(() => {
+      for (const fn of changed) fn({ matches });
+    });
+    await screen.findByRole("navigation", { name: "Bottom bar" });
+    expect(useOverlays.getState().menu).toBeNull();
   });
 });

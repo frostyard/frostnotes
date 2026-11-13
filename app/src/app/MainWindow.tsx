@@ -10,7 +10,7 @@ import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";
 import { feed } from "../data/events";
-import { openVaultManager } from "../data/overlays";
+import { closeMenu, openVaultManager } from "../data/overlays";
 import { usePrefs } from "../data/prefs";
 import { useClient, useOpenVault } from "../data/session";
 import { useNotes, useUI } from "../data/stores";
@@ -146,6 +146,13 @@ export function MainWindow() {
   const backlinks = useBacklinkCount(activeNote?.path ?? null);
   const counts = useNoteCounts(docs);
   const narrow = useNarrow();
+  // A menu opened for one layout does not fit the other: close it when the
+  // window crosses the narrow width (a wide menu's splits do not apply).
+  const wasNarrow = useRef(narrow);
+  useEffect(() => {
+    if (wasNarrow.current !== narrow) closeMenu();
+    wasNarrow.current = narrow;
+  }, [narrow]);
   const focus = useTextFocus();
   const keyboard = useKeyboardInset();
   // A narrow window's sidebars are drawers, one open at a time, closed
