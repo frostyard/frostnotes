@@ -9,8 +9,13 @@ import (
 	"github.com/frostyard/frostnotes/api"
 )
 
-// memLog is an in-memory Log holding seqs oldest..latest.
-type memLog struct{ evs []api.EventEnvelope }
+// memLog is an in-memory Log holding seqs oldest..latest. beforeRead,
+// when set, runs at the start of ChangesSince, as a prune between the
+// broker's reads would.
+type memLog struct {
+	evs        []api.EventEnvelope
+	beforeRead func(*memLog)
+}
 
 func (m *memLog) LatestSeq(context.Context) (int64, error) {
 	if len(m.evs) == 0 {
@@ -27,6 +32,9 @@ func (m *memLog) OldestSeq(context.Context) (int64, error) {
 }
 
 func (m *memLog) ChangesSince(_ context.Context, seq int64) ([]api.EventEnvelope, error) {
+	if m.beforeRead != nil {
+		m.beforeRead(m)
+	}
 	var out []api.EventEnvelope
 	for _, ev := range m.evs {
 		if ev.Seq > seq {
@@ -94,6 +102,20 @@ func TestResyncWhenPruned(t *testing.T) {
 	}
 	if _, info, _ := b.Subscribe(t.Context(), ptr(9)); info.Resync {
 		t.Error("sinceSeq 9 (oldest-1) must replay, not resync")
+	}
+}
+
+// A prune that runs between the broker's check of the oldest seq and its
+// read of the replay must give resync, not a replay with a gap.
+func TestResyncWhenPrunedDuringTheReplayRead(t *testing.T) {
+	log := &memLog{evs: []api.EventEnvelope{durable(1), durable(2), durable(3), durable(4)}}
+	log.beforeRead = func(m *memLog) { m.evs = m.evs[2:] }
+	s, info, err := NewBroker(log).Subscribe(t.Context(), ptr(1))
+	if err != nil || !info.Resync || info.Seq != 4 {
+		t.Fatalf("Subscribe = %+v, %v; want resync at seq 4", info, err)
+	}
+	if len(s.replay) != 0 {
+		t.Fatalf("replay = %v, want none with resync", s.replay)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/frostyard/frostnotes/api"
 )
@@ -52,13 +53,23 @@ func (d *DB) ChangesSince(ctx context.Context, seq int64) ([]api.EventEnvelope, 
 	return out, rows.Err()
 }
 
-// PruneChanges keeps the newest keep durable events. Nothing calls it yet:
-// it stays for a later retention step, and until then the log is never
-// pruned (frostyard/frostnotes#219).
-func (d *DB) PruneChanges(ctx context.Context, keep int) error {
-	return d.Tx(ctx, func(tx *Tx) error {
-		_, err := tx.ExecContext(ctx,
-			`DELETE FROM changes WHERE seq <= (SELECT COALESCE(MAX(seq), 0) FROM changes) - ?`, keep)
+// PruneChanges deletes the durable events up to the newest one recorded
+// before before, and all but the newest keep, and returns how many it
+// deleted. It deletes only from the oldest end, so the retained log has no
+// gap even when the clock went back between events, and events.subscribe
+// can tell a replay from a resync by the oldest seq. The daily prune pass
+// calls it (docs/design/vault.md#changes-log).
+func (d *DB) PruneChanges(ctx context.Context, before time.Time, keep int) (int64, error) {
+	var n int64
+	err := d.Tx(ctx, func(tx *Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM changes WHERE seq <= MAX(
+			(SELECT COALESCE(MAX(seq), 0) FROM changes WHERE at < ?),
+			(SELECT COALESCE(MAX(seq), 0) FROM changes) - ?)`, FormatTime(before), keep)
+		if err != nil {
+			return fmt.Errorf("prune changes: %w", err)
+		}
+		n, err = res.RowsAffected()
 		return err
 	})
+	return n, err
 }

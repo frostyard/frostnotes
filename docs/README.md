@@ -65,6 +65,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0041 — Render native math as vector paths](adr/0041-render-native-math-as-vector-paths.md)
 - [0042 — The desktop app takes frostui's Frostyard look](adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md)
 - [0043 — The typing gate is looser on CI](adr/0043-the-typing-gate-is-looser-on-ci.md)
+- [0044 — The changes log keeps 30 days, and at most 100,000 events](adr/0044-the-changes-log-keeps-30-days-and-at-most-100000-events.md)
 
 ### Design
 
