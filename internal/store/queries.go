@@ -82,6 +82,17 @@ func (d *DB) ListOpenTasks(ctx context.Context, vaultID int64, folder string) ([
 	return entries, nil
 }
 
+// hasTag is the condition that a note has a tag or a tag nested under it;
+// hasTagArgs gives its arguments.
+const hasTag = ` AND EXISTS (SELECT 1 FROM tags WHERE tags.file_id = notes.file_id
+	AND (tags.folded = ? OR (tags.folded >= ? AND tags.folded < ?)))`
+
+// hasTagArgs are hasTag's arguments for folded, a lower-cased tag without
+// '#': the tag itself and the range of the tags nested under it.
+func hasTagArgs(folded string) []any {
+	return []any{folded, folded + "/", folded + "0"}
+}
+
 func noteConditions(vaultID int64, f NoteFilter) (string, []any) {
 	where := "files.vault_id = ?"
 	args := []any{vaultID}
@@ -91,10 +102,8 @@ func noteConditions(vaultID int64, f NoteFilter) (string, []any) {
 		args = append(args, folder+"/", folder+"0")
 	}
 	if f.Tag != "" {
-		tag := strings.ToLower(strings.TrimPrefix(f.Tag, "#"))
-		where += ` AND EXISTS (SELECT 1 FROM tags WHERE tags.file_id = notes.file_id
-			AND (tags.folded = ? OR (tags.folded >= ? AND tags.folded < ?)))`
-		args = append(args, tag, tag+"/", tag+"0")
+		where += hasTag
+		args = append(args, hasTagArgs(strings.ToLower(strings.TrimPrefix(f.Tag, "#")))...)
 	}
 	if f.Property != "" {
 		if f.Value == "" {

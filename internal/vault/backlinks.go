@@ -51,9 +51,9 @@ func backlinkContext(data []byte, start, stop int) []api.SnippetPart {
 		lineEnd = start + i
 	}
 	end := min(stop, lineEnd)
-	before := strings.TrimLeft(valid(data[lineStart:start]), " \t")
-	link := valid(data[start:end])
-	after := strings.TrimRight(valid(data[end:lineEnd]), " \t\r")
+	before := strings.TrimLeft(showText(data[lineStart:start]), " \t")
+	link := showText(data[start:end])
+	after := strings.TrimRight(showText(data[end:lineEnd]), " \t\r")
 	if utf8.RuneCountInString(before) > contextReach {
 		r := []rune(before)
 		before = "…" + string(r[len(r)-contextReach:])
@@ -70,8 +70,4 @@ func backlinkContext(data []byte, start, stop int) []api.SnippetPart {
 		parts = append(parts, api.SnippetPart{Text: after})
 	}
 	return parts
-}
-
-func valid(b []byte) string {
-	return strings.ToValidUTF8(string(b), "�")
 }

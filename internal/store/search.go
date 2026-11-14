@@ -202,9 +202,8 @@ func searchNotesSQL(vaultID int64, q Query) (string, []any) {
 		order = "bm25(notes_fts, 10.0, 5.0, 1.0, 2.0), files.path"
 	}
 	for _, tag := range q.Tags {
-		where += ` AND EXISTS (SELECT 1 FROM tags WHERE tags.file_id = notes.file_id
-			AND (tags.folded = ? OR (tags.folded >= ? AND tags.folded < ?)))`
-		args = append(args, tag, tag+"/", tag+"0")
+		where += hasTag
+		args = append(args, hasTagArgs(tag)...)
 	}
 	return "SELECT " + columns + " FROM " + from + " WHERE " + where + " ORDER BY " + order, args
 }

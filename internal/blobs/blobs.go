@@ -68,6 +68,26 @@ func (s *Store) path(id string) (string, error) {
 // Existing blobs are kept. Directories are created with mode 0700 and blobs
 // with mode 0600. Cancellation before publication leaves no temporary file.
 func (s *Store) Put(ctx context.Context, r io.Reader) (string, error) {
+	return s.put(ctx, r, "")
+}
+
+// PutWant is Put for content that must have the ID want, such as an
+// upload or download named by its hash (ADR-0018): it publishes the blob
+// only if it does, and otherwise stores nothing and returns an error
+// matching ErrCorrupt. A malformed want returns ErrInvalidID before
+// reading.
+func (s *Store) PutWant(ctx context.Context, r io.Reader, want string) error {
+	if !validID(want) {
+		return ErrInvalidID
+	}
+	_, err := s.put(ctx, r, want)
+	return err
+}
+
+// put streams r into a temporary file and publishes it under its hash.
+// With want set, content that hashes to another ID is not published and
+// returns an error matching ErrCorrupt.
+func (s *Store) put(ctx context.Context, r io.Reader, want string) (string, error) {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return "", fmt.Errorf("blobs: create store dir: %w", err)
 	}
@@ -84,6 +104,10 @@ func (s *Store) Put(ctx context.Context, r io.Reader) (string, error) {
 	if _, err := io.Copy(io.MultiWriter(tmp, h), r); err != nil {
 		return "", fmt.Errorf("blobs: read content: %w", err)
 	}
+	id := hex.EncodeToString(h.Sum(nil))
+	if want != "" && id != want {
+		return "", fmt.Errorf("blobs: content of %s hashes to %s: %w", want, id, ErrCorrupt)
+	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -96,53 +120,10 @@ func (s *Store) Put(ctx context.Context, r io.Reader) (string, error) {
 	if err := tmp.Close(); err != nil {
 		return "", fmt.Errorf("blobs: close temp: %w", err)
 	}
-	id := hex.EncodeToString(h.Sum(nil))
 	if err := s.publish(ctx, tmp.Name(), id); err != nil {
 		return "", err
 	}
 	return id, nil
-}
-
-// PutWant is Put for content that must have the ID want, such as an
-// upload or download named by its hash (ADR-0018): it publishes the blob
-// only if it does, and otherwise stores nothing and returns an error
-// matching ErrCorrupt. A malformed want returns ErrInvalidID before
-// reading.
-func (s *Store) PutWant(ctx context.Context, r io.Reader, want string) error {
-	if !validID(want) {
-		return ErrInvalidID
-	}
-	if err := os.MkdirAll(s.dir, 0o700); err != nil {
-		return fmt.Errorf("blobs: create store dir: %w", err)
-	}
-	tmp, err := os.CreateTemp(s.dir, ".put-*")
-	if err != nil {
-		return fmt.Errorf("blobs: create temp: %w", err)
-	}
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmp.Name())
-	}()
-	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(tmp, h), r); err != nil {
-		return fmt.Errorf("blobs: read content: %w", err)
-	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != want {
-		return fmt.Errorf("blobs: content of %s hashes to %s: %w", want, got, ErrCorrupt)
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		return fmt.Errorf("blobs: chmod temp: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		return fmt.Errorf("blobs: sync temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("blobs: close temp: %w", err)
-	}
-	return s.publish(ctx, tmp.Name(), want)
 }
 
 // Size returns a blob's size in bytes. A missing blob returns an error
