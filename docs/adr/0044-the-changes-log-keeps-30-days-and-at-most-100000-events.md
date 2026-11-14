@@ -1,6 +1,6 @@
 # 0044 — The changes log keeps 30 days, and at most 100,000 events
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-13)
 - **Date:** 2026-11-13
 
 ## Context
