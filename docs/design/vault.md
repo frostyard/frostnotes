@@ -368,7 +368,10 @@ The daily pass that prunes versions also trims the log
 ([ADR-0044](../adr/0044-the-changes-log-keeps-30-days-and-at-most-100000-events.md)):
 it deletes the events recorded more than 30 days ago (`Config.Keep`, as
 for versions) and all but the newest 100,000 (`Config.KeepEvents`), about
-20 MB at most. A client away longer gets `resync`, reloads its state, and
+20 MB; between passes the log grows by what that day writes. It deletes
+only from the oldest end: up to the newest event recorded before the
+cutoff, since the clock can go back between events, so the retained log
+has no gap. A client away longer gets `resync`, reloads its state, and
 its tabs do not follow the moves of that time. The latest sequence number
 survives the prune (`AUTOINCREMENT`), so a client that saw it resumes even
 when the log is empty. `events.subscribe` reads the oldest retained event

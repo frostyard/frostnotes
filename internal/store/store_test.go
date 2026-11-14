@@ -288,6 +288,28 @@ func TestPruneChangesByAge(t *testing.T) {
 	}
 }
 
+// The clock can go back between events, so the times of the log are not
+// in seq order. The age rule still deletes only from the oldest end: a
+// gap in the retained log would let events.subscribe replay across it
+// without resync.
+func TestPruneChangesByAgeLeavesNoGap(t *testing.T) {
+	d, _ := openTest(t)
+	ctx := t.Context()
+	cutoff := testNow
+	for _, at := range []time.Time{cutoff.Add(time.Second), cutoff.Add(-time.Second), cutoff.Add(2 * time.Second)} {
+		d.Now = func() time.Time { return at }
+		if err := d.Tx(ctx, func(tx *Tx) error { return tx.Emit(ctx, api.VaultRemoved{ID: 1}) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := d.PruneChanges(ctx, cutoff, 100); err != nil || n != 2 {
+		t.Fatalf("PruneChanges = %d, %v; want seqs 1 and 2 deleted", n, err)
+	}
+	if replay, err := d.ChangesSince(ctx, 0); err != nil || len(replay) != 1 || replay[0].Seq != 3 {
+		t.Fatalf("retained log = %+v, %v; want only seq 3", replay, err)
+	}
+}
+
 // The index's rows leave with their note, file or vault, the search row
 // through a trigger that cascades fire too; a link to a deleted file
 // becomes unresolved; versions outlive their file.

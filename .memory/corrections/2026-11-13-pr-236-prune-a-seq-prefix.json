@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "internal/store",
+  "correction": "A prune of the changes log deletes only a seq prefix: the age rule deletes up to the newest event recorded before the cutoff, never by the time column alone, because the wall clock can go back and events.subscribe detects a pruned replay only by the oldest retained seq.",
+  "evidence": "frostnotes#236: the cross-review at cf96312 found that `DELETE ... WHERE at < ?` could delete seq 2 and keep seqs 1 and 3 when the clock went back, so a subscriber from seq 1 got a replay with a gap and no resync; store.TestPruneChangesByAgeLeavesNoGap guards the fix",
+  "promoted_to": "internal/store/store_test.go TestPruneChangesByAgeLeavesNoGap"
+}

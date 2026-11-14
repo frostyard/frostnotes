@@ -41,6 +41,10 @@ hub thins its log's content after 30 days
   M1's prune of versions): it deletes the durable events recorded more than
   30 days ago (`Config.Keep`, the versions' window), and all but the
   newest 100,000 (`Config.KeepEvents`).
+- **It deletes only from the oldest end.** An event's time is the wall
+  clock at its commit, and the clock can go back, so times are not in
+  sequence order. The age rule deletes every event up to the newest one
+  recorded before the cutoff, so the retained log never has a gap.
 - **A client away longer gets `resync`,** as the protocol already says.
   The newest event can go too after 30 quiet days; a client that saw it
   still resumes, because the latest sequence number survives the prune.
@@ -50,8 +54,12 @@ hub thins its log's content after 30 days
 
 ## Consequences
 
-- The table holds at most 100,000 rows, about 20 MB, whatever the rate of
-  changes; at an ordinary rate it holds 30 days.
+- After each pass the table holds at most 100,000 rows, about 20 MB, and
+  no event older than 30 days; at an ordinary rate it holds 30 days.
+  Between passes, up to 24 hours, it grows by what that day writes.
+- After the clock goes back, an event younger than 30 days can go: a
+  later event that carries a time older than the cutoff takes every event
+  before it.
 - An app closed for more than 30 days, or over 100,000 events (a first
   scan of a very large vault, a long sync catch-up), reloads with
   `resync`, and its tabs do not follow the moves of that time.

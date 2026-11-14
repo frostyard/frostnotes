@@ -53,15 +53,18 @@ func (d *DB) ChangesSince(ctx context.Context, seq int64) ([]api.EventEnvelope, 
 	return out, rows.Err()
 }
 
-// PruneChanges deletes the durable events recorded before before, and all
-// but the newest keep, and returns how many it deleted. The daily prune
-// pass calls it (docs/design/vault.md#changes-log); a subscriber whose
-// sinceSeq it removed gets resync.
+// PruneChanges deletes the durable events up to the newest one recorded
+// before before, and all but the newest keep, and returns how many it
+// deleted. It deletes only from the oldest end, so the retained log has no
+// gap even when the clock went back between events, and events.subscribe
+// can tell a replay from a resync by the oldest seq. The daily prune pass
+// calls it (docs/design/vault.md#changes-log).
 func (d *DB) PruneChanges(ctx context.Context, before time.Time, keep int) (int64, error) {
 	var n int64
 	err := d.Tx(ctx, func(tx *Tx) error {
-		res, err := tx.ExecContext(ctx, `DELETE FROM changes WHERE at < ?
-			OR seq <= (SELECT COALESCE(MAX(seq), 0) FROM changes) - ?`, FormatTime(before), keep)
+		res, err := tx.ExecContext(ctx, `DELETE FROM changes WHERE seq <= MAX(
+			(SELECT COALESCE(MAX(seq), 0) FROM changes WHERE at < ?),
+			(SELECT COALESCE(MAX(seq), 0) FROM changes) - ?)`, FormatTime(before), keep)
 		if err != nil {
 			return fmt.Errorf("prune changes: %w", err)
 		}
