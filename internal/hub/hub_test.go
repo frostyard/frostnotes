@@ -415,3 +415,83 @@ func TestAPushAnswerIsRecordedWhenTheCallersContextEnds(t *testing.T) {
 		t.Fatalf("a repeated push appended to the log: %+v, %v", after, err)
 	}
 }
+
+// A batch of repeated pushes reads its earlier answers without the
+// database's write lock, so a writer that holds the lock (a local edit, a
+// scan, a push to another vault) does not hold the batch up, and the batch
+// does not queue for the lock once per item.
+func TestARepeatedBatchDoesNotWaitForTheWriteLock(t *testing.T) {
+	h := newHub(t)
+	ctx := t.Context()
+	token, device := h.pair("laptop")
+	c, err := h.dial(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := c.Log().Join(ctx, &api.LogJoinParams{Vault: h.vault.Sync})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var items []api.PushItem
+	for i, name := range []string{"one.md", "two.md", "three.md"} {
+		content := []byte("batch " + name + "\n")
+		hash := blobs.ID(content)
+		if resp := h.do(http.MethodPut, "/sync/blobs/"+hash, token, bytes.NewReader(content), nil); resp.StatusCode != http.StatusCreated {
+			t.Fatalf("upload = %s", resp.Status)
+		}
+		items = append(items, api.PushItem{Push: int64(i + 1), Path: name, Hash: &hash,
+			Source: api.VersionSourceEditor, Author: "app", At: time.Now()})
+	}
+	params := &api.LogPushParams{Vault: h.vault.Sync, Replica: rep.ID, Items: items}
+	first, err := c.Log().Push(ctx, params)
+	if err != nil || len(first) != len(items) {
+		t.Fatalf("first push = %+v, %v", first, err)
+	}
+	d, err := h.srv.DB.Device(ctx, device)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	held, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		done <- h.srv.DB.Tx(ctx, func(*store.Tx) error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+	type result struct {
+		as  []api.PushAnswer
+		err error
+	}
+	answered := make(chan result, 1)
+	go func() {
+		as, err := h.srv.Hub.PushAs(ctx, d, params)
+		answered <- result{as, err}
+	}()
+	var again result
+	select {
+	case again = <-answered:
+	case <-time.After(10 * time.Second):
+		// Without the fix the batch waits for the lock: free it so the
+		// test ends, and fail.
+		close(release)
+		<-answered
+		<-done
+		t.Fatal("a batch of repeated pushes waited for the database's write lock")
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if again.err != nil || len(again.as) != len(first) {
+		t.Fatalf("repeated batch = %+v, %v", again.as, again.err)
+	}
+	for i, a := range again.as {
+		f := first[i]
+		if a.Push != f.Push || a.Status != f.Status || a.File == nil || f.File == nil || a.File.File != f.File.File {
+			t.Errorf("repeated answer %d = %+v, want %+v", i, a, f)
+		}
+	}
+}

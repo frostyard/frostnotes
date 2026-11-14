@@ -2,10 +2,11 @@
 // Right sidebar panes): the active file's backlinks from note.backlinks,
 // each with its line; its unlinked mentions from a search for its title
 // and aliases, leaving out the notes that link to it; and its links from
-// note.links. Each reads again whenever the vault's files change.
+// note.links. Each reads again as the vault's links may change
+// (useLinksVersion): at once for a new, moved or removed file, else once
+// the saves stop.
 import { useEffect, useState } from "react";
 
-import { useFiles } from "../../data/files";
 import { notify } from "../../data/overlays";
 import { useClient } from "../../data/session";
 import { useNotes } from "../../data/stores";
@@ -17,6 +18,7 @@ import type { Backlink, Client } from "../../rpc/gen/api";
 import { activeTab } from "../../workspace/ops";
 import { useWorkspace } from "../../workspace/store";
 import { openInLodge, openOrCreate } from "../commands";
+import { useLinksVersion } from "../vaultChanges";
 import { openAtLine, openFile, whereOf } from "./open";
 
 const titleOf = (p: string) => p.slice(p.lastIndexOf("/") + 1).replace(/\.md$/i, "");
@@ -74,14 +76,14 @@ export function BacklinksContainer() {
   const client = useClient();
   const docs = useDocuments();
   const vaultId = useNotes((s) => s.vaultId);
-  const files = useFiles((s) => s.files);
+  const linksVersion = useLinksVersion();
   const path = useActivePath();
   // The last answers, for the file they answer: kept while the next loads, so the pane does not flicker.
   const [state, setState] = useState<{ path: string; linked: MentionGroup[]; unlinked: MentionGroup[] | null } | null>(
     null,
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: files is the trigger: any change in the vault may add or drop a mention
+  // biome-ignore lint/correctness/useExhaustiveDependencies: linksVersion is the trigger: a change in the vault may add or drop a mention
   useEffect(() => {
     if (vaultId === null || path === null) return;
     let stale = false;
@@ -100,7 +102,7 @@ export function BacklinksContainer() {
     return () => {
       stale = true;
     };
-  }, [client, vaultId, path, files]);
+  }, [client, vaultId, path, linksVersion]);
 
   const current = state !== null && state.path === path ? state : null;
   return (
@@ -121,11 +123,11 @@ export function BacklinksContainer() {
 export function OutgoingContainer() {
   const client = useClient();
   const vaultId = useNotes((s) => s.vaultId);
-  const files = useFiles((s) => s.files);
+  const linksVersion = useLinksVersion();
   const path = useActivePath();
   const [state, setState] = useState<{ path: string; links: OutgoingLink[] } | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: files is the trigger: a new or moved file resolves links
+  // biome-ignore lint/correctness/useExhaustiveDependencies: linksVersion is the trigger: a new or moved file resolves links, a save may change them
   useEffect(() => {
     if (vaultId === null || path === null) return;
     let stale = false;
@@ -136,7 +138,7 @@ export function OutgoingContainer() {
     return () => {
       stale = true;
     };
-  }, [client, vaultId, path, files]);
+  }, [client, vaultId, path, linksVersion]);
 
   return (
     <OutgoingPane

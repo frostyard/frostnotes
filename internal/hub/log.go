@@ -166,15 +166,21 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 	// A repeat gets the answer it got before; the new items apply in an
 	// order that frees each path before a move onto it, parking a file of
 	// each ring of moves first (vault.PushOrder).
+	// The batch's earlier answers come in 1 read, which takes no write
+	// lock: the log lock keeps every other push of this vault out.
+	pushes := make([]int64, len(p.Items))
+	for i, it := range p.Items {
+		pushes[i] = it.Push
+	}
+	answered, err := s.h.cfg.DB.PushAnswers(ctx, rep.ID, pushes)
+	if err != nil {
+		return nil, err
+	}
 	prior := make([]*store.PushAnswer, len(p.Items))
 	var fresh []int
 	var changes []vault.PushChange
 	for i, it := range p.Items {
-		a, seen, err := s.answered(ctx, rep, it.Push)
-		if err != nil {
-			return nil, err
-		}
-		if seen {
+		if a, seen := answered[it.Push]; seen {
 			prior[i] = &a
 			continue
 		}
@@ -193,6 +199,7 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 				if err := s.h.cfg.DB.Tx(bg, func(tx *store.Tx) error { return tx.RecordPush(bg, a) }); err != nil {
 					return nil, err
 				}
+				answered[it.Push] = a // a repeat later in this batch gets it
 				prior[i] = &a
 				continue
 			}
@@ -239,21 +246,6 @@ func (s logService) Push(ctx context.Context, p *api.LogPushParams) ([]api.PushA
 		return nil, errors.New("hub: the answer was lost, for the simulation")
 	}
 	return out, nil
-}
-
-// answered returns the answer push already got from replica rep, if any.
-func (s logService) answered(ctx context.Context, rep store.Replica, push int64) (store.PushAnswer, bool, error) {
-	var a store.PushAnswer
-	var seen bool
-	err := s.h.cfg.DB.Tx(ctx, func(tx *store.Tx) error {
-		got, err := tx.PushAnswer(ctx, rep.ID, push)
-		if errors.Is(err, store.ErrNotFound) {
-			return nil
-		}
-		a, seen = got, err == nil
-		return err
-	})
-	return a, seen, err
 }
 
 func changeOf(it api.PushItem) vault.PushChange {

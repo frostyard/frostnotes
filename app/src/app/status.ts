@@ -1,12 +1,11 @@
 // What the status bar shows (docs/specs/ui.md#status-bar): the vault's
-// sync state in words, the active note's backlinks, read again whenever
-// the vault's files change, and its words and characters, or its
-// selection's, counted once typing pauses.
+// sync state in words, the active note's backlinks, read again as the
+// vault's links may change (useLinksVersion), and its words and
+// characters, or its selection's, counted once typing pauses.
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { useFiles } from "../data/files";
 import { useClient } from "../data/session";
 import { useNotes } from "../data/stores";
 import type { DocumentRegistry } from "../editor/registry";
@@ -16,6 +15,7 @@ import type { StatusCounts, StatusSync } from "../features/status/StatusBar";
 import type { SyncStatus } from "../rpc/gen/api";
 import { activeTab } from "../workspace/ops";
 import { useWorkspace } from "../workspace/store";
+import { useLinksVersion } from "./vaultChanges";
 
 /** statusSync is the status bar's sync item for a vault's sync state. */
 export function statusSync(s: SyncStatus): StatusSync {
@@ -43,9 +43,9 @@ function syncText(s: SyncStatus): string {
 export function useBacklinkCount(path: string | null): number | null {
   const client = useClient();
   const vaultId = useNotes((s) => s.vaultId);
-  const files = useFiles((s) => s.files);
+  const linksVersion = useLinksVersion();
   const [count, setCount] = useState<number | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: files is the trigger: any change in the vault may add or drop a link
+  // biome-ignore lint/correctness/useExhaustiveDependencies: linksVersion is the trigger: a change in the vault may add or drop a link
   useEffect(() => {
     if (path === null || vaultId === null) {
       setCount(null);
@@ -59,7 +59,7 @@ export function useBacklinkCount(path: string | null): number | null {
     return () => {
       stale = true;
     };
-  }, [client, vaultId, path, files]);
+  }, [client, vaultId, path, linksVersion]);
   return count;
 }
 
