@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"time"
@@ -90,14 +91,53 @@ func (t *Tx) RecordPush(ctx context.Context, a PushAnswer) error {
 // PushAnswer returns the answer to push pushID of replica replicaID as this
 // transaction sees it, or ErrNotFound. Task card T-0025.
 func (t *Tx) PushAnswer(ctx context.Context, replicaID, pushID int64) (PushAnswer, error) {
+	return scanPushAnswer(t.QueryRowContext(ctx, pushAnswerSelect+` WHERE replica_id = ? AND push_id = ?`,
+		replicaID, pushID))
+}
+
+// PushAnswers returns the answers that replica replicaID got to the pushes
+// in pushes, by push ID; a push with no answer has no entry. It reads in 1
+// query outside a write transaction, so it never waits for a writer: the
+// caller keeps a push of the replica's vault from recording answers while
+// it reads (the hub's per-vault log lock).
+func (d *DB) PushAnswers(ctx context.Context, replicaID int64, pushes []int64) (map[int64]PushAnswer, error) {
+	out := make(map[int64]PushAnswer, len(pushes))
+	if len(pushes) == 0 {
+		return out, nil
+	}
+	ids, err := json.Marshal(pushes)
+	if err != nil {
+		return nil, fmt.Errorf("read push answers: %w", err)
+	}
+	rows, err := d.db.QueryContext(ctx, pushAnswerSelect+`
+		WHERE replica_id = ? AND push_id IN (SELECT value FROM json_each(?))`, replicaID, string(ids))
+	if err != nil {
+		return nil, fmt.Errorf("read push answers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		a, err := scanPushAnswer(rows)
+		if err != nil {
+			return nil, err
+		}
+		out[a.PushID] = a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read push answers: %w", err)
+	}
+	return out, nil
+}
+
+const pushAnswerSelect = `SELECT replica_id, push_id, COALESCE(file_id, 0),
+		status, reason, conflicts, base_pruned, at FROM hub_pushes`
+
+func scanPushAnswer(sc interface{ Scan(...any) error }) (PushAnswer, error) {
 	var a PushAnswer
 	var at string
-	err := t.QueryRowContext(ctx, `SELECT replica_id, push_id, COALESCE(file_id, 0),
-		status, reason, conflicts, base_pruned, at FROM hub_pushes WHERE replica_id = ? AND push_id = ?`,
-		replicaID, pushID).Scan(&a.ReplicaID, &a.PushID, &a.FileID, &a.Status, &a.Reason, &a.Conflicts, &a.BasePruned, &at)
-	if err != nil {
+	if err := sc.Scan(&a.ReplicaID, &a.PushID, &a.FileID, &a.Status, &a.Reason, &a.Conflicts, &a.BasePruned, &at); err != nil {
 		return PushAnswer{}, hubReadError("read push answer", err)
 	}
+	var err error
 	a.At, err = ParseTime(at)
 	return a, err
 }

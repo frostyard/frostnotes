@@ -117,6 +117,30 @@ func TestReplicasAndPushAnswers(t *testing.T) {
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("answering push 1 twice = %v, want ErrConflict", err)
 	}
+
+	// PushAnswers reads a batch's answers at once, without a write
+	// transaction: it does not wait for a writer that holds the lock.
+	desk := ht.device("desk")
+	var other Replica
+	ht.tx(func(tx *Tx) { other, _ = tx.AddReplica(ctx, desk, ht.vault.VaultID) })
+	ht.tx(func(tx *Tx) {
+		if err := tx.RecordPush(ctx, PushAnswer{ReplicaID: other.ID, PushID: 2, Status: api.PushStatusAccepted}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	var got map[int64]PushAnswer
+	ht.tx(func(*Tx) {
+		var err error
+		if got, err = ht.d.PushAnswers(ctx, rep.ID, []int64{3, 2, 1, 2}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if len(got) != 2 || got[1] != refused || got[2] != merged {
+		t.Fatalf("PushAnswers(3, 2, 1, 2) = %+v; want push 1 %+v and push 2 %+v", got, refused, merged)
+	}
+	if none, err := ht.d.PushAnswers(ctx, rep.ID, nil); err != nil || len(none) != 0 {
+		t.Fatalf("PushAnswers() = %+v, %v; want none", none, err)
+	}
 }
 
 func TestPushRecords(t *testing.T) {
