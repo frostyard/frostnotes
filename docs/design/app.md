@@ -196,6 +196,10 @@ lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
   aliases as phrases, leaving out the notes that link; a line opens its
   note at the line. Outgoing links: `note.links` through
   `lib/outgoing.ts`; an unresolved one is created where new notes go.
+  Both panes and the status bar's backlinks read again at once when the
+  set of paths changes (a file added, moved or removed), and otherwise 2 s
+  after the vault's files last changed (`app/vaultChanges.ts`, twice the
+  editor's save delay): a burst of saves costs 1 read, not 1 a save.
   Tags and All properties: `note.tags` and `note.properties`, sorted by
   name or count. Tasks: `note.tasks` lists open tasks in path and line
   order, grouped by note, and opens a task's note at its line. Outline:
@@ -550,8 +554,9 @@ content type by extension, from one table:
   from it last first. A menu or prompt gives focus back to what had it
   when it closes. The status bar (`app/status.ts`) shows the sync state
   in words, the active note's backlinks (`note.backlinks`, again as the
-  vault changes), its words and characters, or its selection's, counted
-  150 ms after the last change, and its mode.
+  vault's links may change, as the link panes do), its words and
+  characters, or its selection's, counted 150 ms after the last change,
+  and its mode.
 - **The window has one key listener,** in the bubble phase, so
   CodeMirror and fields handle their own keys first. It skips events
   already handled, maps the rest with `lib/keymap.ts` (Obsidian's default

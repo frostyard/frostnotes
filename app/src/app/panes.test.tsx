@@ -17,6 +17,7 @@ import { fileRow, findFileRow } from "../testing/files";
 import { emptyWorkspace } from "../workspace/model";
 import { useWorkspace } from "../workspace/store";
 import { App } from "./App";
+import { LINKS_DELAY } from "./vaultChanges";
 
 afterEach(() => {
   useNotes.setState({ connection: { state: "connecting" }, hello: null, vaults: [], vaultId: null });
@@ -193,6 +194,31 @@ describe("the link panes", () => {
     expect(within(unlinked).getByRole("button", { name: "Notes" })).toBeTruthy();
     await user.click(line);
     expect(tabs()).toEqual(["Orchard"]);
+  });
+
+  it("read a note's backlinks again once the vault's saves stop, not at each save", async () => {
+    const { mock, user } = await start();
+    await user.click(fileRow("Quince.md"));
+    const linked = await screen.findByRole("region", { name: "Linked mentions" });
+    await within(linked).findByRole("button", { name: "Plant the [[Quince]] soon, and a [[Pear]]." });
+    await screen.findByRole("button", { name: "1 backlink" });
+    const reads = () => mock.calls.filter((c) => c.method === "note.backlinks").length;
+    const before = reads();
+    // 3 saves of a note, as a person who types with short pauses makes them.
+    for (const text of ["Ask about quince.\n", "Ask about [[Quince]].\n", "Ask about [[Quince]] prices.\n"]) {
+      const hash = useFiles.getState().files.get("Notes.md")?.hash;
+      act(() => mock.vault(3).outside("Notes.md", text));
+      await waitFor(() => expect(useFiles.getState().files.get("Notes.md")?.hash).not.toBe(hash));
+    }
+    expect(reads()).toBe(before);
+    await within(linked).findByRole(
+      "button",
+      { name: "Ask about [[Quince]] prices." },
+      { timeout: LINKS_DELAY + 2000 },
+    );
+    await screen.findByRole("button", { name: "2 backlinks" });
+    // 1 read for the pane and 1 for the status bar.
+    expect(reads()).toBe(before + 2);
   });
 
   it("list a note's links, and create an unresolved one", async () => {
