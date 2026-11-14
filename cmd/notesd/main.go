@@ -172,7 +172,8 @@ func runWith(ctx context.Context, args []string, o runOptions) error {
 	db.OnCommit = broker.Publish
 
 	// One actor per vault scans and watches it and makes its writes; the
-	// manager also prunes versions daily (docs/design/vault.md).
+	// manager also prunes versions and the changes log daily
+	// (docs/design/vault.md).
 	vaults := vault.NewManager(vault.Config{DB: db, Blobs: blobs.New(paths.Blobs), Log: logger, Publish: broker.Publish,
 		Problems: rec})
 	vctx, stopVaults := context.WithCancel(ctx)

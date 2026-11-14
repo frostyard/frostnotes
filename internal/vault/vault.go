@@ -35,9 +35,14 @@ type Config struct {
 	Rescan, NetworkRescan time.Duration
 	// Batch is the most files one scan transaction indexes [200].
 	Batch int
-	// Keep is how long versions are kept [30 days]; PruneEvery is the
-	// interval of the pass that prunes them [24h].
+	// Keep is how long versions and the changes log's durable events are
+	// kept [30 days]; PruneEvery is the interval of the pass that prunes
+	// them [24h].
 	Keep, PruneEvery time.Duration
+	// KeepEvents is the most durable events the changes log keeps, the
+	// newest, however young the older ones are [100,000]
+	// (docs/design/vault.md#changes-log).
+	KeepEvents int
 	// Crash, when set, is asked at each point a crash could fall
 	// ("renamed": after a change's rename, before its transaction;
 	// "applying": in Apply's delete, before the file is removed); true
@@ -75,6 +80,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.PruneEvery == 0 {
 		c.PruneEvery = 24 * time.Hour
+	}
+	if c.KeepEvents == 0 {
+		c.KeepEvents = 100_000
 	}
 	return c
 }

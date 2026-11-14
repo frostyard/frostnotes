@@ -175,6 +175,11 @@ Clients ignore unknown fields and unknown events.
   than the retained log, ahead of the latest `seq`, or negative, the result
   has `resync: true`, nothing is replayed, and the client must refetch its
   state.
+- notesd retains the durable events of the last 30 days, at most the
+  newest 100,000; the latest `seq` survives a prune, so a client that saw
+  it never needs a resync
+  ([ADR-0044](../adr/0044-the-changes-log-keeps-30-days-and-at-most-100000-events.md),
+  [design/vault.md](../design/vault.md#changes-log)).
 - An event reaches a connection only when its domain admits the
   connection's caller (`api.EventAdmits`, generated from each domain's
   `callers`), as a method does: a device on a hub receives `log` events

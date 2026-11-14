@@ -15,7 +15,7 @@ import (
 )
 
 // Manager runs one actor per registered vault, and the daily pass that
-// prunes versions and blobs.
+// prunes versions, blobs and the changes log.
 type Manager struct {
 	cfg Config
 
@@ -46,7 +46,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.wg.Go(func() {
 		for {
 			if err := m.Prune(ctx); err != nil && ctx.Err() == nil {
-				m.cfg.Log.Warn("prune versions", "err", err)
+				m.cfg.Log.Warn("prune", "err", err)
 			}
 			select {
 			case <-ctx.Done():
@@ -147,7 +147,9 @@ func (m *Manager) Vault(id int64) (*Vault, error) {
 // with
 // every vault's changes held off, and no vault starting, so none can name
 // a blob it removes (docs/design/vault.md#versions); requests that only
-// read the index go on. Temporary blobs older than an hour go too.
+// read the index go on. Temporary blobs older than an hour go too, and so
+// do the changes log's durable events older than Config.Keep and all but
+// its newest Config.KeepEvents (docs/design/vault.md#changes-log).
 func (m *Manager) Prune(ctx context.Context) error {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
@@ -208,6 +210,13 @@ func (m *Manager) Prune(ctx context.Context) error {
 	}
 	if len(freed) > 0 || orphans > 0 {
 		m.cfg.Log.Info("pruned versions", "blobs", len(freed), "orphans", orphans)
+	}
+	dropped, err := m.cfg.DB.PruneChanges(ctx, now.Add(-m.cfg.Keep), m.cfg.KeepEvents)
+	if err != nil {
+		return err
+	}
+	if dropped > 0 {
+		m.cfg.Log.Info("pruned the changes log", "events", dropped)
 	}
 	return nil
 }

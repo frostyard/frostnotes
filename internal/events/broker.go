@@ -93,11 +93,23 @@ func (b *Broker) Subscribe(ctx context.Context, sinceSeq *int64) (*Subscription,
 		info.Resync = true
 		return s, info, nil
 	}
-	s.replay, err = b.log.ChangesSince(ctx, *sinceSeq)
+	replay, err := b.log.ChangesSince(ctx, *sinceSeq)
 	if err != nil {
 		s.Close()
 		return nil, api.Subscription{}, err
 	}
+	// The prune pass can delete the oldest events between the two reads.
+	// It only deletes from the oldest end, so the oldest seq read after the
+	// replay shows whether the replay still starts right after sinceSeq.
+	if oldest, err = b.log.OldestSeq(ctx); err != nil {
+		s.Close()
+		return nil, api.Subscription{}, err
+	}
+	if oldest == 0 || *sinceSeq < oldest-1 {
+		info.Resync = true
+		return s, info, nil
+	}
+	s.replay = replay
 	return s, info, nil
 }
 

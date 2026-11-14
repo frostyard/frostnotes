@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/frostyard/frostnotes/api"
 )
@@ -248,13 +249,42 @@ func TestPruneKeepsLatestSeq(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := d.PruneChanges(ctx, 2); err != nil {
-		t.Fatal(err)
+	if n, err := d.PruneChanges(ctx, time.Time{}, 2); err != nil || n != 3 {
+		t.Fatalf("PruneChanges = %d, %v; want 3 deleted", n, err)
 	}
 	oldest, _ := d.OldestSeq(ctx)
 	latest, _ := d.LatestSeq(ctx)
 	if oldest != 4 || latest != 5 {
 		t.Fatalf("after prune oldest=%d latest=%d, want 4 and 5", oldest, latest)
+	}
+}
+
+// PruneChanges also deletes the events recorded before its cutoff, the
+// newest included; LatestSeq still reports the newest seq.
+func TestPruneChangesByAge(t *testing.T) {
+	d, _ := openTest(t)
+	ctx := t.Context()
+	now := testNow
+	d.Now = func() time.Time { return now }
+	for i := range 3 {
+		if err := d.Tx(ctx, func(tx *Tx) error { return tx.Emit(ctx, api.VaultRemoved{ID: int64(i)}) }); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(time.Hour)
+	}
+	if n, err := d.PruneChanges(ctx, testNow.Add(90*time.Minute), 100); err != nil || n != 2 {
+		t.Fatalf("PruneChanges = %d, %v; want the 2 events older than the cutoff", n, err)
+	}
+	if oldest, _ := d.OldestSeq(ctx); oldest != 3 {
+		t.Fatalf("oldest = %d, want 3", oldest)
+	}
+	if n, err := d.PruneChanges(ctx, now, 100); err != nil || n != 1 {
+		t.Fatalf("PruneChanges = %d, %v; want the last event too", n, err)
+	}
+	oldest, _ := d.OldestSeq(ctx)
+	latest, _ := d.LatestSeq(ctx)
+	if oldest != 0 || latest != 3 {
+		t.Fatalf("after prune oldest=%d latest=%d, want 0 and 3", oldest, latest)
 	}
 }
 
