@@ -42,15 +42,18 @@ Work is split per
 
 Status (2026-11-13): **Done.** All 7 phases are done or accepted. The
 leftovers were checked against `main` at 851670a on 2026-11-13; three
-real gaps stay open as issues:
+real gaps became issues, and all three are now closed:
 
 - [#228](https://github.com/frostyard/frostnotes/issues/228): a narrow
-  window offers Split right and Split down (Phase 5).
+  window offers Split right and Split down (Phase 5). Fixed by #232,
+  2026-11-13.
 - [#229](https://github.com/frostyard/frostnotes/issues/229): a narrow
   window follows the editor's focus, not the on-screen keyboard
-  (Phase 5).
+  (Phase 5). Fixed by #232, 2026-11-13.
 - [#230](https://github.com/frostyard/frostnotes/issues/230): the XSS
   check in Safari on the iPhone (Phase 6), which needs the user's phone.
+  Checked by the owner on an iPhone, 2026-11-13
+  ([Phase 6](#phase-6--security-review-planner-an-independent-agent)).
 
 What the check found for each leftover:
 
@@ -65,7 +68,9 @@ What the check found for each leftover:
 - *Phase 6's Chrome PDF viewer:* answered on 2026-11-13: Chromium shows
   a PDF under lodge-content's sandbox
   ([open questions](#open-questions)).
-- *Phase 6's XSS on the phone:* #230.
+- *Phase 6's XSS on the phone:* #230; checked by the owner on an
+  iPhone, 2026-11-13, with no failure reported
+  ([Phase 6](#phase-6--security-review-planner-an-independent-agent)).
 - *Phase 7's 7 days of sync through lodge:* no lost edit was reported,
   but the daily checks were not recorded, so the trial is not verified
   in full; [what is recorded](#the-7-days-of-sync-through-lodge-to-2026-11-02).
@@ -546,10 +551,18 @@ lodge's phase 2.
     `TestTheSocketKeepsLodgesRules`, and the platform review's "checked
     and sound".
 
-  **Pending:**
-  - XSS in the phone's browser, on the user's phone (Phase 7): not run
-    at Phase 7; [#230](https://github.com/frostyard/frostnotes/issues/230)
-    (2026-11-13).
+  **Once pending, now closed (2026-11-13):** Phase 6 has nothing
+  pending.
+  - *XSS in the phone's browser* (not run at Phase 7;
+    [#230](https://github.com/frostyard/frostnotes/issues/230)):
+    checked by the owner on an iPhone, 2026-11-13. In Safari, through
+    lodge, rendered notes ran no script; the owner reported no
+    failure. This record stands on the owner's report: no agent saw
+    the run, and the iOS and Safari versions, the payloads used and
+    how the result was observed (Web Inspector or a visible payload)
+    were not recorded. #230 asked for the versions and the way of
+    observation; the check is closed without them, on the owner's
+    report, and the owner's merge of this record accepts that gap.
   - Chrome's PDF viewer under lodge-content's sandbox (review 12, an
     open question): *answered 2026-11-13*, Chromium shows it
     ([open questions](#open-questions)).

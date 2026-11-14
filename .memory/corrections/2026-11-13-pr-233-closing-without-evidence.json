@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "docs-plans",
+  "correction": "A plan record that closes an item whose issue asks for specific evidence (versions, the way of observation) names each missing piece and who accepts closing without it; saying only that the evidence was not recorded does not meet the issue's Done when.",
+  "evidence": "frostnotes#233: the cross-review at c16e6f9 found that plan 0006 closed Phase 6 and #230 while it said that the iOS and Safari versions and the way of observation, which #230 asked for, were not recorded, with no acceptance of that gap; the record now names the gap and that the owner's merge accepts it, and AGENTS.md's Housekeeping rule says so",
+  "promoted_to": "AGENTS.md (Documentation rules, Housekeeping)"
+}
