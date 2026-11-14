@@ -373,6 +373,7 @@ func TestReleasedMigrationsKeepTheirText(t *testing.T) {
 		"0004_hub_url.sql":              "7c4992079cfe9cfc1340aa268dfd88a7418f9997c69e32aa5e916a5679c2d623",
 		"0005_sync_push_base_hash.sql":  "e3c319c887a2787ec9e92054b7e28619626e28b8fa96b6b52278aaf400218d9c",
 		"0006_sync_applying.sql":        "5772ed39e1bd6781ba24da8332f7349803feda15038682981513c9fcbb9cc846",
+		"0007_sync_pushes_refused.sql":  "dfd3209539786a62ba288db391a3b00503263348514fdfaa59f6660c6ba300e0",
 	}
 	ms, err := loadMigrations()
 	if err != nil {

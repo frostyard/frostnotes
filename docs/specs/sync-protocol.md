@@ -541,7 +541,7 @@ joins again with a new replica.
 | Artifact | Derivation |
 | --- | --- |
 | `api/zz_generated.go`, `app/src/rpc/gen/api.ts`, [rpc-api.md](rpc-api.md) | `make gen` from `schema/rpc/hub.yaml`, `sync.yaml` and `log.yaml` |
-| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql`, `0005_sync_push_base_hash.sql`, `0006_sync_applying.sql` | the hub's and devices' state in this spec |
+| `internal/store/migrations/0002_sync.sql`, `0003_sync_conflict_pushes.sql`, `0005_sync_push_base_hash.sql`, `0006_sync_applying.sql`, `0007_sync_pushes_refused.sql` | the hub's and devices' state in this spec |
 
 ## References
 

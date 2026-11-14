@@ -335,25 +335,13 @@ func (d *DB) AgreedRows(ctx context.Context, vaultID int64) ([]Agreed, error) {
 // T-0027.
 func (d *DB) Pending(ctx context.Context, vaultID int64) ([]Change, error) {
 	// One statement gives all three tables a consistent read snapshot.
-	rows, err := d.db.QueryContext(ctx, `WITH changes AS (
-		SELECT f.id AS file_id, f.path, f.hash, CASE WHEN a.file_id IS NULL THEN 2 ELSE 1 END AS kind
-		FROM files f LEFT JOIN sync_files a ON a.file_id = f.id
-		WHERE f.vault_id = ? AND (a.file_id IS NULL OR f.path <> a.path OR f.hash <> a.hash)
-		UNION ALL
-		SELECT a.file_id, a.path, '', 0 FROM sync_files a
-		WHERE a.vault_id = ? AND NOT EXISTS (SELECT 1 FROM files f WHERE f.id = a.file_id)
-	)
+	rows, err := d.db.QueryContext(ctx, pendingWith+`
 	SELECT c.file_id, c.path, c.hash, c.kind,
 		COALESCE(a.vault_id, 0), COALESCE(a.hub_file, 0), COALESCE(a.file_id, 0),
 		COALESCE(a.seq, 0), COALESCE(a.revision, 0), COALESCE(a.path, ''),
 		COALESCE(a.hash, ''), COALESCE(a.conflicted, 0)
-	FROM changes c LEFT JOIN sync_files a ON a.file_id = c.file_id
-	WHERE NOT EXISTS (
-		SELECT 1 FROM sync_pushes p WHERE p.vault_id = ? AND p.file_id = c.file_id
-		AND p.push_id = (SELECT MAX(latest.push_id) FROM sync_pushes latest
-			WHERE latest.vault_id = p.vault_id AND latest.file_id = p.file_id)
-		AND p.status = 'refused' AND p.reason <> 'missing' AND p.path = c.path AND p.hash = c.hash
-	) ORDER BY c.kind, c.path`, vaultID, vaultID, vaultID)
+	FROM pending c LEFT JOIN sync_files a ON a.file_id = c.file_id
+	ORDER BY c.kind, c.path`, slices.Repeat([]any{vaultID}, pendingWithArgs)...)
 	if err != nil {
 		return nil, fmt.Errorf("list pending: %w", err)
 	}
@@ -375,6 +363,102 @@ func (d *DB) Pending(ctx context.Context, vaultID int64) ([]Change, error) {
 	}
 	return out, hubReadError("list pending", rows.Err())
 }
+
+// pendingWith is the WITH clause of Pending: the table pending (file_id,
+// path, hash, kind) holds a vault's changes to push, with kind 0 for a
+// delete, 1 for a put and 2 for a create. It takes the vault ID
+// pendingWithArgs times.
+const pendingWith = `WITH changes AS (
+		SELECT f.id AS file_id, f.path, f.hash, CASE WHEN a.file_id IS NULL THEN 2 ELSE 1 END AS kind
+		FROM files f LEFT JOIN sync_files a ON a.file_id = f.id
+		WHERE f.vault_id = ? AND (a.file_id IS NULL OR f.path <> a.path OR f.hash <> a.hash)
+		UNION ALL
+		SELECT a.file_id, a.path, '', 0 FROM sync_files a
+		WHERE a.vault_id = ? AND NOT EXISTS (SELECT 1 FROM files f WHERE f.id = a.file_id)
+	), pending AS (
+		SELECT c.file_id, c.path, c.hash, c.kind FROM changes c
+		WHERE NOT EXISTS (
+			SELECT 1 FROM sync_pushes p WHERE p.vault_id = ? AND p.file_id = c.file_id
+			AND p.push_id = (SELECT MAX(latest.push_id) FROM sync_pushes latest
+				WHERE latest.vault_id = p.vault_id AND latest.file_id = p.file_id)
+			AND p.status = 'refused' AND p.reason <> 'missing' AND p.path = c.path AND p.hash = c.hash)
+	)`
+
+const pendingWithArgs = 3
+
+// pendingConflictsFrom is the FROM and WHERE of PendingConflicts, with the
+// versions as v and their agreed rows as a. It takes the vault ID
+// pendingConflictsArgs times.
+const pendingConflictsFrom = `FROM versions v JOIN sync_files a ON a.file_id = v.file_id AND a.vault_id = ?
+		WHERE v.vault_id = ? AND v.conflict = 1 AND v.hash != ''
+		AND NOT EXISTS (SELECT 1 FROM sync_pushes p WHERE p.vault_id = ? AND p.file_id = v.file_id AND p.hash = v.hash)`
+
+const pendingConflictsArgs = 3
+
+// SyncCounts are the counts of a vault's sync.status, as SyncCounts reads
+// them in one statement.
+type SyncCounts struct {
+	Changes             int64 // the changes Pending lists
+	Lost                int64 // the conflict versions PendingConflicts lists
+	UnansweredConflicts int64 // the conflict pushes Unanswered lists
+	Conflicted          int64 // the agreed rows AgreedRows lists as conflicted
+}
+
+// Pending is what is still to go to the hub: the changes, the conflict
+// versions no push has carried, and the conflict pushes without an answer,
+// which are no change of a file but still to go.
+func (c SyncCounts) Pending() int64 { return c.Changes + c.Lost + c.UnansweredConflicts }
+
+// SyncCounts counts vault vaultID's pending changes, pending conflicts,
+// unanswered conflict pushes and conflicted agreed rows, without reading
+// the rows: sync.status shows only the numbers, after every sync cycle.
+func (d *DB) SyncCounts(ctx context.Context, vaultID int64) (SyncCounts, error) {
+	var c SyncCounts
+	// One statement gives the four counts a consistent read snapshot.
+	err := d.db.QueryRowContext(ctx, pendingWith+`
+	SELECT (SELECT COUNT(*) FROM pending),
+		(SELECT COUNT(*) `+pendingConflictsFrom+`),
+		(SELECT COUNT(*) FROM sync_pushes WHERE vault_id = ? AND status IS NULL AND conflict = 1),
+		(SELECT COUNT(*) FROM sync_files WHERE vault_id = ? AND conflicted = 1)`,
+		slices.Repeat([]any{vaultID}, pendingWithArgs+pendingConflictsArgs+2)...).
+		Scan(&c.Changes, &c.Lost, &c.UnansweredConflicts, &c.Conflicted)
+	if err != nil {
+		return SyncCounts{}, fmt.Errorf("count sync status: %w", err)
+	}
+	return c, nil
+}
+
+// Refusals returns vault vaultID's refusals that still stand, by path: each
+// push that is its file's newest answered push, was refused, and whose file
+// still has the push's path and hash, or is gone for a refused delete. A
+// non-nil empty slice when none. The partial index sync_pushes_refused keeps
+// the read to the refused pushes, not every push the device made.
+func (d *DB) Refusals(ctx context.Context, vaultID int64) ([]LocalPush, error) {
+	rows, err := d.db.QueryContext(ctx, refusalsQuery, vaultID)
+	if err != nil {
+		return nil, fmt.Errorf("list refusals: %w", err)
+	}
+	defer rows.Close()
+	out := []LocalPush{}
+	for rows.Next() {
+		p, err := scanLocalPush(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, hubReadError("list refusals", rows.Err())
+}
+
+// refusalsQuery is Refusals' statement; it takes the vault ID. The status
+// is a literal, not a parameter, so SQLite can use the partial index.
+const refusalsQuery = `SELECT ` + localPushColumns + ` FROM sync_pushes p
+	WHERE p.vault_id = ? AND p.status = 'refused'
+	AND NOT EXISTS (SELECT 1 FROM sync_pushes newer WHERE newer.file_id = p.file_id
+		AND newer.push_id > p.push_id AND newer.vault_id = p.vault_id AND newer.status IS NOT NULL)
+	AND (EXISTS (SELECT 1 FROM files f WHERE f.id = p.file_id AND f.path = p.path AND f.hash = p.hash)
+		OR (p.hash = '' AND NOT EXISTS (SELECT 1 FROM files f WHERE f.id = p.file_id)))
+	ORDER BY p.path, p.push_id`
 
 // AddPush records p with PushID the vault's highest + 1 (from 1), At =
 // t.Now() and no answer (p.PushID, p.At, p.Status and p.Reason are
@@ -507,10 +591,8 @@ type LostLocally struct {
 // and flags the file (docs/specs/sync-protocol.md, Pending changes).
 func (d *DB) PendingConflicts(ctx context.Context, vaultID int64) ([]LostLocally, error) {
 	rows, err := d.db.QueryContext(ctx, `SELECT v.file_id, v.path, v.hash, `+agreedColumnsOf("a")+`
-		FROM versions v JOIN sync_files a ON a.file_id = v.file_id AND a.vault_id = ?
-		WHERE v.vault_id = ? AND v.conflict = 1 AND v.hash != ''
-		AND NOT EXISTS (SELECT 1 FROM sync_pushes p WHERE p.vault_id = ? AND p.file_id = v.file_id AND p.hash = v.hash)
-		ORDER BY v.id`, vaultID, vaultID, vaultID)
+		`+pendingConflictsFrom+`
+		ORDER BY v.id`, slices.Repeat([]any{vaultID}, pendingConflictsArgs)...)
 	if err != nil {
 		return nil, fmt.Errorf("list pending conflicts: %w", err)
 	}
