@@ -1346,46 +1346,22 @@ func (l *loop) ignored(p string) bool {
 	return err == nil && v.Ignores(p)
 }
 
-// refreshStatus recomputes the counts sync.status shows.
+// refreshStatus recomputes the counts sync.status shows. It runs after
+// every cycle, an idle one too, so it counts in SQL and reads only the
+// refused pushes.
 func (l *loop) refreshStatus(ctx context.Context) error {
 	db := l.s.cfg.DB
 	remote, err := db.Remote(ctx, l.vaultID)
 	if err != nil {
 		return err
 	}
-	changes, err := db.Pending(ctx, l.vaultID)
-	if err != nil {
-		return err
-	}
-	lost, err := db.PendingConflicts(ctx, l.vaultID)
-	if err != nil {
-		return err
-	}
-	// A conflict push without an answer is no change of a file, but it
-	// is still to go.
-	sends, err := db.Unanswered(ctx, l.vaultID)
-	if err != nil {
-		return err
-	}
-	unsent := 0
-	for _, p := range sends {
-		if p.Conflict {
-			unsent++
-		}
-	}
-	rows, err := db.AgreedRows(ctx, l.vaultID)
+	counts, err := db.SyncCounts(ctx, l.vaultID)
 	if err != nil {
 		return err
 	}
 	refused, err := l.refusals(ctx)
 	if err != nil {
 		return err
-	}
-	conflicts := 0
-	for _, a := range rows {
-		if a.Conflicted {
-			conflicts++
-		}
 	}
 	h, err := db.SyncHub(ctx, remote.Hub)
 	if err != nil {
@@ -1394,7 +1370,7 @@ func (l *loop) refreshStatus(ctx context.Context) error {
 	l.mu.Lock()
 	l.status.URL, l.status.HubVault, l.status.Cursor = h.URL, remote.Name, remote.Cursor
 	l.status.HubSeq = max(l.status.HubSeq, remote.HubSeq)
-	l.status.Pending, l.status.Conflicts, l.status.Refused = int64(len(changes)+len(lost)+unsent), int64(conflicts), refused
+	l.status.Pending, l.status.Conflicts, l.status.Refused = counts.Pending(), counts.Conflicted, refused
 	l.status.Skipped = l.status.Skipped[:0]
 	for p := range l.skipped {
 		l.status.Skipped = append(l.status.Skipped, p)
@@ -1408,38 +1384,17 @@ func (l *loop) refreshStatus(ctx context.Context) error {
 	return nil
 }
 
-// refusals lists the files whose newest push was refused and that are
-// still in the refused state.
+// refusals lists the refused pushes sync.status shows: those that still
+// stand (store.DB.Refusals), by path.
 func (l *loop) refusals(ctx context.Context) ([]api.SyncRefusal, error) {
-	db := l.s.cfg.DB
-	pushes, err := db.Pushes(ctx, l.vaultID)
+	pushes, err := l.s.cfg.DB.Refusals(ctx, l.vaultID)
 	if err != nil {
 		return nil, err
 	}
-	newest := map[int64]store.LocalPush{}
+	out := make([]api.SyncRefusal, 0, len(pushes))
 	for _, p := range pushes {
-		newest[p.FileID] = p
+		out = append(out, api.SyncRefusal{Path: p.Path, Reason: p.Reason, At: p.At})
 	}
-	out := []api.SyncRefusal{}
-	for _, p := range newest {
-		if p.Status != api.PushStatusRefused {
-			continue
-		}
-		f, err := db.FileByID(ctx, p.FileID)
-		still := (errors.Is(err, store.ErrNotFound) && p.Hash == "") || (err == nil && f.Path == p.Path && f.Hash == p.Hash)
-		if still {
-			out = append(out, api.SyncRefusal{Path: p.Path, Reason: p.Reason, At: p.At})
-		}
-	}
-	slices.SortFunc(out, func(a, b api.SyncRefusal) int {
-		if a.Path < b.Path {
-			return -1
-		}
-		if a.Path > b.Path {
-			return 1
-		}
-		return 0
-	})
 	return out, nil
 }
 
