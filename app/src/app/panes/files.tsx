@@ -18,6 +18,7 @@ import type { Client } from "../../rpc/gen/api";
 import { activeTab, open, setFileSort, setFolderOpen, setFoldersOpen } from "../../workspace/ops";
 import { useWorkspace } from "../../workspace/store";
 import { copyPath, createNote, deleteFile, newNotePath } from "../commands";
+import { item, SEP } from "../menus";
 import { openOutside, openOutsideLabel } from "../system";
 import { openFile } from "./open";
 
@@ -211,13 +212,6 @@ async function drop(
 
 // openFilesMenu opens a row's context menu, or the root's (path null).
 function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: boolean, x: number, y: number): void {
-  const item = (id: string, label: string, extra: Partial<Extract<MenuItem, { kind: "item" }>> = {}): MenuItem => ({
-    kind: "item",
-    id,
-    label,
-    ...extra,
-  });
-  const sep: MenuItem = { kind: "separator" };
   const outside = folder || path === null ? null : openOutsideLabel(path);
   const items: MenuItem[] = folder
     ? [
@@ -226,24 +220,24 @@ function openFilesMenu(c: Client, vaultId: number, path: string | null, folder: 
         ...(path === null
           ? []
           : [
-              sep,
+              SEP,
               item("rename", "Rename…", { keys: "F2" }),
               item("move", "Move folder to…"),
-              sep,
+              SEP,
               item("delete", "Delete"),
             ]),
       ]
     : [
         item("open-tab", "Open in new tab"),
         item("open-right", "Open to the right"),
-        sep,
+        SEP,
         item("rename", "Rename…", { keys: "F2" }),
         item("move", "Move file to…"),
-        sep,
+        SEP,
         item("copy-path", "Copy path"),
         item("history", "Open version history"),
         ...(outside === null ? [] : [item("open-default", outside)]),
-        sep,
+        SEP,
         item("delete", "Delete"),
       ];
   const at = path ?? "";

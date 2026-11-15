@@ -32,13 +32,19 @@ import { openOutside, openOutsideLabel } from "./system";
 
 const update = (op: Parameters<ReturnType<typeof useWorkspace.getState>["update"]>[0]) =>
   useWorkspace.getState().update(op);
-const item = (id: string, label: string, extra: Partial<Extract<MenuItem, { kind: "item" }>> = {}): MenuItem => ({
+/** item makes a menu entry with an id, a label and any other fields. */
+export const item = (
+  id: string,
+  label: string,
+  extra: Partial<Extract<MenuItem, { kind: "item" }>> = {},
+): MenuItem => ({
   kind: "item",
   id,
   label,
   ...extra,
 });
-const SEP: MenuItem = { kind: "separator" };
+/** SEP separates groups of menu entries. */
+export const SEP: MenuItem = { kind: "separator" };
 // The split items, none in a narrow window, which draws one group
 // (docs/specs/ui.md#narrow-windows).
 const splitItems = (): MenuItem[] =>

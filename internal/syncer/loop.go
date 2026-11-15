@@ -656,6 +656,9 @@ func fromHub(author, device string) vault.Author {
 	return vault.Author{Source: api.VersionSourceSync, Name: name}
 }
 
+// syncAuthor is the author of what sync itself writes.
+func syncAuthor() vault.Author { return vault.Author{Source: api.VersionSourceSync, Name: "sync"} }
+
 // answer records the hub's answer to push p and makes the file what the
 // hub now has, where it still holds what was pushed.
 // answering is the pushes of one log.push whose answers are being applied, in
@@ -685,7 +688,7 @@ func (l *loop) makeRoom(ctx context.Context, v *vault.Vault, b *answering, p str
 		}
 		to := vault.Beside(p, fmt.Sprintf(".sync-%d", q.FileID))
 		if _, err := v.Apply(ctx, vault.Expect{Path: p, Hash: q.Hash}, vault.Head{Path: to, Hash: q.Hash},
-			vault.Author{Source: api.VersionSourceSync, Name: "sync"}, nil); err != nil {
+			syncAuthor(), nil); err != nil {
 			if errors.Is(err, vault.ErrChanged) {
 				return nil
 			}
@@ -836,7 +839,7 @@ func (l *loop) dropOther(ctx context.Context, prev store.Agreed) error {
 	in := store.Applying{HubFile: prev.HubFile, FileID: prev.FileID, Seq: prev.Seq, Revision: prev.Revision,
 		Path: prev.Path, Deleted: true}
 	_, err = l.applying(ctx, v, in, vault.Expect{Path: prev.Path, Hash: prev.Hash},
-		vault.Author{Source: api.VersionSourceSync, Name: "sync"})
+		syncAuthor())
 	if errors.Is(err, vault.ErrChanged) {
 		bg := context.WithoutCancel(ctx)
 		return l.s.cfg.DB.Tx(bg, func(tx *store.Tx) error { return l.agree(in)(bg, tx, store.File{}) })
@@ -1047,7 +1050,7 @@ func (l *loop) finishOne(ctx context.Context, v *vault.Vault, in store.Applying)
 		}
 		return tx.DeleteApplying(ctx, l.vaultID, in.HubFile)
 	}
-	who := vault.Author{Source: api.VersionSourceSync, Name: "sync"}
+	who := syncAuthor()
 	// Expecting the state the head makes changes nothing on disk: Apply
 	// brings the index up to date with the path, compares, and runs rec.
 	exp, head := vault.Expect{Path: in.At, Hash: in.Hash}, vault.Head{Path: in.At, Hash: in.Hash}
@@ -1263,7 +1266,7 @@ func (l *loop) clearPath(ctx context.Context, v *vault.Vault, p string, self int
 	}
 	a.Path = vault.Beside(p, fmt.Sprintf(".sync-%d", a.HubFile))
 	_, err = v.Apply(ctx, vault.Expect{Path: p, Hash: occ.Hash}, vault.Head{Path: a.Path, Hash: occ.Hash},
-		vault.Author{Source: api.VersionSourceSync, Name: "sync"},
+		syncAuthor(),
 		func(ctx context.Context, tx *store.Tx, _ store.File) error { return tx.PutAgreed(ctx, a) })
 	if errors.Is(err, vault.ErrChanged) {
 		return false, nil
@@ -1317,7 +1320,7 @@ func (l *loop) unpark(ctx context.Context) error {
 			return tx.PutAgreed(ctx, a)
 		}
 		_, err = v.Apply(ctx, vault.Expect{Path: pk.to, Hash: f.Hash}, vault.Head{Path: back, Hash: f.Hash},
-			vault.Author{Source: api.VersionSourceSync, Name: "sync"}, rec)
+			syncAuthor(), rec)
 		switch {
 		case errors.Is(err, vault.ErrChanged):
 			continue // its disk is ahead of its index: tried again next time
