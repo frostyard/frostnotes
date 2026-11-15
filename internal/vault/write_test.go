@@ -365,7 +365,8 @@ func TestDefaultDailyNote(t *testing.T) {
 }
 
 func TestPrune(t *testing.T) {
-	tv := newTestVault(t, map[string]string{"Plan.md": "v1\n", "Gone.md": "gone\n"}, nil)
+	data := t.TempDir()
+	tv := openTestVault(t, makeVault(t, map[string]string{"Plan.md": "v1\n", "Gone.md": "gone\n"}), data, nil)
 	tv.scan()
 	v1 := tv.row("Plan.md").Hash
 	v2 := tv.write("Plan.md", v1, "v2\n", editor).Hash
@@ -377,6 +378,11 @@ func TestPrune(t *testing.T) {
 	v3 := tv.write("Plan.md", v2, "v3\n", editor).Hash
 	orphan, err := tv.blobs.Put(t.Context(), bytes.NewReader([]byte("a crash left me")))
 	if err != nil {
+		t.Fatal(err)
+	}
+	// The orphan's age comes from the test clock, not the real date.
+	p := filepath.Join(data, "blobs", orphan[:2], orphan)
+	if err := os.Chtimes(p, *tv.clock, *tv.clock); err != nil {
 		t.Fatal(err)
 	}
 	*tv.clock = tv.clock.Add(2 * 24 * time.Hour)
