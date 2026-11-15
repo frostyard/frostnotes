@@ -5,7 +5,7 @@
 
 import { IconButton, Splitter } from "@frostyard/lodge-ui/react";
 import { CalendarDays, FileSearch, Files, type LucideIcon, PanelLeft, Terminal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { installKeyListener } from "../commands/keys";
 import { CommandRegistry, CommandsContext } from "../commands/registry";
 import { useAliasesSync } from "../data/aliases";
@@ -172,9 +172,38 @@ export function MainWindow() {
   const windowControls = (
     <TitleBarEnd rightOpen={shown.right} onToggleRight={() => registry.run("app:toggle-right-sidebar")} />
   );
-  const sidebar = (side: Side) => {
+  // paneStack draws a sidebar's pane tabs, its selected pane and, on the left, the vault row; end follows the tabs.
+  const paneStack = (side: Side, end?: ReactNode) => {
     const bar = ws[side];
     const selected = bar.panes[bar.active] ?? (bar.panes[0] as PaneId);
+    return (
+      <>
+        <div className="flex shrink-0 items-center border-b border-separator bg-toolbar">
+          <PaneTabs
+            label={side === "left" ? "Left sidebar panes" : "Right sidebar panes"}
+            panes={bar.panes.map((id) => ({ id, ...PANE_INFO[id] }))}
+            selected={selected}
+            onSelect={(id) => update((w) => selectPane(w, side, id as PaneId))}
+          />
+          {end}
+        </div>
+        <Pane id={selected} />
+        {side === "left" && (
+          <VaultRow
+            vaults={vaults}
+            current={vaultId}
+            settingsDisabled={!registry.applies("app:open-settings")}
+            onChoose={(id) => void openVault(id)}
+            onManage={openVaultManager}
+            onSettings={() => registry.run("app:open-settings")}
+          />
+        )}
+      </>
+    );
+  };
+
+  const sidebar = (side: Side) => {
+    const bar = ws[side];
     let start = bar.width;
     return (
       <>
@@ -194,26 +223,12 @@ export function MainWindow() {
           className="flex shrink-0 flex-col bg-sidebar"
           style={{ width: widths[side] }}
         >
-          <div className="flex shrink-0 items-center border-b border-separator bg-toolbar">
-            <PaneTabs
-              label={side === "left" ? "Left sidebar panes" : "Right sidebar panes"}
-              panes={bar.panes.map((id) => ({ id, ...PANE_INFO[id] }))}
-              selected={selected}
-              onSelect={(id) => update((w) => selectPane(w, side, id as PaneId))}
-            />
-            <div className="h-11 flex-1" />
-            {side === "right" && windowControls}
-          </div>
-          <Pane id={selected} />
-          {side === "left" && (
-            <VaultRow
-              vaults={vaults}
-              current={vaultId}
-              settingsDisabled={!registry.applies("app:open-settings")}
-              onChoose={(id) => void openVault(id)}
-              onManage={openVaultManager}
-              onSettings={() => registry.run("app:open-settings")}
-            />
+          {paneStack(
+            side,
+            <>
+              <div className="h-11 flex-1" />
+              {side === "right" && windowControls}
+            </>,
           )}
         </aside>
         {side === "left" && (
@@ -247,33 +262,6 @@ export function MainWindow() {
   // ADR-0027): the active tab under its view header, the sidebars as
   // drawers, and the bottom bar; no ribbon, title bar row, tab strips,
   // splits or status bar.
-  const drawerContent = (side: Side) => {
-    const bar = ws[side];
-    const selected = bar.panes[bar.active] ?? (bar.panes[0] as PaneId);
-    return (
-      <>
-        <div className="flex shrink-0 items-center border-b border-separator bg-toolbar">
-          <PaneTabs
-            label={side === "left" ? "Left sidebar panes" : "Right sidebar panes"}
-            panes={bar.panes.map((id) => ({ id, ...PANE_INFO[id] }))}
-            selected={selected}
-            onSelect={(id) => update((w) => selectPane(w, side, id as PaneId))}
-          />
-        </div>
-        <Pane id={selected} />
-        {side === "left" && (
-          <VaultRow
-            vaults={vaults}
-            current={vaultId}
-            settingsDisabled={!registry.applies("app:open-settings")}
-            onChoose={(id) => void openVault(id)}
-            onManage={openVaultManager}
-            onSettings={() => registry.run("app:open-settings")}
-          />
-        )}
-      </>
-    );
-  };
   if (narrow && vaultId !== null) {
     const group = activeGroup(ws);
     return (
@@ -363,7 +351,7 @@ export function MainWindow() {
                 label={drawer === "left" ? "Left sidebar" : "Right sidebar"}
                 onClose={() => setDrawer(null)}
               >
-                {drawerContent(drawer)}
+                {paneStack(drawer)}
               </Drawer>
             )}
             <Overlays />
