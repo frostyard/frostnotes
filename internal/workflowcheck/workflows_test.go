@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -329,44 +330,80 @@ func TestCIHasTheSnapshotDebJob(t *testing.T) {
 func TestGoJobsRetryTheModuleDownload(t *testing.T) {
 	jobs := get(workflows(t)["ci.yml"], "jobs")
 	for _, name := range []string{"verify", "race"} {
-		steps := get(get(jobs, name), "steps")
-		if steps == nil || steps.Kind != yaml.SequenceNode {
-			t.Fatalf("ci.yml has no jobs.%s.steps sequence", name)
+		for _, p := range moduleDownloadProblems(get(get(jobs, name), "steps"), name) {
+			t.Error("ci.yml" + p)
 		}
-		setup, download := -1, -1
-		for i, s := range steps.Content {
-			if u := get(s, "uses"); u != nil && strings.HasPrefix(u.Value, "actions/setup-go@") {
-				setup = i
-			}
-			if r := get(s, "run"); r != nil && strings.Contains(r.Value, "go mod download") && strings.Contains(r.Value, " all") && strings.Contains(r.Value, "for i in") {
-				if download < 0 {
-					download = i
-				}
-			}
+	}
+}
+
+// goGate names the commands of a step that reads Go modules: a gate of
+// the Makefile or the go command itself.
+var goGate = regexp.MustCompile(`\bmake +(verify|check|ci|test|race)\b|\bgo +(test|vet|build|run|mod tidy)\b`)
+
+// moduleDownloadProblems checks one job's steps: a step after setup-go
+// downloads the modules with retries, on a copy of go.mod (-modfile),
+// before every step that reads them. Each problem starts with ":line: "
+// or ": ".
+func moduleDownloadProblems(steps *yaml.Node, job string) []string {
+	if steps == nil || steps.Kind != yaml.SequenceNode {
+		return []string{": the " + job + " job has no steps sequence"}
+	}
+	setup, download := -1, -1
+	for i, s := range steps.Content {
+		if u := get(s, "uses"); u != nil && strings.HasPrefix(u.Value, "actions/setup-go@") {
+			setup = i
 		}
-		if setup < 0 {
-			t.Fatalf("ci.yml: the %s job has no step that uses actions/setup-go", name)
+		if r := get(s, "run"); r != nil && download < 0 && strings.Contains(r.Value, "go mod download") && strings.Contains(r.Value, " all") && strings.Contains(r.Value, "for i in") {
+			download = i
 		}
-		if download < 0 {
-			t.Fatalf("ci.yml: the %s job has no step that retries `go mod download ... all`: a transient proxy error would fail the gate (#243)", name)
+	}
+	if setup < 0 {
+		return []string{": the " + job + " job has no step that uses actions/setup-go"}
+	}
+	if download < 0 {
+		return []string{": the " + job + " job has no step that retries `go mod download ... all`: a transient proxy error would fail the gate (#243)"}
+	}
+	var out []string
+	line := func(n *yaml.Node) string { return ":" + strconv.Itoa(n.Line) + ": " }
+	if r := get(steps.Content[download], "run"); !strings.Contains(r.Value, "-modfile=") {
+		out = append(out, line(r)+"the "+job+" job's download writes the repository's go.sum: give it a copy of go.mod with -modfile, or go mod tidy -diff fails")
+	}
+	if download < setup {
+		out = append(out, line(steps.Content[download])+"the "+job+" job downloads the modules before actions/setup-go")
+	}
+	for _, s := range steps.Content[:download] {
+		if r := get(s, "run"); r != nil && goGate.MatchString(r.Value) {
+			out = append(out, line(s)+"the "+job+" job reads the Go modules before the step that retries the download")
 		}
-		if r := get(steps.Content[download], "run"); !strings.Contains(r.Value, "-modfile=") {
-			t.Errorf("ci.yml:%d: the %s job's download writes the repository's go.sum: give it a copy of go.mod with -modfile, or go mod tidy -diff fails", r.Line, name)
+	}
+	return out
+}
+
+// TestModuleDownloadProblemsCatchAGateFirst feeds the check the steps it
+// must refuse: each gate command before the download, a download on the
+// repository's go.sum, and none.
+func TestModuleDownloadProblemsCatchAGateFirst(t *testing.T) {
+	const setup = "- uses: actions/setup-go@0000000000000000000000000000000000000000\n"
+	const download = "- run: for i in 1 2 3; do go mod download -modfile=\"$RUNNER_TEMP/download.mod\" all && exit 0; done\n"
+	parse := func(src string) *yaml.Node {
+		var doc yaml.Node
+		if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+			t.Fatal(err)
 		}
-		if download < setup {
-			t.Errorf("ci.yml:%d: the %s job downloads the modules before actions/setup-go", steps.Content[download].Line, name)
+		return doc.Content[0]
+	}
+	if p := moduleDownloadProblems(parse(setup+download+"- run: make verify\n"), "j"); len(p) != 0 {
+		t.Errorf("a right job: %q", p)
+	}
+	for _, gate := range []string{"make verify", "make check", "make ci", "go test -race ./...", "go vet ./...", "go mod tidy -diff"} {
+		if p := moduleDownloadProblems(parse(setup+"- run: "+gate+"\n"+download), "j"); len(p) != 1 {
+			t.Errorf("%q before the download: %q, want 1 problem", gate, p)
 		}
-		for i, s := range steps.Content {
-			r := get(s, "run")
-			if r == nil || i == download {
-				continue
-			}
-			if !strings.Contains(r.Value, "make verify") && !strings.Contains(r.Value, "go test") {
-				continue
-			}
-			if i < download {
-				t.Errorf("ci.yml:%d: the %s job runs the gate before the step that retries `go mod download all`", s.Line, name)
-			}
-		}
+	}
+	if p := moduleDownloadProblems(parse(setup+"- run: for i in 1 2 3; do go mod download all && exit 0; done\n"), "j"); len(p) != 1 {
+		t.Errorf("a download on the repository's go.sum: %q, want 1 problem", p)
+	}
+	if p := moduleDownloadProblems(parse(setup+"- run: make verify\n"), "j"); len(p) != 1 {
+		t.Errorf("no download: %q, want 1 problem", p)
 	}
 }
