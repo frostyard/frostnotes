@@ -317,3 +317,56 @@ func TestCIHasTheSnapshotDebJob(t *testing.T) {
 		t.Errorf("deb job name = %v", n)
 	}
 }
+
+// proxy.golang.org fails a download now and then: on #243 the verify job
+// stopped at `go mod tidy -diff` with "stream error: stream ID 1;
+// INTERNAL_ERROR" for golang.org/x/tools@v0.52.0, a transient error
+// outside the repository, and the setup-go cache did not hold the module.
+// The Go jobs therefore retry one download of the whole build list after
+// setup-go, before the gate reads the modules. The download works on a
+// copy of go.mod (-modfile): it adds sums to the go.sum beside the go.mod
+// it reads, and go mod tidy -diff would then fail.
+func TestGoJobsRetryTheModuleDownload(t *testing.T) {
+	jobs := get(workflows(t)["ci.yml"], "jobs")
+	for _, name := range []string{"verify", "race"} {
+		steps := get(get(jobs, name), "steps")
+		if steps == nil || steps.Kind != yaml.SequenceNode {
+			t.Fatalf("ci.yml has no jobs.%s.steps sequence", name)
+		}
+		setup, download := -1, -1
+		for i, s := range steps.Content {
+			if u := get(s, "uses"); u != nil && strings.HasPrefix(u.Value, "actions/setup-go@") {
+				setup = i
+			}
+			if r := get(s, "run"); r != nil && strings.Contains(r.Value, "go mod download") && strings.Contains(r.Value, " all") && strings.Contains(r.Value, "for i in") {
+				if download < 0 {
+					download = i
+				}
+			}
+		}
+		if setup < 0 {
+			t.Fatalf("ci.yml: the %s job has no step that uses actions/setup-go", name)
+		}
+		if download < 0 {
+			t.Fatalf("ci.yml: the %s job has no step that retries `go mod download ... all`: a transient proxy error would fail the gate (#243)", name)
+		}
+		if r := get(steps.Content[download], "run"); !strings.Contains(r.Value, "-modfile=") {
+			t.Errorf("ci.yml:%d: the %s job's download writes the repository's go.sum: give it a copy of go.mod with -modfile, or go mod tidy -diff fails", r.Line, name)
+		}
+		if download < setup {
+			t.Errorf("ci.yml:%d: the %s job downloads the modules before actions/setup-go", steps.Content[download].Line, name)
+		}
+		for i, s := range steps.Content {
+			r := get(s, "run")
+			if r == nil || i == download {
+				continue
+			}
+			if !strings.Contains(r.Value, "make verify") && !strings.Contains(r.Value, "go test") {
+				continue
+			}
+			if i < download {
+				t.Errorf("ci.yml:%d: the %s job runs the gate before the step that retries `go mod download all`", s.Line, name)
+			}
+		}
+	}
+}

@@ -34,6 +34,20 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      # proxy.golang.org can fail a download now and then (#243): fetch
+      # every module of the build list, with up to 3 tries, so that the
+      # gate below reads them from the module cache. go mod download adds
+      # the sums of all it fetches to the go.sum beside its go.mod, which
+      # go mod tidy -diff refuses, so it works on a copy of the two.
+      - name: Download the Go modules
+        run: |
+          cp go.mod "$RUNNER_TEMP/download.mod"
+          cp go.sum "$RUNNER_TEMP/download.sum"
+          for i in 1 2 3; do
+            go mod download -modfile="$RUNNER_TEMP/download.mod" all && exit 0
+            sleep 10
+          done
+          exit 1
       # The locked golangci-lint, checksum-verified, as `mise install` does.
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
@@ -62,6 +76,20 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      # proxy.golang.org can fail a download now and then (#243): fetch
+      # every module of the build list, with up to 3 tries, so that the
+      # gate below reads them from the module cache. go mod download adds
+      # the sums of all it fetches to the go.sum beside its go.mod, which
+      # go mod tidy -diff refuses, so it works on a copy of the two.
+      - name: Download the Go modules
+        run: |
+          cp go.mod "$RUNNER_TEMP/download.mod"
+          cp go.sum "$RUNNER_TEMP/download.sum"
+          for i in 1 2 3; do
+            go mod download -modfile="$RUNNER_TEMP/download.mod" all && exit 0
+            sleep 10
+          done
+          exit 1
       # The desktop app's tests render views headless with MyGo's Tester,
       # which lays text out with Pango and cairo (no GTK, no display).
       - name: Install the text runtime of the desktop app's tests
