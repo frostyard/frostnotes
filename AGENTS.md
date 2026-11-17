@@ -92,6 +92,13 @@ file a step names before writing its frostnotes counterpart.
   `internal/rpctest`: a real server for tests, on `lodge/kit/rpctest`.
   `internal/devgw`: the loopback WebSocket gateway for UI work in a
   browser. `internal/config`: paths.
+- `internal/query`: `note.query`'s compiler: it parses a base's YAML (a subset of
+  Obsidian Bases, [specs/bases.md](docs/specs/bases.md)) and its statements,
+  folds constants, and compiles a view's filters, sort and groups to SQL over
+  `files LEFT JOIN notes` with every property key and literal as a bound
+  parameter ([ADR-0037](docs/adr/0037-queries-are-obsidian-bases-compiled-to-sql.md));
+  `store.DB.RunQuery` runs the SQL and the engine serves it. Its fixture vault
+  is `internal/query/testdata/vault`.
 - `internal/vault`: one actor per vault (`Manager`): `Walk`, the scan, the
   fsnotify watcher, the path guard, atomic compare-and-merge writes,
   moves, settings, daily notes and the daily prune. Every change to a
@@ -272,6 +279,9 @@ them rather than improvising, whichever agent you are:
   one that does not exist; the router enforces it from the domain's
   `callers` (`api.Router.Dispatch`).
 - SQLite databases never live on a network file system or `/mnt/host`.
+- A store method that returns rows and a count of every match reads both
+  in 1 statement (a window `COUNT(*) OVER ()`) or in 1 read transaction:
+  2 statements can see 2 snapshots of the index (frostnotes#245).
 - Downloads in scripts are version-pinned and checksum-verified
   (frostyard/core ADR-0023).
 

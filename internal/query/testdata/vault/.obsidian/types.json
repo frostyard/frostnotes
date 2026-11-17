@@ -1,0 +1,1 @@
+{"types":{"priority":"number","done":"checkbox","due":"date","started":"datetime","category":"multitext","owner":"text","labels":"multitext","mood":"number","Count":"number"}}

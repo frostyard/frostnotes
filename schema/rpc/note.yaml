@@ -185,6 +185,41 @@ types:
       - {name: deleted, type: "[]string", doc: "The files deleted, by path."}
       - {name: kept, type: "[]string", doc: "Files kept: changed since their base, or not named (made since the listing). An edit beats a delete (ADR-0005)."}
       - {name: removed, type: bool, doc: "The folder itself is gone: nothing was kept in it."}
+  - name: QueryView
+    doc: A view of a base (docs/specs/bases.md#interface).
+    fields:
+      - {name: name, type: string, doc: "As written; empty when the view has no name."}
+      - {name: type, type: string, doc: "As written: table, cards or another type outside the subset."}
+  - name: QueryColumn
+    doc: A column of a view.
+    fields:
+      - {name: key, type: string, doc: "As written in the view's order."}
+      - {name: displayName, type: string, doc: "From the base's properties; else the key without a leading note."}
+  - name: QueryRow
+    doc: A file a query matched.
+    fields:
+      - {name: path, type: string}
+      - {name: title, type: string, doc: "A note's title; an attachment's file.basename."}
+      - {name: kind, type: FileKind}
+      - {name: values, type: "[]json", doc: "One JSON value for each column, in column order; null for a missing value or an unshown column."}
+      - {name: image, type: json, optional: true, doc: "For a cards view with an image key: that property's JSON value."}
+  - name: QueryGroup
+    doc: A group of rows of a view with groupBy.
+    fields:
+      - {name: value, type: json, doc: "The group's value as JSON; null for the files without the property."}
+      - {name: count, type: int, doc: "How many of the result's rows are in this group: group i holds the next count rows."}
+  - name: QueryResult
+    doc: A base's view evaluated against the vault (docs/specs/bases.md#interface).
+    fields:
+      - {name: view, type: QueryView, doc: "The view evaluated."}
+      - {name: views, type: "[]QueryView", doc: "Every view of the base, in order, those outside the subset too."}
+      - {name: notice, type: string, optional: true, doc: "Set when the view is outside the subset: then columns, rows and groups are empty and total is 0."}
+      - {name: columns, type: "[]QueryColumn"}
+      - {name: rows, type: "[]QueryRow", doc: "The matching files, sorted, at most the limit."}
+      - {name: groups, type: "[]QueryGroup", optional: true, doc: "With groupBy: the groups in order."}
+      - {name: total, type: int, doc: "Every matching file, before the limit."}
+      - {name: unshown, type: "[]string", doc: "The column keys whose values notesd cannot show, each once, in column order."}
+      - {name: image, type: string, optional: true, doc: "A cards view's image key."}
 methods:
   - name: list
     doc: >-
@@ -441,6 +476,23 @@ methods:
       - {name: title, type: string, optional: true, doc: "{{title}}: the note it goes into; empty by default."}
       - {name: at, type: time, optional: true, doc: "The date and time {{date}} and {{time}} give; now by default."}
     result: ExpandedTemplate
+    errors: [notFound, invalidParams]
+  - name: query
+    doc: >-
+      Evaluate a view of an Obsidian base against the vault: the subset of
+      Bases that notesd compiles to SQL over the index
+      (docs/specs/bases.md, ADR-0037). The base is the file at path or the
+      YAML in source; exactly one is given. A base outside the subset, or a
+      filter that cannot be compiled exactly, is refused with invalidParams
+      naming its location; a view outside the subset gives a notice.
+    params:
+      - {name: vaultId, type: int}
+      - {name: path, type: string, optional: true, doc: "A vault file, read as the base's YAML; at most 1 MiB."}
+      - {name: source, type: string, optional: true, doc: "A base's YAML (a base code block's text); at most 1 MiB."}
+      - {name: from, type: string, optional: true, doc: "A vault note's path: the note that embeds the base; it sets this."}
+      - {name: view, type: string, optional: true, doc: "A view's name; the first view by default."}
+      - {name: limit, type: int, optional: true, doc: "1 to 1000; 1000 by default."}
+    result: QueryResult
     errors: [notFound, invalidParams]
   - name: mkdir
     writes: true

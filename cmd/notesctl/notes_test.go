@@ -32,6 +32,7 @@ type fakeNotes struct {
 	write     api.WriteResult
 	move      api.MoveResult
 	versions  []api.Version
+	query     api.QueryResult
 }
 
 func (f *fakeNotes) record(p any) error {
@@ -139,6 +140,10 @@ func (f *fakeNotes) MoveFolder(_ context.Context, p *api.NoteMoveFolderParams) (
 
 func (f *fakeNotes) DeleteFolder(_ context.Context, p *api.NoteDeleteFolderParams) (*api.FolderDeleteResult, error) {
 	return nil, f.record(p)
+}
+
+func (f *fakeNotes) Query(_ context.Context, p *api.NoteQueryParams) (*api.QueryResult, error) {
+	return &f.query, f.record(p)
 }
 
 func (f *fakeNotes) Mkdir(_ context.Context, p *api.NoteMkdirParams) error {

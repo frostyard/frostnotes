@@ -87,6 +87,7 @@ Building from source, the nsl machine for the app and the gates:
 - [Three-way merge](specs/merge.md) — how `internal/merge` merges text and notes, with its golden fixtures
 - [Rendering](specs/render.md) — the HTML notesd renders notes into, the sanitizer's allowlist, and its fixtures
 - [UI](specs/ui.md) — the main window: tokens, type, Obsidian's layout in frostmail's look, panes, prompts, the browser, narrow windows, the keyboard map
+- [Obsidian Bases queries](specs/bases.md) — the subset of Bases notesd evaluates, `note.query` and `notesctl query`, with its fixtures
 - [notesd as a lodge app](specs/lodge-app.md) — what notesd installs for lodge and serves on its app socket: callers from `Lodge-*` headers, `/api`, blobs, `/mcp` scopes, `/device/` and relocation
 
 
@@ -101,6 +102,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0007 — Folder scopes for agents](plans/0007-folder-scopes-for-agents.md)
 - [0008 — M6, the standalone desktop app](plans/0008-m6-the-standalone-desktop-app.md)
 - [0009 — The desktop app on MyGo and frostui](plans/0009-mygo-desktop.md)
+- [0010 — M5, queries](plans/0010-m5-queries.md)
 
 ## Conventions
 

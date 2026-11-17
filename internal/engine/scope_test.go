@@ -39,6 +39,7 @@ func noteParams(id int64) map[string]map[string]any {
 		"note.properties":     {"vaultId": id},
 		"note.tasks":          {"vaultId": id},
 		"note.template":       {"vaultId": id, "template": "Plan.md"},
+		"note.query":          {"vaultId": id, "source": "filters: 'true'\n"},
 		"note.mkdir":          {"vaultId": id, "path": "Folder"},
 		"note.moveFolder":     {"vaultId": id, "path": "Folder", "to": "Other"},
 		"note.deleteFolder":   {"vaultId": id, "path": "Folder", "files": []any{}},

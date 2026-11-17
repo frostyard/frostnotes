@@ -829,6 +829,22 @@ A template note's content with {{title}}, {{date}}, {{time}} and their formats a
 Result: `ExpandedTemplate`.
 Errors: `notFound`, `invalidParams`.
 
+### `note.query`
+
+Evaluate a view of an Obsidian base against the vault: the subset of Bases that notesd compiles to SQL over the index (docs/specs/bases.md, ADR-0037). The base is the file at path or the YAML in source; exactly one is given. A base outside the subset, or a filter that cannot be compiled exactly, is refused with invalidParams naming its location; a view outside the subset gives a notice.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vaultId` | `int` |  |
+| `path` | `string` (optional) | A vault file, read as the base's YAML; at most 1 MiB. |
+| `source` | `string` (optional) | A base's YAML (a base code block's text); at most 1 MiB. |
+| `from` | `string` (optional) | A vault note's path: the note that embeds the base; it sets this. |
+| `view` | `string` (optional) | A view's name; the first view by default. |
+| `limit` | `int` (optional) | 1 to 1000; 1000 by default. |
+
+Result: `QueryResult`.
+Errors: `notFound`, `invalidParams`.
+
 ### `note.mkdir`
 
 Create a folder and any missing parents. An existing folder is not an error.
@@ -1157,6 +1173,61 @@ What a folder delete did.
 | `deleted` | `[]string` | The files deleted, by path. |
 | `kept` | `[]string` | Files kept: changed since their base, or not named (made since the listing). An edit beats a delete (ADR-0005). |
 | `removed` | `bool` | The folder itself is gone: nothing was kept in it. |
+
+### Type `QueryView`
+
+A view of a base (docs/specs/bases.md#interface).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | `string` | As written; empty when the view has no name. |
+| `type` | `string` | As written: table, cards or another type outside the subset. |
+
+### Type `QueryColumn`
+
+A column of a view.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `key` | `string` | As written in the view's order. |
+| `displayName` | `string` | From the base's properties; else the key without a leading note. |
+
+### Type `QueryRow`
+
+A file a query matched.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | `string` |  |
+| `title` | `string` | A note's title; an attachment's file.basename. |
+| `kind` | `FileKind` |  |
+| `values` | `[]json` | One JSON value for each column, in column order; null for a missing value or an unshown column. |
+| `image` | `json` (optional) | For a cards view with an image key: that property's JSON value. |
+
+### Type `QueryGroup`
+
+A group of rows of a view with groupBy.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `value` | `json` | The group's value as JSON; null for the files without the property. |
+| `count` | `int` | How many of the result's rows are in this group: group i holds the next count rows. |
+
+### Type `QueryResult`
+
+A base's view evaluated against the vault (docs/specs/bases.md#interface).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `view` | `QueryView` | The view evaluated. |
+| `views` | `[]QueryView` | Every view of the base, in order, those outside the subset too. |
+| `notice` | `string` (optional) | Set when the view is outside the subset: then columns, rows and groups are empty and total is 0. |
+| `columns` | `[]QueryColumn` |  |
+| `rows` | `[]QueryRow` | The matching files, sorted, at most the limit. |
+| `groups` | `[]QueryGroup` (optional) | With groupBy: the groups in order. |
+| `total` | `int` | Every matching file, before the limit. |
+| `unshown` | `[]string` | The column keys whose values notesd cannot show, each once, in column order. |
+| `image` | `string` (optional) | A cards view's image key. |
 
 ### Enum `LinkKind`
 
