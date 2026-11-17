@@ -13,6 +13,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/markdown"
+	"github.com/frostyard/frostnotes/internal/query"
 	"github.com/frostyard/frostnotes/internal/store"
 	"github.com/frostyard/frostnotes/internal/vault"
 )
@@ -616,4 +617,116 @@ func (n notes) DeleteFolder(ctx context.Context, p *api.NoteDeleteFolderParams) 
 		return nil, err
 	}
 	return v.DeleteFolder(ctx, p.Path, p.Files, who)
+}
+
+// maxBase is the most bytes of a base that note.query reads.
+const maxBase = 1 << 20
+
+// Query evaluates a view of a base against the vault (docs/specs/bases.md).
+// It only reads, so every caller kind may call it.
+func (n notes) Query(ctx context.Context, p *api.NoteQueryParams) (*api.QueryResult, error) {
+	v, err := n.m.Vault(p.VaultID)
+	if err != nil {
+		return nil, err
+	}
+	if (p.Path == nil) == (p.Source == nil) {
+		return nil, api.InvalidParams("give exactly one of path and source")
+	}
+	limit := int64(1000)
+	if p.Limit != nil {
+		limit = *p.Limit
+	}
+	if limit < 1 || limit > 1000 {
+		return nil, api.InvalidParams("limit %d: at least 1 and at most 1000", limit)
+	}
+	var source []byte
+	var base *store.File
+	if p.Path != nil {
+		f, err := n.file(ctx, p.VaultID, *p.Path)
+		if err != nil {
+			return nil, err
+		}
+		if f.Size > maxBase {
+			return nil, api.InvalidParams("%s is %d bytes; a base is at most %d", f.Path, f.Size, maxBase)
+		}
+		got, err := v.Read(ctx, f.Path)
+		if err != nil {
+			return nil, err
+		}
+		source, base = []byte(got.Content), &f
+	} else {
+		if len(*p.Source) > maxBase {
+			return nil, api.InvalidParams("source is %d bytes; a base is at most %d", len(*p.Source), maxBase)
+		}
+		source = []byte(*p.Source)
+	}
+	// this is the embedding note, else the base file itself.
+	var this *query.This
+	if p.From != nil {
+		f, err := n.file(ctx, p.VaultID, *p.From)
+		if err != nil {
+			return nil, err
+		}
+		base = &f
+	}
+	if base != nil {
+		if this, err = n.thisFile(ctx, *base); err != nil {
+			return nil, err
+		}
+	}
+	types, err := vault.LoadTypes(v.Root())
+	if err != nil {
+		return nil, fmt.Errorf("vault %d's property types: %w", p.VaultID, err)
+	}
+	var lookupErr error
+	resolve := func(from, target string) (string, error) {
+		files := func(name string) []string {
+			paths, err := n.db.FilesNamed(ctx, p.VaultID, name)
+			lookupErr = cmp.Or(lookupErr, err)
+			return paths
+		}
+		return markdown.Resolve(from, target, files), lookupErr
+	}
+	plan, err := query.Compile(source, query.Options{View: p.View, Types: types, This: this,
+		ResolveLink: resolve, Now: time.Now(), Loc: time.Local, Limit: int(limit)})
+	var qerr *query.Error
+	if errors.As(err, &qerr) {
+		return nil, api.InvalidParams("%v", qerr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if plan.Notice != "" {
+		return plan.Result(nil, 0), nil
+	}
+	rows, total, err := n.db.RunQuery(ctx, p.VaultID, plan.Query)
+	if err != nil {
+		return nil, err
+	}
+	return plan.Result(rows, total), nil
+}
+
+// thisFile is what `this` folds to for file f: the index's facts about it.
+func (n notes) thisFile(ctx context.Context, f store.File) (*query.This, error) {
+	this := &query.This{ID: f.ID, Path: f.Path, Size: f.Size, MTime: f.ModTime, Tags: []string{}, Links: []string{}}
+	if f.Kind() != store.FileNote {
+		return this, nil
+	}
+	info, err := n.db.NoteInfo(ctx, f.ID)
+	if err != nil {
+		return nil, err
+	}
+	this.Tags = info.Tags
+	links, err := n.db.Links(ctx, f.ID)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for _, l := range links {
+		if l.Target != "" && !seen[l.Target] {
+			seen[l.Target] = true
+			this.Links = append(this.Links, l.Target)
+		}
+	}
+	return this, nil
 }

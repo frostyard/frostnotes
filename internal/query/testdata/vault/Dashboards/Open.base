@@ -1,0 +1,15 @@
+filters:
+  and:
+    - file.inFolder("Projects")
+    - 'status != "done"'
+properties:
+  note.status:
+    displayName: Status
+views:
+  - type: table
+    name: Open
+    order: [file.name, note.status, note.due]
+    sort:
+      - property: note.due
+        direction: ASC
+    limit: 50

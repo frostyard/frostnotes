@@ -35,6 +35,7 @@ func newRootCmd() *cobra.Command {
 		newLsCmd(opts),
 		newCatCmd(opts),
 		newSearchCmd(opts),
+		newQueryCmd(opts),
 		newBacklinksCmd(opts),
 		newWriteCmd(opts),
 		newMvCmd(opts),

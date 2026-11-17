@@ -195,6 +195,42 @@ file lies in is listed. `note.render` resolves links over the index and
 reads embedded notes from their blobs by the index's hash, not from the
 vault's folder ([specs/render.md](../specs/render.md)).
 
+### Queries
+
+`note.query` evaluates a view of an Obsidian base against the index
+([ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md); the
+subset, its types and its errors are
+[specs/bases.md](../specs/bases.md)). A query runs in three steps, in three
+packages:
+
+1. **`internal/query` parses and compiles.** It reads the base's YAML
+   (`yaml.Node`, so errors name a location such as `views[0].filters.and[1]`),
+   checks the global filters and the evaluated view against the subset, and
+   parses each statement with a small hand-written parser. It folds in Go
+   what is known before the query runs: `today()`, `now()`, date arithmetic,
+   `date()` and `this.file.*`. It then writes one SQL condition over `files
+   LEFT JOIN notes`, and the `ORDER BY` terms of `groupBy` and `sort`. Every
+   property key and literal is a bound parameter; no text of a base is in the
+   SQL. Every condition is 0 or 1, never NULL. What the compiler cannot
+   translate exactly it refuses with an `*query.Error`; it never drops a
+   condition. A property's key is matched with `json_each(notes.props)`, with
+   its JSON type, so `5` and `"5"` differ; dates convert in `frostnotes_time`,
+   a deterministic SQL function that `internal/store` registers with the
+   SQLite driver, which reads ISO 8601 text in notesd's time zone.
+2. **`store.DB` runs it** (`RunQuery`): the matching rows with the columns'
+   sources (`props`, tags, link targets), at most the limit, and the count of
+   every match. It adds no table and no migration.
+3. **The engine serves it** (`notes.Query` in `internal/engine/note.go`): it
+   checks the params, reads the base from the vault when given a path (at most
+   1 MiB), loads the property types (`vault.LoadTypes`), gives the compiler
+   the `this` file's facts and a link resolver (`markdown.Resolve` over
+   `FilesNamed`, as `note.resolve` does), runs the plan and has it build the
+   result: column values and image values from each row's frontmatter, and
+   groups from consecutive rows of equal group value.
+
+The method only reads, so every caller kind of the `note` domain may call it.
+Built in [plan 0010](../plans/0010-m5-queries.md).
+
 ### Link resolution
 
 Obsidian's rules, as [specs/markdown.md](../specs/markdown.md#link-resolution)
@@ -409,8 +445,8 @@ and never a replay with a gap.
 
 ## References
 
-- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope), [ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md) (a crash while sync applies a head)
+- Rationale: [ADR-0003](../adr/0003-plain-markdown-files-are-the-source-of-truth.md), [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md), [ADR-0015](../adr/0015-index-what-comments-hide-as-obsidian-does.md), [ADR-0017](../adr/0017-revisions-number-the-hubs-log-and-hashes-name-content.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (an agent's folder scope), [ADR-0034](../adr/0034-a-device-records-the-head-it-applies-before-it-changes-the-disk.md) (a crash while sync applies a head), [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md) (queries)
 - Related: [overview.md](overview.md), [sync.md](sync.md), [app.md](app.md) (the editor as a writer)
-- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/render.md](../specs/render.md)
+- Contracts: [specs/markdown.md](../specs/markdown.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/mcp.md](../specs/mcp.md), [specs/render.md](../specs/render.md), [specs/bases.md](../specs/bases.md) (queries)
 - Built in: [plan 0003 — M1](../plans/0003-m1-headless-vault.md); sync's apply path in [plan 0004 — M2](../plans/0004-m2-sync.md); written settings in [plan 0005 — M3](../plans/0005-m3-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
 - Folder scopes: the write scope's path check after the path guard, and an agent's append to today's daily note, built in [plan 0007](../plans/0007-folder-scopes-for-agents.md) ([ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md))

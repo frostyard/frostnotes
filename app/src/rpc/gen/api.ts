@@ -878,6 +878,77 @@ export interface FolderDeleteResult {
   removed: boolean;
 }
 
+/** A view of a base (docs/specs/bases.md#interface). */
+export interface QueryView {
+  /** As written; empty when the view has no name. */
+  name: string;
+  /** As written: table, cards or another type outside the subset. */
+  type: string;
+}
+
+/** A column of a view. */
+export interface QueryColumn {
+  /** As written in the view's order. */
+  key: string;
+  /** From the base's properties; else the key without a leading note. */
+  displayName: string;
+}
+
+/** A file a query matched. */
+export interface QueryRow {
+  path: string;
+  /** A note's title; an attachment's file.basename. */
+  title: string;
+  kind: FileKind;
+  /**
+   * One JSON value for each column, in column order; null for a missing value
+   * or an unshown column.
+   */
+  values: unknown[];
+  /** For a cards view with an image key: that property's JSON value. */
+  image?: unknown;
+}
+
+/** A group of rows of a view with groupBy. */
+export interface QueryGroup {
+  /** The group's value as JSON; null for the files without the property. */
+  value: unknown;
+  /**
+   * How many of the result's rows are in this group: group i holds the next
+   * count rows.
+   */
+  count: number;
+}
+
+/**
+ * A base's view evaluated against the vault (docs/specs/bases.md#interface).
+ */
+export interface QueryResult {
+  /** The view evaluated. */
+  view: QueryView;
+  /** Every view of the base, in order, those outside the subset too. */
+  views: QueryView[];
+  /**
+   * Set when the view is outside the subset: then columns, rows and groups
+   * are empty and total is 0.
+   */
+  notice?: string;
+  columns: QueryColumn[];
+  /** The matching files, sorted, at most the limit. */
+  rows: QueryRow[];
+  /** With groupBy: the groups in order. */
+  groups?: QueryGroup[];
+  /** Every matching file, before the limit. */
+  total: number;
+  /**
+   * The column keys whose values notesd cannot show, each once, in column
+   * order.
+   */
+  unshown: string[];
+  /** A cards view's image key. */
+  image?: string;
+}
+
 /** Params of note.list. */
 export interface NoteListParams {
   vaultId: number;
@@ -1116,6 +1187,21 @@ export interface NoteTemplateParams {
   at?: string /* RFC 3339 */;
 }
 
+/** Params of note.query. */
+export interface NoteQueryParams {
+  vaultId: number;
+  /** A vault file, read as the base's YAML; at most 1 MiB. */
+  path?: string;
+  /** A base's YAML (a base code block's text); at most 1 MiB. */
+  source?: string;
+  /** A vault note's path: the note that embeds the base; it sets this. */
+  from?: string;
+  /** A view's name; the first view by default. */
+  view?: string;
+  /** 1 to 1000; 1000 by default. */
+  limit?: number;
+}
+
 /** Params of note.mkdir. */
 export interface NoteMkdirParams {
   vaultId: number;
@@ -1306,6 +1392,15 @@ export interface NoteClient {
    */
   template(params: NoteTemplateParams): Promise<ExpandedTemplate>;
   /**
+   * Evaluate a view of an Obsidian base against the vault: the subset of
+   * Bases that notesd compiles to SQL over the index (docs/specs/bases.md,
+   * ADR-0037). The base is the file at path or the YAML in source; exactly
+   * one is given. A base outside the subset, or a filter that cannot be
+   * compiled exactly, is refused with invalidParams naming its location; a
+   * view outside the subset gives a notice.
+   */
+  query(params: NoteQueryParams): Promise<QueryResult>;
+  /**
    * Create a folder and any missing parents. An existing folder is not an
    * error.
    */
@@ -1350,6 +1445,7 @@ function noteClient(t: Transport): NoteClient {
     properties: (params) => t.call<PropertyCount[]>("note.properties", params),
     tasks: (params) => t.call<TaskEntry[]>("note.tasks", params),
     template: (params) => t.call<ExpandedTemplate>("note.template", params),
+    query: (params) => t.call<QueryResult>("note.query", params),
     mkdir: (params) => t.call<null>("note.mkdir", params).then(() => undefined),
     moveFolder: (params) => t.call<FolderMoveResult>("note.moveFolder", params),
     deleteFolder: (params) => t.call<FolderDeleteResult>("note.deleteFolder", params),
@@ -1987,6 +2083,7 @@ export const METHODS = [
   "note.properties",
   "note.tasks",
   "note.template",
+  "note.query",
   "note.mkdir",
   "note.moveFolder",
   "note.deleteFolder",
@@ -2066,6 +2163,7 @@ export const METHOD_CALLERS: Readonly<Record<Method, readonly CallerKind[]>> = {
   "note.properties": ["local", "session", "agent"],
   "note.tasks": ["local", "session", "agent"],
   "note.template": ["local", "session", "agent"],
+  "note.query": ["local", "session", "agent"],
   "note.mkdir": ["local", "session", "agent"],
   "note.moveFolder": ["local", "session", "agent"],
   "note.deleteFolder": ["local", "session", "agent"],

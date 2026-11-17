@@ -1322,6 +1322,68 @@ type FolderDeleteResult struct {
 	Removed bool `json:"removed"`
 }
 
+// QueryView: A view of a base (docs/specs/bases.md#interface).
+type QueryView struct {
+	// As written; empty when the view has no name.
+	Name string `json:"name"`
+	// As written: table, cards or another type outside the subset.
+	Type string `json:"type"`
+}
+
+// QueryColumn: A column of a view.
+type QueryColumn struct {
+	// As written in the view's order.
+	Key string `json:"key"`
+	// From the base's properties; else the key without a leading note.
+	DisplayName string `json:"displayName"`
+}
+
+// QueryRow: A file a query matched.
+type QueryRow struct {
+	Path string `json:"path"`
+	// A note's title; an attachment's file.basename.
+	Title string   `json:"title"`
+	Kind  FileKind `json:"kind"`
+	// One JSON value for each column, in column order; null for a missing value
+	// or an unshown column.
+	Values []jsontext.Value `json:"values"`
+	// For a cards view with an image key: that property's JSON value.
+	Image jsontext.Value `json:"image,omitzero"`
+}
+
+// QueryGroup: A group of rows of a view with groupBy.
+type QueryGroup struct {
+	// The group's value as JSON; null for the files without the property.
+	Value jsontext.Value `json:"value"`
+	// How many of the result's rows are in this group: group i holds the next
+	// count rows.
+	Count int64 `json:"count"`
+}
+
+// QueryResult: A base's view evaluated against the vault
+// (docs/specs/bases.md#interface).
+type QueryResult struct {
+	// The view evaluated.
+	View QueryView `json:"view"`
+	// Every view of the base, in order, those outside the subset too.
+	Views []QueryView `json:"views"`
+	// Set when the view is outside the subset: then columns, rows and groups are
+	// empty and total is 0.
+	Notice  *string       `json:"notice,omitzero"`
+	Columns []QueryColumn `json:"columns"`
+	// The matching files, sorted, at most the limit.
+	Rows []QueryRow `json:"rows"`
+	// With groupBy: the groups in order.
+	Groups []QueryGroup `json:"groups,omitzero"`
+	// Every matching file, before the limit.
+	Total int64 `json:"total"`
+	// The column keys whose values notesd cannot show, each once, in column
+	// order.
+	Unshown []string `json:"unshown"`
+	// A cards view's image key.
+	Image *string `json:"image,omitzero"`
+}
+
 // NoteListParams holds the params of note.list.
 type NoteListParams struct {
 	VaultID int64 `json:"vaultId"`
@@ -1532,6 +1594,21 @@ type NoteTemplateParams struct {
 	At *time.Time `json:"at,omitzero"`
 }
 
+// NoteQueryParams holds the params of note.query.
+type NoteQueryParams struct {
+	VaultID int64 `json:"vaultId"`
+	// A vault file, read as the base's YAML; at most 1 MiB.
+	Path *string `json:"path,omitzero"`
+	// A base's YAML (a base code block's text); at most 1 MiB.
+	Source *string `json:"source,omitzero"`
+	// A vault note's path: the note that embeds the base; it sets this.
+	From *string `json:"from,omitzero"`
+	// A view's name; the first view by default.
+	View *string `json:"view,omitzero"`
+	// 1 to 1000; 1000 by default.
+	Limit *int64 `json:"limit,omitzero"`
+}
+
 // NoteMkdirParams holds the params of note.mkdir.
 type NoteMkdirParams struct {
 	VaultID int64  `json:"vaultId"`
@@ -1661,6 +1738,13 @@ type NoteService interface {
 	// {{title}}, {{date}}, {{time}} and their formats and offsets expanded, as
 	// Obsidian's Insert template does (docs/design/vault.md#daily-notes).
 	Template(ctx context.Context, p *NoteTemplateParams) (*ExpandedTemplate, error)
+	// Query implements note.query. Evaluate a view of an Obsidian base against
+	// the vault: the subset of Bases that notesd compiles to SQL over the index
+	// (docs/specs/bases.md, ADR-0037). The base is the file at path or the YAML
+	// in source; exactly one is given. A base outside the subset, or a filter
+	// that cannot be compiled exactly, is refused with invalidParams naming its
+	// location; a view outside the subset gives a notice.
+	Query(ctx context.Context, p *NoteQueryParams) (*QueryResult, error)
 	// Mkdir implements note.mkdir. Create a folder and any missing parents. An
 	// existing folder is not an error.
 	Mkdir(ctx context.Context, p *NoteMkdirParams) error
@@ -1908,6 +1992,16 @@ func registerNote(r *Router, s NoteService) {
 		}
 		return s.Template(ctx, &p)
 	})
+	r.handle("note.query", callers, false, func(ctx context.Context, raw jsontext.Value) (any, error) {
+		var p NoteQueryParams
+		if err := decodeParams(raw, &p, []string{"vaultId"}); err != nil {
+			return nil, err
+		}
+		if err := inScope(ctx, p.VaultID); err != nil {
+			return nil, err
+		}
+		return s.Query(ctx, &p)
+	})
 	r.handle("note.mkdir", callers, true, func(ctx context.Context, raw jsontext.Value) (any, error) {
 		var p NoteMkdirParams
 		if err := decodeParams(raw, &p, []string{"vaultId", "path"}); err != nil {
@@ -2140,6 +2234,16 @@ func (x NoteClient) Tasks(ctx context.Context, p *NoteTasksParams) ([]TaskEntry,
 func (x NoteClient) Template(ctx context.Context, p *NoteTemplateParams) (*ExpandedTemplate, error) {
 	var r ExpandedTemplate
 	err := x.c.Call(ctx, "note.template", p, &r)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Query calls note.query.
+func (x NoteClient) Query(ctx context.Context, p *NoteQueryParams) (*QueryResult, error) {
+	var r QueryResult
+	err := x.c.Call(ctx, "note.query", p, &r)
 	if err != nil {
 		return nil, err
 	}
@@ -3315,6 +3419,7 @@ var Methods = []string{
 	"note.properties",
 	"note.tasks",
 	"note.template",
+	"note.query",
 	"note.mkdir",
 	"note.moveFolder",
 	"note.deleteFolder",

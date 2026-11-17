@@ -1,6 +1,6 @@
 # 0037 — Queries are Obsidian Bases, a subset that notesd compiles to SQL
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-11-16)
 - **Date:** 2026-11-09
 
 ## Context
@@ -147,7 +147,9 @@ notes`, with bound parameters:
   match `links.dest_id`. Otherwise match `dest_id IS NULL` and the same
   `links.name`.
 - `file.hasProperty`: `json_each(notes.props)`.
-- List `contains`: `props` rows.
+- List `contains`: `json_each` over the value, with each item's JSON
+  type. `props` rows do not keep the difference between `5` and `"5"`
+  ([specs/bases.md](../specs/bases.md#sql)).
 - Scalar comparisons: `notes.props` through SQLite's JSON functions,
   with `props.num` for numbers.
 - Text functions: case-sensitive SQL, including `instr()` for substrings,
@@ -306,10 +308,13 @@ carries the content of a note not asked about gains a clause:
 
 ## References
 
-- Shapes: [roadmap — M5](../plans/0002-roadmap.md); with M5's code,
-  [design/vault.md — Index](../design/vault.md#index),
+- Shapes: [roadmap — M5](../plans/0002-roadmap.md),
+  [plan 0010](../plans/0010-m5-queries.md),
+  [specs/bases.md](../specs/bases.md),
+  [design/vault.md — Queries](../design/vault.md#queries); with M5's
+  later steps,
   [specs/mcp.md](../specs/mcp.md),
-  [specs/rpc-api.md](../specs/rpc-api.md), and a new `docs/specs/bases.md`.
+  [specs/rpc-api.md](../specs/rpc-api.md).
 - Builds on:
   [ADR-0003](0003-plain-markdown-files-are-the-source-of-truth.md),
   [ADR-0004](0004-a-notes-daemon-with-thin-clients.md),
