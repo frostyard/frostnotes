@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -555,11 +556,16 @@ func foldCompare(l constant, op string, r constant, col int) (frag, *Error) {
 	var cmp int
 	switch l.k {
 	case kNum:
-		li, lok := l.numArg.(int64)
-		ri, rok := r.numArg.(int64)
-		if lok && rok {
+		li, lInt := l.numArg.(int64)
+		ri, rInt := r.numArg.(int64)
+		switch {
+		case lInt && rInt:
 			cmp = compareOrdered(li, ri) // whole numbers compare exactly
-		} else {
+		case lInt:
+			cmp = compareIntFloat(li, r.num)
+		case rInt:
+			cmp = -compareIntFloat(ri, l.num)
+		default:
 			cmp = compareOrdered(l.num, r.num)
 		}
 	case kStr:
@@ -570,6 +576,16 @@ func foldCompare(l constant, op string, r constant, col int) (frag, *Error) {
 		cmp = compareOrdered(b2i(l.b), b2i(r.b))
 	}
 	return boolFrag(cmpHolds(cmp, op)), nil
+}
+
+// compareIntFloat compares a whole number with a real exactly, as SQLite
+// does: a finite float64 is an exact rational, so the integer is not rounded.
+func compareIntFloat(i int64, f float64) int {
+	r := new(big.Rat)
+	if r.SetFloat64(f) == nil {
+		return compareOrdered(float64(i), f) // not finite: cannot happen for a parsed literal
+	}
+	return new(big.Rat).SetInt64(i).Cmp(r)
 }
 
 func compareOrdered[T int | int64 | float64 | string](a, b T) int {
