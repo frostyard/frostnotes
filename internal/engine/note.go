@@ -646,11 +646,16 @@ func (n notes) Query(ctx context.Context, p *api.NoteQueryParams) (*api.QueryRes
 		if err != nil {
 			return nil, err
 		}
-		if f.Size > maxBase {
-			return nil, api.InvalidParams("%s is %d bytes; a base is at most %d", f.Path, f.Size, maxBase)
-		}
 		got, err := v.Read(ctx, f.Path)
 		if err != nil {
+			return nil, err
+		}
+		// The size is that of what was read from the disk, not the index's.
+		if len(got.Content) > maxBase {
+			return nil, api.InvalidParams("%s is %d bytes; a base is at most %d", f.Path, len(got.Content), maxBase)
+		}
+		// this is the file as the index has it after the read.
+		if f, err = n.file(ctx, p.VaultID, *p.Path); err != nil {
 			return nil, err
 		}
 		source, base = []byte(got.Content), &f

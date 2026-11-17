@@ -46,10 +46,8 @@ func (d *DB) RunQuery(ctx context.Context, vaultID int64, q ViewQuery) ([]QueryR
 		where += " AND (" + q.Where + ")"
 		args = append(args, q.Args...)
 	}
-	var total int
-	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*)`+where, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count query matches: %w", err)
-	}
+	// The rows and the count of every match come from 1 statement, so they
+	// are 1 snapshot of the index: COUNT(*) OVER () is computed before LIMIT.
 	cols := `files.id, files.path, files.kind, files.size, files.mtime, COALESCE(notes.title, ''), COALESCE(notes.props, '{}')`
 	if q.Tags {
 		cols += `, (SELECT json_group_array(name) FROM (SELECT name FROM tags WHERE tags.file_id = files.id ORDER BY ord))`
@@ -58,6 +56,7 @@ func (d *DB) RunQuery(ctx context.Context, vaultID int64, q ViewQuery) ([]QueryR
 		cols += `, (SELECT json_group_array(target) FROM (SELECT target FROM links WHERE links.file_id = files.id AND target != ''
 			GROUP BY target ORDER BY MIN(ord)))`
 	}
+	cols += `, COUNT(*) OVER ()`
 	order := " ORDER BY files.path"
 	if q.OrderBy != "" {
 		order = " ORDER BY " + q.OrderBy
@@ -70,6 +69,7 @@ func (d *DB) RunQuery(ctx context.Context, vaultID int64, q ViewQuery) ([]QueryR
 	}
 	defer rows.Close()
 	var out []QueryRow
+	total := 0 // no row, no match
 	for rows.Next() {
 		var r QueryRow
 		var kind, props string
@@ -82,6 +82,7 @@ func (d *DB) RunQuery(ctx context.Context, vaultID int64, q ViewQuery) ([]QueryR
 		if q.Links {
 			dest = append(dest, &links)
 		}
+		dest = append(dest, &total)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, 0, fmt.Errorf("scan query row: %w", err)
 		}
@@ -102,5 +103,5 @@ func (d *DB) RunQuery(ctx context.Context, vaultID int64, q ViewQuery) ([]QueryR
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("read query rows: %w", err)
 	}
-	return out, max(total, len(out)), nil
+	return out, total, nil
 }

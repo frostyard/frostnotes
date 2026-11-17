@@ -27,6 +27,7 @@ func TestRefusals(t *testing.T) {
 		{"a tab in YAML", "filters:\n\t- x\n", "base: not valid YAML", ""},
 		{"a list is not a base", "- a\n- b\n", "base: a base is a YAML mapping", ""},
 		{"a scalar is not a base", "hello\n", "base: a base is a YAML mapping", ""},
+		{"a bad second document", "filters: 'true'\n---\nfilters: [\n", "base: not valid YAML after the first document", ""},
 		{"two documents", "views: []\n---\nviews: []\n", "base: more than one YAML document", ""},
 		{"an alias", "x: &a status\nfilters: *a\n", "filters: YAML anchors and aliases are outside the subset", ""},
 		{"a repeated key", "filters: a\nfilters: b\n", "filters: the key is given twice", ""},
@@ -254,6 +255,25 @@ func TestRefusalInAnotherView(t *testing.T) {
 
 func TestRefusalsWithThis(t *testing.T) {
 	e := fixtureEnv(t)
+	// A list constant stands for its items only in hasTag, containsAny and
+	// containsAll. Alpha has 4 tags; Beta has 1, which an item count cannot catch.
+	for _, this := range []string{"Projects/Alpha.md", "Projects/Beta.md"} {
+		for _, stmt := range []string{
+			`file.tags.contains(this.file.tags)`, `labels.contains(this.file.tags)`, `status.contains(this.file.links)`,
+			`file.name.startsWith(this.file.tags)`, `file.name.endsWith(this.file.tags)`, `status.startsWith(this.file.tags)`,
+			`file.inFolder(this.file.tags)`, `file.hasProperty(this.file.tags)`, `file.path.contains(this.file.links)`,
+		} {
+			_, err := e.run(filterBase(stmt), withThis(this, e))
+			if err == nil || !strings.Contains(err.Error(), "not a list") || !strings.HasPrefix(err.Error(), "filters: ") {
+				t.Errorf("%s with this = %s: %v, want an error: not a list", stmt, this, err)
+			}
+		}
+		for _, stmt := range []string{`file.hasTag(this.file.tags)`, `file.tags.containsAny(this.file.tags)`, `file.tags.containsAll(this.file.tags)`, `labels.containsAny(this.file.tags)`} {
+			if _, err := e.run(filterBase(stmt), withThis(this, e)); err != nil {
+				t.Errorf("%s with this = %s: %v", stmt, this, err)
+			}
+		}
+	}
 	for _, tc := range []struct{ stmt, has string }{
 		{`file.tags == this.file.tags`, "a list cannot be compared"},
 		{`this.file.tags == 1`, "a list cannot be compared"},

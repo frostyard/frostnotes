@@ -3,11 +3,14 @@ package engine_test
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/vault"
 )
 
 func queryVault(t *testing.T) *apiVault {
@@ -37,8 +40,11 @@ views:
 		"Boards/Links.base": "filters: file.hasLink(this)\n",
 		"Boards/Bad.base":   "filters: 'file.backlinks.isEmpty()'\n",
 		"Boards/Big.base":   "filters: 'true'\n# " + strings.Repeat("x", 1<<20),
+		"Boards/Grow.base":  "filters: 'true'\n",
 	})
-	return openVault(t, dir)
+	// A long debounce keeps the watcher from indexing the tests' edits: the
+	// index stays as the first scan left it.
+	return openVaultWith(t, dir, vault.Config{Debounce: time.Hour})
 }
 
 func str(s string) *string { return &s }
@@ -91,7 +97,7 @@ func TestNoteQuery(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(res.Rows) != 2 || res.Total != 9 {
+		if len(res.Rows) != 2 || res.Total != 10 {
 			t.Errorf("limit 2: %d rows of %d", len(res.Rows), res.Total)
 		}
 	})
@@ -149,6 +155,25 @@ func TestNoteQuery(t *testing.T) {
 		}
 		if _, err := av.c.Note().Query(ctx, &api.NoteQueryParams{VaultID: av.id + 99, Source: str("filters: 'true'")}); code(err) != api.CodeNotFound {
 			t.Errorf("an unknown vault: %v", err)
+		}
+	})
+	t.Run("a base that grew on disk since the index", func(t *testing.T) {
+		// The index holds the small file; the disk holds more than 1 MiB.
+		// The size that counts is that of what is read.
+		content := "filters: 'true'\n# " + strings.Repeat("y", 1<<20)
+		editFile(t, av.dir, "Boards/Grow.base", content)
+		_, err := run(av.c, api.NoteQueryParams{Path: str("Boards/Grow.base")})
+		want := fmt.Sprintf("Boards/Grow.base is %d bytes; a base is at most 1048576", len(content))
+		if code(err) != api.CodeInvalidParams || !strings.Contains(err.Error(), want) {
+			t.Errorf("a base that grew = %v, want invalidParams: %s", err, want)
+		}
+	})
+	t.Run("a base that shrank on disk since the index", func(t *testing.T) {
+		// The index says 1 MiB and more; the disk holds a small base.
+		editFile(t, av.dir, "Boards/Big.base", "filters: 'file.ext == \"csv\"'\n")
+		res, err := run(av.c, api.NoteQueryParams{Path: str("Boards/Big.base")})
+		if err != nil || !slices.Equal(paths(res), []string{"Work/data.csv"}) {
+			t.Errorf("a base that shrank = %v, %v", res, err)
 		}
 	})
 	t.Run("the wire form", func(t *testing.T) {

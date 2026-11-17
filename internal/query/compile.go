@@ -555,7 +555,13 @@ func foldCompare(l constant, op string, r constant, col int) (frag, *Error) {
 	var cmp int
 	switch l.k {
 	case kNum:
-		cmp = compareOrdered(l.num, r.num)
+		li, lok := l.numArg.(int64)
+		ri, rok := r.numArg.(int64)
+		if lok && rok {
+			cmp = compareOrdered(li, ri) // whole numbers compare exactly
+		} else {
+			cmp = compareOrdered(l.num, r.num)
+		}
 	case kStr:
 		cmp = compareOrdered(l.str, r.str)
 	case kDate:
@@ -706,6 +712,12 @@ func (c *compiler) fileCompare(p prop, op string, k constant, col int) (frag, *E
 // textArgs reads a method's arguments as constants. A list constant
 // (this.file.tags) stands for its items. Each item is a string or a number.
 func (c *compiler) constArgs(e callExpr) ([]constant, *Error) {
+	// A list constant stands for its items only where a method takes a set.
+	listArgs := e.name == "containsAny" || e.name == "containsAll" || (e.ns == "file" && e.name == "hasTag")
+	name := e.name
+	if e.ns != "" {
+		name = e.ns + "." + name
+	}
 	var out []constant
 	for _, a := range e.args {
 		op, err := c.operand(a)
@@ -719,6 +731,9 @@ func (c *compiler) constArgs(e callExpr) ([]constant, *Error) {
 		case kStr, kNum:
 			out = append(out, *op.cst)
 		case kList:
+			if !listArgs {
+				return nil, errf("column %d: %s takes a string or a number, not a list: only file.hasTag, containsAny and containsAll take this.file.tags or this.file.links", e.col, name)
+			}
 			for _, item := range op.cst.list {
 				out = append(out, constant{k: kStr, str: item})
 			}

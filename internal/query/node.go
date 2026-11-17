@@ -25,6 +25,25 @@ type node struct {
 	value string
 	pairs []pair  // a mapping's, in order
 	items []*node // a sequence's
+
+	// raw is a value that is read only when the query needs it (a view's
+	// filters and the like): force converts it, in place, at loc and depth.
+	raw   *yaml.Node
+	loc   string
+	depth int
+}
+
+// force converts a value that convert left unread.
+func (n *node) force() *Error {
+	if n == nil || n.raw == nil {
+		return nil
+	}
+	conv, err := convert(n.raw, n.loc, n.depth)
+	if err != nil {
+		return err
+	}
+	*n = *conv
+	return nil
 }
 
 type pair struct {
@@ -61,7 +80,11 @@ func parseYAML(source []byte) (*node, *Error) {
 		return nil, &Error{Location: "base", Msg: fmt.Sprintf("not valid YAML: %v", err)}
 	}
 	var extra yaml.Node
-	if err := dec.Decode(&extra); err == nil {
+	switch err := dec.Decode(&extra); {
+	case errors.Is(err, io.EOF):
+	case err != nil:
+		return nil, &Error{Location: "base", Msg: fmt.Sprintf("not valid YAML after the first document: %v", err)}
+	default:
 		return nil, &Error{Location: "base", Msg: "more than one YAML document"}
 	}
 	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 {
@@ -117,6 +140,10 @@ func convert(n *yaml.Node, loc string, depth int) (*node, *Error) {
 				return nil, &Error{Location: here, Msg: "the key is given twice"}
 			}
 			seen[k.Value] = true
+			if lazyKey(loc, depth, k.Value) {
+				out.pairs = append(out.pairs, pair{k.Value, &node{kind: child.Kind, tag: child.ShortTag(), raw: child, loc: here, depth: depth + 1}})
+				continue
+			}
 			val, err := convert(child, here, depth+1)
 			if err != nil {
 				return nil, err
@@ -135,10 +162,28 @@ func keepKey(loc string, depth int, key string) bool {
 		return key == "filters" || key == "properties" || key == "views"
 	case depth == 2 && strings.HasPrefix(loc, "views["):
 		switch key {
-		case "type", "name", "filters", "order", "sort", "limit", "groupBy", "groupOrder", "image":
+		case "type", "name", "filters", "order", "sort", "limit", "groupBy", "image":
 			return true
 		}
-		return false
+		return false // groupOrder too: only its presence matters
+	case depth == 2 && strings.HasPrefix(loc, "properties."):
+		return key == "displayName"
 	}
 	return true
+}
+
+// lazyKey says whether a key's value is read only when the query needs it:
+// the global filters, and each view's filters, order, sort, groupBy, limit
+// and image. A view the query does not evaluate is never checked.
+func lazyKey(loc string, depth int, key string) bool {
+	switch {
+	case depth == 0:
+		return key == "filters"
+	case depth == 2 && strings.HasPrefix(loc, "views["):
+		switch key {
+		case "filters", "order", "sort", "groupBy", "limit", "image":
+			return true
+		}
+	}
+	return false
 }

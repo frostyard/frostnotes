@@ -279,6 +279,9 @@ them rather than improvising, whichever agent you are:
   one that does not exist; the router enforces it from the domain's
   `callers` (`api.Router.Dispatch`).
 - SQLite databases never live on a network file system or `/mnt/host`.
+- A store method that returns rows and a count of every match reads both
+  in 1 statement (a window `COUNT(*) OVER ()`) or in 1 read transaction:
+  2 statements can see 2 snapshots of the index (frostnotes#245).
 - Downloads in scripts are version-pinned and checksum-verified
   (frostyard/core ADR-0023).
 

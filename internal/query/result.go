@@ -1,10 +1,13 @@
 package query
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"io"
+	"math/big"
 	"path"
-	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/frostyard/frostnotes/api"
@@ -124,11 +127,35 @@ func nonNil(s []string) []string {
 }
 
 // sameJSON compares two JSON values as values: 1 and 1.0 are the same,
-// and null is null.
+// and null is null. Numbers compare exactly (as rationals), never as
+// float64, so 2 distinct large integers stay 2 values.
 func sameJSON(a, b jsontext.Value) bool {
-	var x, y any
-	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
-		return string(a) == string(b)
+	return canonicalJSON(a) == canonicalJSON(b)
+}
+
+// canonicalJSON writes v as text that is equal for equal values.
+func canonicalJSON(v jsontext.Value) string {
+	dec := jsontext.NewDecoder(bytes.NewReader(v))
+	var b strings.Builder
+	for {
+		tok, err := dec.ReadToken()
+		if err != nil {
+			if err != io.EOF {
+				return string(v) // not JSON: compare the text
+			}
+			return b.String()
+		}
+		switch tok.Kind() {
+		case '0':
+			text := tok.String()
+			if r, ok := new(big.Rat).SetString(text); ok {
+				text = r.RatString()
+			}
+			b.WriteString("n" + text + ";")
+		case '"':
+			b.WriteString(strconv.Quote(tok.String()) + ";")
+		default:
+			b.WriteString(tok.String() + ";") // null, true, false, [ ] { }
+		}
 	}
-	return reflect.DeepEqual(x, y)
 }

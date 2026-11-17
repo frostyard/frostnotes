@@ -96,6 +96,17 @@ func Compile(source []byte, o Options) (*Plan, error) {
 		return p, nil
 	}
 
+	// Only what the query reads is checked: the global filters and the view.
+	if err := root.get("filters").force(); err != nil {
+		return nil, err
+	}
+	if v.n != nil {
+		for _, pr := range v.n.pairs {
+			if err := pr.val.force(); err != nil {
+				return nil, err
+			}
+		}
+	}
 	c := newCompiler(o)
 	var conds []frag
 	for _, f := range []struct {

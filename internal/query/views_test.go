@@ -518,3 +518,81 @@ func TestThis(t *testing.T) {
 		}
 	})
 }
+
+func TestTotalWithTheLimit(t *testing.T) {
+	e := fixtureEnv(t)
+	// total counts every match, with 1 statement, whatever the limit and
+	// even with no row.
+	for _, tc := range []struct {
+		name       string
+		base       string
+		limit      int
+		rows, want int
+	}{
+		{"a limit below the matches", filterBase(`file.ext == "md"`), 3, 3, 17},
+		{"a limit of 1", filterBase(`file.ext == "md"`), 1, 1, 17},
+		{"a limit above the matches", filterBase(`file.ext == "md"`), 1000, 17, 17},
+		{"no match", filterBase(`false`), 5, 0, 0},
+		{"no match with groups", "filters: 'false'\n" + view("groupBy:\n  property: status\n"), 5, 0, 0},
+		{"1 match", filterBase(`file.name == "Home.md"`), 5, 1, 1},
+	} {
+		res := e.mustRun(tc.base, withLimit(tc.limit))
+		if len(res.Rows) != tc.rows || int(res.Total) != tc.want {
+			t.Errorf("%s: %d rows, total %d; want %d rows, total %d", tc.name, len(res.Rows), res.Total, tc.rows, tc.want)
+		}
+	}
+}
+
+// TestGroupByLargeIntegers: 2 whole numbers that float64 cannot tell apart
+// are 2 groups, and 1 and 1.0 are 1.
+func TestGroupByLargeIntegers(t *testing.T) {
+	dir := t.TempDir()
+	for name, n := range map[string]string{"a.md": "9007199254740992", "b.md": "9007199254740993", "c.md": "9007199254740993", "d.md": "1", "e.md": "1.0"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("---\nn: "+n+"\n---\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e := indexedEnv(t, dir)
+	res := e.mustRun(view("groupBy:\n  property: n\n"))
+	want := []string{`1:2`, `9007199254740992:1`, `9007199254740993:2`}
+	if got := groupShape(res); !slices.Equal(got, want) {
+		t.Errorf("groups = %q, want %q", got, want)
+	}
+}
+
+// TestReadsOnlyWhatItNeeds: a base is checked where the query reads it:
+// the global filters, the evaluated view, and displayName in properties.
+func TestReadsOnlyWhatItNeeds(t *testing.T) {
+	e := fixtureEnv(t)
+	other := "x: &a status\nviews:\n  - type: table\n    name: A\n    order: [file.name]\n  - type: table\n    name: B\n    filters: *a\n    sort: *a\n"
+	if res := e.mustRun(other); res.Total != 21 {
+		t.Errorf("an alias in another view's filters: %+v", res)
+	}
+	_, err := e.run(other, withView("B"))
+	if err == nil || !strings.HasPrefix(err.Error(), "views[1].filters: YAML anchors and aliases are outside the subset") {
+		t.Errorf("the evaluated view with an alias: %v", err)
+	}
+	// A bad filter of another view, and bad keys of its sort, order and limit.
+	bad := "views:\n  - type: table\n  - type: table\n    name: B\n    filters: [x]\n    order: 5\n    sort: x\n    groupBy: 1\n    limit: no\n    image: [x]\n"
+	if _, err := e.run(bad); err != nil {
+		t.Errorf("another view's keys are not read: %v", err)
+	}
+	// The global filters are not read for a view that gives a notice.
+	global := "x: &a status\nfilters: *a\nviews:\n  - type: kanban\n  - type: table\n    name: T\n"
+	if res := e.mustRun(global); res.Notice == nil {
+		t.Errorf("a notice with an alias in the global filters: %+v", res)
+	}
+	if _, err := e.run(global, withView("T")); err == nil || !strings.HasPrefix(err.Error(), "filters: YAML anchors and aliases are outside the subset") {
+		t.Errorf("the global filters with an alias: %v", err)
+	}
+	// Property metadata other than displayName is not read.
+	props := "x: &a 5\nproperties:\n  note.x:\n    width: *a\n    nested: {k: *a}\n    displayName: X\nviews:\n  - type: table\n    order: [note.x]\n"
+	res := e.mustRun(props)
+	if len(res.Columns) != 1 || res.Columns[0].DisplayName != "X" {
+		t.Errorf("columns = %+v", res.Columns)
+	}
+	// groupOrder is a notice whatever it holds.
+	if res := e.mustRun("x: &a 1\nviews:\n  - type: table\n    groupOrder: *a\n"); res.Notice == nil {
+		t.Errorf("groupOrder with an alias: %+v", res)
+	}
+}

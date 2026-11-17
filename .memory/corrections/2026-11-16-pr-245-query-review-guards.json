@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-16",
+  "scope": "internal/query",
+  "correction": "A query compiler checks what a client could get wrong without warning: fold and group numbers without float64 loss, read rows and the total in 1 statement, size a base by the bytes read rather than the index, refuse a malformed trailing YAML document, validate only the filters and keys it reads, expand a list constant only where the contract allows it, and test calendar durations across a daylight-saving change.",
+  "evidence": "frostnotes#245: the cross-review at 745a40b found 7 blocking points (int64 precision in foldCompare and sameJSON, COUNT and rows in 2 statements, the 1 MiB check on stale index size, an ignored bad second YAML document, aliases in unread views refusing the base, contains(this.file.tags) acting as containsAny, no DST test); each fix has a test that failed with the fix reverted, except the snapshot fix, which no deterministic test can catch",
+  "promoted_to": "internal/query TestFilterStatements, TestGroupByLargeIntegers, TestRefusals, TestReadsOnlyWhatItNeeds, TestRefusalsWithThis, TestDaysAreCalendarDays, TestTotalWithTheLimit; internal/engine TestNoteQuery; AGENTS.md Code conventions (rows and count in 1 statement)"
+}
