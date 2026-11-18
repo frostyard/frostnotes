@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 
@@ -29,6 +30,9 @@ func (t *tools) queryNotes(ctx context.Context, _ *sdk.CallToolRequest, in query
 	}
 	if in.View != "" && in.Path == "" {
 		return nil, queryOut{}, fmt.Errorf("view needs path")
+	}
+	if in.Path != "" && strings.ToLower(path.Ext(in.Path)) != ".base" {
+		return nil, queryOut{}, fmt.Errorf("path must be a .base file")
 	}
 	if len(in.Sort) > 0 && in.Path != "" {
 		return nil, queryOut{}, fmt.Errorf("sort applies only with filters: a base's view sets its own order")
@@ -59,7 +63,13 @@ func (t *tools) queryNotes(ctx context.Context, _ *sdk.CallToolRequest, in query
 		if err != nil {
 			return nil, queryOut{}, err
 		}
-		params.Source = new(string(source))
+		// YAML folds raw line-break runes inside JSON strings to spaces.
+		// Escapes preserve filter literals and property names byte for byte.
+		params.Source = new(strings.NewReplacer(
+			"\u0085", `\u0085`,
+			"\u2028", `\u2028`,
+			"\u2029", `\u2029`,
+		).Replace(string(source)))
 	} else {
 		params.Path = &in.Path
 		if in.View != "" {
@@ -71,6 +81,9 @@ func (t *tools) queryNotes(ctx context.Context, _ *sdk.CallToolRequest, in query
 		return nil, queryOut{}, err
 	}
 	if res.Notice != nil && *res.Notice != "" {
+		if res.View.Name == "" {
+			return nil, queryOut{}, fmt.Errorf("an unnamed view: %s", *res.Notice)
+		}
 		return nil, queryOut{}, fmt.Errorf("view %q: %s", res.View.Name, *res.Notice)
 	}
 	keys := make([]string, len(res.Columns))

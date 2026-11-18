@@ -230,6 +230,117 @@ func TestQueryNotesUnsupportedViewsAreErrorsWithoutFiles(t *testing.T) {
 	}
 }
 
+// The source keeps U+0085, U+2028, U+2029 and an emoji, which YAML would
+// otherwise fold or break, in literals and property names.
+func TestQueryNotesPreservesUnicodeLineBreaksAndEmoji(t *testing.T) {
+	files := map[string]string{
+		"Labels/Space.md": "---\nlabel: \"a b\"\n---\nspace\n",
+		"Labels/Emoji.md": "---\nlabel: \"🍐 pear\"\n---\nemoji\n",
+	}
+	for _, r := range []rune{'\u0085', '\u2028', '\u2029'} {
+		files[fmt.Sprintf("Labels/U%04X.md", r)] = fmt.Sprintf("---\nlabel: \"a\\u%04xb\"\n\"p\\u%04xq\": preserved\n---\nlabel\n", r, r)
+	}
+	h := newHarness(t, files, false)
+	for _, r := range []rune{'\u0085', '\u2028', '\u2029'} {
+		t.Run(fmt.Sprintf("U%04X", r), func(t *testing.T) {
+			property := "p" + string(r) + "q"
+			var out queryOut
+			h.ok("query_notes", map[string]any{
+				"filters":    `label == "a` + string(r) + `b"`,
+				"properties": []string{property},
+			}, &out)
+			want := fmt.Sprintf("Labels/U%04X.md", r)
+			if got := queryPaths(out); !slices.Equal(got, []string{want}) || out.Total != 1 {
+				t.Fatalf("paths = %v, total %d; want only %s", got, out.Total, want)
+			}
+			if properties := out.Files[0].Properties; len(properties) != 1 || properties[property] != "preserved" {
+				t.Errorf("properties = %#v, want %q preserved", properties, property)
+			}
+		})
+	}
+	var out queryOut
+	h.ok("query_notes", map[string]any{"filters": `label == "🍐 pear"`}, &out)
+	if got := queryPaths(out); !slices.Equal(got, []string{"Labels/Emoji.md"}) || out.Total != 1 {
+		t.Fatalf("emoji paths = %v, total %d", got, out.Total)
+	}
+}
+
+// An unnamed view with a notice is an error that says so.
+func TestQueryNotesUnnamedViewNoticeIsAnErrorWithoutFiles(t *testing.T) {
+	h := newHarness(t, map[string]string{"Bases/Unnamed.base": "views:\n  - {type: kanban}\n"}, false)
+	res := h.call("query_notes", map[string]any{"path": "Bases/Unnamed.base"})
+	text := resultText(t, res)
+	if !res.IsError || res.StructuredContent != nil || strings.Contains(text, `"files"`) || !strings.Contains(text, "an unnamed view: views[0]: view type kanban is outside the subset") {
+		t.Fatalf("unnamed view = %+v, text %s", res, text)
+	}
+}
+
+// No input adds a key or a view to the base the tool builds.
+func TestQueryNotesInputCannotChangeTheBaseShape(t *testing.T) {
+	h := newHarness(t, queryFixture(), false)
+	t.Run("filter cannot inject a view", func(t *testing.T) {
+		text := h.fails("query_notes", map[string]any{"filters": `x"}],"views":[{"type":"kanban"}]`})
+		if !strings.Contains(text, "invalidParams") || !strings.Contains(text, "filters:") || strings.Contains(text, "kanban is outside the subset") {
+			t.Fatal(text)
+		}
+	})
+	t.Run("quoted and multiline property names", func(t *testing.T) {
+		names := []string{`a"b`, "c\nd"}
+		var out queryOut
+		h.ok("query_notes", map[string]any{"filters": `file.ext == "md"`, "properties": names}, &out)
+		if len(out.Files) != 4 || out.Total != 4 {
+			t.Fatalf("query = %+v, want 4 notes", out)
+		}
+		for _, file := range out.Files {
+			if len(file.Properties) != len(names) {
+				t.Errorf("%s properties = %#v", file.Path, file.Properties)
+			}
+			for _, name := range names {
+				if value, ok := file.Properties[name]; !ok || value != nil {
+					t.Errorf("%s property %q = %#v, present %t; want null", file.Path, name, value, ok)
+				}
+			}
+		}
+	})
+	t.Run("filter mapping has one key", func(t *testing.T) {
+		text := h.fails("query_notes", map[string]any{"filters": map[string]any{"and": []string{"true"}, "or": []string{"true"}}})
+		if !strings.Contains(text, "invalidParams") || !strings.Contains(text, "a filter mapping has exactly one key") {
+			t.Fatal(text)
+		}
+	})
+}
+
+// The default limit is 200, absent or 0, not note.query's 1000.
+func TestQueryNotesDefaultLimitReturns200Of201Matches(t *testing.T) {
+	files := make(map[string]string)
+	for i := range 201 {
+		files[fmt.Sprintf("Many/Note-%03d.md", i)] = "made-up note\n"
+	}
+	h := newHarness(t, files, false)
+	var previous []string
+	for _, tc := range []struct {
+		name  string
+		limit *int
+	}{{"absent", nil}, {"zero", new(0)}} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := map[string]any{"filters": `file.inFolder("Many")`}
+			if tc.limit != nil {
+				args["limit"] = *tc.limit
+			}
+			var out queryOut
+			h.ok("query_notes", args, &out)
+			if len(out.Files) != 200 || out.Total != len(files) {
+				t.Fatalf("query returned %d files, total %d; want 200, 201", len(out.Files), out.Total)
+			}
+			paths := queryPaths(out)
+			if previous != nil && !slices.Equal(paths, previous) {
+				t.Errorf("zero limit paths differ from absent limit")
+			}
+			previous = paths
+		})
+	}
+}
+
 // Bad input is a tool error, and notesd's refusals pass through.
 func TestQueryNotesRefusesInvalidInputsAndPreservesNotesdErrors(t *testing.T) {
 	h := newHarness(t, queryFixture(), false)
@@ -241,6 +352,7 @@ func TestQueryNotesRefusesInvalidInputsAndPreservesNotesdErrors(t *testing.T) {
 		{"no source", map[string]any{}, []string{"give filters or path"}},
 		{"two sources", map[string]any{"filters": "true", "path": "Bases/Open.base"}, []string{"give filters or path, not both"}},
 		{"view without path", map[string]any{"filters": "true", "view": "Open"}, []string{"view needs path"}},
+		{"non-base path", map[string]any{"path": "Garden/Quince.md"}, []string{"path must be a .base file"}},
 		{"sort with path", map[string]any{"path": "Bases/Open.base", "sort": []map[string]any{{"property": "priority"}}}, []string{"sort applies only with filters: a base's view sets its own order"}},
 		{"empty property", map[string]any{"filters": "true", "properties": []string{"status", ""}}, []string{"a property name is empty"}},
 		{"this without path", map[string]any{"filters": `this.file.name == "x"`}, []string{"this is not set"}},

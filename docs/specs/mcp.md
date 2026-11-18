@@ -152,7 +152,8 @@ is an error.
   ([specs/bases.md](bases.md#filters)). There is no `this`: a statement
   that uses it is refused, and `file.hasLink` resolves from the vault
   root. A view never shows a notice in this form.
-- **`path`:** the tool sends `note.query` the `.base` file's path and
+- **`path`:** a path that does not end in `.base` (in any case) is an
+  error. The tool sends `note.query` the `.base` file's path and
   `view`, so the view's own filters, sort and limit apply, and `this` is
   the base file. `properties` names columns of the view, as its `order`
   writes them, where `KEY` and `note.KEY` are the same column; another
@@ -162,7 +163,9 @@ is an error.
   names, or with no `view` the base's first view, is outside the subset
   (a type such as kanban, or `groupOrder`), the result is a tool error
   that names the view and the notice, for example `view "Board":
-  views[1]: view type kanban is outside the subset`. It never carries
+  views[1]: view type kanban is outside the subset`, or for a view with
+  no name `an unnamed view: views[0]: view type kanban is outside the
+  subset`. It never carries
   `files`: an empty list with a `total` of 0 would read as a view that
   matches nothing.
 - **Rows** are notes and attachments, in the query's order, at most
@@ -175,6 +178,11 @@ is an error.
   With no `properties`, each file's `properties` is `{}`.
 - A refused filter or base is a tool error with `note.query`'s
   `invalidParams` message, which names the location and the expression.
+  With `filters`, the location is in the base the tool builds:
+  `filters` for the filters and `views[0].sort[N]` for a sort key.
+- The source keeps every character of the input: the tool writes
+  U+0085, U+2028 and U+2029 as JSON escapes, because YAML would read them
+  as line breaks.
 
 ### Write tools
 
