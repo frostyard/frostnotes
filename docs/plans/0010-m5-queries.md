@@ -14,9 +14,11 @@ Work is split per
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the compiler and its contract. No cards.
 
-Status (2026-11-16):
+Status (2026-11-17):
 - ADR-0037 was accepted on 2026-11-16.
-- Phase 1 is built on a pull request.
+- Phase 1 is done: frostnotes#245 merged on 2026-11-16.
+- Phase 2 is built on a pull request: `query_notes`, with check 7's
+  tests.
 
 ## Phase 1 — `note.query` and `notesctl query` (1 PR)
 
@@ -80,7 +82,7 @@ Status (2026-11-16):
 | 4. Fuzz: no base text in SQL text | 1 | built |
 | 5. Refusals, ignored keys, unshown columns, notices | 1 | built |
 | 6. Benchmark | 1 | built; budget below |
-| 7. `query_notes` under a read scope, notices as tool errors | 2 | open |
+| 7. `query_notes` under a read scope, notices as tool errors | 2 | built: `internal/mcpserver`'s query tests, and through lodge's `/mcp` |
 | 8. Rendering through the sanitizer | 3 | open |
 | 9. No rewrite of a `.base` file | 3 | open (Phase 1 only reads) |
 | 10. Operators on missing, unconvertible and attachment values | 1 | built |
@@ -103,8 +105,9 @@ gate; run it after a change to the compiler or the store's query.
 
 - Implements: [specs/bases.md](../specs/bases.md),
   [design/vault.md — Queries](../design/vault.md#queries),
-  [specs/rpc-api.md](../specs/rpc-api.md); later
-  [specs/mcp.md](../specs/mcp.md) and [design/app.md](../design/app.md)
+  [specs/rpc-api.md](../specs/rpc-api.md),
+  [specs/mcp.md](../specs/mcp.md#queries); later
+  [design/app.md](../design/app.md)
 - Decisions: [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md),
   [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md),
   [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)

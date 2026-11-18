@@ -62,6 +62,34 @@ type listOut struct {
 	Notice string      `json:"notice"`
 }
 
+type querySort struct {
+	Property  string `json:"property" jsonschema:"a note property (status or note.status) or file.path, file.name, file.basename, file.ext, file.folder, file.size or file.mtime"`
+	Direction string `json:"direction,omitzero" jsonschema:"ASC (the default) or DESC"`
+}
+
+type queryIn struct {
+	Filters    any         `json:"filters,omitzero" jsonschema:"an Obsidian Bases filter: a statement string, or an object with exactly one of and, or, not, each a list of statements and objects"`
+	Path       string      `json:"path,omitzero" jsonschema:"a .base file in the vault, instead of filters"`
+	View       string      `json:"view,omitzero" jsonschema:"with path: the view's name; the base's first view by default"`
+	Properties []string    `json:"properties,omitzero" jsonschema:"the properties to return for each file; default none; with path, columns of the view"`
+	Sort       []querySort `json:"sort,omitzero" jsonschema:"with filters: the order of the files; file.path ascending breaks ties"`
+	Limit      int         `json:"limit,omitzero" jsonschema:"at most this many files, 1 to 1000; default 200"`
+}
+
+type queryFile struct {
+	Path       string         `json:"path"`
+	Title      string         `json:"title" jsonschema:"a note's title; an attachment's file name without its extension"`
+	URL        string         `json:"url,omitzero" jsonschema:"through lodge: the note's address, /notes/<vault id>/<path> with each segment percent-encoded, for a link to it or lodge.open"`
+	Properties map[string]any `json:"properties" jsonschema:"each property asked for, by the name given; null when the file has no value"`
+	Writable   *bool          `json:"writable,omitzero" jsonschema:"whether this session may write the note; present only when its writes are limited to folders"`
+}
+
+type queryOut struct {
+	Files  []queryFile `json:"files"`
+	Total  int         `json:"total" jsonschema:"how many files match, beyond limit included"`
+	Notice string      `json:"notice"`
+}
+
 type tasksIn struct {
 	Folder string `json:"folder,omitzero" jsonschema:"only tasks in notes in this folder or below it; / is the whole vault"`
 	Limit  int    `json:"limit,omitzero" jsonschema:"at most this many tasks, 1 to 1000; default 200"`

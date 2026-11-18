@@ -67,8 +67,9 @@ socket ([lodge-app.md](lodge-app.md#mcp),
     Porter/Routines/, and append to today's daily note. A write
     elsewhere is refused.`
   - A write outside the scope is a tool error, whose text says the same.
-- **`writable`:** under a scope with `write=` or `except=`, `read_note`
-  and `list_notes` mark each note with whether the session may write it.
+- **`writable`:** under a scope with `write=` or `except=`, `read_note`,
+  `list_notes` and `query_notes` mark each note with whether the session
+  may write it.
   The mark is a convenience: the engine is the check.
   A scope with only `daily` offers the read tools.
 - **Sessions:** each `initialize` opens a session bound to its token's
@@ -121,6 +122,7 @@ linking note's address.
 | `list_notes` | `folder`, `tag`, `property`, `value` (strings, optional); `limit` (integer 1–1000, default 200) | `notes`: `[{path, title, url, modified, writable}]` by path, `writable` under a limited scope; `total`; `notice` |
 | `list_tasks` | `folder` (string, optional); `limit` (integer 1–1000, default 200) | `tasks`: `[{path, title, url, line, text}]` by path and line; `total`; `notice` |
 | `get_backlinks` | `path` (required) | `backlinks`: `[{source, url, line, target, alias, embed}]`, `url` the source's; `notice` |
+| `query_notes` | exactly one of `filters` (a Bases statement string, or an object with one of `and`, `or`, `not`) and `path` (a `.base` file); `view` (string, with `path` only); `properties` (strings, default none); `sort` (`[{property, direction}]`, with `filters` only); `limit` (integer 1–1000, default 200) | `files`: `[{path, title, url, properties, writable}]` in the query's order, `writable` under a limited scope; `total`; `notice` |
 
 - `search_notes` calls `note.search`. A snippet is its parts' text joined,
   each matching part between `**` and `**`.
@@ -133,6 +135,54 @@ linking note's address.
 - `get_backlinks` calls `note.backlinks`; `line` is the link's line in its
   source, `target` its target as written, `embed` true for `![[…]]` and
   images.
+- `query_notes` calls `note.query`, the Obsidian Bases subset of
+  [specs/bases.md](bases.md)
+  ([ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md)).
+  See [Queries](#queries).
+
+### Queries
+
+`query_notes` runs a query in one of two forms; giving both, or neither,
+is an error.
+
+- **`filters`:** the tool sends `note.query` a `source`: a base whose
+  `filters` are the ones given and whose one view is a table with the
+  properties as its `order` and `sort` as its `sort`. `filters` is a
+  statement string or an object, as a base's `filters` are
+  ([specs/bases.md](bases.md#filters)). There is no `this`: a statement
+  that uses it is refused, and `file.hasLink` resolves from the vault
+  root. A view never shows a notice in this form.
+- **`path`:** a path that does not end in `.base` (in any case) is an
+  error. The tool sends `note.query` the `.base` file's path and
+  `view`, so the view's own filters, sort and limit apply, and `this` is
+  the base file. `properties` names columns of the view, as its `order`
+  writes them, where `KEY` and `note.KEY` are the same column; another
+  name is an error that lists the view's columns. `sort` is an error in
+  this form: the view sets its own order.
+- **A view that shows a notice is an error.** When the view that `view`
+  names, or with no `view` the base's first view, is outside the subset
+  (a type such as kanban, or `groupOrder`), the result is a tool error
+  that names the view and the notice, for example `view "Board":
+  views[1]: view type kanban is outside the subset`, or for a view with
+  no name `an unnamed view: views[0]: view type kanban is outside the
+  subset`. It never carries
+  `files`: an empty list with a `total` of 0 would read as a view that
+  matches nothing.
+- **Rows** are notes and attachments, in the query's order, at most
+  `limit` (the view's own `limit` too, when it is smaller); `total`
+  counts every match. `title` is a note's title, an attachment's
+  `file.basename`.
+- **`properties`** holds each property asked for, by the name given, with
+  its JSON value, or null when the file has none. A property notesd
+  cannot show (`formula.*`, `this.*`, an unknown `file.*`) is an error.
+  With no `properties`, each file's `properties` is `{}`.
+- A refused filter or base is a tool error with `note.query`'s
+  `invalidParams` message, which names the location and the expression.
+  With `filters`, the location is in the base the tool builds:
+  `filters` for the filters and `views[0].sort[N]` for a sort key.
+- The source keeps every character of the input: the tool writes
+  U+0085, U+2028 and U+2029 as JSON escapes, because YAML would read them
+  as line breaks.
 
 ### Write tools
 
@@ -192,17 +242,18 @@ more than one, is an error.
   or receive: edits are applied to the content `note.read` returned.
 - A tool calls only notesd's `note` domain and `rpc.hello`; it never reads
   or writes the vault's files itself.
-- A read-only server's tool list is exactly the five read tools, and so
+- A read-only server's tool list is exactly the six read tools, and so
   is the list of a session under a read scope. A session's other tools
   are those its scope allows, and no more.
 - A tool result never carries the content of a note the tool was not asked
-  about: `search_notes` returns snippets, not notes.
+  about: `search_notes` returns snippets, not notes, and `query_notes`
+  returns the frontmatter values the call names, never a body.
 - A session through lodge reaches only its scope's vault: every tool
   call names that vault, whatever its input says, and the engine
   answers `notFound` for any other.
 
 ## References
 
-- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (through lodge), [lodge ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (folder scopes)
-- Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [design/app.md](../design/app.md#in-a-browser) (the routes `url` gives), [specs/rpc-api.md](rpc-api.md) (`note`), [specs/lodge-app.md](lodge-app.md#mcp)
-- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp); through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md); folder scopes in [plan 0007](../plans/0007-folder-scopes-for-agents.md)
+- Rationale: [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md), [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md) (`query_notes`), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (through lodge), [lodge ADR-0006](https://github.com/frostyard/lodge/blob/main/docs/adr/0006-agents-reach-each-app-through-its-own-mcp-endpoint.md), [ADR-0006](../adr/0006-every-write-names-the-version-it-changes.md), [ADR-0014](../adr/0014-the-api-carries-text-and-keeps-bytes-it-cannot-show.md) (content as text), [ADR-0028](../adr/0028-an-agents-scope-can-limit-writes-to-folders.md) (folder scopes)
+- Context: [design/overview.md](../design/overview.md), [design/vault.md](../design/vault.md#writes), [design/vault.md — Queries](../design/vault.md#queries), [specs/bases.md](bases.md) (the query subset), [design/app.md](../design/app.md#in-a-browser) (the routes `url` gives), [specs/rpc-api.md](rpc-api.md) (`note`), [specs/lodge-app.md](lodge-app.md#mcp)
+- Built in: [plan 0003, Phase 6](../plans/0003-m1-headless-vault.md#phase-6--mcp); through lodge in [plan 0006](../plans/0006-m4-notes-inside-lodge.md); folder scopes in [plan 0007](../plans/0007-folder-scopes-for-agents.md); `query_notes` in [plan 0010, Phase 2](../plans/0010-m5-queries.md#phase-2--query_notes-for-agents)
