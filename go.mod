@@ -4,9 +4,9 @@ go 1.27.4
 
 require (
 	github.com/d2lang/mathjax-go v0.1.0
-	github.com/egoist/mygo v0.9.0
+	github.com/egoist/mygo v0.10.0
 	github.com/frostyard/clix v0.5.0
-	github.com/frostyard/frostui v0.5.1
+	github.com/frostyard/frostui v0.10.0
 	github.com/frostyard/lodge/kit v0.4.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
@@ -82,12 +82,11 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-// The native desktop app needs MyGo changes that no release has yet:
-// elements between lines (egoist/mygo#1662), per-line styles, and the
-// Markdown view's task actions and anchors. This is branch frostyard/next on
-// a fork: v0.9.0 and those, nothing else. The fork has no v0.9.0 tag, so its
-// pseudo-version reads v0.8.4. Once all are in a MyGo release, require that
-// release and drop this (docs/plans/0009-mygo-desktop.md). While it stays,
-// make verify also runs frostui's tests against it; the step and the replace
-// go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261111132952-d97fd2e109b9
+// MyGo v0.10.0 provides per-line styles, Markdown task actions, and anchors,
+// but not editor elements between lines or line-level strike-through. This
+// bounded fork ports only those desktop-editor changes onto v0.10.0 from
+// egoist/mygo#1662. Keep the replacement until the feature is released
+// upstream (docs/plans/0009-mygo-desktop.md). While it
+// stays, make verify also runs frostui's tests against it; the step and the
+// replace go together.
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261118034332-0a40cf649641

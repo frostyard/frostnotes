@@ -272,6 +272,28 @@ func scanBlocks(text string, revealed func(int) bool) Result {
 	return s.Scan(text, Options{Revealed: revealed, Blocks: true, Embed: embedAll})
 }
 
+func TestDoneTaskKeepsItsStrikeStyleWhenAnEmbedKeepsSource(t *testing.T) {
+	in := "- [x] see ![[Missing]]\n"
+	for _, tc := range []struct {
+		name string
+		kind EmbedKind
+	}{
+		{"missing", NoEmbed},
+		{"inline note", NoteEmbed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s Scanner
+			r := s.Scan(in, Options{Blocks: true, Embed: func(string, bool) EmbedKind { return tc.kind }})
+			if len(r.Styles) != 1 || !r.Styles[0].Done {
+				t.Fatalf("styles %+v", r.Styles)
+			}
+			if got := show(in, r.Pieces); got != "☑ see ![[Missing]]\n" {
+				t.Fatalf("shows %q", got)
+			}
+		})
+	}
+}
+
 func TestWholeBlocksDrawInPlaceOfTheirLines(t *testing.T) {
 	for _, tc := range []struct {
 		name, in, shown, source, label string

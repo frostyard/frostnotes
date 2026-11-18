@@ -1139,7 +1139,10 @@ This completes media playback in [plan 0009](../plans/0009-mygo-desktop.md), und
 [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
 
 Native live preview uses MyGo's per-line styles for heading sizes (in Inter,
-[the native look](#the-native-look)) and completed task strike-through. Selecting a line restores its source font and marks;
-source mode clears all preview styles. This completes the line-style portion
+[the native look](#the-native-look)) and completed task strike-through. The
+bounded MyGo desktop fork preserves line-style strike-through so long tasks
+wrap across rows and retained embed source stays struck. Selecting a line
+restores its source font and marks; source mode clears all preview styles.
+This completes the line-style portion
 of [plan 0009, Phase 5](../plans/0009-mygo-desktop.md), under
 [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
