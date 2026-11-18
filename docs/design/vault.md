@@ -229,6 +229,10 @@ packages:
    groups from consecutive rows of equal group value.
 
 The method only reads, so every caller kind of the `note` domain may call it.
+The MCP read tool `query_notes` is its client for agents
+([specs/mcp.md](../specs/mcp.md#read-tools)): it sends a `.base` file's
+path, or an agent's filters as the `source` of a base with one table view,
+and turns a view's notice into a tool error.
 Built in [plan 0010](../plans/0010-m5-queries.md).
 
 ### Link resolution

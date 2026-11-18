@@ -52,7 +52,7 @@ const ServerName = "frostnotes"
 const instructions = `Frostnotes serves the user's notes vault: markdown notes with YAML
 properties, linked with [[wikilinks]]. Paths are relative to the vault and
 separated by "/", as search_notes and list_notes give them. Find notes with
-search_notes or list_notes, then read them with read_note. ` + Notice + `
+search_notes, list_notes or query_notes, then read them with read_note. ` + Notice + `
 Each write is recorded in the note's history as yours, and the user can
 revert it.`
 
@@ -133,6 +133,16 @@ how many there are. ` + Notice}, t.listTasks)
 or attachment from the vault's other notes: for each, the linking note's
 path, the link's line, its target as written, its alias, and whether it
 embeds. ` + Notice}, t.getBacklinks)
+	sdk.AddTool(s, &sdk.Tool{Name: "query_notes", Annotations: reads, Description: `Query the vault's files with Obsidian Bases filters.
+Give filters (a statement such as 'status == "open" && file.hasTag("work")',
+or an object with exactly one of and, or, not, each holding a list of
+statements and objects), or path, a .base file in the vault, with an optional
+view (its first view by default). Files are notes and attachments.
+properties names the properties to return for each file (none by default;
+with path, columns of the view); sort orders the files (with filters only).
+A statement that uses this needs path. Returns at most limit files and how
+many match. A view outside the supported subset (such as kanban, or one
+with groupOrder) is an error, never an empty result. ` + Notice}, t.queryNotes)
 	if o.ReadOnly {
 		return s
 	}

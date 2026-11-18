@@ -138,12 +138,12 @@ func call(t *testing.T, cs *sdk.ClientSession, tool string, args map[string]any)
 	return res, text.String()
 }
 
-// A read scope's session lists the five read tools and reads its vault.
+// A read scope's session lists the six read tools and reads its vault.
 func TestAReadScopeServesTheReadTools(t *testing.T) {
 	n := startLodge(t)
 	cs := n.connect(t, "claude-laptop", scope(n.vault, false))
-	if got := toolNames(t, cs); !slices.Equal(got, []string{"get_backlinks", "list_notes", "list_tasks", "read_note", "search_notes"}) {
-		t.Fatalf("tools = %v, want the five read tools", got)
+	if got := toolNames(t, cs); !slices.Equal(got, []string{"get_backlinks", "list_notes", "list_tasks", "query_notes", "read_note", "search_notes"}) {
+		t.Fatalf("tools = %v, want the six read tools", got)
 	}
 	if res, text := call(t, cs, "read_note", map[string]any{"path": "Plan.md"}); res.IsError || !strings.Contains(text, "Plant the beds.") {
 		t.Fatalf("read_note = %v %s", res.IsError, text)
@@ -158,12 +158,93 @@ func TestAReadScopeServesTheReadTools(t *testing.T) {
 	}
 }
 
+// query_notes through lodge serves the scope's vault only, with notice,
+// marks writable under a folder scope, and refuses a view with a notice
+// (ADR-0037, check 7).
+func TestQueryNotesThroughLodgeIsPinnedToTheScopesVault(t *testing.T) {
+	n := startLodge(t)
+	ctx := t.Context()
+	for _, file := range []struct {
+		vault         int64
+		path, content string
+	}{
+		{n.vault, "Garden/Quince.md", "---\ntags: [garden]\n---\nSECRETBODY-quince\n"},
+		{n.other, "Garden/Medlar.md", "---\ntags: [garden]\n---\nSECRETBODY-medlar\n"},
+		{n.vault, "Bases/Garden.base", `filters: 'file.hasTag("garden")'
+views:
+  - {type: table, name: Garden}
+  - {type: kanban, name: Board}
+  - type: table
+    name: Grouped
+    groupBy: {property: status, direction: ASC}
+    groupOrder: [open]
+`},
+	} {
+		if _, err := n.local.Note().Create(ctx, &api.NoteCreateParams{VaultID: file.vault, Path: file.path, Content: file.content}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(cs *sdk.ClientSession, args map[string]any, vaultID int64, path string, writable bool) {
+		t.Helper()
+		res, text := call(t, cs, "query_notes", args)
+		if res.IsError {
+			t.Fatal(text)
+		}
+		var out struct {
+			Files []struct {
+				Path     string `json:"path"`
+				URL      string `json:"url"`
+				Writable *bool  `json:"writable"`
+			} `json:"files"`
+			Total  int    `json:"total"`
+			Notice string `json:"notice"`
+		}
+		if err := json.Unmarshal([]byte(text), &out); err != nil {
+			t.Fatal(err)
+		}
+		if len(out.Files) != 1 || out.Total != 1 || out.Notice != mcpserver.Notice {
+			t.Fatalf("query = %s, want one match and Notice", text)
+		}
+		file := out.Files[0]
+		if file.Path != path || file.URL != "/notes/"+strconv.FormatInt(vaultID, 10)+"/"+path {
+			t.Errorf("query = %s, want vault %d path %s", text, vaultID, path)
+		}
+		if writable {
+			if file.Writable == nil || !*file.Writable {
+				t.Errorf("query = %s, want writable true", text)
+			}
+		} else if file.Writable != nil || strings.Contains(text, `"writable"`) {
+			t.Errorf("query = %s, want writable absent", text)
+		}
+		if strings.Contains(text, "SECRETBODY") || strings.Contains(text, `"content"`) {
+			t.Errorf("query leaked content: %s", text)
+		}
+	}
+	cs := n.connect(t, "garden-reader", scope(n.vault, false))
+	filters := map[string]any{"filters": `file.hasTag("garden")`}
+	check(cs, filters, n.vault, "Garden/Quince.md", false)
+	check(cs, map[string]any{"path": "Bases/Garden.base"}, n.vault, "Garden/Quince.md", false)
+	for _, tc := range []struct{ view, want string }{
+		{"Board", "views[1]: view type kanban is outside the subset"},
+		{"Grouped", "views[2]: groupOrder is outside the subset"},
+	} {
+		res, text := call(t, cs, "query_notes", map[string]any{"path": "Bases/Garden.base", "view": tc.view})
+		if !res.IsError || res.StructuredContent != nil || strings.Contains(text, `"files"`) || !strings.Contains(text, `view "`+tc.view+`"`) || !strings.Contains(text, tc.want) {
+			t.Errorf("unsupported view %s = %+v, %s", tc.view, res, text)
+		}
+	}
+	other := n.connect(t, "other-garden-reader", scope(n.other, false))
+	check(other, filters, n.other, "Garden/Medlar.md", false)
+	folder := n.connect(t, "garden-writer", "vault="+strconv.FormatInt(n.vault, 10)+";write=Garden/")
+	check(folder, filters, n.vault, "Garden/Quince.md", true)
+}
+
 // A write scope's writes name the token, not the MCP client.
 func TestAWriteScopeWritesAsItsToken(t *testing.T) {
 	n := startLodge(t)
 	cs := n.connect(t, "claude-laptop", scope(n.vault, true))
-	if got := toolNames(t, cs); len(got) != 8 {
-		t.Fatalf("tools = %v, want eight", got)
+	if got := toolNames(t, cs); len(got) != 9 {
+		t.Fatalf("tools = %v, want nine", got)
 	}
 	if res, text := call(t, cs, "edit_note", map[string]any{"path": "Plan.md", "append": "Water them.\n"}); res.IsError {
 		t.Fatalf("edit_note: %s", text)
@@ -206,8 +287,8 @@ func TestTheEngineHoldsTheAgentToItsScope(t *testing.T) {
 func TestAFolderScopeHoldsThroughLodge(t *testing.T) {
 	n := startLodge(t)
 	cs := n.connect(t, "porter", "vault="+strconv.FormatInt(n.vault, 10)+";write=Porter/;except=Porter/Routines/;daily")
-	if got := toolNames(t, cs); len(got) != 8 {
-		t.Fatalf("tools = %v, want eight", got)
+	if got := toolNames(t, cs); len(got) != 9 {
+		t.Fatalf("tools = %v, want nine", got)
 	}
 	if res, text := call(t, cs, "create_note", map[string]any{"path": "Porter/Memory.md", "content": "memory\n"}); res.IsError {
 		t.Fatalf("create_note in Porter/: %s", text)
@@ -233,7 +314,7 @@ func TestAFolderScopeHoldsThroughLodge(t *testing.T) {
 func TestToolsFollowTheScope(t *testing.T) {
 	n := startLodge(t)
 	id := "vault=" + strconv.FormatInt(n.vault, 10)
-	reads := []string{"get_backlinks", "list_notes", "list_tasks", "read_note", "search_notes"}
+	reads := []string{"get_backlinks", "list_notes", "list_tasks", "query_notes", "read_note", "search_notes"}
 	for _, tc := range []struct {
 		scope  string
 		extra  []string
@@ -498,7 +579,7 @@ func TestASessionBelongsToItsToken(t *testing.T) {
 		}
 	}
 	// The session still works for its own token.
-	if got := toolNames(t, cs); len(got) != 5 {
+	if got := toolNames(t, cs); len(got) != 6 {
 		t.Errorf("tools after the refusals = %v", got)
 	}
 }
@@ -509,7 +590,7 @@ func TestANinthSessionEvictsTheLeastRecentlyUsed(t *testing.T) {
 	var sessions []*sdk.ClientSession
 	for i := range 8 {
 		cs := n.connect(t, "claude-laptop", scope(n.vault, false))
-		if got := toolNames(t, cs); len(got) != 5 {
+		if got := toolNames(t, cs); len(got) != 6 {
 			t.Fatalf("session %d: tools = %v", i, got)
 		}
 		sessions = append(sessions, cs)

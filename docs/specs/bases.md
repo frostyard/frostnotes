@@ -4,9 +4,10 @@ The subset of [Obsidian Bases](https://help.obsidian.md/bases) that notesd
 evaluates, the method `note.query` that evaluates it, and `notesctl query`.
 `internal/query` parses a base and compiles it to SQL over the index;
 `store.DB` runs the SQL; the engine serves `note.query` to every caller
-kind of the `note` domain. The app's base views, the web app's and the
-MCP tool `query_notes` are clients of this contract (later steps of
-[roadmap M5](../plans/0002-roadmap.md)). Rationale:
+kind of the `note` domain. The MCP tool `query_notes`
+([specs/mcp.md](mcp.md#queries)) is a client of this contract; the app's
+base views and the web app's are later steps of
+[roadmap M5](../plans/0002-roadmap.md). Rationale:
 [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md); where
 it fits: [design/vault.md](../design/vault.md#queries). Built in
 [plan 0010](../plans/0010-m5-queries.md).
@@ -353,6 +354,7 @@ outside the subset.
   [ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md),
   [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md)
 - Context: [design/vault.md — Queries](../design/vault.md#queries),
+  [specs/mcp.md — Queries](mcp.md#queries) (`query_notes`),
   [specs/rpc-api.md](rpc-api.md) (`note.query`, generated),
   [specs/markdown.md — link resolution](markdown.md#link-resolution)
 - Plan: [plan 0010](../plans/0010-m5-queries.md)
