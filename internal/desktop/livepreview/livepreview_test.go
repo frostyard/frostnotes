@@ -267,6 +267,27 @@ func embedAll(target string, wikilink bool) EmbedKind {
 	return NoEmbed
 }
 
+func TestDoneTaskStrikesPlainTextAndInlineObjects(t *testing.T) {
+	in := "- [x] done [[Plan]]\n"
+	var s Scanner
+	r := s.Scan(in, Options{})
+	var dim, object bool
+	for _, p := range r.Pieces {
+		switch p.Kind {
+		case Dim:
+			dim = dim || p.Label == " done "
+		case Link:
+			object = object || p.Strike && p.Label == "Plan"
+		}
+	}
+	if !dim || !object {
+		t.Fatalf("pieces %+v; plain text dim=%v, link struck=%v", r.Pieces, dim, object)
+	}
+	if got := show(in, r.Pieces); got != "☑ done Plan\n" {
+		t.Fatalf("shows %q", got)
+	}
+}
+
 func scanBlocks(text string, revealed func(int) bool) Result {
 	var s Scanner
 	return s.Scan(text, Options{Revealed: revealed, Blocks: true, Embed: embedAll})

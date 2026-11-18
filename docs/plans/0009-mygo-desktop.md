@@ -271,16 +271,16 @@ other sessions are writing their pull requests:
   `Buffer.EditRemote` ([egoist/mygo#1654](https://github.com/egoist/mygo/pull/1654))
   and uses MyGo's own undo.
 
-**A fork until the rest lands.** MyGo v0.9.0 (2026-11-11) has #1654 and
-[egoist/mygo#1655](https://github.com/egoist/mygo/pull/1655). `go.mod`
-requires v0.9.0 and replaces it with `github.com/bketelsen/mygo`, branch
-`frostyard/next` at `d97fd2e1`: v0.9.0 with
-[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662) (elements between
-lines), per-line styles (headings' sizes and done tasks) and the Markdown
-view's task actions and anchors, nothing else. The fork has no v0.9.0 tag, so
-its pseudo-version reads v0.8.4. The owner approved the fork on 2026-11-10 and
-the move to v0.9.0 on 2026-11-11. Once all of these are in a MyGo release,
-`go.mod` requires that release and the `replace` goes. The fork also changes the MyGo frostui builds against here, and
+**A fork until editor blocks land.** MyGo v0.10.0 has remote edits,
+per-line styles, and the Markdown view's task actions and anchors. `go.mod`
+requires v0.10.0 and replaces it with `github.com/bketelsen/mygo`, branch
+`frostyard/v0.10.0-editor-blocks` at `ef1e6f1e`: v0.10.0 with only
+[egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662)'s elements
+between lines. The fork has no v0.10.0 tag, so its pseudo-version reads
+v0.8.4. Frostnotes draws completed-task strike-through in the live-preview
+replacement now that upstream line styles only carry fonts and line height.
+Once editor blocks are in a MyGo release, `go.mod` requires that release and
+the `replace` goes. The fork changes the MyGo frostui builds against here, and
 frostui's CI tests only released MyGo, so `make verify` runs
 `go test github.com/frostyard/frostui/...` while the `replace` stays; the
 step goes with it. A failure there is reported to frostui.

@@ -77,11 +77,10 @@ func (e *NoteEditor) showLive(c *ui.Context) {
 	e.State.SetReplacements(out)
 	styles := make([]code.LineStyle, 0, len(res.Styles))
 	for _, s := range res.Styles {
-		style := code.LineStyle{Line: s.Line, Strike: s.Done}
-		if s.Heading > 0 {
-			style.Font = headingFont(e.font(), s.Heading)
+		if s.Heading == 0 {
+			continue // done-task text is struck in its replacement below
 		}
-		styles = append(styles, style)
+		styles = append(styles, code.LineStyle{Line: s.Line, Font: headingFont(e.font(), s.Heading)})
 	}
 	e.State.SetLineStyles(styles)
 	backgrounds := make([]code.LineBackground, len(res.Code))
@@ -239,24 +238,37 @@ func (e *NoteEditor) replacement(c *ui.Context, p livepreview.Piece, muted ui.Co
 	case livepreview.Rule:
 		r.Text, r.Color = strings.Repeat("─", ruleWidth), muted
 	case livepreview.Dim:
+		f := e.font()
 		r.Text, r.Color = p.Label, muted
+		r.Label, r.Width = p.Label, e.objectWidth(c, p.Label, f)
+		r.Content = e.struckText(p.Label, muted)
 	case livepreview.Math:
 		if obj, ok := e.live.math.Inline(p.Label, e.font().Size, c.Theme().Text); ok {
 			r.Width = obj.Width
 			r.Label = p.Label
 			r.Content = func(_ *ui.Context, el ui.Element, _ code.Replacement) {
-				el.Draw(func(p *ui.Painter, rect ui.Rect) {
+				el.Draw(func(paint *ui.Painter, rect ui.Rect) {
 					// Fit tall inline expressions inside the line; display math gets its own block.
 					width, height := obj.Width, obj.Height
 					if height > rect.H {
 						width *= rect.H / height
 						height = rect.H
 					}
-					obj.Draw(p, ui.Rect{X: rect.X, Y: rect.Y + (rect.H-height)/2, W: width, H: height})
+					obj.Draw(paint, ui.Rect{X: rect.X, Y: rect.Y + (rect.H-height)/2, W: width, H: height})
+					if p.Strike {
+						line := &ui.Path{}
+						line.MoveTo(rect.X, rect.Y+rect.H/2)
+						line.LineTo(rect.X+rect.W, rect.Y+rect.H/2)
+						paint.StrokePath(line, 1, muted)
+					}
 				})
 			}
 		} else {
 			r.Text = "$" + p.Label + "$"
+			if p.Strike {
+				r.Label, r.Content = r.Text, e.struckText(r.Text, muted)
+				r.Width = e.objectWidth(c, r.Text, e.font())
+			}
 		}
 	case livepreview.Task:
 		return e.taskBox(p)
@@ -264,6 +276,16 @@ func (e *NoteEditor) replacement(c *ui.Context, p livepreview.Piece, muted ui.Co
 		return e.object(c, p)
 	}
 	return r
+}
+
+// struckText draws a completed task's plain text or an inline fallback.
+func (e *NoteEditor) struckText(label string, color ui.Color) func(*ui.Context, ui.Element, code.Replacement) {
+	f := e.font()
+	return func(c *ui.Context, el ui.Element, _ code.Replacement) {
+		el.Children(func() {
+			ui.Text(c, label).Font(f.Family).FontSize(f.Size).TextColor(color).Strikethrough().SingleLine()
+		})
+	}
 }
 
 // font is the editor's font, with what MyGo fills in.
@@ -306,7 +328,12 @@ func (e *NoteEditor) object(c *ui.Context, p livepreview.Piece) code.Replacement
 			}
 			el.Children(func() {
 				b := ui.ButtonBase(c).Fill().Center().KeepFocus().Cursor(ui.CursorPointer).Label(p.Label)
-				b.Children(func() { ui.Text(c, p.Label).Font(f.Family).FontSize(f.Size).TextColor(color).SingleLine() })
+				b.Children(func() {
+					text := ui.Text(c, p.Label).Font(f.Family).FontSize(f.Size).TextColor(color).SingleLine()
+					if p.Strike {
+						text.Strikethrough()
+					}
+				})
 				if b.Clicked() {
 					e.activate(p, at, c.Modifiers())
 				}

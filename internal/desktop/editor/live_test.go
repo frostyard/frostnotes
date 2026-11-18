@@ -103,11 +103,12 @@ func TestAClickFollowsALinkATagAndAFootnote(t *testing.T) {
 func TestADoneTasksTextIsDim(t *testing.T) {
 	f := openEditor(t, "a.md", "- [x] gone\n\nlast\n")
 	got := f.shown()
-	if want := []string{"- [x]=>box", " gone=> gone"}; !slices.Equal(got, want) {
+	if want := []string{"- [x]=>box", " gone=>box"}; !slices.Equal(got, want) {
 		t.Fatalf("%q, want %q", got, want)
 	}
-	if r := f.ed.State.Replacements()[1]; r.Color == (ui.Color{}) {
-		t.Fatal("the text kept its color")
+	r := f.ed.State.Replacements()[1]
+	if r.Color == (ui.Color{}) || r.Content == nil || r.Label != " gone" {
+		t.Fatalf("the text is not a labeled, struck replacement: %+v", r)
 	}
 }
 
@@ -326,13 +327,13 @@ func TestLiveLineStylesFollowRevealAndMode(t *testing.T) {
 	f := openEditor(t, "a.md", "# Heading\n\n- [x] done\n\nlast\n")
 	f.tt.Frame()
 	styles := f.ed.State.LineStyles()
-	if len(styles) != 2 || styles[0].Line != 0 || styles[0].Font.Size != 2*f.ed.font().Size || !styles[1].Strike {
+	if len(styles) != 1 || styles[0].Line != 0 || styles[0].Font.Size != 2*f.ed.font().Size {
 		t.Fatalf("styles %+v", styles)
 	}
 	f.caret(3)
 	f.tt.Frame()
 	styles = f.ed.State.LineStyles()
-	if len(styles) != 1 || !styles[0].Strike {
+	if len(styles) != 0 {
 		t.Fatalf("revealed heading styles %+v", styles)
 	}
 	f.ed.Prefs.Live = false

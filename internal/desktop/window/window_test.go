@@ -1176,7 +1176,12 @@ func TestReadingTaskClickHasUndoAndRedoWithoutAnEditor(t *testing.T) {
 	}
 	f.until("interactive task", func() bool {
 		f.loop.Advance(reading.RenderDelay)
-		return f.tt.Click("Mark task done") == nil
+		box, ok := f.tt.AccessByRole(ui.RoleCheckBox, "water")
+		if !ok {
+			return false
+		}
+		f.tt.ClickAt(box.Bounds.X+box.Bounds.W/2, box.Bounds.Y+box.Bounds.H/2)
+		return true
 	})
 	if tc.doc.Text() != "- [x] water\n" {
 		t.Fatalf("click: %q", tc.doc.Text())

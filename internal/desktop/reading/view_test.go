@@ -212,9 +212,11 @@ func TestReadingTaskClickEditsItsMappedSourceLine(t *testing.T) {
 	for _, source := range []string{"---\ntitle: Tasks\n---\n%%comment%%\n- [ ] water\n", "> [!note] Work\n> - [ ] water\n"} {
 		t.Run(source, func(t *testing.T) {
 			f := open(t, map[string]string{"Tasks.md": source}, "Tasks.md")
-			if err := f.tt.Click("Mark task done"); err != nil {
-				t.Fatal(err)
+			box, ok := f.tt.AccessByRole(ui.RoleCheckBox, "water")
+			if !ok {
+				t.Fatal("task checkbox not accessible")
 			}
+			f.tt.ClickAt(box.Bounds.X+box.Bounds.W/2, box.Bounds.Y+box.Bounds.H/2)
 			want := strings.Replace(source, "[ ]", "[x]", 1)
 			if f.doc.Text() != want {
 				t.Fatalf("got %q, want %q; mapping %v of %q", f.doc.Text(), want, f.view.sourceLines, f.view.md)
@@ -234,7 +236,9 @@ func TestObsoleteReadingTaskClickDoesNotEdit(t *testing.T) {
 	cs, _ := notes.ChangesOf(len(f.doc.Text()), notes.Change{From: 0, To: 0, Insert: "new line\n"})
 	f.doc.Local(cs)
 	before := f.doc.Text()
-	_ = f.tt.Click("Mark task done") // the stale action may already be disabled
+	if box, ok := f.tt.AccessByRole(ui.RoleCheckBox, "original"); ok {
+		f.tt.ClickAt(box.Bounds.X+box.Bounds.W/2, box.Bounds.Y+box.Bounds.H/2)
+	}
 	if f.doc.Text() != before {
 		t.Fatal("obsolete checkbox changed current text")
 	}
