@@ -89,4 +89,4 @@ require (
 // upstream (docs/plans/0009-mygo-desktop.md). While it
 // stays, make verify also runs frostui's tests against it; the step and the
 // replace go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261118033705-7c6d69ade314
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261118034332-0a40cf649641

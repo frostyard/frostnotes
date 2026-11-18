@@ -274,7 +274,7 @@ other sessions are writing their pull requests:
 **A fork until editor blocks land.** MyGo v0.10.0 has remote edits,
 per-line styles, and the Markdown view's task actions and anchors. `go.mod`
 requires v0.10.0 and replaces it with `github.com/bketelsen/mygo`, branch
-`frostyard/v0.10.0-editor-blocks` at `7c6d69ad`: v0.10.0 with only
+`frostyard/v0.10.0-editor-blocks` at `0a40cf64`: v0.10.0 with only
 [egoist/mygo#1662](https://github.com/egoist/mygo/pull/1662)'s elements
 between lines and the existing line-style strike-through needed by the live
 preview. The fork has no v0.10.0 tag, so its pseudo-version reads v0.8.4.

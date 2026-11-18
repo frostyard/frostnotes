@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-18",
+  "scope": "internal/desktop",
+  "correction": "Completed-task strike-through uses MyGo line styles, not fixed-width replacement content, so long live-preview lines wrap and retained embed source stays struck; the pinned MyGo port paints plain and wrapped rows while skipping element replacements.",
+  "evidence": "frostnotes#248: cross-review blocked fixed-width Dim replacements because soft wrapping was lost and dropped embed markers lost strike-through; the corrected fork at 0a40cf6496412dea843a4013576cdbe2119131e4 has a pixel test for wrapped strike painting, while Frostnotes tests unresolved and inline-note embeds with a retained source.",
+  "promoted_to": "internal/desktop/editor TestLiveLineStylesFollowRevealAndMode; internal/desktop/livepreview TestDoneTaskKeepsItsStrikeStyleWhenAnEmbedKeepsSource; MyGo ui/editor TestLineStyleStrikesWrappedRows"
+}
