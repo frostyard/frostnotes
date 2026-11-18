@@ -25,14 +25,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261118030833-ef1e6f1e8dc4.mod",
+    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261118033705-7c6d69ade314.mod",
     "sha256": "c5f553e2f93ddcff569f7fd95902e334f7a972d6819db1d5ca075b7e7c79cc18",
     "dest": "goproxy/github.com/bketelsen/mygo/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261118030833-ef1e6f1e8dc4.zip",
-    "sha256": "485baf42c3894045d4fe96ea1e2dc8a5751ae8e0dd0a26167b313cb482161aed",
+    "url": "https://proxy.golang.org/github.com/bketelsen/mygo/@v/v0.8.4-0.20261118033705-7c6d69ade314.zip",
+    "sha256": "94720ed6ade28103648305f7b1d9919ba5a9bacd140af5fc6c24e47bb5be3508",
     "dest": "goproxy/github.com/bketelsen/mygo/@v"
   },
   {

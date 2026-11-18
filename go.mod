@@ -83,9 +83,10 @@ require (
 )
 
 // MyGo v0.10.0 provides per-line styles, Markdown task actions, and anchors,
-// but not editor elements between lines. This bounded fork ports only that
-// change onto v0.10.0 from egoist/mygo#1662. Keep the replacement until the
-// feature is released upstream (docs/plans/0009-mygo-desktop.md). While it
+// but not editor elements between lines or line-level strike-through. This
+// bounded fork ports only those desktop-editor changes onto v0.10.0 from
+// egoist/mygo#1662. Keep the replacement until the feature is released
+// upstream (docs/plans/0009-mygo-desktop.md). While it
 // stays, make verify also runs frostui's tests against it; the step and the
 // replace go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261118030833-ef1e6f1e8dc4
+replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261118033705-7c6d69ade314

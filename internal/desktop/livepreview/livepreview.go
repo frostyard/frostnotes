@@ -48,9 +48,8 @@ const (
 type Piece struct {
 	Start, End int
 	Kind       Kind
-	// Done is a Task's state. Strike strikes an inline replacement in a
-	// completed task, whose surrounding text is made of Dim pieces.
-	Done, Strike bool
+	// Done is a Task's state.
+	Done bool
 	// Label is what a Link, Tag, Footnote or Dim shows.
 	Label string
 	// Target is the file a Link names, "" for one to the web.
@@ -777,27 +776,9 @@ func linePieces(line string, afterText, afterGap bool) []Piece {
 	before := len(ps)
 	ps = inline(ps, line, at, end, &linkScan{work: 16*len(line) + 1024})
 	if done && end > at {
-		in := ps[before:]
-		if label, ok := plainText(line, at, end, in); ok {
+		if label, ok := plainText(line, at, end, ps[before:]); ok {
 			return append(ps[:before], Piece{Start: at, End: end, Kind: Dim, Label: label})
 		}
-		// Inline objects stay interactive, so dim only the source around
-		// them and tell those objects to strike their own text.
-		out := make([]Piece, 0, len(ps)+len(in)+1)
-		out = append(out, ps[:before]...)
-		cursor := at
-		for _, p := range in {
-			if cursor < p.Start {
-				out = append(out, Piece{Start: cursor, End: p.Start, Kind: Dim, Label: line[cursor:p.Start]})
-			}
-			p.Strike = p.Kind != Hide
-			out = append(out, p)
-			cursor = p.End
-		}
-		if cursor < end {
-			out = append(out, Piece{Start: cursor, End: end, Kind: Dim, Label: line[cursor:end]})
-		}
-		return out
 	}
 	return ps
 }

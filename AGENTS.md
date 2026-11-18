@@ -223,7 +223,8 @@ file a step names before writing its frostnotes counterpart.
   Frostyard look, [ADR-0042](docs/adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md)) over
   `github.com/egoist/mygo` v0.10.0, replaced by the owner's fork
   `github.com/bketelsen/mygo` (the v0.10.0 editor-blocks port from
-  egoist/mygo#1662) until that change is in a release (plan 0009).
+  egoist/mygo#1662, with line-style strike-through) until those changes are in
+  a release (plan 0009).
   Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as

@@ -267,30 +267,31 @@ func embedAll(target string, wikilink bool) EmbedKind {
 	return NoEmbed
 }
 
-func TestDoneTaskStrikesPlainTextAndInlineObjects(t *testing.T) {
-	in := "- [x] done [[Plan]]\n"
-	var s Scanner
-	r := s.Scan(in, Options{})
-	var dim, object bool
-	for _, p := range r.Pieces {
-		switch p.Kind {
-		case Dim:
-			dim = dim || p.Label == " done "
-		case Link:
-			object = object || p.Strike && p.Label == "Plan"
-		}
-	}
-	if !dim || !object {
-		t.Fatalf("pieces %+v; plain text dim=%v, link struck=%v", r.Pieces, dim, object)
-	}
-	if got := show(in, r.Pieces); got != "☑ done Plan\n" {
-		t.Fatalf("shows %q", got)
-	}
-}
-
 func scanBlocks(text string, revealed func(int) bool) Result {
 	var s Scanner
 	return s.Scan(text, Options{Revealed: revealed, Blocks: true, Embed: embedAll})
+}
+
+func TestDoneTaskKeepsItsStrikeStyleWhenAnEmbedKeepsSource(t *testing.T) {
+	in := "- [x] see ![[Missing]]\n"
+	for _, tc := range []struct {
+		name string
+		kind EmbedKind
+	}{
+		{"missing", NoEmbed},
+		{"inline note", NoteEmbed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s Scanner
+			r := s.Scan(in, Options{Blocks: true, Embed: func(string, bool) EmbedKind { return tc.kind }})
+			if len(r.Styles) != 1 || !r.Styles[0].Done {
+				t.Fatalf("styles %+v", r.Styles)
+			}
+			if got := show(in, r.Pieces); got != "☑ see ![[Missing]]\n" {
+				t.Fatalf("shows %q", got)
+			}
+		})
+	}
 }
 
 func TestWholeBlocksDrawInPlaceOfTheirLines(t *testing.T) {
