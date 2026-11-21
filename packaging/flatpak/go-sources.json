@@ -217,14 +217,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.4.0.mod",
-    "sha256": "48c6227bc6996aa9882e825e848cae99b5a75edb48f99802fc9e95cf24b2ffaf",
+    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.5.0.mod",
+    "sha256": "6cb8ec4b816c14e5c97349d0ffe6219945ea5ca937519cac6d139e105b86f4b3",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.4.0.zip",
-    "sha256": "cd0aa6dc855daac1a206c59914d24aa1696a8b47440290f1b1bc6ed63e16b45b",
+    "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.5.0.zip",
+    "sha256": "1e2e2fcb3ce45d081e18fc5205fd44f4156219dba1d3cfc9b51e9bd7e3966dd3",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"
   },
   {
@@ -253,14 +253,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.6.mod",
+    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.7.mod",
     "sha256": "3f3e5119a976d643304f10432810c0117574ea92c9b8254f0ea60963ce7f0281",
     "dest": "goproxy/github.com/gen2brain/gav1d/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.6.zip",
-    "sha256": "1c3c3b8247bd52b42ae9461debeb271861a82a8d8cb1f8be6bc32395b4c381fa",
+    "url": "https://proxy.golang.org/github.com/gen2brain/gav1d/@v/v0.2.7.zip",
+    "sha256": "f688a99bf0b6431cfceea69048c5ea267e22716e9d6cbc3695b0d0cdd9263dfc",
     "dest": "goproxy/github.com/gen2brain/gav1d/@v"
   },
   {
