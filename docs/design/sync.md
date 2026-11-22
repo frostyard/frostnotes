@@ -206,7 +206,13 @@ approve), and the device collects its token: 32 random
 bytes, of which the hub keeps only the SHA-256. The device keeps the token
 in the Secret Service's default collection, which it makes, as libsecret
 does, when the session has none (a fresh autologin session has only
-GNOME Keyring's `session` collection). Before it asks the hub, the
+GNOME Keyring's `session` collection). With no Secret Service, the
+Flatpak's notesd keeps no token: its store fails with `ErrNoKeyring` and
+names `flatpak override --user --env=FROSTNOTES_SECRETS=file
+org.frostyard.Frostnotes`, while a notesd outside the Flatpak keeps the
+token in a 0600 file with a warning
+([ADR-0045](../adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)).
+Before it asks the hub, the
 device writes and deletes a probe secret, so a keyring that cannot keep
 the token fails the join before the hub knows the device. When the device
 cannot keep a token it has collected, it withdraws the pairing

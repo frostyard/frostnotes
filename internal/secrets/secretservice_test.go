@@ -362,7 +362,7 @@ func TestOpenPicksAndMigrates(t *testing.T) {
 	}
 
 	// No service on the bus: the file store, untouched.
-	st, err := Open(t.Context(), file, log)
+	st, err := Open(t.Context(), file, log, HostOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestOpenPicksAndMigrates(t *testing.T) {
 	}
 
 	f := startFake(t, addr)
-	st, err = Open(t.Context(), file, log)
+	st, err = Open(t.Context(), file, log, HostOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +389,7 @@ func TestOpenPicksAndMigrates(t *testing.T) {
 	}
 
 	t.Setenv("FROSTNOTES_SECRETS", "file")
-	st, err = Open(t.Context(), file, log)
+	st, err = Open(t.Context(), file, log, HostOptions())
 	if _, ok := st.(*File); err != nil || !ok {
 		t.Errorf("FROSTNOTES_SECRETS=file gave %T, %v", st, err)
 	}
@@ -453,6 +453,7 @@ func TestSecretServiceReplacesACollectionThatIsGone(t *testing.T) {
 // A service that cannot make a collection says how to keep tokens instead.
 func TestSecretServiceNoKeyring(t *testing.T) {
 	ss, f := openFake(t)
+	ss.hint = HostOptions().Hint
 	f.mu.Lock()
 	f.alias = noPrompt
 	f.refuseCreate = true
@@ -507,5 +508,73 @@ func TestAwaitCompleted(t *testing.T) {
 	got, err := awaitCompleted(t.Context(), path, signals)
 	if err != nil || got.Value() != made {
 		t.Fatalf("Completed: %v, %v; want %s", got, err, made)
+	}
+}
+
+func TestOpenInTheFlatpakKeepsNoFile(t *testing.T) {
+	addr := privateBus(t)
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", addr)
+	t.Setenv("FROSTNOTES_SECRETS", "")
+	log := slog.New(slog.DiscardHandler)
+	file := filepath.Join(t.TempDir(), "secrets.json")
+	key := HubToken("one")
+	if err := NewFile(file).Set(t.Context(), key, "pw"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(t.Context(), file, log, FlatpakOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range []string{"get", "set", "delete"} {
+		var err error
+		switch op {
+		case "get":
+			_, err = st.Get(t.Context(), key)
+		case "set":
+			err = st.Set(t.Context(), key, "changed")
+		case "delete":
+			err = st.Delete(t.Context(), key)
+		}
+		if !errors.Is(err, ErrNoKeyring) || errors.Is(err, ErrNotFound) {
+			t.Errorf("%s without a Secret Service = %v; want ErrNoKeyring, not ErrNotFound", op, err)
+		}
+		if err == nil || !strings.Contains(err.Error(), "flatpak override --user --env=FROSTNOTES_SECRETS=file org.frostyard.Frostnotes") {
+			t.Errorf("%s error does not name the Flatpak override: %v", op, err)
+		}
+	}
+	after, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("secret operations changed the file: got %q, want %q", after, before)
+	}
+
+	startFake(t, addr)
+	st, err = Open(t.Context(), file, log, FlatpakOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.(*SecretService); !ok {
+		t.Fatalf("store = %T, want *SecretService", st)
+	}
+	if got, err := st.Get(t.Context(), key); err != nil || got != "pw" {
+		t.Errorf("get after migration = %q, %v; want pw", got, err)
+	}
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the migrated file is still there: %v", err)
+	}
+}
+
+func TestOpenInTheFlatpakAllowsExplicitFile(t *testing.T) {
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", privateBus(t))
+	t.Setenv("FROSTNOTES_SECRETS", "file")
+	st, err := Open(t.Context(), filepath.Join(t.TempDir(), "secrets.json"), slog.New(slog.DiscardHandler), FlatpakOptions())
+	if _, ok := st.(*File); err != nil || !ok {
+		t.Fatalf("explicit file store in the Flatpak = %T, %v; want *File", st, err)
 	}
 }

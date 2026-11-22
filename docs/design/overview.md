@@ -192,7 +192,7 @@ Planned configuration:
 | --- | --- | --- |
 | `FROSTNOTES_DATA_DIR` | `$XDG_DATA_HOME/frostnotes` | notesd: `notesd.db`, `blobs/` |
 | `FROSTNOTES_SOCKET` | `$XDG_RUNTIME_DIR/frostnotes/notesd.sock`; in the Flatpak, `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock` | notesd, notesctl, the app |
-| `FROSTNOTES_SECRETS=file` | unset | notesd: keep device tokens in a private file, not the Secret Service (development) |
+| `FROSTNOTES_SECRETS=file` | unset | notesd: keep device tokens in a private file, not the Secret Service (development; in the Flatpak, the only way to pair without a Secret Service, [ADR-0045](../adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)) |
 
 The socket directory is 0700 and the socket 0600, owned by the user. One notesd runs per data directory: it holds an exclusive lock on `notesd.lock` there, and a second notesd on the directory exits at once ([ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)). The
 database must be on a local file system; vaults may be anywhere. A hub

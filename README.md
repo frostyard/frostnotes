@@ -79,7 +79,11 @@ flatpak uninstall --user org.frostyard.Frostnotes
 Your vaults stay: they are your folders. notesd's index, versions and
 sync state stay in `~/.var/app/org.frostyard.Frostnotes/` unless you add
 `--delete-data`. A device's sync token stays in the Secret Service, in an
-item labeled `Frostnotes: …`.
+item labeled `Frostnotes: …`. Without a Secret Service, the Flatpak keeps
+no token and cannot pair, unless you run `flatpak override --user
+--env=FROSTNOTES_SECRETS=file org.frostyard.Frostnotes`; the token is then
+in a 0600 file in that data directory
+([ADR-0045](docs/adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)).
 
 ## Problem records
 

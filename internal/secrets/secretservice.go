@@ -36,10 +36,21 @@ var ErrUnavailable = errors.New("secrets: no Secret Service")
 // unlock a collection, or to make the default one.
 var ErrDismissed = errors.New("secrets: the Secret Service's prompt was dismissed")
 
-// ErrNoKeyring means the Secret Service has no default collection and
-// cannot make one, so no token can be kept in it.
-var ErrNoKeyring = errors.New("secrets: the Secret Service cannot make a default collection: " +
-	"set FROSTNOTES_SECRETS=file to keep tokens in a file")
+// ErrNoKeyring means no keyring can keep a token: no Secret Service answers,
+// or the service cannot make a default collection.
+var ErrNoKeyring = errors.New("secrets: no keyring can keep the token")
+
+// errNoKeyring wraps ErrNoKeyring with its cause and the hint that says how
+// to keep tokens in a file instead (ADR-0045).
+func errNoKeyring(cause, hint string) error {
+	if cause != "" {
+		cause += ": "
+	}
+	if hint != "" {
+		hint = ": " + hint
+	}
+	return fmt.Errorf("%s%w%s", cause, ErrNoKeyring, hint)
+}
 
 // staleObjects are the D-Bus errors that say an object path is not there,
 // which a session with no login keyring gives for the collection its
@@ -74,6 +85,7 @@ type secretStruct struct {
 type SecretService struct {
 	conn    *dbus.Conn
 	session dbus.ObjectPath
+	hint    string
 	mu      sync.Mutex // one prompt at a time
 }
 
@@ -178,7 +190,7 @@ func (s *SecretService) createDefault(ctx context.Context) (dbus.ObjectPath, err
 	err := s.conn.Object(ssName, ssPath).CallWithContext(ctx, ssService+".CreateCollection", 0, props, "default").
 		Store(&path, &prompt)
 	if err != nil {
-		return "", fmt.Errorf("make the default collection: %v: %w", err, ErrNoKeyring)
+		return "", errNoKeyring(fmt.Sprintf("make the default collection: %v", err), s.hint)
 	}
 	if prompt != noPrompt {
 		result, err := s.prompt(ctx, prompt)
@@ -187,12 +199,12 @@ func (s *SecretService) createDefault(ctx context.Context) (dbus.ObjectPath, err
 		}
 		made, ok := result.Value().(dbus.ObjectPath)
 		if !ok || made == noPrompt {
-			return "", fmt.Errorf("make the default collection: the prompt named no collection: %w", ErrNoKeyring)
+			return "", errNoKeyring("make the default collection: the prompt named no collection", s.hint)
 		}
 		return made, nil
 	}
 	if path == noPrompt {
-		return "", fmt.Errorf("make the default collection: the service named no collection: %w", ErrNoKeyring)
+		return "", errNoKeyring("make the default collection: the service named no collection", s.hint)
 	}
 	return path, nil
 }
