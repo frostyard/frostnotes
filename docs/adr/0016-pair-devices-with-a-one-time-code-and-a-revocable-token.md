@@ -1,6 +1,6 @@
 # 0016 — Pair devices with a one-time code and a revocable token
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [0045](0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md) (no plain file in the Flatpak without the user asking)
 - **Date:** 2026-10-16
 
 ## Context

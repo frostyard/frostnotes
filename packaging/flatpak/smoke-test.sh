@@ -4,8 +4,9 @@
 # Background portal does at login, and leaves no flatpak-spawn behind; a
 # second notesd on the same data directory exits; a note written through
 # notesctl reads back. The portal and the app are fakes, since the build
-# sandbox has no portal and no display. It needs no Secret Service (notesd
-# keeps its secrets in a file without one).
+# sandbox has no portal and no display. It needs no Secret Service: nothing
+# here pairs, and without one the Flatpak's notesd keeps no secrets and still
+# serves notes (docs/adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md).
 #
 # An update replaces the engine, only forward (docs/adr/0032-an-update-replaces-the-running-notesd.md):
 # once a notesd of build A runs, the fake flatpak-spawn answers

@@ -190,7 +190,7 @@ func runWith(ctx context.Context, args []string, o runOptions) error {
 	}
 	// The device side of sync runs on every notesd; the hub's listener only
 	// with -hub (docs/design/sync.md).
-	keys, err := secrets.Open(ctx, filepath.Join(paths.DataDir, "secrets.json"), logger)
+	keys, err := secrets.Open(ctx, filepath.Join(paths.DataDir, "secrets.json"), logger, secrets.OptionsFor(config.InFlatpak(os.Getenv)))
 	if err != nil {
 		return err
 	}
