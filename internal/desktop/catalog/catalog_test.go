@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"path"
 	"strings"
 	"testing"
 
@@ -29,6 +30,11 @@ func start(t *testing.T, files map[string]string) (*Catalog, *desktoptest.Notesd
 
 func TestLinkText(t *testing.T) {
 	c := &Catalog{LinkFormat: "shortest", files: []api.VaultFile{{Path: "A/Plan.md"}, {Path: "B/Plan.md"}, {Path: "B/Unique.md"}, {Path: "map.png"}}}
+	c.named = map[string][]string{}
+	for _, f := range c.files {
+		name := strings.ToLower(path.Base(f.Path))
+		c.named[name] = append(c.named[name], f.Path)
+	}
 	cases := []struct{ format, p, from, want string }{
 		{"shortest", "B/Unique.md", "A/x.md", "Unique"},
 		{"shortest", "A/Plan.md", "B/x.md", "A/Plan"},
@@ -38,6 +44,24 @@ func TestLinkText(t *testing.T) {
 		{"relative", "A/Plan.md", "A/x.md", "Plan"},
 	}
 	for _, tc := range cases {
+		c.LinkFormat = tc.format
+		if got := c.LinkText(tc.p, tc.from); got != tc.want {
+			t.Errorf("%s %s from %s: %q, want %q", tc.format, tc.p, tc.from, got, tc.want)
+		}
+	}
+	c = &Catalog{files: []api.VaultFile{{Path: "Plan.md"}, {Path: "A/Plan.md"}, {Path: "A/X.md"}, {Path: "B/Unique.md"}}, named: map[string][]string{}}
+	for _, f := range c.files {
+		name := strings.ToLower(path.Base(f.Path))
+		c.named[name] = append(c.named[name], f.Path)
+	}
+	for _, tc := range []struct{ format, p, from, want string }{
+		{"shortest", "Plan.md", "A/X.md", "/Plan"},
+		{"absolute", "Plan.md", "A/X.md", "/Plan"},
+		{"shortest", "A/Plan.md", "A/X.md", "A/Plan"},
+		{"shortest", "Plan.md", "X.md", "Plan"},
+		{"shortest", "B/Unique.md", "A/X.md", "Unique"},
+		{"absolute", "B/Unique.md", "A/X.md", "B/Unique"},
+	} {
 		c.LinkFormat = tc.format
 		if got := c.LinkText(tc.p, tc.from); got != tc.want {
 			t.Errorf("%s %s from %s: %q, want %q", tc.format, tc.p, tc.from, got, tc.want)

@@ -95,6 +95,11 @@ func markdownDestination(dest []byte) (markdown.Link, bool) {
 	}
 	l := markdown.Link{Kind: markdown.LinkMarkdown, Target: target}
 	if hasSub {
+		// The heading is decoded too: Obsidian writes a space in a
+		// markdown link's heading as %20 (docs/specs/render.md).
+		if decoded, err := url.PathUnescape(sub); err == nil {
+			sub = decoded
+		}
 		l.Subpath = "#" + sub
 	}
 	return l, true

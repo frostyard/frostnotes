@@ -13,6 +13,16 @@ describe("link text", () => {
     expect(linkTextFor("media/map.png", "Notes.md", PATHS, "shortest")).toBe("map.png");
   });
 
+  it("roots paths only when the linking folder would resolve them to another file", () => {
+    const paths = ["Plan.md", "A/Plan.md", "A/X.md", "B/Unique.md"];
+    expect(linkTextFor("Plan.md", "A/X.md", paths, "shortest")).toBe("/Plan");
+    expect(linkTextFor("Plan.md", "A/X.md", paths, "absolute")).toBe("/Plan");
+    expect(linkTextFor("A/Plan.md", "A/X.md", paths, "shortest")).toBe("A/Plan");
+    expect(linkTextFor("Plan.md", "X.md", paths, "shortest")).toBe("Plan");
+    expect(linkTextFor("B/Unique.md", "A/X.md", paths, "shortest")).toBe("Unique");
+    expect(linkTextFor("B/Unique.md", "A/X.md", paths, "absolute")).toBe("B/Unique");
+  });
+
   it("is the path by the absolute format", () => {
     expect(linkTextFor("Orchard/North Block/Soil.md", "Notes.md", PATHS, "absolute")).toBe("Orchard/North Block/Soil");
   });

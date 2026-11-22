@@ -23,14 +23,82 @@ export const TAGS_TTL = 10_000;
 const bare = (p: string) => p.replace(/\.md$/i, "");
 const nameOf = (p: string) => bare(p.slice(p.lastIndexOf("/") + 1));
 
+// These path operations and resolution mirror internal/markdown/resolve.go.
+function cleanPath(path: string): string {
+  const rooted = path.startsWith("/");
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === ".." && parts.length > 0 && parts[parts.length - 1] !== "..") parts.pop();
+    else if (part !== ".." || !rooted) parts.push(part);
+  }
+  return (rooted ? "/" : "") + parts.join("/") || ".";
+}
+
+function dirOf(path: string): string {
+  return cleanPath(path.slice(0, path.lastIndexOf("/") + 1));
+}
+
+function matchesResolvePath(file: string, name: string, suffix: boolean): boolean {
+  return file === name || (suffix && file.endsWith(`/${name}`));
+}
+
+function compareResolvePaths(a: string, b: string, name: string, folder: string, suffix: boolean): number {
+  if (suffix) {
+    const aLocal = dirOf(a) === folder;
+    const bLocal = dirOf(b) === folder;
+    if (aLocal !== bLocal) return aLocal ? -1 : 1;
+  }
+  const aExact = matchesResolvePath(a, name, suffix);
+  const bExact = matchesResolvePath(b, name, suffix);
+  if (aExact !== bExact) return aExact ? -1 : 1;
+  if (suffix) {
+    const depth = a.split("/").length - b.split("/").length;
+    if (depth !== 0) return depth;
+  }
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function resolveName(name: string, folder: string, suffix: boolean, paths: readonly string[]): string {
+  if (name === ".." || name.startsWith("../")) return "";
+  const lower = name.toLowerCase();
+  const base = lower.slice(lower.lastIndexOf("/") + 1);
+  const matches = paths.filter(
+    (file) =>
+      file.slice(file.lastIndexOf("/") + 1).toLowerCase() === base &&
+      matchesResolvePath(file.toLowerCase(), lower, suffix),
+  );
+  matches.sort((a, b) => compareResolvePaths(a, b, name, folder, suffix));
+  return matches[0] ?? "";
+}
+
+function resolveLink(source: string, target: string, paths: readonly string[]): string {
+  if (target === "") return source;
+  const rooted = target.startsWith("/");
+  target = target.replace(/^\/+/, "");
+  const names = (target.toLowerCase().endsWith(".md") ? [target] : [`${target}.md`, target]).map(cleanPath);
+  const folder = dirOf(source);
+  for (const name of names) {
+    const wanted = rooted ? name : cleanPath(`${folder}/${name}`);
+    const match = resolveName(wanted, folder, false, paths);
+    if (match !== "") return match;
+  }
+  if (rooted || target.startsWith("./") || target.startsWith("../")) return "";
+  for (const name of names) {
+    const match = resolveName(name, folder, true, paths);
+    if (match !== "") return match;
+  }
+  return "";
+}
+
 /**
  * linkTextFor is what a link from the note at from writes to name path, by
  * the vault's link format: "absolute", the path; "relative", the path from
  * the note's folder; "shortest", the file's name when no other file has
- * it, else the path. A note's ".md" is left out.
+ * it, else the path. A note's ".md" is left out. Text that would resolve to
+ * another file from the linking note becomes the rooted path ("/" and the path).
  */
 export function linkTextFor(path: string, from: string, paths: Iterable<string>, format: string): string {
-  if (format === "absolute") return bare(path);
   if (format === "relative") {
     const dir = from.split("/").slice(0, -1);
     const to = path.split("/");
@@ -38,10 +106,13 @@ export function linkTextFor(path: string, from: string, paths: Iterable<string>,
     while (i < dir.length && i < to.length - 1 && dir[i] === to[i]) i++;
     return bare([...dir.slice(i).map(() => ".."), ...to.slice(i)].join("/"));
   }
+  const files = [...paths];
+  const checked = (text: string) => (resolveLink(from, text, files) === path ? text : `/${bare(path)}`);
+  if (format === "absolute") return checked(bare(path));
   const name = nameOf(path).toLowerCase();
   let same = 0;
-  for (const p of paths) if (nameOf(p).toLowerCase() === name) same++;
-  return same > 1 ? bare(path) : nameOf(path);
+  for (const p of files) if (nameOf(p).toLowerCase() === name) same++;
+  return checked(same > 1 ? bare(path) : nameOf(path));
 }
 
 /** CatalogSource is what a note's editor gives its catalog. */

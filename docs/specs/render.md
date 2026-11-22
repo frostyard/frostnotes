@@ -65,7 +65,8 @@ embeds' depth), `links.go` (task card T-0045) and `syntax.go` (T-0046).
 - **A markdown link** whose destination has no scheme and does not start
   with `//` names a vault file or a heading of this note: an internal
   link as above, its `data-href` the destination percent-decoded, its
-  target the part before `#`. Any other link is `<a class="external-link"
+  target the part before the first `#` and its subpath the rest, each
+  percent-decoded (Obsidian writes a heading's space as `%20`). Any other link is `<a class="external-link"
   href="…" rel="noopener noreferrer">`, with its title.
 - **An embed** `![[target#subpath|alias]]` of a note:
   - **alone in its paragraph** (other note embeds and line breaks
@@ -273,6 +274,7 @@ here; other files have the hash shown.
 | `Notes/Deep2.md` | note |
 | `Notes/Deep3.md` | note |
 | `Notes/Deep4.md` | note |
+| `Notes/Harvest.md` | note |
 | `Media/map.png` | `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` |
 | `Media/song.mp3` | `bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` |
 | `Media/clip.webm` | `cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc` |
@@ -334,6 +336,20 @@ Three
 
 ```md
 Four
+```
+
+#### `Notes/Harvest.md`
+
+```md
+# Harvest
+
+## First pick
+
+Apples.
+
+## Second pick
+
+Pears.
 ```
 
 ## Fixtures
@@ -688,6 +704,22 @@ Text
 <blockquote data-block="q1"><p>quoted</p>
 </blockquote>
 <p data-block="cont">Text</p>
+```
+
+### R19 — A markdown link's heading, percent-decoded [links]
+
+```md
+[First](Harvest.md#First%20pick)
+
+![Second](Harvest.md#Second%20pick)
+```
+
+```html
+<p><a class="internal-link" data-href="Harvest.md#First pick" data-path="Notes/Harvest.md">First</a></p>
+<div class="embed" data-href="Harvest.md#Second pick" data-path="Notes/Harvest.md">
+<h2>Second pick</h2>
+<p>Pears.</p>
+</div>
 ```
 
 ## Derived artifacts

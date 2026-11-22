@@ -237,11 +237,19 @@ func nameOf(p string) string { return bare(path.Base(p)) }
 // LinkText is what a link from the note at from writes to name p, by the
 // vault's link format: absolute, the path; relative, the path from the
 // note's folder; shortest, the file's name when no other file has it,
-// else the path. A note's ".md" is left out.
+// else the path. A note's ".md" is left out. When the text would resolve
+// to another file from the linking note, the link is the rooted path
+// ("/" and the path).
 func (c *Catalog) LinkText(p, from string) string {
+	checked := func(text string) string {
+		if markdown.Resolve(from, text, func(name string) []string { return c.named[name] }) != p {
+			return "/" + bare(p)
+		}
+		return text
+	}
 	switch c.LinkFormat {
 	case "absolute":
-		return bare(p)
+		return checked(bare(p))
 	case "relative":
 		var dir []string
 		if d := path.Dir(from); d != "." {
@@ -266,9 +274,9 @@ func (c *Catalog) LinkText(p, from string) string {
 		}
 	}
 	if same > 1 {
-		return bare(p)
+		return checked(bare(p))
 	}
-	return nameOf(p)
+	return checked(nameOf(p))
 }
 
 // Match is a note a query found: by its path, or by one of its aliases.
