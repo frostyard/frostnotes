@@ -15,7 +15,7 @@ serves them to a web app and to agents.
 
 **Status:** pre-release. The [roadmap](docs/plans/0002-roadmap.md) says what works and what comes next.
 
-**Documentation:** [docs/README.md](docs/README.md)
+**Documentation:** [frostyard.org/docs/apps/frostnotes](https://frostyard.org/docs/apps/frostnotes/)
 
 ![The desktop app in the Frostyard dark theme: a trip note in live preview with its properties, tasks and a table, the vault's folders on the left and the note's backlinks on the right](docs/images/editor-dark.png)
 
