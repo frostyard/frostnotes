@@ -68,16 +68,9 @@ func appendText(content, text string) string {
 
 // withDaily calls fn with date's daily note, created from the template
 // when it is missing, under the vault's lock. ctx's write guard judges the
-// note's path first, whether or not it exists.
+// note's path first, whether or not it exists. The settings are read and the
+// path computed under the lock.
 func (v *Vault) withDaily(ctx context.Context, date time.Time, who Author, fn func(r *os.Root, n *api.Note, created bool) error) error {
-	settings, err := LoadSettings(v.root)
-	if err != nil {
-		return err
-	}
-	p, err := DailyPath(settings.Daily, date)
-	if err != nil {
-		return err
-	}
 	r, err := v.open()
 	if err != nil {
 		return err
@@ -87,6 +80,17 @@ func (v *Vault) withDaily(ctx context.Context, date time.Time, who Author, fn fu
 		return err
 	}
 	defer v.mu.Unlock()
+	settings, err := LoadSettings(v.root)
+	if err != nil {
+		return err
+	}
+	if v.dailySettings != nil {
+		v.dailySettings()
+	}
+	p, err := DailyPath(settings.Daily, date)
+	if err != nil {
+		return err
+	}
 	if err := v.checkIgnored(p); err != nil {
 		return err
 	}

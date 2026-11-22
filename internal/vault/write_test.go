@@ -356,6 +356,41 @@ func TestDailyNotes(t *testing.T) {
 	}
 }
 
+func TestDailyReadsItsSettingsUnderTheLock(t *testing.T) {
+	tv := newTestVault(t, map[string]string{
+		".obsidian/daily-notes.json": `{"folder": "Journal/", "format": "YYYY/MM-DD", "template": "Templates/Daily"}`,
+		"Templates/Daily.md":         "# {{title}}\n{{date}} was a {{date:dddd}}; made at {{time}}\n",
+	}, nil)
+	tv.scan()
+	date := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	var called, unlocked bool
+	tv.v.dailySettings = func() {
+		called = true
+		if tv.v.mu.TryLock() {
+			unlocked = true
+			tv.v.mu.Unlock()
+		}
+	}
+	for _, name := range []string{"Daily", "AppendDaily"} {
+		called, unlocked = false, false
+		var err error
+		if name == "Daily" {
+			_, err = tv.v.Daily(t.Context(), date, agent)
+		} else {
+			_, err = tv.v.AppendDaily(t.Context(), date, "appended text", agent)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !called {
+			t.Errorf("%s did not run the dailySettings hook", name)
+		}
+		if unlocked {
+			t.Errorf("%s read the daily-note settings without mu held", name)
+		}
+	}
+}
+
 func TestDefaultDailyNote(t *testing.T) {
 	tv := newTestVault(t, map[string]string{}, nil)
 	d, err := tv.v.Daily(t.Context(), time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC), editor)

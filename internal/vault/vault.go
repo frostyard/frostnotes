@@ -123,6 +123,11 @@ type Vault struct {
 	// there, as another program might.
 	staged func(p string)
 
+	// dailySettings, when set, runs in withDaily just after the daily-note
+	// settings are read: tests check that mu is held there (docs/specs/lodge-app.md:
+	// a daily note is judged under the vault's lock).
+	dailySettings func()
+
 	scanReq chan struct{} // a scan is wanted
 	reindex atomic.Bool   // the next scan reads every file again
 	cancel  context.CancelFunc
