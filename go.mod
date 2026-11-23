@@ -7,7 +7,7 @@ require (
 	github.com/egoist/mygo v0.10.0
 	github.com/frostyard/clix v0.5.0
 	github.com/frostyard/frostui v0.10.0
-	github.com/frostyard/lodge/kit v0.5.0
+	github.com/frostyard/lodge/kit v0.6.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gen2brain/gav1d v0.2.7

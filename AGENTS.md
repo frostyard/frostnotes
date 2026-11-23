@@ -216,7 +216,7 @@ file a step names before writing its frostnotes counterpart.
   only sanctioned path: from a clean `main` equal to `origin/main` it runs
   `make check`, tags `svu next` and pushes the tag.
 - **Go modules** (`go.mod`): `github.com/frostyard/clix` v0.5.0 (the CLI shell of
-  `notesctl`), `github.com/frostyard/lodge/kit` v0.5.0 (the RPC and app runtime),
+  `notesctl`), `github.com/frostyard/lodge/kit` v0.6.0 (the RPC and app runtime),
   `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
   also clix's), and for the native desktop app (plan 0009)
   `github.com/frostyard/frostui` v0.10.0 (frostyard's desktop UI kit and its
@@ -229,7 +229,7 @@ file a step names before writing its frostnotes counterpart.
   `packaging/flatpak/go-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as
   `github:frostyard/lodge#client/v0.3.2&path:client` and `@frostyard/lodge-ui` as
-  `github:frostyard/lodge#ui/v0.6.0&path:ui`.
+  `github:frostyard/lodge#ui/v0.7.0&path:ui`.
 - **Tool pins** (`mise.toml`): golangci-lint 2.15.0, svu 3.4.1, nfpm 2.48.0
   (these are not frostyard modules). The only bketelsen module is the MyGo
   fork above.
