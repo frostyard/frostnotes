@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -121,6 +122,90 @@ func TestTheStatusBarLeadsWithTheConnection(t *testing.T) {
 	f.openVault()
 	if !f.has("Local") {
 		t.Fatalf("no connection in %q", f.tt.Texts())
+	}
+}
+
+// TestConflictsDialogScrollsAt1280x800 checks that a long conflict list can
+// scroll to its last file without moving the dialog's Close button.
+func TestConflictsDialogScrollsAt1280x800(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.tt.SetSize(1280, 800)
+	for range 3 {
+		f.tt.Frame()
+	}
+	f.a.conflict = make([]api.SyncConflict, 40)
+	for i := range f.a.conflict {
+		f.a.conflict[i].Path = fmt.Sprintf("conflict-%02d.md", i)
+	}
+	f.a.showConflicts()
+	f.tt.Frame()
+	f.tt.Frame()
+	f.checkInfoScrolls("Conflicts", "conflict-00.md", "conflict-39.md")
+}
+
+// TestShortcutsDialogScrollsAt1280x800 checks that the real shortcut list
+// remains scrollable inside Info's body while its Close button stays fixed.
+func TestShortcutsDialogScrollsAt1280x800(t *testing.T) {
+	f := start(t)
+	f.openVault()
+	f.tt.SetSize(1280, 800)
+	f.tt.Frame()
+	var entries []frostui.ShortcutEntry
+	for _, s := range f.a.table {
+		if s.Unlisted || len(s.Keys) == 0 {
+			continue
+		}
+		entries = append(entries, frostui.ShortcutEntry{Group: s.Group, Title: s.Title})
+	}
+	slices.SortStableFunc(entries, func(x, y frostui.ShortcutEntry) int { return strings.Compare(x.Group, y.Group) })
+	if len(entries) == 0 {
+		t.Fatal("no listed shortcuts with keys")
+	}
+	f.a.showShortcuts()
+	f.tt.Frame()
+	f.tt.Frame()
+	f.checkInfoScrolls("Keyboard shortcuts", entries[0].Title, entries[len(entries)-1].Title)
+}
+
+// checkInfoScrolls checks visible geometry, since Find retains clipped labels
+// with zero height. The role locator distinguishes the dialog from other UI.
+func (f *fixture) checkInfoScrolls(title, firstLabel, lastLabel string) {
+	f.t.Helper()
+	dialogNode, ok := f.tt.AccessByRole(ui.RoleDialog, title)
+	dialog := dialogNode.Bounds
+	if !ok || dialog.H <= 0 || dialog.Y < 0 || dialog.Y+dialog.H > 800 {
+		f.t.Fatalf("%q dialog outside 1280x800: found=%v, rect=%+v", title, ok, dialog)
+	}
+	closeNode, ok := f.tt.AccessByRole(ui.RoleButton, "Close")
+	closeButton := closeNode.Bounds
+	if !ok || closeButton.H <= 0 {
+		f.t.Fatalf("Close not visible: found=%v, rect=%+v", ok, closeButton)
+	}
+	inView := func(label string) bool {
+		r, found := f.tt.Find(label)
+		return found && r.H > 0 && r.Y >= closeButton.Y+closeButton.H &&
+			r.Y+r.H <= dialog.Y+dialog.H && r.Y+r.H <= 800
+	}
+	first, ok := f.tt.Find(firstLabel)
+	if !ok || !inView(firstLabel) {
+		f.t.Fatalf("first row %q not in view: found=%v, rect=%+v, dialog=%+v, Close=%+v", firstLabel, ok, first, dialog, closeButton)
+	}
+	last, _ := f.tt.Find(lastLabel)
+	f.t.Logf("%q: dialog=%+v, Close=%+v, first %q=%+v, last %q=%+v", title, dialog, closeButton, firstLabel, first, lastLabel, last)
+	if inView(lastLabel) {
+		f.t.Fatalf("%q fits without scrolling; the check needs a list taller than the window", lastLabel)
+	}
+	for step := 0; !inView(lastLabel); step++ {
+		if step == 40 {
+			last, found := f.tt.Find(lastLabel)
+			f.t.Fatalf("%q not in view after 40 scroll steps: found=%v, rect=%+v, dialog=%+v", lastLabel, found, last, dialog)
+		}
+		f.tt.Scroll(first.X+first.W/2, dialog.Y+dialog.H/2, 0, 120)
+		f.tt.Frame()
+	}
+	if after, found := f.tt.AccessByRole(ui.RoleButton, "Close"); !found || after.Bounds != closeButton {
+		f.t.Errorf("scrolling moved Close: found=%v, before=%+v, after=%+v", found, closeButton, after.Bounds)
 	}
 }
 
