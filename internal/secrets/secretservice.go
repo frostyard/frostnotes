@@ -83,10 +83,11 @@ type secretStruct struct {
 
 // SecretService is a Store in the desktop's Secret Service.
 type SecretService struct {
-	conn    *dbus.Conn
-	session dbus.ObjectPath
-	hint    string
-	mu      sync.Mutex // one prompt at a time
+	conn        *dbus.Conn
+	session     dbus.ObjectPath
+	hint        string
+	application string
+	mu          sync.Mutex // one prompt at a time
 }
 
 var _ Store = (*SecretService)(nil)
@@ -101,11 +102,11 @@ func OpenSecretService(ctx context.Context, conn *dbus.Conn) (*SecretService, er
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	return &SecretService{conn: conn, session: session}, nil
+	return &SecretService{conn: conn, session: session, application: "frostnotes"}, nil
 }
 
-func attributes(key string) map[string]string {
-	return map[string]string{"application": "frostnotes", "key": key}
+func (s *SecretService) attributes(key string) map[string]string {
+	return map[string]string{"application": s.application, "key": key}
 }
 
 // Get returns the secret stored under key, or ErrNotFound.
@@ -151,7 +152,7 @@ func (s *SecretService) setIn(ctx context.Context, coll dbus.ObjectPath, key, va
 	}
 	props := map[string]dbus.Variant{
 		ssItem + ".Label":      dbus.MakeVariant("Frostnotes: " + key),
-		ssItem + ".Attributes": dbus.MakeVariant(attributes(key)),
+		ssItem + ".Attributes": dbus.MakeVariant(s.attributes(key)),
 	}
 	sec := secretStruct{Session: s.session, Value: []byte(value), ContentType: "text/plain; charset=utf8"}
 	var item, prompt dbus.ObjectPath
@@ -233,7 +234,7 @@ func (s *SecretService) Delete(ctx context.Context, key string) error {
 // find returns the item holding key, unlocking it when needed.
 func (s *SecretService) find(ctx context.Context, key string) (dbus.ObjectPath, error) {
 	var unlocked, locked []dbus.ObjectPath
-	err := s.conn.Object(ssName, ssPath).CallWithContext(ctx, ssService+".SearchItems", 0, attributes(key)).
+	err := s.conn.Object(ssName, ssPath).CallWithContext(ctx, ssService+".SearchItems", 0, s.attributes(key)).
 		Store(&unlocked, &locked)
 	if err != nil {
 		return "", fmt.Errorf("secrets: search %s: %w", key, err)

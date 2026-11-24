@@ -48,7 +48,7 @@ falls back with a warning. The apps of the suite should behave alike.
 - `FROSTNOTES_SECRETS=file` keeps choosing the file in both cases. In the
   Flatpak the user sets it with `flatpak override`.
 - `secrets.Options` carry `NoFallback` and the hint that ends an
-  `ErrNoKeyring` message. `secrets.OptionsFor(inFlatpak)` picks them:
+  `ErrNoKeyring` message. `secrets.OptionsFor(appID)` picks them:
   `FlatpakOptions()` or `HostOptions()`.
 
 This amends ADR-0016 and ADR-0031: their "the Secret Service keeps the

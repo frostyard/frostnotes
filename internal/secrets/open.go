@@ -23,6 +23,9 @@ func Open(ctx context.Context, file string, log *slog.Logger, opts Options) (Sto
 		var ss *SecretService
 		if ss, err = OpenSecretService(ctx, conn); err == nil {
 			ss.hint = opts.Hint
+			if opts.application != "" {
+				ss.application = opts.application
+			}
 			if err := migrate(ctx, fs, ss); err != nil {
 				return nil, err
 			}
