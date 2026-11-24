@@ -14,7 +14,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/system"
 	"github.com/frostyard/frostnotes/internal/desktop/vaults"
-	"github.com/frostyard/pocketgo/desktop/workspaceui"
+	"github.com/frostyard/frostui/workspaceui"
 	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/icons/lucide"
 	"github.com/nsgo-dev/nsgo/ui"

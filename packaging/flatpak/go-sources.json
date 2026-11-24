@@ -265,6 +265,18 @@
   },
   {
     "type": "file",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/workspaceui/@v/v0.1.0.mod",
+    "sha256": "9bdb61e6f027cef4a5014032e70fc5e369d2bef936d61b1121c686c9a337a1ea",
+    "dest": "goproxy/github.com/frostyard/frostui/workspaceui/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/workspaceui/@v/v0.1.0.zip",
+    "sha256": "3e59df64189de89a56f66e15954fd84f012fed1188c8d08ea49fdfa1323aeac6",
+    "dest": "goproxy/github.com/frostyard/frostui/workspaceui/@v"
+  },
+  {
+    "type": "file",
     "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.6.0.mod",
     "sha256": "6cb8ec4b816c14e5c97349d0ffe6219945ea5ca937519cac6d139e105b86f4b3",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"
@@ -274,18 +286,6 @@
     "url": "https://proxy.golang.org/github.com/frostyard/lodge/kit/@v/v0.6.0.zip",
     "sha256": "a5546f5991630171e044064348257752d922e2d7d465747639e80114e21ebe85",
     "dest": "goproxy/github.com/frostyard/lodge/kit/@v"
-  },
-  {
-    "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/pocketgo/desktop/workspaceui/@v/v0.1.0-rc.1.mod",
-    "sha256": "dd6c23612c78a0352e352956ab541fa17d01a22f13b85d30121a2ec9ee6e28b1",
-    "dest": "goproxy/github.com/frostyard/pocketgo/desktop/workspaceui/@v"
-  },
-  {
-    "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/pocketgo/desktop/workspaceui/@v/v0.1.0-rc.1.zip",
-    "sha256": "1e09321208f3a9dae70db0c0a8935ab4d7e81ffc9958aaa623c675b1330a0247",
-    "dest": "goproxy/github.com/frostyard/pocketgo/desktop/workspaceui/@v"
   },
   {
     "type": "file",
