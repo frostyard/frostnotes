@@ -114,3 +114,11 @@ make ui-dev         # nsl: notesd and Vite; open http://127.0.0.1:5173
 `make help` lists every target. [AGENTS.md](../AGENTS.md#gates) says
 which gate a change needs, and which integration runs a change to the
 scan, the write path or parsing needs.
+
+## Build the side-by-side NSGo release candidate
+
+On x86-64 Linux, use `NSL_MACHINE=trixie packaging/nsgo/build-rc.sh` with your provisioned nsl machine name. Install the GNOME 51 runtime and SDK and either flatpak-builder or org.flatpak.Builder first. The script builds a committed checkout into `build/nsgo-rc/frostnotes-<version>-rc.<commit>/`. The Flatpak and Lodge archive each carry the full commit recorded in `revision.txt`. Run `sha256sum -c SHA256SUMS` inside that directory.
+
+Install the bundle with `flatpak install --user ./frostnotes-*-x86_64.flatpak` and run `flatpak run org.frostyard.Frostnotes.Preview`. The preview has its own notesd, data directory and runtime socket. With the preview running, register a test notebook using `flatpak run --command=notesctl org.frostyard.Frostnotes.Preview vault add /absolute/path/to/test-notebook`.
+
+The Lodge archive contains the complete `notes/` app tree for the existing Notes app ID. Use a Lodge gateway with Wasm app-frame support. Stage the archive alongside the installed Notes tree and retain the previous tree for rollback. Open Notes from an admitted browser, select a test vault and verify the new editor by creating and reopening a note. The web bundle uses the installed notesd service.

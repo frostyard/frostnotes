@@ -11,8 +11,11 @@ const AppID = "org.frostyard.Frostnotes"
 const LockFile = "notesd.lock"
 
 // InFlatpak reports whether the environment is this application's Flatpak
-// sandbox (FLATPAK_ID is AppID): the app's own, not another Flatpak's.
-func InFlatpak(getenv func(string) string) bool { return getenv("FLATPAK_ID") == AppID }
+// sandbox, including the independently installable preview.
+func InFlatpak(getenv func(string) string) bool {
+	id := getenv("FLATPAK_ID")
+	return id == AppID || id == AppID+".Preview"
+}
 
 // Paths are notesd's file locations. Vaults live wherever the user keeps
 // them; nothing here is inside a vault (ADR-0003).

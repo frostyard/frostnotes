@@ -48,6 +48,7 @@ func TestDefaultSocketInTheFlatpak(t *testing.T) {
 		name, flatpakID, want string
 	}{
 		{"flatpak", AppID, "/run/user/1000/app/org.frostyard.Frostnotes/frostnotes/notesd.sock"},
+		{"preview", AppID + ".Preview", "/run/user/1000/app/org.frostyard.Frostnotes.Preview/frostnotes/notesd.sock"},
 		{"another flatpak", "org.example.Other", "/run/user/1000/frostnotes/notesd.sock"},
 		{"no flatpak", "", "/run/user/1000/frostnotes/notesd.sock"},
 	} {

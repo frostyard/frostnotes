@@ -1,0 +1,33 @@
+{
+  "app-id": "org.frostyard.Frostnotes.Preview",
+  "branch": "preview",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "51",
+  "sdk": "org.gnome.Sdk",
+  "command": "frostnotes",
+  "finish-args": [
+    "--socket=wayland", "--socket=fallback-x11", "--share=ipc", "--device=dri",
+    "--share=network", "--talk-name=org.freedesktop.secrets", "--filesystem=home"
+  ],
+  "modules": [{
+    "name": "frostnotes-preview",
+    "buildsystem": "simple",
+    "sources": [{"type": "dir", "path": "native"}],
+    "build-commands": [
+      "install -Dm755 FrostNotes /app/libexec/frostnotes-app",
+      "install -Dm755 frostnotes.sh /app/bin/frostnotes",
+      "install -Dm755 request-background.py /app/libexec/frostnotes-request-background",
+      "install -m755 notesd notesctl /app/bin/",
+      "desktop-file-install --dir=/app/share/applications --set-key=Exec --set-value=frostnotes --set-key=Name --set-value='FrostNotes Preview' --add-category=Office org.frostyard.Frostnotes.Preview.desktop",
+      "install -Dm644 org.frostyard.Frostnotes.Preview.png -t /app/share/icons/hicolor/512x512/apps",
+      "install -Dm644 org.frostyard.Frostnotes.Preview.metainfo.xml -t /app/share/metainfo",
+      "install -Dm644 revision.txt -t /app/share/frostnotes",
+      "install -Dm644 LICENSE THIRD_PARTY_NOTICES.txt -t /app/share/licenses/org.frostyard.Frostnotes.Preview"
+    ],
+    "test-commands": [
+      "desktop-file-validate /app/share/applications/org.frostyard.Frostnotes.Preview.desktop",
+      "appstreamcli validate --no-net /app/share/metainfo/org.frostyard.Frostnotes.Preview.metainfo.xml",
+      "test -x /app/libexec/frostnotes-app && test -x /app/bin/notesd && test -x /app/bin/notesctl"
+    ]
+  }]
+}
