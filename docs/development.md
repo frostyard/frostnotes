@@ -77,6 +77,8 @@ Open **Field notes** on both screens. Edit it in one window and press **Save**. 
 
 Use **New note** (Ctrl/Cmd+N) to create a note in the selected vault. Enter a path such as `Plants/Field notes` to create it in a folder. **Quick open** (Ctrl/Cmd+O) matches note titles and paths. **Search vault** (Ctrl/Cmd+Shift+F) searches indexed contents and shows the matching passage. Use the arrow keys and Enter to open a result. The toolbar buttons also work when the browser reserves a shortcut.
 
+From an open note, **Rename or move note** accepts a new vault-relative path. The checkbox controls whether notesd rewrites links. **Move to trash** saves pending edits and asks for confirmation. To bring a note back, open **Restore deleted note** in the vault toolbar and enter its old path, or select a recent removal observed by this window. Restore reads the last retained contents from notesd and checks that the path is still free.
+
 To try inline editing, add a heading, a task such as `- [ ] prune`, and a link to a second note such as `[[Garden|orchard]]`. Choose **Live preview**. Click the heading to edit its Markdown and use the arrow keys to move between lines. Click a rendered checkbox to toggle it, or the link text to open the note. **Source** returns to whole-note selection and editing. The mode carries over when you open another note in the same window.
 
 The loopback hostname and port match the development gateway’s origin check. On a Lodge origin the browser opens the same-origin `/app/notes/api` WebSocket. The trial above exercises the loopback gateway. See the [preview decision](adr/0046-test-a-shared-nsgo-source-editor.md).
