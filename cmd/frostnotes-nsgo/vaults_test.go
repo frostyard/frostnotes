@@ -68,7 +68,8 @@ func TestVaultSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app.WaitFor("label:Mint", 25*time.Second)
+	// The session dials again on a timer of the app's clock.
+	waitTimers(t, app, 25*time.Second, func() bool { return app.Exists("label:Mint") })
 	states, err := dev.C.Sync().Status(t.Context(), &api.SyncStatusParams{})
 	if err != nil || len(states) != 1 || states[0].URL != hub.HubURL {
 		t.Fatalf("restarted pairing: %v, %v", states, err)

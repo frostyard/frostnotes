@@ -16,20 +16,96 @@ import (
 	"github.com/nsgo-dev/nsgo/nsgotest"
 )
 
+// TestMain starts NSGo's test host, so the suite also runs in a real window:
+// go tool nsgo test -target linux (make nsgo-live).
+func TestMain(m *testing.M) { nsgotest.Main(m) }
+
+// repoRoot finds the repository from the working directory, which is this
+// package's directory under go test and a directory below it on a target.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "cmd", "notesd")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("no cmd/notesd above the working directory")
+		}
+		dir = parent
+	}
+}
+
+// waitTimers waits as app.WaitUntil does while the app's own timers run.
+// Headless, NSGo's waits move the app's clock a frame between checks. On a
+// target they leave it still, so a debounce or a retry that the app set with
+// AfterFunc never comes due there. This moves the clock in both.
+func waitTimers(t *testing.T, app *nsgotest.App, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the condition did not hold after %v\n%s", timeout, app.Dump())
+		}
+		app.Advance(100 * time.Millisecond)
+	}
+}
+
+// headlessStep reports whether the run is headless, and on a target logs why
+// the step it guards is left out there. The rest of the test still runs in
+// the real window.
+func headlessStep(t *testing.T, why string) bool {
+	t.Helper()
+	if target := nsgotest.Target(); target != "" {
+		t.Logf("left out on %s: %s", target, why)
+		return false
+	}
+	return true
+}
+
+// typeLines types text with line breaks into a multiline field. On a target
+// NSGo v0.3.0's Linux test host sends a line break as the Enter key, which
+// submits a single-line field and does nothing in a text view, so there the
+// text goes into the same widget as an input method's commit.
+func typeLines(app *nsgotest.App, selector, text string) {
+	if nsgotest.Target() == "" {
+		app.Type(selector, text)
+		return
+	}
+	app.Focus(selector)
+	app.Commit(selector, text)
+}
+
 // Exercise the actual UI callbacks. Selecting the next note while the old
 // editor is dirty must flush that editor's base and text to its own path.
 func startWorkspace(t *testing.T) (*nsgotest.App, string) {
+	t.Helper()
+	app, vault := startVault(t, map[string]string{"First.md": "First\r\n", "Second.md": "Second\r\n"}, 1150, 760)
+	app.WaitFor("label:First", 10*time.Second)
+	return app, vault
+}
+
+// startVault writes files into a new vault named Vault, starts a notesd that
+// holds only that vault, and opens the client on it in a window of the
+// given size, with NSGo's options. A nil files starts the client on a notesd
+// with no vault.
+func startVault(t *testing.T, files map[string]string, width, height core.Points, options ...nsgotest.Option) (*nsgotest.App, string) {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	vault := filepath.Join(dir, "Vault")
-	if err := os.Mkdir(vault, 0700); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"First", "Second"} {
-		if err := os.WriteFile(filepath.Join(vault, name+".md"), []byte(name+"\r\n"), 0600); err != nil {
+	for name, text := range files {
+		path := filepath.Join(vault, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -37,7 +113,7 @@ func startWorkspace(t *testing.T) (*nsgotest.App, string) {
 	t.Setenv("FROSTNOTES_SOCKET", socket)
 	t.Setenv("FROSTNOTES_DATA_DIR", filepath.Join(dir, "data"))
 	binary := filepath.Join(dir, "notesd")
-	build := exec.CommandContext(t.Context(), "go", "-C", "../..", "build", "-o", binary, "./cmd/notesd")
+	build := exec.CommandContext(t.Context(), "go", "-C", repoRoot(t), "build", "-o", binary, "./cmd/notesd")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build notesd: %v\n%s", err, output)
 	}
@@ -63,12 +139,12 @@ func startWorkspace(t *testing.T) (*nsgotest.App, string) {
 		}
 	}
 	t.Cleanup(func() { _ = c.Close() })
-	if _, err := c.Vault().Add(ctx, &api.VaultAddParams{Path: vault}); err != nil {
-		t.Fatal(err)
+	if files != nil {
+		if _, err := c.Vault().Add(ctx, &api.VaultAddParams{Path: vault}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	app := nsgotest.Start(t, root, nsgotest.Size(1150, 760))
-	app.WaitFor("label:First", 10*time.Second)
-	return app, vault
+	return nsgotest.Start(t, root, append([]nsgotest.Option{nsgotest.Size(width, height)}, options...)...), vault
 }
 
 func TestSwitchNoteDuringAutosave(t *testing.T) {
@@ -77,14 +153,14 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	app.WaitFor("text:Saved", 10*time.Second)
 	const source = "label:Markdown source"
 	app.Clear(source)
-	app.Type(source, "updated\n")
+	typeLines(app, source, "updated\n")
 	app.Press("label:Second")
 	app.WaitUntil(10*time.Second, func() bool { return app.Exists(source) && app.Find(source).Text == "Second\n" })
 	if app.Exists("text:No vaults available") {
 		t.Fatal("empty state alongside populated vault")
 	}
 	app.Clear(source)
-	app.Type(source, "# Garden 🌱\n- [ ] prune\nSee [[First|orchard]].\n```\n- [ ] literal\n```\n")
+	typeLines(app, source, "# Garden 🌱\n- [ ] prune\nSee [[First|orchard]].\n```\n- [ ] literal\n```\n")
 	app.Press("label:Live preview")
 	app.WaitFor("label:Edit line 1", time.Second)
 	app.Press("label:Task on line 2")
@@ -102,10 +178,12 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	app.WaitUntil(time.Second, func() bool { return app.Find(field).Text == "- [ ] prune" })
 	// A multiline paste creates real document lines and leaves the field
 	// on the last inserted line. Undo restores the original task marker.
-	app.Paste(field, core.PasteEvent{Text: "\nseedling"})
-	app.WaitUntil(time.Second, func() bool { return app.Exists(field) && strings.Contains(app.Find(field).Text, "seedling") })
-	app.Key("mod+z")
-	app.WaitUntil(time.Second, func() bool { return app.Exists(field) && app.Find(field).Text == "- [ ] prune" })
+	if headlessStep(t, "NSGo v0.3.0 reports a paste only headless: App.Paste skips the test on a target (2026-11-24)") {
+		app.Paste(field, core.PasteEvent{Text: "\nseedling"})
+		app.WaitUntil(time.Second, func() bool { return app.Exists(field) && strings.Contains(app.Find(field).Text, "seedling") })
+		app.Key("mod+z")
+		app.WaitUntil(time.Second, func() bool { return app.Exists(field) && app.Find(field).Text == "- [ ] prune" })
+	}
 	if app.Exists("label:Task on line 5") {
 		t.Fatal("task inside code fence")
 	}
@@ -147,7 +225,7 @@ func TestCreateAndFindNote(t *testing.T) {
 	app.Press("label:First")
 	app.Key("mod+shift+f")
 	app.Type("label:Find note", "scarlet")
-	app.WaitUntil(5*time.Second, func() bool { return strings.Contains(app.Dump(), " · a scarlet quince") })
+	waitTimers(t, app, 5*time.Second, func() bool { return strings.Contains(app.Dump(), " · a scarlet quince") })
 	app.Key("enter")
 	app.WaitFor("text:Plants/Field notes.md", 5*time.Second)
 }
