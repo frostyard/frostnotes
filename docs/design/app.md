@@ -54,6 +54,8 @@ The preview uses PocketGo’s versioned workspace shell, file explorer and notic
 
 In the NSGo preview, **Live preview** renders headings, tasks and wiki links in the note. Clicking a line reveals its original Markdown in place. The shared scanner supplies byte ranges, and edits apply to the same document as source mode. Clicking a task changes its marker. Clicking a wiki link resolves the target through notesd. Undo and redo operate on local edits within the current preview. A remote text change clears that history. See [the live-preview design decision](../adr/0039-live-preview-is-replacements-over-the-source.md).
 
+On Linux, the vault manager creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
+
 The optional Lodge bundle starts the existing Lodge client handshake before mounting NSGo, follows the shell theme, and uses the same-origin notes API. Its config is revalidated separately from the immutable runtime assets. The loopback Lodge fixture exercises browser admission, offline editing, and conflict recovery over this route. [Run the Lodge evidence](../development.md#run-the-preview-inside-lodge)
 
 ## Overview

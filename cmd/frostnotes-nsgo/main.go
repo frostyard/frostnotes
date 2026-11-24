@@ -18,7 +18,11 @@ import (
 	"github.com/nsgo-dev/nsgo/ui"
 )
 
-func main() { nsgo.Run(root, nsgo.WindowSize(1160, 760)) }
+func main() {
+	finish := desktopLifetime()
+	defer finish()
+	nsgo.Run(root, nsgo.WindowSize(1160, 760))
+}
 
 type environment struct{ *core.Scope }
 
@@ -42,7 +46,9 @@ func (e environment) After(d time.Duration, f func()) func() {
 }
 
 type workspace struct {
-	removed map[int64][]string
+	removed     map[int64][]string
+	syncInfo    *core.Signal[*api.SyncStatus]
+	syncRequest int
 
 	cx                                       *core.Scope
 	session                                  *session.Session
@@ -60,10 +66,11 @@ type workspace struct {
 func root(cx *core.Scope) core.Node {
 	cx.SetTitle("FrostNotes")
 	w := &workspace{
-		removed: make(map[int64][]string),
-		cx:      cx,
-		session: session.New(environment{cx}, platformDialer(), 0),
-		vaults:  core.NewSignalFunc(cx, []api.Vault(nil), slices.Equal),
+		syncInfo: core.NewSignal(cx, (*api.SyncStatus)(nil)),
+		removed:  make(map[int64][]string),
+		cx:       cx,
+		session:  session.New(environment{cx}, platformDialer(), 0),
+		vaults:   core.NewSignalFunc(cx, []api.Vault(nil), slices.Equal),
 		files: core.NewSignalFunc(cx, []api.NoteEntry(nil), func(a, b []api.NoteEntry) bool {
 			return slices.EqualFunc(a, b, func(x, y api.NoteEntry) bool { return x.Path == y.Path && x.Title == y.Title })
 		}),
@@ -111,8 +118,8 @@ func root(cx *core.Scope) core.Node {
 	}
 	shell := workspaceui.Shell{
 		Brand: "FrostNotes", Header: []core.Node{core.Text{ContentFunc: w.title, Style: ui.TypeTitle}},
-		Actions:       w.noteActions(),
-		SidebarFooter: []core.Node{core.Text{ContentFunc: w.connection.Get, Style: ui.TypeCaption.Merge(core.Style{Padding: core.All(12)})}},
+		Actions:       append(w.vaultActions(), w.noteActions()...),
+		SidebarFooter: []core.Node{core.Text{ContentFunc: w.connectionLabel, Style: ui.TypeCaption.Merge(core.Style{Padding: core.All(12)})}},
 		Sections:      w.vaultSections, Selected: func() string { return strconv.FormatInt(w.vault.Get(), 10) },
 		Navigate: func(key string) {
 			id, err := strconv.ParseInt(key, 10, 64)
@@ -120,7 +127,14 @@ func root(cx *core.Scope) core.Node {
 				w.leave(func() { w.selectVault(id) })
 			}
 		},
-		Content: []core.Node{explorer},
+		Content: []core.Node{core.Dynamic(func(*core.Scope) core.Node {
+			if w.vault.Get() == 0 {
+				if welcome := w.vaultWelcome(); welcome != nil {
+					return welcome
+				}
+			}
+			return explorer
+		})},
 	}
 	return core.View{Style: ui.FillRest, Children: []core.Node{shell, core.Dynamic(w.notice), core.Dynamic(w.noteDialog)}}
 }
@@ -214,8 +228,12 @@ func (w *workspace) leave(next func()) {
 }
 
 func (w *workspace) selectVault(id int64) {
-	w.action.Set("")
+	if !isVaultAction(w.action.GetUntracked()) {
+		w.action.Set("")
+	}
+	w.syncInfo.Set(nil)
 	w.vault.Set(id)
+	w.loadSync()
 	w.files.Set(nil)
 	w.loadFiles()
 }
@@ -260,6 +278,7 @@ func (w *workspace) loadVaults() {
 			w.vaults.Set(vs)
 			if slices.ContainsFunc(vs, func(v api.Vault) bool { return v.ID == w.vault.GetUntracked() }) {
 				w.loadFiles()
+				w.loadSync()
 				return
 			}
 
@@ -300,6 +319,11 @@ func (w *workspace) loadFiles() {
 func (w *workspace) onEvent(_ int64, ev api.Event) {
 	id := w.vault.GetUntracked()
 	switch e := ev.(type) {
+	case api.SyncChanged:
+		if id == e.Status.VaultID {
+			w.syncRequest++
+			w.syncInfo.Set(&e.Status)
+		}
 	case api.VaultAdded, api.VaultRemoved:
 		w.loadVaults()
 	case api.NoteChanged:

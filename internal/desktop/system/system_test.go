@@ -117,3 +117,32 @@ func TestPortalAnswers(t *testing.T) {
 		t.Errorf("%v", *b.Portal.Error)
 	}
 }
+
+func TestOnlyLastFlatpakWindowStopsBackgroundSync(t *testing.T) {
+	env, cfg, _ := flatpak(t)
+	writeTo(t, filepath.Join(cfg, offFile), "off")
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "notesctl"), []byte("#!/bin/sh\nprintf '%s' \"$1\" > \"$WINDOW_EXIT_LOG\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(bin, "shutdown.log")
+	t.Setenv("PATH", bin)
+	t.Setenv("WINDOW_EXIT_LOG", log)
+	first, err := WindowLifetime(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := WindowLifetime(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first()
+	if _, err := os.Stat(log); !os.IsNotExist(err) {
+		t.Fatalf("first close called notesctl: %v", err)
+	}
+	second()
+	got, err := os.ReadFile(log)
+	if err != nil || string(got) != "shutdown" {
+		t.Fatalf("last close: %q, %v", got, err)
+	}
+}

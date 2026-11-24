@@ -49,7 +49,7 @@ func (w *workspace) noteDialog(cx *core.Scope) core.Node {
 	case quickOpen, vaultSearch:
 		return w.findDialog(cx, action)
 	default:
-		return nil
+		return w.vaultDialog(cx, action)
 	}
 }
 func (w *workspace) closeDialog(open bool, _ base.Reason) {
