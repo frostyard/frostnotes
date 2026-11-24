@@ -329,7 +329,9 @@ func TestCIHasTheSnapshotDebJob(t *testing.T) {
 // it reads, and go mod tidy -diff would then fail.
 func TestGoJobsRetryTheModuleDownload(t *testing.T) {
 	jobs := get(workflows(t)["ci.yml"], "jobs")
-	for _, name := range []string{"verify", "race"} {
+	// race-shards runs the race gate's go test; the race job only reads
+	// its result (racegate_test.go).
+	for _, name := range []string{"verify", "race-shards"} {
 		for _, p := range moduleDownloadProblems(get(get(jobs, name), "steps"), name) {
 			t.Error("ci.yml" + p)
 		}
@@ -337,8 +339,9 @@ func TestGoJobsRetryTheModuleDownload(t *testing.T) {
 }
 
 // goGate names the commands of a step that reads Go modules: a gate of
-// the Makefile or the go command itself.
-var goGate = regexp.MustCompile(`\bmake +(verify|check|ci|test|race)\b|\bgo +(test|vet|build|run|mod tidy)\b`)
+// the Makefile or the go command itself. A gate's name may be quoted, as
+// in make "race-$SHARD".
+var goGate = regexp.MustCompile(`\bmake +["']?(verify|check|ci|test|race)\b|\bgo +(test|vet|build|run|mod tidy)\b`)
 
 // moduleDownloadProblems checks one job's steps: a step after setup-go
 // downloads the modules with retries, on a copy of go.mod (-modfile),
@@ -395,7 +398,7 @@ func TestModuleDownloadProblemsCatchAGateFirst(t *testing.T) {
 	if p := moduleDownloadProblems(parse(setup+download+"- run: make verify\n"), "j"); len(p) != 0 {
 		t.Errorf("a right job: %q", p)
 	}
-	for _, gate := range []string{"make verify", "make check", "make ci", "go test -race ./...", "go vet ./...", "go mod tidy -diff"} {
+	for _, gate := range []string{"make verify", "make check", "make ci", `make "race-$SHARD"`, "go test -race ./...", "go vet ./...", "go mod tidy -diff"} {
 		if p := moduleDownloadProblems(parse(setup+"- run: "+gate+"\n"+download), "j"); len(p) != 1 {
 			t.Errorf("%q before the download: %q, want 1 problem", gate, p)
 		}
