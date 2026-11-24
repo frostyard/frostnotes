@@ -44,6 +44,26 @@ nsgo-check: ## Exercise the NSGo preview against notesd and compile the web clie
 	cd cmd/frostnotes-nsgo && go mod tidy -diff && go vet ./... && env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 -tags integration ./...
 	cd cmd/frostnotes-nsgo && GOOS=js GOARCH=wasm go build -o /dev/null .
 
+# The same suite in a real Linux window. Xvfb gives it a screen of one size on
+# every host and keeps its windows off the desktop. GDK_BACKEND=x11 is what
+# keeps them off: without it GTK tries Wayland first, and with WAYLAND_DISPLAY
+# unset it still finds a desktop's compositor at the default socket,
+# wayland-0. NSGo's test command has no -tags flag, so the integration tag
+# goes through GOFLAGS. GTK reads testdata/xdg's settings file last of the
+# system's: it stops the text caret's blinking. Pictures go to
+# cmd/frostnotes-nsgo/.nsgo/test/screenshots/linux, which git ignores.
+NSGO_LIVE = env -u WAYLAND_DISPLAY GDK_BACKEND=x11 XDG_SESSION_TYPE=x11 GOFLAGS=-tags=integration \
+	XDG_CONFIG_DIRS=/etc/xdg:$(CURDIR)/cmd/frostnotes-nsgo/testdata/xdg \
+	xvfb-run -a -s "-screen 0 1600x1200x24" go tool nsgo test -target linux
+.PHONY: nsgo-live nsgo-pictures
+nsgo-live: ## Run the NSGo client's suite in a real Linux window, under Xvfb
+	@command -v xvfb-run >/dev/null 2>&1 || { echo "make nsgo-live needs xvfb-run (the xvfb package)"; exit 1; }
+	cd cmd/frostnotes-nsgo && $(NSGO_LIVE) .
+
+nsgo-pictures: ## Take the kept pictures of the client's main views again (cmd/frostnotes-nsgo/comparison/linux)
+	@command -v xvfb-run >/dev/null 2>&1 || { echo "make nsgo-pictures needs xvfb-run (the xvfb package)"; exit 1; }
+	cd cmd/frostnotes-nsgo && $(NSGO_LIVE) -run '^TestPictures' -screenshots comparison/linux .
+
 desktop-run: desktop-build ## Run the native desktop app against the running notesd
 	build/frostnotes
 

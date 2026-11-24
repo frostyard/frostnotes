@@ -203,6 +203,13 @@ file a step names before writing its frostnotes counterpart.
 
 - Unit and race runs filter no test names (frostyard/core ADR-0038, [ADR-0035](docs/adr/0035-unit-runs-filter-no-test-names.md)): integration tests carry the `integration` build tag instead; `internal/repocheck` fails if a unit run in the Makefile or a workflow gets `-run` or `-skip`.
 - Fix a lint finding rather than loosening `.golangci.yml`.
+- `make nsgo-check`, a part of `make verify`, runs the NSGo client's suite
+  headless on a real notesd (`cmd/frostnotes-nsgo`, `-tags integration`);
+  `make nsgo-live` runs the same suite in a real GTK 4 window under Xvfb
+  (it needs `xvfb-run`). Run both after a change to the client or its
+  tests. A change of the client's look runs `make nsgo-pictures` and
+  commits the changed PNGs of `cmd/frostnotes-nsgo/comparison/linux`
+  ([design/app.md](docs/design/app.md#the-nsgo-clients-live-suite)).
 
 ## Releases and dependencies
 

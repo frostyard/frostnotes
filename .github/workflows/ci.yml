@@ -62,6 +62,24 @@ jobs:
           sudo apt-get install --yes --no-install-recommends fonts-dejavu-core libpangocairo-1.0-0
       - name: Tidy, vet, format, lint and unit tests
         run: make verify
+      # make verify ran the NSGo client's suite headless (nsgo-check). Next,
+      # the same suite in a real GTK 4 window, under Xvfb (docs/design/app.md,
+      # The NSGo client's live suite). The packages are the ones frostmail's
+      # NSGo client job installs for its live suite.
+      - name: Install the window runtime of the live suite
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libgtk-4-1 libwebkitgtk-6.0-4 libxtst6 libxi6 fonts-dejavu-core xvfb xauth
+      - run: make nsgo-live
+      # The pictures this run drew, to read beside the kept ones
+      # (cmd/frostnotes-nsgo/comparison/linux). No step compares them.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: nsgo-live-pictures
+          path: cmd/frostnotes-nsgo/.nsgo/test/screenshots/linux
+          if-no-files-found: warn
 
   race:
     name: Race detector

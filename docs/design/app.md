@@ -1062,6 +1062,83 @@ a record holds the app ID `org.frostyard.Frostnotes`, the version, component
 - `make desktop-evidence` runs the native app's evidence: a generated
   10,000-note vault within a frame, and an edit on the hub reaching the open
   editor. `make desktop-smoke` starts the release build under Xvfb.
+- `make nsgo-check` runs the NSGo client's suite headless, and
+  `make nsgo-live` runs it in a real window
+  ([below](#the-nsgo-clients-live-suite)).
+
+### The NSGo client's live suite
+
+The NSGo client (`cmd/frostnotes-nsgo`,
+[ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md))
+has one suite, run two ways. It is Frostnotes' part of Phase 0.5 of
+frostmail's
+[plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md):
+live UI tests and pictures of today's look, before the look changes.
+
+- **The suite:** 4 workflows (`workspace_test.go`, `vaults_test.go`) and 8
+  picture tours (`pictures_test.go`), with the build tags `linux` and
+  `integration`. NSGo's `nsgotest` drives the client by label and text.
+  Each test starts a real notesd on temp data; the tours' vault is 6
+  made-up notes written in `pictures_test.go`.
+- **Headless,** `make nsgo-check`, a part of `make verify`: `go test -tags
+  integration` in `cmd/frostnotes-nsgo`. NSGo models the views, with
+  approximate text and no pixels: `app.Screenshot` only logs.
+- **In a real window,** `make nsgo-live`: `go tool nsgo test -target linux`
+  under `xvfb-run`, each test in a process of its own, in a GTK 4 window.
+  It needs the `xvfb` package and GTK 4. `TestMain` is `nsgotest.Main`.
+  The target has no `-tags` flag, so the Makefile passes the tag in
+  `GOFLAGS`. On a target the tests' working directory is under
+  `cmd/frostnotes-nsgo/.nsgo/`, so they find the repository with
+  `repoRoot`. Pictures go to
+  `cmd/frostnotes-nsgo/.nsgo/test/screenshots/linux`, which git ignores.
+  CI's Verify job runs the target after `make verify` and uploads the
+  pictures as `nsgo-live-pictures`.
+- **The window stays off the desktop** only with `GDK_BACKEND=x11`, which
+  the Makefile sets. GTK tries Wayland first. With `WAYLAND_DISPLAY` unset
+  it still connects to the default socket, `wayland-0`: on a desktop whose
+  compositor listens there, GDK under `xvfb-run` opened
+  `GdkWaylandDisplay wayland-0`, and with `GDK_BACKEND=x11` it opened
+  Xvfb's X11 display (2026-11-24).
+- **What a target does differently** from the headless run, in NSGo v0.3.0,
+  and what the tests do about it (seen under Xvfb on 2026-11-24):
+  - The app's clock. Headless, a wait of NSGo's moves the app's clock a
+    frame between checks. On a target a wait leaves the clock still, so a
+    timer of the app never comes due: vault search waits 250 ms before it
+    asks notesd, and the session dials again 1 s after its connection
+    drops. `waitTimers` moves the clock while it waits, in both runs.
+  - A line break typed in a multiline field. The Linux test host sends it
+    as the Enter key, which does nothing in a text view: the lines arrive
+    as 1 line. `typeLines` enters the text as an input method's commit on
+    a target.
+  - A paste. `App.Paste` reports a paste only headless, and on a target it
+    skips the test. `TestSwitchNoteDuringAutosave` leaves out its paste and
+    the undo after it on a target (`headlessStep`), and runs its other
+    steps there.
+
+  No test skips on a target.
+- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 19 PNGs,
+  1160 by 760 and, for a narrow window, 600 by 760. They show no note
+  selected, a note in source and in live preview, a line under edit, the 4
+  note dialogs, quick open with and without a query, vault search, the
+  vault manager and its join form, a notesd with no vault, the narrow
+  tree, note and navigation, and a note in the dark appearance, wide and
+  narrow. `make nsgo-pictures` takes them again. A change of the look
+  commits its changed pictures. No test compares pixels: fonts differ
+  between hosts.
+  - The tours pin light or dark (`nsgotest.Environment`). Without it a
+    target takes the appearance from GTK's settings, which follow the
+    host.
+  - `testdata/xdg/gtk-4.0/settings.ini` stops the caret's blinking. With
+    a caret that blinked, 4 or 5 pictures differed between 2 takes, each
+    in 1 column of 18 or 20 pixels. Without the blinking, 3 takes on 1
+    host gave the same bytes for all 19 (2026-11-24).
+  - `dark-narrow-note.png` shows a compact window in the dark appearance:
+    the area around the editor is white, and the title, the status and
+    the icons on it have the dark appearance's light colors.
+- **The web target** is not run. The test files are Linux-only, and each
+  test starts a notesd with `os/exec`, which a browser cannot. Lodge's
+  browser path stays with `make nsgo-lodge-evidence`
+  ([development.md](../development.md#run-the-preview-inside-lodge)).
 
 ## Operational notes
 

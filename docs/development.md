@@ -62,6 +62,8 @@ make nsgo-check
 go build -o build/ ./cmd/notesctl ./cmd/notesd
 ```
 
+`make nsgo-check` runs the client's tests headless. `make nsgo-live` runs the same tests in a real window under Xvfb, and `make nsgo-pictures` takes the kept pictures of its main views again. See [the live suite](design/app.md#the-nsgo-clients-live-suite).
+
 The Linux executable uses the same socket as `notesctl`. For a disposable trial, run the following together in Bash. The daemon, native client and static server run as jobs in this shell. The vault and database live under the printed temporary directory.
 
 ```bash
