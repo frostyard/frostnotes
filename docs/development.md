@@ -75,6 +75,8 @@ printf 'Vault: %s\nOpen: http://127.0.0.1:5173/#token=%s\n' "$trial/Notebook" "$
 
 Open **Field notes** on both screens. Edit it in one window and press **Save**. The other editor should update in place. Reverse the direction. If both editors change the same line from the same starting version, the later writer should see the conflict notice. Inspect its version with `build/notesctl versions 'Field notes.md'`. To finish the trial, run `kill "$web" "$native" "$daemon"` in the original shell.
 
+Use **New note** (Ctrl/Cmd+N) to create a note in the selected vault. Enter a path such as `Plants/Field notes` to create it in a folder. **Quick open** (Ctrl/Cmd+O) matches note titles and paths. **Search vault** (Ctrl/Cmd+Shift+F) searches indexed contents and shows the matching passage. Use the arrow keys and Enter to open a result. The toolbar buttons also work when the browser reserves a shortcut.
+
 To try inline editing, add a heading, a task such as `- [ ] prune`, and a link to a second note such as `[[Garden|orchard]]`. Choose **Live preview**. Click the heading to edit its Markdown and use the arrow keys to move between lines. Click a rendered checkbox to toggle it, or the link text to open the note. **Source** returns to whole-note selection and editing. The mode carries over when you open another note in the same window.
 
 The loopback hostname and port match the development gateway’s origin check. On a Lodge origin the browser opens the same-origin `/app/notes/api` WebSocket. The trial above exercises the loopback gateway. See the [preview decision](adr/0046-test-a-shared-nsgo-source-editor.md).

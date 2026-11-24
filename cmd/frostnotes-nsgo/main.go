@@ -50,6 +50,7 @@ type workspace struct {
 	doc                                      *core.Signal[*notes.Document]
 	revision                                 *core.Signal[int]
 	connection, problem                      *core.Signal[string]
+	action                                   *core.Signal[string]
 	preview, live                            *core.Signal[bool]
 	catalogRequest, filesRequest, navigation int
 }
@@ -68,6 +69,7 @@ func root(cx *core.Scope) core.Node {
 		revision:   core.NewSignal(cx, 0),
 		connection: core.NewSignal(cx, "Connecting to notesd…"),
 		problem:    core.NewSignal(cx, ""),
+		action:     core.NewSignal(cx, ""),
 		preview:    core.NewSignal(cx, false),
 		live:       core.NewSignal(cx, false),
 	}
@@ -98,6 +100,7 @@ func root(cx *core.Scope) core.Node {
 			d.RetryNow()
 		}
 	})
+	w.bindNoteActions()
 	w.session.Start()
 	explorer := workspaceui.FileExplorer{
 		TreeWidth: 230, Tree: ui.Sidebar{SectionsFunc: w.noteSections, Selected: core.NewMemo(cx, w.selectedPath).Get, OnSelect: w.open},
@@ -105,7 +108,7 @@ func root(cx *core.Scope) core.Node {
 	}
 	shell := workspaceui.Shell{
 		Brand: "FrostNotes", Header: []core.Node{core.Text{ContentFunc: w.title, Style: ui.TypeTitle}},
-		Actions:       []core.Node{ui.IconButton{Label: "Refresh vaults and notes", Icon: lucide.RefreshCw, OnPress: w.loadVaults}},
+		Actions:       w.noteActions(),
 		SidebarFooter: []core.Node{core.Text{ContentFunc: w.connection.Get, Style: ui.TypeCaption.Merge(core.Style{Padding: core.All(12)})}},
 		Sections:      w.vaultSections, Selected: func() string { return strconv.FormatInt(w.vault.Get(), 10) },
 		Navigate: func(key string) {
@@ -116,7 +119,7 @@ func root(cx *core.Scope) core.Node {
 		},
 		Content: []core.Node{explorer},
 	}
-	return core.View{Style: ui.FillRest, Children: []core.Node{shell, core.Dynamic(w.notice)}}
+	return core.View{Style: ui.FillRest, Children: []core.Node{shell, core.Dynamic(w.notice), core.Dynamic(w.noteDialog)}}
 }
 
 func (w *workspace) title() string {
@@ -208,6 +211,7 @@ func (w *workspace) leave(next func()) {
 }
 
 func (w *workspace) selectVault(id int64) {
+	w.action.Set("")
 	w.vault.Set(id)
 	w.files.Set(nil)
 	w.loadFiles()

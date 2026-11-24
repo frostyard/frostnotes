@@ -142,3 +142,40 @@ func TestNSGoLodgeInline(t *testing.T) {
 	click("Open Other")
 	b.await(10*time.Second, "opened linked note", func() bool { return b.truthy(`return document.body.innerText.includes("Pears by the wall.")`) })
 }
+
+// A second client creates a nested note while the browser is already open.
+// Discover it by its contents in Lodge, edit it, and read it back via RPC.
+func TestNSGoLodgeFind(t *testing.T) {
+	w := startWorld(t)
+	b := startBrowser(t, "nsgo-find", 1160, 760)
+	b.navigate(w.url + "/notes")
+	b.frame(b.waitFind(`iframe.frame[title="Notes"]`, 30*time.Second))
+	click := func(label string) {
+		t.Helper()
+		b.click(b.waitFind(fmt.Sprintf("[aria-label=%q]", label), 10*time.Second))
+	}
+	click("Garden")
+	const p = "Plants/Field notes.md"
+	const content = "A scarlet quince"
+	_, err := w.hub.C.Note().Create(t.Context(), &api.NoteCreateParams{VaultID: w.hub.Vault, Path: p, Content: content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	click("Search vault")
+	b.click(b.waitFind("input[aria-label='Find note']", time.Second))
+	b.keys("scarlet")
+	b.await(10*time.Second, "indexed body match", func() bool {
+		return b.truthy(`return [...document.querySelectorAll('[role=option]')].some(el=>el.textContent.includes(arguments[0]))`, p)
+	})
+	b.chord("\ue007") // Return chooses the highlighted match.
+	b.await(5*time.Second, "selected result", func() bool {
+		return b.truthy(`return document.querySelector("textarea")?.value===arguments[0]`, content)
+	})
+	b.click(b.waitFind("textarea", time.Second))
+	b.chord(keyControl, "a")
+	b.keys("Shared harvest")
+	eventually(t, 10*time.Second, "other client reads browser edit", func() bool {
+		n, err := w.hub.C.Note().Read(t.Context(), &api.NoteReadParams{VaultID: w.hub.Vault, Path: p})
+		return err == nil && n.Content == "Shared harvest"
+	})
+}
