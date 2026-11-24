@@ -18,7 +18,8 @@ import (
 
 // Exercise the actual UI callbacks. Selecting the next note while the old
 // editor is dirty must flush that editor's base and text to its own path.
-func TestSwitchNoteDuringAutosave(t *testing.T) {
+func startWorkspace(t *testing.T) (*nsgotest.App, string) {
+	t.Helper()
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0700); err != nil {
 		t.Fatal(err)
@@ -61,12 +62,17 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	defer c.Close()
+	t.Cleanup(func() { _ = c.Close() })
 	if _, err := c.Vault().Add(ctx, &api.VaultAddParams{Path: vault}); err != nil {
 		t.Fatal(err)
 	}
 	app := nsgotest.Start(t, root, nsgotest.Size(1150, 760))
 	app.WaitFor("label:First", 10*time.Second)
+	return app, vault
+}
+
+func TestSwitchNoteDuringAutosave(t *testing.T) {
+	app, vault := startWorkspace(t)
 	app.Press("label:First")
 	app.WaitFor("text:Saved", 10*time.Second)
 	const source = "label:Markdown source"
@@ -113,4 +119,35 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	if err != nil || string(got) != "updated\r\n" {
 		t.Fatalf("first note = %q, %v", got, err)
 	}
+}
+
+func TestCreateAndFindNote(t *testing.T) {
+	app, vault := startWorkspace(t)
+	app.Press("label:New note")
+	app.Type("label:Note path", "Plants/Field notes")
+	app.Press("label:Create")
+	app.WaitFor("text:Plants/Field notes.md", 5*time.Second)
+	app.WaitFor("text:Saved", 5*time.Second)
+	app.Type("label:Markdown source", "a scarlet quince")
+	app.Press("label:First")
+	app.WaitFor("text:First.md", 5*time.Second)
+	b, err := os.ReadFile(filepath.Join(vault, "Plants", "Field notes.md"))
+	if err != nil || string(b) != "a scarlet quince" {
+		t.Fatalf("new note = %q, %v", b, err)
+	}
+	app.Press("label:New note")
+	app.Type("label:Note path", "Plants/Field notes.md")
+	app.Press("label:Create")
+	app.WaitUntil(5*time.Second, func() bool { return strings.Contains(app.Dump(), "Plants/Field notes.md exists") })
+	app.Press("label:Cancel")
+	app.Key("mod+o")
+	app.Type("label:Find note", "Plants/Field")
+	app.Key("enter")
+	app.WaitFor("text:Plants/Field notes.md", 5*time.Second)
+	app.Press("label:First")
+	app.Key("mod+shift+f")
+	app.Type("label:Find note", "scarlet")
+	app.WaitUntil(5*time.Second, func() bool { return strings.Contains(app.Dump(), " · a scarlet quince") })
+	app.Key("enter")
+	app.WaitFor("text:Plants/Field notes.md", 5*time.Second)
 }
