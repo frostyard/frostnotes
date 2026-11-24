@@ -3,17 +3,16 @@ package window
 import (
 	"context"
 	"errors"
-	"fmt"
-	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/uikit"
+
+	"github.com/frostyard/frostnotes/internal/desktop/vaults"
 )
 
 // The join flow's phases.
@@ -29,30 +28,6 @@ const (
 	modeJoin = "join"
 	modePair = "pair"
 )
-
-var errCancelled = errors.New("the join was cancelled")
-
-func forbiddenName() *regexp.Regexp { return regexp.MustCompile(`[\\/:*?"<>|#^\[\]]`) }
-
-// vaultNameError says why name cannot name a new vault, "" when it can.
-func vaultNameError(name string) string {
-	t := strings.TrimSpace(name)
-	switch {
-	case t == "":
-		return "A vault needs a name."
-	case strings.HasPrefix(t, "."):
-		return "A vault's name cannot start with a dot."
-	case forbiddenName().MatchString(t):
-		return `A vault's name cannot hold any of these: \ / : * ? " < > | # ^ [ ]`
-	}
-	return ""
-}
-
-func vaultFolder(location, name string) string {
-	return strings.TrimRight(location, "/") + "/" + strings.TrimSpace(name)
-}
-
-func hubURL(url string) string { return strings.TrimRight(strings.TrimSpace(url), "/") }
 
 // vaultManager is the vault manager (docs/specs/ui.md#vault-manager): a
 // page while the window has no vault, a dialog over it otherwise.
@@ -271,7 +246,7 @@ func (m *vaultManager) createForm(c *ui.Context, a *App) {
 	ui.TextInput(c, &m.name).Label("Vault name").AutoFocus()
 	problem := ""
 	if m.name != "" {
-		problem = vaultNameError(m.name)
+		problem = vaults.NameError(m.name)
 	}
 	if problem != "" {
 		frostui.Toned(c, problem, frostui.Danger).Wrap()
@@ -280,9 +255,9 @@ func (m *vaultManager) createForm(c *ui.Context, a *App) {
 	if m.err != "" {
 		frostui.Problem(c, m.err)
 	}
-	can := vaultNameError(m.name) == "" && strings.TrimSpace(m.location) != ""
+	can := vaults.NameError(m.name) == "" && strings.TrimSpace(m.location) != ""
 	if ui.PrimaryButton(c, "Create").Disabled(!can).Clicked() && can {
-		m.add(a, vaultFolder(m.location, m.name), true)
+		m.add(a, vaults.Folder(m.location, m.name), true)
 	}
 }
 
@@ -341,7 +316,7 @@ func (j *joinFlow) nameProblem() string {
 		return ""
 	}
 	if j.makesVault {
-		return vaultNameError(j.name)
+		return vaults.NameError(j.name)
 	}
 	if strings.TrimSpace(j.name) == "" {
 		return "A vault needs a name."
@@ -420,14 +395,14 @@ func (j *joinFlow) start(a *App) {
 	if post == nil {
 		post = a.cfg.Env.Post
 	}
-	flow := joinRun{c: client, ctx: ctx, url: hubURL(j.url), name: strings.TrimSpace(j.name), device: strings.TrimSpace(j.device),
-		vaultID: j.vaultID, mode: j.mode, folder: "", onCode: func(code string) {
+	flow := vaults.Join{Client: client, Context: ctx, URL: vaults.HubURL(j.url), Name: strings.TrimSpace(j.name), Device: strings.TrimSpace(j.device),
+		VaultID: j.vaultID, PairOnly: j.mode == modePair, Folder: "", OnCode: func(code string) {
 			post(func() {
 				if j.run == run && ctx.Err() == nil {
 					j.code, j.phase = code, joinApprove
 				}
 			})
-		}, onJoining: func() {
+		}, OnJoining: func() {
 			post(func() {
 				if j.run == run && ctx.Err() == nil {
 					j.phase = joinJoining
@@ -435,23 +410,23 @@ func (j *joinFlow) start(a *App) {
 			})
 		}}
 	if j.makesVault {
-		flow.folder = vaultFolder(j.location, j.name)
+		flow.Folder = vaults.Folder(j.location, j.name)
 	}
 	go func() {
 		defer cancel()
-		v, err := flow.run()
+		v, err := flow.Run()
 		post(func() {
 			if j.run != run {
 				// Cancelled or replaced: the flow is closed or shows another
 				// run, so a vault this one may have left on the list is told
 				// apart from it.
-				var left *vaultLeft
+				var left *vaults.VaultLeft
 				if errors.As(err, &left) {
 					a.notify(left.Error())
 				}
 				return
 			}
-			if errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) {
 				return
 			}
 			if err != nil {
@@ -476,153 +451,4 @@ func (a *App) joined(j *joinFlow, v *api.Vault) {
 	if j.onDone != nil {
 		j.onDone()
 	}
-}
-
-// joinRun is one run of the flow, off the UI thread.
-type joinRun struct {
-	c                 *api.Client
-	ctx               context.Context
-	url, name, device string
-	vaultID           int64
-	mode, folder      string
-	onCode            func(string)
-	onJoining         func()
-}
-
-func (r *joinRun) stopped() error {
-	if r.ctx.Err() != nil {
-		return errCancelled
-	}
-	return nil
-}
-
-// awaitApproval shows the pairing's code and waits: notesd long-polls up to
-// 30 seconds for each sync.paired.
-func (r *joinRun) awaitApproval(p *api.Pairing) error {
-	if err := r.stopped(); err != nil {
-		return err
-	}
-	r.onCode(p.Code)
-	for {
-		if err := r.stopped(); err != nil {
-			return err
-		}
-		res, err := r.c.Sync().Paired(r.ctx, &api.SyncPairedParams{Pairing: p.Pairing})
-		if err != nil {
-			return err
-		}
-		switch res.State {
-		case api.PairingStateApproved:
-			return nil
-		case api.PairingStateExpired:
-			return errors.New("the pairing expired: the code was not approved within 10 minutes")
-		}
-	}
-}
-
-func (r *joinRun) pairNew() error {
-	params := &api.SyncPairParams{URL: r.url}
-	if r.device != "" {
-		params.Name = &r.device
-	}
-	p, err := r.c.Sync().Pair(r.ctx, params)
-	if err != nil {
-		return err
-	}
-	return r.awaitApproval(p)
-}
-
-func (r *joinRun) paired() (bool, error) {
-	hubs, err := r.c.Sync().Hubs(r.ctx, &api.SyncHubsParams{})
-	if err != nil {
-		return false, err
-	}
-	for _, h := range hubs {
-		if h.URL == r.url {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (r *joinRun) join(id int64, wasPaired bool) error {
-	params := &api.SyncJoinParams{VaultID: id, URL: r.url, Name: r.name}
-	_, err := r.c.Sync().Join(r.ctx, params)
-	var e *api.Error
-	if err == nil || !wasPaired || !errors.As(err, &e) || e.Code != api.CodeRevoked {
-		return err
-	}
-	// The hub refuses a device it paired: pair again once, join again.
-	if err := r.pairNew(); err != nil {
-		return err
-	}
-	_, err = r.c.Sync().Join(r.ctx, params)
-	return err
-}
-
-// addVault adds the folder to be made and waits for notesd's answer, even
-// through a cancel: one that landed mid-call could leave a vault nothing knows
-// of. The join after it sees the cancel, and removes the vault.
-func (r *joinRun) addVault() (*api.Vault, error) {
-	bg, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	create := true
-	v, err := r.c.Vault().Add(bg, &api.VaultAddParams{Path: r.folder, Create: &create})
-	if err != nil {
-		var rpcErr *api.Error
-		if !errors.As(err, &rpcErr) {
-			return nil, &vaultLeft{fmt.Sprintf("adding the vault lost its answer: %v; the vault at %q may remain on the list. Check Manage vaults and remove it before retrying", err, r.folder)}
-		}
-	}
-	return v, err
-}
-
-// vaultLeft is a join's failure that may leave its vault on the list. The
-// user hears of it even when the join was cancelled or replaced (#194).
-type vaultLeft struct{ msg string }
-
-func (e *vaultLeft) Error() string { return e.msg }
-
-// cleanupFailed says a join failed and its vault stayed on the list. It
-// does not wrap the join's error: a cancel would read as nothing to show.
-func cleanupFailed(err error, name string, rerr error) error {
-	why := err.Error()
-	if errors.Is(err, errCancelled) || errors.Is(err, context.Canceled) {
-		why = "the join was cancelled"
-	}
-	return &vaultLeft{why + `; could not remove the new vault "` + name + `" from the list: ` + rerr.Error() + ". Remove it in Manage vaults."}
-}
-
-// run returns the vault it made, nil when the vault existed.
-func (r *joinRun) run() (*api.Vault, error) {
-	if r.mode == modePair {
-		return nil, r.pairNew()
-	}
-	wasPaired, err := r.paired()
-	if err != nil {
-		return nil, err
-	}
-	if !wasPaired {
-		if err := r.pairNew(); err != nil {
-			return nil, err
-		}
-	}
-	r.onJoining()
-	if r.folder == "" {
-		return nil, r.join(r.vaultID, wasPaired)
-	}
-	v, err := r.addVault()
-	if err != nil {
-		return nil, err
-	}
-	if err := r.join(v.ID, wasPaired); err != nil {
-		// Forget the vault it made and did not join, even when cancelled.
-		bg, cancel := context.WithTimeout(context.Background(), 10_000_000_000)
-		defer cancel()
-		if rerr := r.c.Vault().Remove(bg, &api.VaultRemoveParams{ID: v.ID}); rerr != nil {
-			return nil, cleanupFailed(err, r.name, rerr)
-		}
-		return nil, err
-	}
-	return v, nil
 }

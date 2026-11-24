@@ -1222,28 +1222,6 @@ func TestSyncMissingOnlyForThatAnswer(t *testing.T) {
 	}
 }
 
-func TestACleanupFailureIsNotACancel(t *testing.T) {
-	err := cleanupFailed(context.Canceled, "Notes", errors.New("gone"))
-	if errors.Is(err, context.Canceled) {
-		t.Fatal("the cleanup failure would be dropped as a cancel")
-	}
-	if !strings.Contains(err.Error(), "Notes") {
-		t.Fatalf("%v", err)
-	}
-}
-
-func TestACancelDoesNotCutTheAddShort(t *testing.T) {
-	f := start(t)
-	dir := filepath.Join(t.TempDir(), "new")
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	r := joinRun{c: f.Other, ctx: ctx, folder: dir}
-	v, err := r.addVault()
-	if err != nil || v == nil {
-		t.Fatalf("vault %v, err %v", v, err)
-	}
-}
-
 func TestReadingTaskClickHasUndoAndRedoWithoutAnEditor(t *testing.T) {
 	f := start(t)
 	source := "- [ ] water\n"
@@ -1410,21 +1388,6 @@ func TestHeldEventsAtZeroSurviveRestart(t *testing.T) {
 	}
 	if got := next.Store.Workspace().ActiveTab().View.Path; got != "z.md" {
 		t.Fatalf("restored path %q", got)
-	}
-}
-
-func TestLostAddAnswerExplainsPossibleVault(t *testing.T) {
-	f := start(t)
-	if err := f.Other.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r := joinRun{c: f.Other, folder: "/made-up/vault"}
-	_, err := r.addVault()
-	if err == nil || !strings.Contains(err.Error(), "Manage vaults") || !strings.Contains(err.Error(), r.folder) {
-		t.Fatalf("lost answer: %v", err)
-	}
-	if left := (*vaultLeft)(nil); !errors.As(err, &left) {
-		t.Fatal("a cancelled join would drop the lost answer")
 	}
 }
 

@@ -90,3 +90,12 @@ func guardBrowserDraft(cx *core.Scope, dirty func() bool) {
 	})
 	cx.Cleanup(func() { window.Call("removeEventListener", "beforeunload", handler); handler.Release() })
 }
+
+// Lodge supplies its own vault catalog and manages the server's filesystem.
+func (w *workspace) vaultActions() []core.Node                 { return nil }
+func (w *workspace) vaultWelcome() core.Node                   { return nil }
+func (w *workspace) vaultDialog(*core.Scope, string) core.Node { return nil }
+func isVaultAction(string) bool                                { return false }
+func (w *workspace) loadSync()                                 {}
+func (w *workspace) connectionLabel() string                   { return w.connection.Get() }
+func desktopLifetime() func()                                  { return func() {} }

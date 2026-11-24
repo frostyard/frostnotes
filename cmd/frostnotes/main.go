@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"log/slog"
@@ -178,6 +177,11 @@ func run() error {
 	frostui.SetIcons(frostui.NewIcons(map[string][]byte{config.AppID + "-symbolic": logo}))
 
 	var win *mygo.Window
+	finish, err := system.WindowLifetime(getenv)
+	if err != nil {
+		return err
+	}
+	defer finish()
 	mygo.App.OnSecondInstance(func([]string, string) {
 		if win != nil {
 			win.Show()
@@ -185,11 +189,7 @@ func run() error {
 		}
 	})
 	mygo.App.WhenReady(func() { win = open(getenv, paths.Socket, paths.Blobs, configDir, stateDir) })
-	err = mygo.App.Run()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	system.StopOnExit(ctx, getenv)
-	return err
+	return mygo.App.Run()
 }
 
 func open(getenv system.Getenv, socket, blobs, configDir, stateDir string) *mygo.Window {
