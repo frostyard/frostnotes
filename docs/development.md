@@ -44,6 +44,39 @@ under Xvfb against a real notesd, and `make desktop-evidence` records the
 -run TestEveryScreenDraws ./internal/desktop/window` writes each screen's
 picture to `DIR`.
 
+## Try the shared NSGo editor
+
+From the repository root on x86-64 Linux, build the native app and browser assets from the same source.
+
+```sh
+make nsgo-check
+(cd cmd/frostnotes-nsgo && go tool nsgo build -target linux_x64,web -installers=false -channel none -output ../../build/nsgo)
+go build -o build/ ./cmd/notesctl ./cmd/notesd
+```
+
+The Linux executable uses the same socket as `notesctl`. For a disposable trial, run the following together in Bash. The daemon, native client and static server run as jobs in this shell. The vault and database live under the printed temporary directory.
+
+```bash
+trial=$(mktemp -d)
+mkdir "$trial/Notebook"
+printf '# Field notes\n\nFirst line.\n' > "$trial/Notebook/Field notes.md"
+export FROSTNOTES_DATA_DIR="$trial/db" FROSTNOTES_SOCKET="$trial/notesd.sock"
+export FROSTNOTES_DEVGW_TOKEN="$(openssl rand -hex 16)"
+build/notesd -devgw 127.0.0.1:46321 &
+daemon=$!
+for i in {1..100}; do [[ -S "$FROSTNOTES_SOCKET" ]] && break; sleep 0.1; done
+build/notesctl vault add "$trial/Notebook"
+build/nsgo/FrostNotes-0.1.0-linux_x64/FrostNotes &
+native=$!
+python3 -m http.server 5173 --bind 127.0.0.1 --directory build/nsgo/FrostNotes-0.1.0-web &
+web=$!
+printf 'Vault: %s\nOpen: http://127.0.0.1:5173/#token=%s\n' "$trial/Notebook" "$FROSTNOTES_DEVGW_TOKEN"
+```
+
+Open **Field notes** on both screens. Edit it in one window and press **Save**. The other editor should update in place. Reverse the direction. If both editors change the same line from the same starting version, the later writer should see the conflict notice. Inspect its version with `build/notesctl versions 'Field notes.md'`. To finish the trial, run `kill "$web" "$native" "$daemon"` in the original shell.
+
+The loopback hostname and port match the development gateway’s origin check. On a Lodge origin the browser opens the same-origin `/app/notes/api` WebSocket. The trial above exercises the loopback gateway. See the [preview decision](adr/0046-test-a-shared-nsgo-source-editor.md).
+
 ## Set up the nsl machine
 
 ```sh

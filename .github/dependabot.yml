@@ -30,6 +30,17 @@ updates:
       go:
         patterns: ["*"]
 
+  - package-ecosystem: gomod
+    directory: /cmd/frostnotes-nsgo
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      nsgo:
+        patterns: ["*"]
+
   - package-ecosystem: npm
     directory: /app
     schedule:
