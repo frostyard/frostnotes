@@ -67,6 +67,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0043 — The typing gate is looser on CI](adr/0043-the-typing-gate-is-looser-on-ci.md)
 - [0044 — The changes log keeps 30 days, and at most 100,000 events](adr/0044-the-changes-log-keeps-30-days-and-at-most-100000-events.md)
 - [0045 — The Flatpak keeps no device token in a plain file unless the user asks](adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)
+- [0046 — Test a shared NSGo source editor](adr/0046-test-a-shared-nsgo-source-editor.md)
 
 ### Design
 

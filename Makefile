@@ -1,4 +1,4 @@
-.PHONY: help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
+.PHONY: nsgo-check help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
@@ -23,6 +23,10 @@ build: ## Build notesd and notesctl into build/
 
 desktop-build: ## Build the native desktop app into build/frostnotes, as a release builds it
 	CGO_ENABLED=0 go build -trimpath -tags mygo_noinspector -ldflags '$(LDFLAGS) -X github.com/egoist/mygo.production=1' -o build/frostnotes ./cmd/frostnotes
+
+nsgo-check: ## Exercise the NSGo preview against notesd and compile the web client
+	cd cmd/frostnotes-nsgo && go mod tidy -diff && go vet ./... && env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 -tags integration ./...
+	cd cmd/frostnotes-nsgo && GOOS=js GOARCH=wasm go build -o /dev/null .
 
 desktop-run: ## Run the native desktop app against the running notesd
 	go run ./cmd/frostnotes
@@ -111,7 +115,7 @@ m1-evidence: ## Record M1's exit evidence 1-4 (FROSTNOTES_OBSIDIAN_LINKS, FROSTN
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
 # detector.
-verify: ## Tidy, generated files, vet, format, lint and unit tests
+verify: nsgo-check ## Tidy, generated files, vet, format, lint and unit tests
 	go mod tidy -diff
 	$(MAKE) --no-print-directory gen-check
 	go vet ./...
