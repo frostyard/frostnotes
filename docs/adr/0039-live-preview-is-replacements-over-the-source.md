@@ -64,5 +64,6 @@ editor has no syntax tree, and a keystroke in a 10,000-line note has 16 ms.
 
 ## References
 
+- NSGo preview: [shared editor](../design/app.md#shared-nsgo-editor-preview)
 - Shapes: [design/app.md](../design/app.md#live-preview), [specs/ui.md](../specs/ui.md#in-the-native-desktop-app), [plan 0009](../plans/0009-mygo-desktop.md#phase-5--live-preview-about-3-weeks)
 - Builds on: [ADR-0007](0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0038](0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)

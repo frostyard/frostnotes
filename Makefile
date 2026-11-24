@@ -285,7 +285,7 @@ NSGO_LODGE_E2E_REF := 19aec317dee4ba1ecb9e2691a90fb981023bfaa6
 .PHONY: nsgo-lodge-evidence
 nsgo-lodge-evidence: nsgo-lodge-app ## Verify a browser draft across Lodge disconnect and reconnect (nsl)
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(NSGO_LODGE_E2E_REF) $(NSGO_LODGE)/e2e'
-	$(IN_NSL) 'command -v geckodriver >/dev/null && M4_EVIDENCE_DIR=$$PWD/$(NSGO_LODGE)/evidence LODGE_E2E=$$PWD/$(NSGO_LODGE)/e2e NOTES_WEB=$$PWD/$(NSGO_LODGE)/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 3m -v -run "^TestNSGoLodgeReconnect$$" ./internal/webevidence'
+	$(IN_NSL) 'command -v geckodriver >/dev/null && M4_EVIDENCE_DIR=$$PWD/$(NSGO_LODGE)/evidence LODGE_E2E=$$PWD/$(NSGO_LODGE)/e2e NOTES_WEB=$$PWD/$(NSGO_LODGE)/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 3m -v -run "^TestNSGoLodge" ./internal/webevidence'
 
 m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
 	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'

@@ -84,3 +84,61 @@ func TestNSGoLodgeReconnect(t *testing.T) {
 	}
 	t.Fatal("the notice, stored file and recovered draft disagree")
 }
+
+// Drive the mounted WebAssembly app through Firefox's pointer and keyboard.
+func TestNSGoLodgeInline(t *testing.T) {
+	w := startWorld(t)
+	b := startBrowser(t, "nsgo-inline", 1160, 760)
+	b.navigate(w.url + "/notes")
+	b.frame(b.waitFind(`iframe.frame[title="Notes"]`, 30*time.Second))
+	click := func(label string) {
+		t.Helper()
+		b.click(b.waitFind(fmt.Sprintf("[aria-label=%q]", label), 20*time.Second))
+	}
+	click("Garden")
+	b.await(10*time.Second, "source loaded", func() bool {
+		return b.truthy(`return document.querySelector("textarea")?.value===arguments[0]`, garden)
+	})
+	const md = "# Garden\n- [ ] prune\nSee [[Other|orchard]]."
+	b.click(b.waitFind("textarea", time.Second))
+	b.chord(keyControl, "a")
+	b.keys(md)
+	click("Live preview")
+	click("Task on line 2")
+	eventually(t, 10*time.Second, "inline checkbox saved", func() bool { return w.disk("Garden.md") == "# Garden\n- [x] prune\nSee [[Other|orchard]]." })
+	click("Edit line 2")
+	waitField := func(value string) {
+		t.Helper()
+		b.await(5*time.Second, "active Markdown line "+value, func() bool {
+			return b.truthy(`return document.activeElement?.tagName==="TEXTAREA" && document.activeElement.value===arguments[0]`, value)
+		})
+	}
+	waitField("- [x] prune")
+	b.chord("\ue013") // WebDriver ArrowUp
+	waitField("# Garden")
+	b.chord("\ue010") // End
+	b.keys("!")
+	waitField("# Garden!")
+	eventually(t, 10*time.Second, "inline typing saved", func() bool { return w.disk("Garden.md") == "# Garden!\n- [x] prune\nSee [[Other|orchard]]." })
+	b.chord(keyControl, "z")
+	waitField("# Garden")
+	eventually(t, 10*time.Second, "source undo after typing", func() bool { return w.disk("Garden.md") == "# Garden\n- [x] prune\nSee [[Other|orchard]]." })
+	t.Log("Inline editor:", b.screenshot("garden"))
+	// Another writer changes the same heading while its raw line is active.
+	// The next undo must never replay the previous edit over the new base.
+	current, err := w.hub.C.Note().Read(t.Context(), &api.NoteReadParams{VaultID: w.hub.Vault, Path: "Garden.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const remote = "# Orchard\n- [x] prune\nSee [[Other|orchard]]."
+	_, err = w.hub.C.Note().Write(t.Context(), &api.NoteWriteParams{VaultID: w.hub.Vault, Path: current.Path, Base: current.Hash, Content: remote})
+	if err != nil {
+		t.Fatal(err)
+	}
+	click("Edit line 1")
+	waitField("# Orchard")
+	b.chord(keyControl, "z")
+	waitField("# Orchard")
+	click("Open Other")
+	b.await(10*time.Second, "opened linked note", func() bool { return b.truthy(`return document.body.innerText.includes("Pears by the wall.")`) })
+}

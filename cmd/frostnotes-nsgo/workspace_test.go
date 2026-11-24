@@ -7,10 +7,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/nsgotest"
 )
 
@@ -74,6 +76,38 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	app.WaitUntil(10*time.Second, func() bool { return app.Exists(source) && app.Find(source).Text == "Second\n" })
 	if app.Exists("text:No vaults available") {
 		t.Fatal("empty state alongside populated vault")
+	}
+	app.Clear(source)
+	app.Type(source, "# Garden 🌱\n- [ ] prune\nSee [[First|orchard]].\n```\n- [ ] literal\n```\n")
+	app.Press("label:Live preview")
+	app.WaitFor("label:Edit line 1", time.Second)
+	app.Press("label:Task on line 2")
+	app.Press("label:Edit line 2")
+	const field = "label:Markdown line"
+	app.WaitUntil(time.Second, func() bool { return app.Exists(field) && app.Find(field).Text == "- [x] prune" })
+	app.Focus(field)
+	app.Key("up")
+	app.WaitUntil(time.Second, func() bool { return app.Find(field).Text == "# Garden 🌱" })
+	app.Key("mod+z")
+	app.WaitUntil(time.Second, func() bool { return app.Find(field).Text == "- [ ] prune" })
+	app.Key("mod+shift+z")
+	app.WaitUntil(time.Second, func() bool { return app.Find(field).Text == "- [x] prune" })
+	app.Key("mod+z")
+	app.WaitUntil(time.Second, func() bool { return app.Find(field).Text == "- [ ] prune" })
+	// A multiline paste creates real document lines and leaves the field
+	// on the last inserted line. Undo restores the original task marker.
+	app.Paste(field, core.PasteEvent{Text: "\nseedling"})
+	app.WaitUntil(time.Second, func() bool { return app.Exists(field) && strings.Contains(app.Find(field).Text, "seedling") })
+	app.Key("mod+z")
+	app.WaitUntil(time.Second, func() bool { return app.Exists(field) && app.Find(field).Text == "- [ ] prune" })
+	if app.Exists("label:Task on line 5") {
+		t.Fatal("task inside code fence")
+	}
+	app.Press("label:Open First")
+	app.WaitUntil(10*time.Second, func() bool { return app.Exists("text:First.md") })
+	second, err := os.ReadFile(filepath.Join(vault, "Second.md"))
+	if err != nil || string(second) != "# Garden 🌱\r\n- [ ] prune\r\nSee [[First|orchard]].\r\n```\r\n- [ ] literal\r\n```\r\n" {
+		t.Fatalf("inline source on disk = %q, %v", second, err)
 	}
 	got, err := os.ReadFile(filepath.Join(vault, "First.md"))
 	if err != nil || string(got) != "updated\r\n" {
