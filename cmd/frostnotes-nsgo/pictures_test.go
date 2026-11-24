@@ -16,7 +16,7 @@ import (
 // (make nsgo-live) each name is a PNG, and comparison/linux holds the last
 // set a person kept (make nsgo-pictures). No test compares pixels.
 
-// pictureVault is the tours' vault: made-up notes in two folders, with the
+// pictureVault is the tours' vault: made-up notes in three folders, with the
 // marks live preview draws.
 var pictureVault = map[string]string{
 	"Welcome.md":        "# Welcome\n\nA small vault for the pictures of the client.\n\nStart with [[Quince]] or the [[Seed list]].\n",
@@ -25,6 +25,8 @@ var pictureVault = map[string]string{
 	"Plants/Mint.md":    "# Mint\n\nKeep it in a pot, or it takes the bed.\n",
 	"Plants/Fig.md":     "# Fig\n\nBrown Turkey, against the south wall.\n",
 	"Journal/Monday.md": "# Monday\n\nPlanted the quince. Rain by noon.\n",
+	// A folder inside a folder, which the tree nests.
+	"Plants/Herbs/Basil.md": "# Basil\n\nPinch the tops, and it bushes out.\n",
 }
 
 // The size of the app's own window (main.go), and a width under both compact
