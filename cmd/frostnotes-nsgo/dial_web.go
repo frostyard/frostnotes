@@ -16,7 +16,7 @@ import (
 	"github.com/nsgo-dev/nsgo/core"
 )
 
-// Lodge authenticates the same-origin socket with the browser session.
+// Lodge admits the same-origin socket using the node and login from WhoIs.
 // Local previews use notesd's existing gateway. The token travels in the
 // fragment to keep it out of the static server's request logs.
 func platformDialer() session.Dialer {
@@ -27,7 +27,8 @@ func platformDialer() session.Dialer {
 	}
 	host := location.Get("host").String()
 	endpoint := url.URL{Scheme: scheme, Host: host, Path: "/app/notes/api"}
-	local := host == "127.0.0.1:5173" || host == "localhost:5173"
+	inLodge := strings.HasPrefix(location.Get("pathname").String(), "/app/notes/")
+	local := !inLodge && (host == "127.0.0.1:5173" || host == "localhost:5173")
 	if local {
 		params, _ := url.ParseQuery(strings.TrimPrefix(location.Get("hash").String(), "#"))
 		endpoint = url.URL{Scheme: "ws", Host: "127.0.0.1:46321", Path: "/", RawQuery: url.Values{"token": {params.Get("token")}}.Encode()}
