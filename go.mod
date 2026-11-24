@@ -10,13 +10,13 @@ require (
 	github.com/frostyard/lodge/kit v0.6.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/gen2brain/gav1d v0.2.7
+	github.com/gen2brain/gav1d v0.2.10
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.7
 	go.yaml.in/yaml/v3 v3.0.6
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.62.0
