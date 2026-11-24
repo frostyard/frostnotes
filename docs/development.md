@@ -77,6 +77,12 @@ Open **Field notes** on both screens. Edit it in one window and press **Save**. 
 
 The loopback hostname and port match the development gateway’s origin check. On a Lodge origin the browser opens the same-origin `/app/notes/api` WebSocket. The trial above exercises the loopback gateway. See the [preview decision](adr/0046-test-a-shared-nsgo-source-editor.md).
 
+### Run the preview inside Lodge
+
+With the FrostNotes nsl machine provisioned, run `make nsgo-lodge-evidence`. It stages the preview in `build/nsgo-lodge/apps/notes` and starts the pinned Lodge development gateway and a real `notesd` with a disposable vault. Firefox opens Notes from the Lodge shell. The test removes its fixture node from the allow-list, types a draft offline, writes to the same line over the Unix socket, and readmits the node. It checks the editor, the file and the exact conflict version, then writes a screenshot under `build/nsgo-lodge/evidence`.
+
+For a separate Lodge test installation, `make nsgo-lodge-app` builds the app tree alone. The gateway needs [Lodge’s Wasm frame policy](https://github.com/frostyard/lodge/pull/116). The preview uses the existing Notes manifest and app ID inside this separate staging tree.
+
 ## Set up the nsl machine
 
 ```sh

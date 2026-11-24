@@ -10,7 +10,7 @@ const poll = process.env.NSL === "1";
 // The web build (--mode web) is served by lodge at /app/notes/
 // (docs/design/app.md#in-a-browser); the development server's from its root.
 export default defineConfig(({ mode }) => ({
-  base: mode === "web" ? "/app/notes/" : "/",
+  base: mode === "web" || mode === "nsgo" ? "/app/notes/" : "/",
   plugins: [react(), tailwindcss()],
   clearScreen: false,
   envPrefix: ["VITE_"],
@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     watch: poll ? { usePolling: true, interval: 300 } : undefined,
   },
-  build: { target: "es2022" },
+  build: { target: "es2022", ...(mode === "nsgo" ? { rolldownOptions: { input: "nsgo.html" } } : {}) },
   test: {
     environment: "happy-dom",
     // Tests read dates in UTC wherever they run (CI already does).

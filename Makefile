@@ -173,6 +173,19 @@ lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version
 	cp -R build/web build/lodge/apps/notes/web
 	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/lodge/apps/notes/app.json
 
+# Standalone staging tree for the preview. Vite builds the Lodge handshake;
+# NSGo supplies the versioned runtime, WASM and resource files.
+.PHONY: nsgo-lodge-app
+NSGO_LODGE := build/nsgo-lodge
+nsgo-lodge-app: ## Stage the opt-in NSGo Lodge application in build/nsgo-lodge/apps/notes
+	cd cmd/frostnotes-nsgo && go tool nsgo build -target web -version 0.1.0 -channel none -installers=false -output ../../$(NSGO_LODGE)/release
+	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec vite build --mode nsgo --outDir ../$(NSGO_LODGE)/apps/notes/web --emptyOutDir'
+	mv $(NSGO_LODGE)/apps/notes/web/nsgo.html $(NSGO_LODGE)/apps/notes/web/index.html
+	cp $(NSGO_LODGE)/release/FrostNotes-0.1.0-web/nsgo.json $(NSGO_LODGE)/apps/notes/web/
+	cd $(NSGO_LODGE)/release/FrostNotes-0.1.0-web && cp nsgo.*.js wasm_exec.*.js *.wasm *.txt ../../apps/notes/web/assets/
+	cp packaging/icons/icon.svg $(NSGO_LODGE)/apps/notes/web/icon.svg
+	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > $(NSGO_LODGE)/apps/notes/app.json
+
 # The /usr layout (frostyard/core ADR-0058): notesd, notesctl, the manifest,
 # the web build, the units and the sysusers.d entry, staged under
 # LODGE_DESTDIR by packaging/lodge/stage.sh. Needs make build and make
@@ -266,6 +279,13 @@ LODGE_E2E_REF := e76a17c57766bad3797b8d78708591d88c5e7777
 .PHONY: lodge-e2e m4-evidence porter-evidence
 lodge-e2e: ## Build lodge's development build at LODGE_E2E_REF into build/lodge-e2e (nsl)
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(LODGE_E2E_REF) build/lodge-e2e'
+
+# The NSGo preview needs app-frame Wasm support introduced in Lodge #116.
+NSGO_LODGE_E2E_REF := 19aec317dee4ba1ecb9e2691a90fb981023bfaa6
+.PHONY: nsgo-lodge-evidence
+nsgo-lodge-evidence: nsgo-lodge-app ## Verify a browser draft across Lodge disconnect and reconnect (nsl)
+	$(IN_NSL) 'scripts/lodge-e2e.sh $(NSGO_LODGE_E2E_REF) $(NSGO_LODGE)/e2e'
+	$(IN_NSL) 'command -v geckodriver >/dev/null && M4_EVIDENCE_DIR=$$PWD/$(NSGO_LODGE)/evidence LODGE_E2E=$$PWD/$(NSGO_LODGE)/e2e NOTES_WEB=$$PWD/$(NSGO_LODGE)/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 3m -v -run "^TestNSGoLodgeReconnect$$" ./internal/webevidence'
 
 m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
 	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'

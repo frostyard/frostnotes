@@ -52,6 +52,8 @@ is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
 
 The preview uses PocketGo’s versioned workspace shell, file explorer and notices. FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
 
+The optional Lodge bundle starts the existing Lodge client handshake before mounting NSGo, follows the shell theme, and uses the same-origin notes API. Its config is revalidated separately from the immutable runtime assets. The loopback Lodge fixture exercises browser admission, offline editing, and conflict recovery over this route. [Run the Lodge evidence](../development.md#run-the-preview-inside-lodge)
+
 ## Overview
 
 The web app is a React UI, a thin client of notesd like `notesctl`, MCP and
