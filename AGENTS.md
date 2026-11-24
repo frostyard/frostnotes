@@ -242,6 +242,13 @@ file a step names before writing its frostnotes counterpart.
   `github.com/bketelsen/mygo` (the v0.10.0 editor-blocks port from
   egoist/mygo#1662, with line-style strike-through) until those changes are in
   a release (plan 0009).
+  The NSGo client's own module (`cmd/frostnotes-nsgo/go.mod`) also requires
+  `github.com/frostyard/frostui/workspaceui` v0.2.0, the kit it shares with
+  FrostMail and PocketGo (a module of its own in frostui, tags
+  `workspaceui/vX.Y.Z`), and `github.com/nsgo-dev/nsgo` v0.3.0, which
+  frostyard does not own. The client draws the kit's Frostyard themes, in
+  its bundled Inter, and a desktop keeps its choice of appearance
+  ([design/app.md](docs/design/app.md#shared-nsgo-editor-preview)).
   Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as

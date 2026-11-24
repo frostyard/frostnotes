@@ -139,17 +139,29 @@ func TestPicturesOfANarrowWindow(t *testing.T) {
 	app.Screenshot("narrow-navigation")
 }
 
-// The same note in the dark appearance, wide and narrow.
+// The same views in Frostyard, the dark theme: a note in source and in live
+// preview, a dialog with a field, and the vault manager, which holds the
+// choice of appearance.
 func TestPicturesInDark(t *testing.T) {
-	for _, picture := range []struct {
-		name  string
-		width core.Points
-	}{{"dark-note-source", pictureWidth}, {"dark-narrow-note", narrowWidth}} {
-		t.Run(picture.name, func(t *testing.T) {
-			app := pictureWorkspace(t, picture.width, true)
-			app.Press("label:Quince")
-			app.WaitFor("text:Saved", 10*time.Second)
-			app.Screenshot(picture.name)
-		})
-	}
+	app := pictureWorkspace(t, pictureWidth, true)
+	app.Press("label:Quince")
+	app.WaitFor("text:Saved", 10*time.Second)
+	app.Screenshot("dark-note-source")
+	app.Press("label:Live preview")
+	app.WaitFor("label:Edit line 1", 5*time.Second)
+	app.Screenshot("dark-note-live-preview")
+	app.Press("label:Rename or move note")
+	app.WaitFor("label:Destination path", 5*time.Second)
+	app.Screenshot("dark-dialog-move-note")
+	app.Press("label:Cancel")
+	app.Press("label:Manage vaults")
+	app.WaitFor("label:Create new vault", 5*time.Second)
+	app.Screenshot("dark-vault-manager")
+}
+
+func TestPicturesOfANarrowWindowInDark(t *testing.T) {
+	app := pictureWorkspace(t, narrowWidth, true)
+	app.Press("label:Quince")
+	app.WaitFor("text:Saved", 10*time.Second)
+	app.Screenshot("dark-narrow-note")
 }

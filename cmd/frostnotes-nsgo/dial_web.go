@@ -91,6 +91,10 @@ func guardBrowserDraft(cx *core.Scope, dirty func() bool) {
 	cx.Cleanup(func() { window.Call("removeEventListener", "beforeunload", handler); handler.Release() })
 }
 
+// ownAppearance reports whether the client keeps its own choice of
+// appearance. Lodge sets the web build's (app/src/nsgo-lodge.ts).
+const ownAppearance = false
+
 // Lodge supplies its own vault catalog and manages the server's filesystem.
 func (w *workspace) vaultActions() []core.Node                 { return nil }
 func (w *workspace) vaultWelcome() core.Node                   { return nil }

@@ -112,6 +112,7 @@ func (w *workspace) vaultDialog(cx *core.Scope, action string) core.Node {
 			keep.Set(b.KeepRunning)
 		}})
 	}
+	nodes = append(nodes, w.appearanceRow())
 	return ui.Dialog{Title: manageVaults, Open: func() bool { return true }, OnOpenChange: w.closeDialog, Children: nodes}
 }
 

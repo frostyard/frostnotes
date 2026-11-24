@@ -60,11 +60,21 @@ type workspace struct {
 	connection, problem                      *core.Signal[string]
 	action                                   *core.Signal[string]
 	preview, live                            *core.Signal[bool]
+	appearance                               *core.Signal[core.Appearance]
 	catalogRequest, filesRequest, navigation int
 }
 
 func root(cx *core.Scope) core.Node {
 	cx.SetTitle("FrostNotes")
+	// The Frostyard look and the bundled Inter. A font the platform refuses
+	// leaves the text in the system's face.
+	_ = workspaceui.Apply(cx)
+	appearance := core.AppearanceSystem
+	if ownAppearance {
+		// Lodge sets the web build's appearance; a desktop keeps its own.
+		appearance = savedAppearance(cx)
+		cx.SetAppearance(appearance)
+	}
 	w := &workspace{
 		syncInfo: core.NewSignal(cx, (*api.SyncStatus)(nil)),
 		removed:  make(map[int64][]string),
@@ -82,6 +92,7 @@ func root(cx *core.Scope) core.Node {
 		action:     core.NewSignal(cx, ""),
 		preview:    core.NewSignal(cx, false),
 		live:       core.NewSignal(cx, false),
+		appearance: core.NewSignal(cx, appearance),
 	}
 	w.session.OnChange(func() {
 		if w.session.State() == session.Connected {
@@ -136,7 +147,7 @@ func root(cx *core.Scope) core.Node {
 			return explorer
 		})},
 	}
-	return core.View{Style: ui.FillRest, Children: []core.Node{shell, core.Dynamic(w.notice), core.Dynamic(w.noteDialog)}}
+	return workspaceui.Frame(shell, core.Dynamic(w.notice), core.Dynamic(w.noteDialog))
 }
 
 func (w *workspace) title() string {

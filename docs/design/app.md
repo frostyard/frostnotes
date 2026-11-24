@@ -52,9 +52,11 @@ is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
 
 [ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md) promotes this editor to the Linux and Lodge defaults. The Flatpak also includes MyGo for workflows such as revision history.
 
-The default Linux and Lodge app uses the versioned workspace shell, file explorer and notices of frostui’s `workspaceui` module (`github.com/frostyard/frostui/workspaceui`). FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
+The default Linux and Lodge app uses the versioned workspace shell, file explorer and notices of frostui’s `workspaceui` module (`github.com/frostyard/frostui/workspaceui`, v0.2.0). FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
 
 In the NSGo preview, **Live preview** renders headings, tasks and wiki links in the note. Clicking a line reveals its original Markdown in place. The shared scanner supplies byte ranges, and edits apply to the same document as source mode. Clicking a task changes its marker. Clicking a wiki link resolves the target through notesd. Undo and redo operate on local edits within the current preview. A remote text change clears that history. See [the live-preview design decision](../adr/0039-live-preview-is-replacements-over-the-source.md).
+
+The client draws the kit's Frostyard look: Frostyard in the dark appearance and Frostyard light in the light one, with its text in Inter, which the kit bundles. `root` calls `workspaceui.Apply` before it builds a view, and the window's root view is `workspaceui.Frame`. Nothing else of the client's layout or controls changed with the look. On a desktop the vault manager has an Appearance row, the kit's System, Light and Dark choice. A press shows the choice at once and keeps it in the client's storage under `appearance` (`light` or `dark`; no entry is the system's), and a start shows the kept choice (`appearance.go`). The Lodge build has no such row and keeps nothing: Lodge sets its appearance (`app/src/nsgo-lodge.ts`). The look is frostmail's [ADR-0062](https://github.com/frostyard/frostmail/blob/main/docs/adr/0062-give-the-nsgo-client-the-frostyard-look-from-the-shared-kit.md) and [plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md); the kept pictures are [below](#the-nsgo-clients-live-suite).
 
 On Linux, the vault manager creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
 
@@ -1070,12 +1072,14 @@ a record holds the app ID `org.frostyard.Frostnotes`, the version, component
 
 The NSGo client (`cmd/frostnotes-nsgo`,
 [ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md))
-has one suite, run two ways. It is Frostnotes' part of Phase 0.5 of
+has one suite, run two ways. It began as Frostnotes' part of Phase 0.5 of
 frostmail's
 [plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md):
-live UI tests and pictures of today's look, before the look changes.
+live UI tests and pictures of the look, kept before the look changed. The
+pictures now show the kit's Frostyard look
+([above](#shared-nsgo-editor-preview)).
 
-- **The suite:** 4 workflows (`workspace_test.go`, `vaults_test.go`) and 8
+- **The suite:** 6 workflows (`workspace_test.go`, `vaults_test.go`) and 9
   picture tours (`pictures_test.go`), with the build tags `linux` and
   `integration`. NSGo's `nsgotest` drives the client by label and text.
   Each test starts a real notesd on temp data; the tours' vault is 6
@@ -1116,25 +1120,39 @@ live UI tests and pictures of today's look, before the look changes.
     steps there.
 
   No test skips on a target.
-- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 19 PNGs,
-  1160 by 760 and, for a narrow window, 600 by 760. They show no note
-  selected, a note in source and in live preview, a line under edit, the 4
-  note dialogs, quick open with and without a query, vault search, the
-  vault manager and its join form, a notesd with no vault, the narrow
-  tree, note and navigation, and a note in the dark appearance, wide and
-  narrow. `make nsgo-pictures` takes them again. A change of the look
-  commits its changed pictures. No test compares pixels: fonts differ
-  between hosts.
+- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 22 PNGs,
+  1160 by 760 and, for a narrow window, 600 by 760. 17 are in Frostyard
+  light: no note selected, a note in source and in live preview, a line
+  under edit, the 4 note dialogs, quick open with and without a query,
+  vault search, the vault manager and its join form, a notesd with no
+  vault, and the narrow tree, note and navigation. 5, named `dark-`, are
+  in Frostyard: a note in source and in live preview, the dialog that
+  moves a note, the vault manager and the narrow note.
+  `make nsgo-pictures` takes them again. A change of the look commits its
+  changed pictures. No test compares pixels.
+  - The look they show, read from the pictures of 2026-11-24. Light: the
+    navigation is `#e8f0f6`, the narrow window's ground `#f5f9fc`, the
+    accent `#0b6ea6`, and the source field `#ffffff`. Dark: `#081b2d`,
+    `#06111d`, `#47b8ef` and `#061826`. The content pane of a wide window
+    is `#f4f9fc` in light and `#06121e` in dark, 1 step from the ground's
+    color.
+  - The text is the kit's bundled Inter. With the host's own Inter hidden
+    from fontconfig (a `FONTCONFIG_FILE` that rejects the family), a take
+    gave the same bytes for all 22 as a take without it; with it hidden
+    and no font registered, the text was Noto Sans (2026-11-24, on 1
+    host).
   - The tours pin light or dark (`nsgotest.Environment`). Without it a
     target takes the appearance from GTK's settings, which follow the
     host.
   - `testdata/xdg/gtk-4.0/settings.ini` stops the caret's blinking. With
     a caret that blinked, 4 or 5 pictures differed between 2 takes, each
     in 1 column of 18 or 20 pixels. Without the blinking, 3 takes on 1
-    host gave the same bytes for all 19 (2026-11-24).
-  - `dark-narrow-note.png` shows a compact window in the dark appearance:
-    the area around the editor is white, and the title, the status and
-    the icons on it have the dark appearance's light colors.
+    host gave the same bytes for all 19 pictures of the look before
+    Frostyard, and 2 takes for all 22 of this one (2026-11-24).
+  - `dark-narrow-note.png` shows a compact window in the dark appearance.
+    With the kit at v0.1.0 the area around the editor was white under the
+    dark appearance's light text. The kit's compact shell paints its
+    ground since v0.2.0: the picture's ground is `#06111d`.
 - **The web target** is not run. The test files are Linux-only, and each
   test starts a notesd with `os/exec`, which a browser cannot. Lodge's
   browser path stays with `make nsgo-lodge-evidence`

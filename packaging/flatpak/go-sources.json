@@ -265,14 +265,14 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/frostui/workspaceui/@v/v0.1.0.mod",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/workspaceui/@v/v0.2.0.mod",
     "sha256": "9bdb61e6f027cef4a5014032e70fc5e369d2bef936d61b1121c686c9a337a1ea",
     "dest": "goproxy/github.com/frostyard/frostui/workspaceui/@v"
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/frostyard/frostui/workspaceui/@v/v0.1.0.zip",
-    "sha256": "3e59df64189de89a56f66e15954fd84f012fed1188c8d08ea49fdfa1323aeac6",
+    "url": "https://proxy.golang.org/github.com/frostyard/frostui/workspaceui/@v/v0.2.0.zip",
+    "sha256": "66c13c177a6017ed6a958b97e7742e5c393c7b947d86e77cad75b02b9691dfc0",
     "dest": "goproxy/github.com/frostyard/frostui/workspaceui/@v"
   },
   {
