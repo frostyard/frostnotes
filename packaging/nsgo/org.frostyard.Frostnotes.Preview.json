@@ -24,6 +24,7 @@
       "install -Dm644 revision.txt -t /app/share/frostnotes",
       "install -Dm644 LICENSE THIRD_PARTY_NOTICES.txt -t /app/share/licenses/org.frostyard.Frostnotes.Preview"
     ],
+    "run-tests": true,
     "test-commands": [
       "desktop-file-validate /app/share/applications/org.frostyard.Frostnotes.Preview.desktop",
       "appstreamcli validate --no-net /app/share/metainfo/org.frostyard.Frostnotes.Preview.metainfo.xml",
