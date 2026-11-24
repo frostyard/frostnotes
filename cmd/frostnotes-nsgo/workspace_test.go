@@ -151,3 +151,52 @@ func TestCreateAndFindNote(t *testing.T) {
 	app.Key("enter")
 	app.WaitFor("text:Plants/Field notes.md", 5*time.Second)
 }
+
+func TestManageNotes(t *testing.T) {
+	app, vault := startWorkspace(t)
+	const field = "label:Markdown source"
+	app.Press("label:First")
+	app.WaitFor("text:Saved", 5*time.Second)
+	app.Type(field, "draft")
+	// Rename from a second client before autosave. The active buffer
+	// follows note.moved and its save must land at the new path.
+	c, _, err := api.Dial(t.Context(), os.Getenv("FROSTNOTES_SOCKET"), "other-window")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	vs, err := c.Vault().List(t.Context(), &api.VaultListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := vs[0].ID
+	_, err = c.Note().Move(t.Context(), &api.NoteMoveParams{VaultID: id, Path: "First.md", To: "Renamed.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.WaitFor("text:Renamed.md", 5*time.Second)
+	app.Press("label:Rename or move note")
+	app.Clear("label:Destination path")
+	app.Type("label:Destination path", "Plants/Renamed")
+	app.Press("label:Move")
+	app.WaitFor("text:Plants/Renamed.md", 5*time.Second)
+	app.Type(field, "+latest")
+	app.Press("label:Move to trash")
+	app.Press("label:Cancel")
+	app.Press("label:Move to trash")
+	app.Press("label:Trash note")
+	app.WaitFor("text:Select a note to edit", 5*time.Second)
+	for _, p := range []string{"First.md", "Renamed.md", "Plants/Renamed.md"} {
+		if _, err := os.Stat(filepath.Join(vault, p)); !os.IsNotExist(err) {
+			t.Fatalf("%s after trash: %v", p, err)
+		}
+	}
+	app.Press("label:Restore deleted note")
+	app.Type("label:Deleted note path", "Plants/Renamed.md")
+	app.Press("label:Restore")
+	app.WaitUntil(5*time.Second, func() bool { return app.Exists(field) && app.Find(field).Text == "First\ndraft+latest" })
+	// A second restore must never overwrite a live file.
+	if err := restoreDeleted(t.Context(), c, id, "Plants/Renamed.md"); err == nil {
+		t.Fatal("restored over a live note")
+	}
+}

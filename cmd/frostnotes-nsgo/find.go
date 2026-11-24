@@ -32,13 +32,20 @@ func (w *workspace) noteActions() []core.Node {
 	button := func(action string, icon func() *core.SVG) core.Node {
 		return ui.IconButton{Label: action, Icon: icon, Disabled: func() bool { return w.vault.Get() == 0 }, OnPress: func() { w.showAction(action) }}
 	}
-	return []core.Node{button(newNote, lucide.FilePlus), button(quickOpen, lucide.FolderOpen), button(vaultSearch, lucide.Search), ui.IconButton{Label: "Refresh vaults and notes", Icon: lucide.RefreshCw, OnPress: w.loadVaults}}
+	return []core.Node{button(newNote, lucide.FilePlus), button(quickOpen, lucide.FolderOpen), button(vaultSearch, lucide.Search), button(restoreNote, lucide.ArchiveRestore), ui.IconButton{Label: "Refresh vaults and notes", Icon: lucide.RefreshCw, OnPress: w.loadVaults}}
 }
 func (w *workspace) noteDialog(cx *core.Scope) core.Node {
 	action := w.action.Get()
 	switch action {
 	case newNote:
 		return w.createDialog(cx)
+	case moveNote, trashNote:
+		if d := w.doc.Get(); d != nil {
+			return w.manageDialog(cx, action, d)
+		}
+		return nil
+	case restoreNote:
+		return w.restoreDialog(cx)
 	case quickOpen, vaultSearch:
 		return w.findDialog(cx, action)
 	default:

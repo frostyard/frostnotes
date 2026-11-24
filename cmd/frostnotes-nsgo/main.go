@@ -42,6 +42,8 @@ func (e environment) After(d time.Duration, f func()) func() {
 }
 
 type workspace struct {
+	removed map[int64][]string
+
 	cx                                       *core.Scope
 	session                                  *session.Session
 	vaults                                   *core.Signal[[]api.Vault]
@@ -58,6 +60,7 @@ type workspace struct {
 func root(cx *core.Scope) core.Node {
 	cx.SetTitle("FrostNotes")
 	w := &workspace{
+		removed: make(map[int64][]string),
 		cx:      cx,
 		session: session.New(environment{cx}, platformDialer(), 0),
 		vaults:  core.NewSignalFunc(cx, []api.Vault(nil), slices.Equal),
@@ -300,6 +303,7 @@ func (w *workspace) onEvent(_ int64, ev api.Event) {
 	case api.VaultAdded, api.VaultRemoved:
 		w.loadVaults()
 	case api.NoteChanged:
+		w.forgetRemoved(e.VaultID, e.Path)
 		if e.VaultID == id && !slices.ContainsFunc(w.files.GetUntracked(), func(f api.NoteEntry) bool { return f.Path == e.Path }) {
 			w.loadFiles()
 		}
@@ -308,10 +312,18 @@ func (w *workspace) onEvent(_ int64, ev api.Event) {
 			w.loadFiles()
 		}
 	case api.NoteMoved:
+		w.forgetRemoved(e.VaultID, e.To)
 		if e.VaultID == id {
 			w.loadFiles()
 		}
 	case api.NoteRemoved:
+		w.rememberRemoved(e.VaultID, e.Path)
+		if d := w.doc.GetUntracked(); d != nil && d.Vault() == e.VaultID && d.Path() == e.Path && !d.Unsaved() && d.Notice() != nil && d.Notice().Kind == notes.NoticeDeleted {
+			if a := w.action.GetUntracked(); a == trashNote || a == moveNote {
+				w.action.Set("")
+			}
+			w.leave(func() {})
+		}
 		if e.VaultID == id {
 			w.loadFiles()
 		}
@@ -337,7 +349,7 @@ func (w *workspace) editor() core.Node {
 					return "Source"
 				}
 				return "Live preview"
-			}, OnPress: func() { w.live.Set(!w.live.GetUntracked()) }}, ui.Button{Text: "Save", Icon: lucide.Save, Disabled: func() bool { w.revision.Get(); return !d.Unsaved() }, OnPress: d.RetryNow}),
+			}, OnPress: func() { w.live.Set(!w.live.GetUntracked()) }}, ui.Button{Text: "Save", Icon: lucide.Save, Disabled: func() bool { w.revision.Get(); return !d.Unsaved() }, OnPress: d.RetryNow}, ui.IconButton{Label: moveNote, Icon: lucide.Pencil, OnPress: func() { w.showAction(moveNote) }}, ui.IconButton{Label: trashNote, Icon: lucide.Trash, OnPress: func() { w.showAction(trashNote) }}),
 			core.Show{When: func() bool { w.revision.Get(); return needsRecovery(d) }, Then: func(*core.Scope) core.Node {
 				return ui.Input{Label: "Recovered draft", Multiline: true, Readonly: true, Style: ui.FillRest, DefaultValue: d.Notice().Text}
 			}, Else: func(*core.Scope) core.Node {

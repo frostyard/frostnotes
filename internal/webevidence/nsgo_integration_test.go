@@ -179,3 +179,46 @@ func TestNSGoLodgeFind(t *testing.T) {
 		return err == nil && n.Content == "Shared harvest"
 	})
 }
+
+func TestNSGoLodgeManage(t *testing.T) {
+	w := startWorld(t)
+	b := startBrowser(t, "nsgo-manage", 1160, 760)
+	b.navigate(w.url + "/notes")
+	b.frame(b.waitFind(`iframe.frame[title="Notes"]`, 30*time.Second))
+	click := func(label string) {
+		t.Helper()
+		b.click(b.waitFind(fmt.Sprintf("[aria-label=%q]", label), 10*time.Second))
+	}
+	click("Garden")
+	b.await(8*time.Second, "Garden loaded", func() bool {
+		return b.truthy(`return document.querySelector("textarea")?.value===arguments[0]`, garden)
+	})
+	b.click(b.waitFind("textarea", time.Second))
+	b.chord(keyControl, "a")
+	b.keys("draft")
+	if w.disk("Garden.md") != garden {
+		t.Fatal("expected an unsaved browser draft at rename")
+	}
+	_, err := w.hub.C.Note().Move(t.Context(), &api.NoteMoveParams{VaultID: w.hub.Vault, Path: "Garden.md", To: "Renamed.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, 8*time.Second, "dirty draft saved under the remote name", func() bool { return w.disk("Renamed.md") == "draft" })
+	click("Rename or move note")
+	click("Destination path")
+	b.chord(keyControl, "a")
+	b.keys("Plants/Orchard")
+	click("Move")
+	eventually(t, 8*time.Second, "browser move", func() bool { return w.disk("Plants/Orchard.md") == "draft" })
+	click("Move to trash")
+	click("Trash note")
+	b.await(8*time.Second, "trashed editor closed", func() bool { return b.truthy(`return document.body.innerText.includes("Select a note to edit")`) })
+	click("Restore deleted note")
+	click("Deleted note path")
+	b.keys("Plants/Orchard.md")
+	click("Restore")
+	b.await(8*time.Second, "restored editor", func() bool { return b.truthy(`return document.querySelector("textarea")?.value==="draft"`) })
+	if w.disk("Plants/Orchard.md") != "draft" {
+		t.Fatal("restored bytes differ")
+	}
+}
