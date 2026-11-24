@@ -152,8 +152,8 @@ file a step names before writing its frostnotes counterpart.
   desktop app's in `cmd/frostnotes`
   ([ADR-0036](docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
-  (SHA-pinned actions; no test-name filter on a unit run; the baseline
-  files, below).
+  (SHA-pinned actions; no test-name filter on a unit run; the race gate's
+  parts and CI's shards; the baseline files, below).
 - `app/`: lodge's web app, React + TypeScript. JSON-RPC multiplexing is in
   `app/src/rpc/transport.ts`, with WebSocket (`transport/ws.ts`) and
   mock (`rpc/mock/`) transports. `app/src/features/` is presentational;
@@ -188,8 +188,8 @@ file a step names before writing its frostnotes counterpart.
   gofmt, the pinned golangci-lint (`mise install`) and unit tests. Run it
   before claiming any Go change is complete. `make ui-check` (Biome, tsc,
   Vitest) runs in the nsl machine; `make ci` is verify plus that,
-  `make desktop-build` and the race detector. Never run pnpm or node on the
-  host. `make vault-it` (the `kill -9` harness) and
+  `make desktop-build` and the race gate, `make race`. Never run pnpm or
+  node on the host. `make vault-it` (the `kill -9` harness) and
   `make obsidian-links` (Obsidian's link dump, local only) are the
   integration runs for changes to the scan, the write path or parsing.
   `make vulncheck` runs govulncheck (pinned in the Makefile; needs the
@@ -201,6 +201,16 @@ file a step names before writing its frostnotes counterpart.
   ([ADR-0043](docs/adr/0043-the-typing-gate-is-looser-on-ci.md)). Run it
   after a change to the editor or live preview.
 
+- The race gate, `make race`, has 3 parts
+  ([ADR-0048](docs/adr/0048-the-race-gate-runs-in-3-parts.md)):
+  `race-rest` (the race detector on every package but `internal/synctest`),
+  `race-sim` (the race detector on `internal/synctest`, with no checkptr in
+  `modernc.org`'s packages) and `race-sim-checkptr` (`internal/synctest`
+  with checkptr in every package and no race detector). CI's `race-shards`
+  job runs each part on a runner of its own, and the required check
+  "Race detector" passes only when every shard passed. A new part needs
+  its `race-` target, its shard and its line in `internal/workflowcheck`,
+  which fails when the three differ.
 - Unit and race runs filter no test names (frostyard/core ADR-0038, [ADR-0035](docs/adr/0035-unit-runs-filter-no-test-names.md)): integration tests carry the `integration` build tag instead; `internal/repocheck` fails if a unit run in the Makefile or a workflow gets `-run` or `-skip`.
 - Fix a lint finding rather than loosening `.golangci.yml`.
 - `make nsgo-check`, a part of `make verify`, runs the NSGo client's suite

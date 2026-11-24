@@ -115,7 +115,8 @@ The Makefile's app targets run in the machine named `frostnotes`
 
 ```sh
 make check          # host: generated files, vet, lint, unit tests
-make ci             # make verify, the race tests and the app checks (nsl)
+make ci             # make verify, the race gate and the app checks (nsl)
+make race           # host: the race gate alone, in the 3 parts CI runs as shards
 make ui-check       # nsl: Biome, typecheck and UI tests
 make desktop-run    # host: the native app against the running notesd
 make ui-dev         # nsl: notesd and Vite; open http://127.0.0.1:5173
@@ -124,6 +125,8 @@ make ui-dev         # nsl: notesd and Vite; open http://127.0.0.1:5173
 `make help` lists every target. [AGENTS.md](../AGENTS.md#gates) says
 which gate a change needs, and which integration runs a change to the
 scan, the write path or parsing needs.
+[ADR-0048](adr/0048-the-race-gate-runs-in-3-parts.md) says why the race
+gate has 3 parts (`make race-rest`, `race-sim` and `race-sim-checkptr`).
 
 ## Build the side-by-side NSGo release candidate
 
