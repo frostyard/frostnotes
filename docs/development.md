@@ -75,11 +75,15 @@ printf 'Vault: %s\nOpen: http://127.0.0.1:5173/#token=%s\n' "$trial/Notebook" "$
 
 Open **Field notes** on both screens. Edit it in one window and press **Save**. The other editor should update in place. Reverse the direction. If both editors change the same line from the same starting version, the later writer should see the conflict notice. Inspect its version with `build/notesctl versions 'Field notes.md'`. To finish the trial, run `kill "$web" "$native" "$daemon"` in the original shell.
 
+To try inline editing, add a heading, a task such as `- [ ] prune`, and a link to a second note such as `[[Garden|orchard]]`. Choose **Live preview**. Click the heading to edit its Markdown and use the arrow keys to move between lines. Click a rendered checkbox to toggle it, or the link text to open the note. **Source** returns to whole-note selection and editing. The mode carries over when you open another note in the same window.
+
 The loopback hostname and port match the development gateway’s origin check. On a Lodge origin the browser opens the same-origin `/app/notes/api` WebSocket. The trial above exercises the loopback gateway. See the [preview decision](adr/0046-test-a-shared-nsgo-source-editor.md).
 
 ### Run the preview inside Lodge
 
 With the FrostNotes nsl machine provisioned, run `make nsgo-lodge-evidence`. It stages the preview in `build/nsgo-lodge/apps/notes` and starts the pinned Lodge development gateway and a real `notesd` with a disposable vault. Firefox opens Notes from the Lodge shell. The test removes its fixture node from the allow-list, types a draft offline, writes to the same line over the Unix socket, and readmits the node. It checks the editor, the file and the exact conflict version, then writes a screenshot under `build/nsgo-lodge/evidence`.
+
+The same evidence target checks inline editing in Firefox. It compares the checkbox edit, heading edit and undo with the file on disk, then follows a wiki link.
 
 For a separate Lodge test installation, `make nsgo-lodge-app` builds the app tree alone. The gateway needs [Lodge’s Wasm frame policy](https://github.com/frostyard/lodge/pull/116). The preview uses the existing Notes manifest and app ID inside this separate staging tree.
 

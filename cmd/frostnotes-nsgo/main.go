@@ -23,8 +23,22 @@ func main() { nsgo.Run(root, nsgo.WindowSize(1160, 760)) }
 type environment struct{ *core.Scope }
 
 func (e environment) After(d time.Duration, f func()) func() {
-	stop := e.AfterFunc(d, f)
-	return func() { stop() }
+	// AfterFunc belongs to the currently executing NSGo view. Arm it under
+	// the workspace so replacing a line or switching editor modes cannot
+	// cancel a pending document save. The session runs on the UI thread.
+	var stop func() bool
+	cancelled := false
+	e.Post(func() {
+		if !cancelled {
+			stop = e.AfterFunc(d, f)
+		}
+	})
+	return func() {
+		cancelled = true
+		if stop != nil {
+			stop()
+		}
+	}
 }
 
 type workspace struct {
@@ -36,7 +50,7 @@ type workspace struct {
 	doc                                      *core.Signal[*notes.Document]
 	revision                                 *core.Signal[int]
 	connection, problem                      *core.Signal[string]
-	preview                                  *core.Signal[bool]
+	preview, live                            *core.Signal[bool]
 	catalogRequest, filesRequest, navigation int
 }
 
@@ -55,6 +69,7 @@ func root(cx *core.Scope) core.Node {
 		connection: core.NewSignal(cx, "Connecting to notesd…"),
 		problem:    core.NewSignal(cx, ""),
 		preview:    core.NewSignal(cx, false),
+		live:       core.NewSignal(cx, false),
 	}
 	w.session.OnChange(func() {
 		if w.session.State() == session.Connected {
@@ -313,14 +328,21 @@ func (w *workspace) editor() core.Node {
 			return [...]string{"Loading…", "Note is missing", "Saved", "Unsaved changes", "Saving…"}[d.Status()]
 		}
 		return core.View{Style: ui.FillRest.Merge(core.Style{Padding: core.All(16), Gap: 10}), Children: []core.Node{
-			workspaceui.Row(core.Text{ContentFunc: func() string { w.revision.Get(); return d.Path() }, Style: ui.TypeTitle}, core.Text{ContentFunc: status, Style: ui.TypeCaption}, ui.Button{Text: "Save", Icon: lucide.Save, Disabled: func() bool { w.revision.Get(); return !d.Unsaved() }, OnPress: d.RetryNow}),
+			workspaceui.Row(core.Text{ContentFunc: func() string { w.revision.Get(); return d.Path() }, Style: ui.TypeTitle}, core.Text{ContentFunc: status, Style: ui.TypeCaption}, ui.Button{TextFunc: func() string {
+				if w.live.Get() {
+					return "Source"
+				}
+				return "Live preview"
+			}, OnPress: func() { w.live.Set(!w.live.GetUntracked()) }}, ui.Button{Text: "Save", Icon: lucide.Save, Disabled: func() bool { w.revision.Get(); return !d.Unsaved() }, OnPress: d.RetryNow}),
 			core.Show{When: func() bool { w.revision.Get(); return needsRecovery(d) }, Then: func(*core.Scope) core.Node {
 				return ui.Input{Label: "Recovered draft", Multiline: true, Readonly: true, Style: ui.FillRest, DefaultValue: d.Notice().Text}
 			}, Else: func(*core.Scope) core.Node {
-				return ui.Input{Label: "Markdown source", Multiline: true, NoAutoCorrect: true, Style: ui.FillRest, Value: func() string { w.revision.Get(); return d.Text() }, Disabled: func() bool {
-					w.revision.Get()
-					return !d.Loaded() || d.Status() == notes.StatusMissing || d.ReadOnly() != ""
-				}, OnChange: func(value string) { d.Local(notes.Diff(d.Text(), value)) }}
+				return core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(*core.Scope) core.Node {
+					return ui.Input{Label: "Markdown source", Multiline: true, NoAutoCorrect: true, Style: ui.FillRest, Value: func() string { w.revision.Get(); return d.Text() }, Disabled: func() bool {
+						w.revision.Get()
+						return !d.Loaded() || d.Status() == notes.StatusMissing || d.ReadOnly() != ""
+					}, OnChange: func(value string) { d.Local(notes.Diff(d.Text(), value)) }}
+				}}
 			}},
 		}}
 	})
