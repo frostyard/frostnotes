@@ -147,6 +147,39 @@ func startVault(t *testing.T, files map[string]string, width, height core.Points
 	return nsgotest.Start(t, root, append([]nsgotest.Option{nsgotest.Size(width, height)}, options...)...), vault
 }
 
+// The vault manager's choice of appearance shows at once and is kept on the
+// device.
+func TestAppearanceChoiceIsKept(t *testing.T) {
+	app, _ := startWorkspace(t)
+	app.Press("label:Manage vaults")
+	app.WaitFor("role:tab Dark", 5*time.Second)
+	app.Press("role:tab Dark")
+	if app.Appearance != core.AppearanceDark {
+		t.Fatalf("the app asked for appearance %v after Dark, want dark", app.Appearance)
+	}
+	if got, _ := app.Storage().GetItem("appearance"); got != "dark" {
+		t.Fatalf("the kept appearance is %q, want dark", got)
+	}
+	app.Press("role:tab System")
+	if _, kept := app.Storage().GetItem("appearance"); kept || app.Appearance != core.AppearanceSystem {
+		t.Fatalf("after System the device keeps a choice (%v) or the app asks for %v", kept, app.Appearance)
+	}
+}
+
+// A start shows the appearance the device kept.
+func TestKeptAppearanceShowsAtStart(t *testing.T) {
+	app, _ := startVault(t, map[string]string{"First.md": "First\n"}, 1150, 760, nsgotest.Storage(map[string]string{"appearance": "light"}))
+	app.WaitFor("label:First", 10*time.Second)
+	if app.Appearance != core.AppearanceLight {
+		t.Fatalf("the app asked for appearance %v at its start, want light", app.Appearance)
+	}
+	app.Press("label:Manage vaults")
+	app.WaitFor("role:tab Light", 5*time.Second)
+	if !app.Find("role:tab Light").Props.Selected {
+		t.Fatalf("the choice does not show Light as chosen\n%s", app.Dump())
+	}
+}
+
 func TestSwitchNoteDuringAutosave(t *testing.T) {
 	app, vault := startWorkspace(t)
 	app.Press("label:First")

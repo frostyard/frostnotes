@@ -22,4 +22,8 @@ func platformDialer() session.Dialer {
 	}
 }
 
+// ownAppearance reports whether the client keeps its own choice of
+// appearance. A desktop does.
+const ownAppearance = true
+
 func guardBrowserDraft(*core.Scope, func() bool) {}

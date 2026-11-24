@@ -5,7 +5,7 @@ go 1.27.4
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/frostyard/frostnotes v0.0.0
-	github.com/frostyard/frostui/workspaceui v0.1.0
+	github.com/frostyard/frostui/workspaceui v0.2.0
 	github.com/nsgo-dev/nsgo v0.3.0
 )
 
