@@ -63,12 +63,23 @@ jobs:
       - name: Tidy, vet, format, lint and unit tests
         run: make verify
 
-  race:
-    name: Race detector
+  # The race gate, make race, in its 3 parts on 3 runners (ADR-0048): the
+  # job waits for its slowest part, not for their sum. The shards are the
+  # Makefile's race-<shard> targets, and internal/workflowcheck fails when
+  # the two lists differ. The required check is the race job below.
+  race-shards:
+    name: Race shard (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
+    strategy:
+      # A failed shard does not stop the others: one run shows every failure.
+      fail-fast: false
+      matrix:
+        shard: [rest, sim, sim-checkptr]
+    env:
+      SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,14 +102,37 @@ jobs:
           done
           exit 1
       # The desktop app's tests render views headless with MyGo's Tester,
-      # which lays text out with Pango and cairo (no GTK, no display).
+      # which lays text out with Pango and cairo (no GTK, no display). Only
+      # the rest shard runs them: sync's simulation imports no desktop
+      # package.
       - name: Install the text runtime of the desktop app's tests
+        if: matrix.shard == 'rest'
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends fonts-dejavu-core libpangocairo-1.0-0
-      # internal/synctest alone takes about 9.5 minutes under the race
-      # detector here, so go test's default 10-minute timeout is too tight.
-      - run: go test -race -timeout 25m ./...
+      # Each target sets go test's timeout to 25 minutes: internal/synctest
+      # took 10 to 14 minutes under the race detector with checkptr in every
+      # package, which go test's default 10 minutes is too tight for.
+      - name: Run the shard's part of the race gate
+        run: make "race-$SHARD"
+
+  # The required check: the rulesets match the name "Race detector". It
+  # passes only when every shard passed. It runs always, since a job that is
+  # skipped because a shard failed or was cancelled would count as passed.
+  race:
+    name: Race detector
+    needs: race-shards
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.race-shards.result }}
+        run: |
+          echo "the race shards: $SHARDS"
+          test "$SHARDS" = success
 
   vulncheck:
     name: Vulnerabilities (make vulncheck)

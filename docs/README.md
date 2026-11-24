@@ -69,6 +69,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0045 — The Flatpak keeps no device token in a plain file unless the user asks](adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)
 - [0046 — Test a shared NSGo source editor](adr/0046-test-a-shared-nsgo-source-editor.md)
 - [0047 — Use the shared NSGo editor on Linux and Lodge](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
+- [0048 — The race gate runs in 3 parts](adr/0048-the-race-gate-runs-in-3-parts.md)
 
 ### Design
 

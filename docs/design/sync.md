@@ -326,6 +326,15 @@ pick, such as swaps, case-only renames, attachments over 10 MB,
 revocations and rejoins from an older copy (`profile.go`)
 ([ADR-0020](../adr/0020-test-sync-with-a-seeded-simulation-of-a-hub-and-devices.md)).
 
+The package's unit tests (the scenarios, the short seeds and the
+regression plans) are the slowest part of the race gate, so the gate runs
+them apart from the other packages, in 2 parts: `make race-sim` under the
+race detector, with no checkptr in `modernc.org`'s packages, and
+`make race-sim-checkptr` with checkptr in every package and no race
+detector. Both run every test of the package, with no fewer seeds or
+steps; CI runs each on a runner of its own
+([ADR-0048](../adr/0048-the-race-gate-runs-in-3-parts.md)).
+
 ## Operational notes
 
 - Clocks do not order anything; order comes from the hub's sequence

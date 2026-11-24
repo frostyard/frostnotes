@@ -1,4 +1,4 @@
-.PHONY: nsgo-check help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
+.PHONY: nsgo-check help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci race race-rest race-sim race-sim-checkptr vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 SOURCE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo development)
@@ -130,7 +130,7 @@ m1-evidence: ## Record M1's exit evidence 1-4 (FROSTNOTES_OBSIDIAN_LINKS, FROSTN
 
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
-# detector.
+# gate (make race).
 verify: nsgo-check ## Tidy, generated files, vet, format, lint and unit tests
 	go mod tidy -diff
 	$(MAKE) --no-print-directory gen-check
@@ -145,8 +145,28 @@ verify: nsgo-check ## Tidy, generated files, vet, format, lint and unit tests
 
 check: fmt verify ## Format, then verify (the developer gate)
 
-ci: verify ui-check desktop-build ## verify plus race tests and the app checks (nsl)
-	go test -race -timeout 25m ./...
+ci: verify ui-check desktop-build race ## verify plus the race gate and the app checks (nsl)
+
+# The race gate in 3 parts (ADR-0048). CI's Race detector job runs each part
+# on a runner of its own, and internal/workflowcheck fails when the parts
+# here and the job's shards differ. RACE_SIM is the package that runs apart.
+# Under -race the compiler also adds checkptr's checks of unsafe pointers; in
+# modernc.org's SQLite, which is C translated to Go, they took about half of
+# the simulation's time. race-sim leaves them out of modernc.org's packages
+# only, and race-sim-checkptr runs them in every package with no race
+# detector, so every check of the old single run still runs.
+RACE_SIM := ./internal/synctest
+
+race: race-rest race-sim race-sim-checkptr ## The race gate: every package under the race detector, in CI's 3 parts
+
+race-rest: ## The race detector on every package but sync's simulation
+	pkgs="$$(go list ./... | grep -v -x -F "$$(go list $(RACE_SIM))")" && test -n "$$pkgs" && go test -race -timeout 25m $$pkgs
+
+race-sim: ## The race detector on sync's simulation, with no checkptr in modernc.org's packages
+	go test -race -timeout 25m '-gcflags=modernc.org/...=-d=checkptr=0' $(RACE_SIM)
+
+race-sim-checkptr: ## checkptr in every package on sync's simulation, with no race detector
+	go test -timeout 25m -gcflags=all=-d=checkptr $(RACE_SIM)
 
 vulncheck: ## Report reachable vulnerabilities (govulncheck; needs the network)
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...

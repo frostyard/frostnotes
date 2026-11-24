@@ -110,7 +110,7 @@ mise install        # host: golangci-lint, svu and nfpm, pinned
 make check          # host: generated files, vet, lint, unit tests
 nsl create frostnotes --distro debian:13
 nsl run -m frostnotes --root bash dev/nsl/provision.sh "$(id -un)"
-make ci             # make verify, the race tests and the app checks (nsl)
+make ci             # make verify, the race gate and the app checks (nsl)
 ```
 
 [docs/development.md](docs/development.md) covers the requirements,
