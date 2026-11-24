@@ -68,6 +68,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0044 — The changes log keeps 30 days, and at most 100,000 events](adr/0044-the-changes-log-keeps-30-days-and-at-most-100000-events.md)
 - [0045 — The Flatpak keeps no device token in a plain file unless the user asks](adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)
 - [0046 — Test a shared NSGo source editor](adr/0046-test-a-shared-nsgo-source-editor.md)
+- [0047 — Use the shared NSGo editor on Linux and Lodge](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
 
 ### Design
 

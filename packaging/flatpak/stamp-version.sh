@@ -60,6 +60,8 @@ fi
 # The manifest: name the version and the commit in notesd's ldflags, replacing
 # the word that a main build reports.
 sed -i "s/-X main\.version=flatpak/-X main.version=$version -X main.commit=$commit/" "$manifest"
+sed -i "s/\"NSGO_VERSION\": \"[^\"]*\"/\"NSGO_VERSION\": \"$version\"/" "$manifest"
+grep -Fq -- "\"NSGO_VERSION\": \"$version\"" "$manifest" || die "the NSGo build did not take the stamp"
 grep -Fq -- "$new" "$manifest" || die "$manifest did not take the stamp"
 if grep -Fq -- "$old" "$manifest"; then
 	die "$manifest still holds '$old'"

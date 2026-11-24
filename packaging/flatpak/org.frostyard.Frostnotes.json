@@ -27,13 +27,17 @@
           "GOFLAGS": "-trimpath -buildvcs=false -modcacherw",
           "GOMODCACHE": "/run/build/frostnotes/.gomodcache",
           "GOCACHE": "/run/build/frostnotes/.gocache",
-          "CGO_ENABLED": "0"
+          "CGO_ENABLED": "0",
+          "NSGO_VERSION": "0.1.0"
         }
       },
       "build-commands": [
         "go build -tags mygo_noinspector -ldflags '-s -w -X main.version=flatpak -X github.com/egoist/mygo.production=1' -o build/ ./cmd/notesd ./cmd/notesctl ./cmd/frostnotes",
         "install -Dm755 -t /app/bin build/notesd build/notesctl",
-        "install -Dm755 build/frostnotes /app/libexec/frostnotes-app",
+        "install -Dm755 build/frostnotes /app/libexec/frostnotes-mygo",
+        "cd cmd/frostnotes-nsgo && go tool nsgo build -target linux_x64 -id org.frostyard.Frostnotes -version \"$NSGO_VERSION\" -channel none -installers=false -output ../../build/nsgo",
+        "install -Dm755 \"build/nsgo/FrostNotes-$NSGO_VERSION-linux_x64/FrostNotes\" /app/libexec/frostnotes-app",
+        "install -Dm644 packaging/flatpak/source-revision /app/share/frostnotes/revision.txt",
         "install -Dm755 packaging/flatpak/frostnotes.sh /app/bin/frostnotes",
         "install -Dm755 packaging/flatpak/request-background.py /app/libexec/frostnotes-request-background",
         "install -Dm644 packaging/flatpak/org.frostyard.Frostnotes.desktop -t /app/share/applications",
@@ -64,7 +68,9 @@
           "url": "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz",
           "sha256": "7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840",
           "dest": "go-sdk",
-          "only-arches": ["x86_64"]
+          "only-arches": [
+            "x86_64"
+          ]
         },
         "go-sources.json"
       ],
@@ -73,8 +79,10 @@
         "python3 -c \"from gi.repository import Gio, GLib\"",
         "desktop-file-validate /app/share/applications/org.frostyard.Frostnotes.desktop",
         "appstreamcli validate --no-net /app/share/metainfo/org.frostyard.Frostnotes.metainfo.xml",
-        "sh packaging/flatpak/smoke-test.sh"
-      ]
+        "sh packaging/flatpak/smoke-test.sh",
+        "test -x /app/libexec/frostnotes-app && test -x /app/libexec/frostnotes-mygo"
+      ],
+      "run-tests": true
     }
   ]
 }

@@ -12,5 +12,10 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 out=packaging/flatpak
 
-go run ./tools/flatpakgo >"$out/go-sources.json.tmp"
-mv "$out/go-sources.json.tmp" "$out/go-sources.json"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+go build -o "$tmp/flatpakgo" ./tools/flatpakgo
+"$tmp/flatpakgo" >"$tmp/daemon.json"
+(cd cmd/frostnotes-nsgo && "$tmp/flatpakgo") >"$tmp/desktop.json"
+jq -s 'add | unique_by(.url) | sort_by(.dest, .url)' "$tmp/daemon.json" "$tmp/desktop.json" >"$tmp/combined.json"
+mv "$tmp/combined.json" "$out/go-sources.json"

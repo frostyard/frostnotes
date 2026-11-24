@@ -24,7 +24,7 @@ git -C "$root" archive "$revision" | tar -x -C "$stage/src"
 go_root=$(go env GOROOT)
 export PATH="$go_root/bin:$PATH" GOWORK=off
 cd "$stage/src"
-make nsgo-lodge-app VERSION="$version"
+make nsgo-lodge-app VERSION="$version" SOURCE_REVISION="$revision"
 web=build/nsgo-lodge/apps/notes/web
 printf '%s\n' "$revision" > "$result/revision.txt"
 cp "$result/revision.txt" "$web/"

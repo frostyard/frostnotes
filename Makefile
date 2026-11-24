@@ -1,6 +1,8 @@
 .PHONY: nsgo-check help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+SOURCE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo development)
+NSGO_VERSION ?= $(shell sed -n 's/^version: //p' cmd/frostnotes-nsgo/nsgo.yaml)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
@@ -19,17 +21,31 @@ help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | expand -t 18
 
 build: ## Build notesd and notesctl into build/
-	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/...
+	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
 
-desktop-build: ## Build the native desktop app into build/frostnotes, as a release builds it
-	CGO_ENABLED=0 go build -trimpath -tags mygo_noinspector -ldflags '$(LDFLAGS) -X github.com/egoist/mygo.production=1' -o build/frostnotes ./cmd/frostnotes
+# Keep the established executable path for developers and smoke tests.
+ifeq ($(shell uname -s),Linux)
+desktop-build: ## Build the default Linux desktop executable
+	cd cmd/frostnotes-nsgo && go tool nsgo build -target linux_x64 -id org.frostyard.Frostnotes -version $(NSGO_VERSION) -channel none -installers=false -output ../../build/desktop
+	install -m755 build/desktop/FrostNotes-$(NSGO_VERSION)-linux_x64/FrostNotes build/frostnotes
+else
+desktop-build: desktop-mygo-build
+	cp build/frostnotes-mygo build/frostnotes
+endif
+
+.PHONY: desktop-mygo-build desktop-mygo-run
+desktop-mygo-build: ## Build the MyGo desktop fallback
+	CGO_ENABLED=0 go build -trimpath -tags mygo_noinspector -ldflags '$(LDFLAGS) -X github.com/egoist/mygo.production=1' -o build/frostnotes-mygo ./cmd/frostnotes
+
+desktop-mygo-run: desktop-mygo-build ## Run the MyGo desktop fallback
+	build/frostnotes-mygo
 
 nsgo-check: ## Exercise the NSGo preview against notesd and compile the web client
 	cd cmd/frostnotes-nsgo && go mod tidy -diff && go vet ./... && env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 -tags integration ./...
 	cd cmd/frostnotes-nsgo && GOOS=js GOARCH=wasm go build -o /dev/null .
 
-desktop-run: ## Run the native desktop app against the running notesd
-	go run ./cmd/frostnotes
+desktop-run: desktop-build ## Run the native desktop app against the running notesd
+	build/frostnotes
 
 desktop-smoke: desktop-build ## Start the native app under Xvfb against a real notesd (needs xvfb-run)
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
@@ -162,28 +178,32 @@ ui-fmt: ## Format the app's sources and organize imports with Biome (nsl)
 ui-dev: build ## Run notesd -devgw and Vite in the nsl machine; open http://127.0.0.1:5173 on the host
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && cd .. && scripts/dev-app.sh --browser'
 
-web-build: ## Build the web app for lodge into build/web, base /app/notes/ (nsl)
-	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec tsc --noEmit && pnpm exec vite build --mode web --outDir ../build/web --emptyOutDir'
-	cp packaging/icons/icon.svg build/web/icon.svg
-
-# notes' install tree for lodge (docs/specs/lodge-app.md, What notesd
-# installs): copy build/lodge/apps/notes to /usr/share/lodge/apps/notes.
-lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version and web/
-	rm -rf build/lodge/apps/notes && mkdir -p build/lodge/apps/notes
-	cp -R build/web build/lodge/apps/notes/web
-	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/lodge/apps/notes/app.json
-
-# Standalone staging tree for the preview. Vite builds the Lodge handshake;
-# NSGo supplies the versioned runtime, WASM and resource files.
-.PHONY: nsgo-lodge-app
+# The released site and server package consume the same staging tree.
 NSGO_LODGE := build/nsgo-lodge
-nsgo-lodge-app: ## Stage the opt-in NSGo Lodge application in build/nsgo-lodge/apps/notes
-	cd cmd/frostnotes-nsgo && go tool nsgo build -target web -version 0.1.0 -channel none -installers=false -output ../../$(NSGO_LODGE)/release
+web-build: nsgo-lodge-app ## Build the default Lodge web app into build/web
+	rm -rf build/web
+	cp -R $(NSGO_LODGE)/apps/notes/web build/web
+
+lodge-app: nsgo-lodge-app ## Stage the released Lodge app in build/lodge/apps/notes
+	mkdir -p build/lodge/apps
+	rm -rf build/lodge/apps/notes
+	cp -R $(NSGO_LODGE)/apps/notes build/lodge/apps/
+
+.PHONY: legacy-lodge-app
+legacy-lodge-app: ## Build the React frontend for its original Lodge evidence suite
+	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec tsc --noEmit && pnpm exec vite build --mode web --outDir ../build/legacy-lodge/apps/notes/web --emptyOutDir'
+	cp packaging/icons/icon.svg build/legacy-lodge/apps/notes/web/icon.svg
+	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/legacy-lodge/apps/notes/app.json
+
+.PHONY: nsgo-lodge-app
+nsgo-lodge-app: ## Stage the shared NSGo workspace for Lodge
+	cd cmd/frostnotes-nsgo && go tool nsgo build -target web -id org.frostyard.Frostnotes -version $(NSGO_VERSION) -channel none -installers=false -output ../../$(NSGO_LODGE)/release
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec vite build --mode nsgo --outDir ../$(NSGO_LODGE)/apps/notes/web --emptyOutDir'
 	mv $(NSGO_LODGE)/apps/notes/web/nsgo.html $(NSGO_LODGE)/apps/notes/web/index.html
-	cp $(NSGO_LODGE)/release/FrostNotes-0.1.0-web/nsgo.json $(NSGO_LODGE)/apps/notes/web/
-	cd $(NSGO_LODGE)/release/FrostNotes-0.1.0-web && cp nsgo.*.js wasm_exec.*.js *.wasm *.txt ../../apps/notes/web/assets/
+	cp $(NSGO_LODGE)/release/FrostNotes-$(NSGO_VERSION)-web/nsgo.json $(NSGO_LODGE)/apps/notes/web/
+	cd $(NSGO_LODGE)/release/FrostNotes-$(NSGO_VERSION)-web && cp nsgo.*.js wasm_exec.*.js *.wasm *.txt ../../apps/notes/web/assets/
 	cp packaging/icons/icon.svg $(NSGO_LODGE)/apps/notes/web/icon.svg
+	printf '%s\n' '$(SOURCE_REVISION)' > $(NSGO_LODGE)/apps/notes/web/revision.txt
 	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > $(NSGO_LODGE)/apps/notes/app.json
 
 # The /usr layout (frostyard/core ADR-0058): notesd, notesctl, the manifest,
@@ -228,6 +248,8 @@ deb-check: ## Check the .deb: exact member names, /usr only, root ownership, no 
 		--file /usr/lib/systemd/system/frostnotes.service \
 		--file /usr/lib/systemd/system/frostnotes-lodge.socket \
 		--file /usr/lib/sysusers.d/frostnotes.conf \
+		--file /usr/share/lodge/apps/notes/web/revision.txt \
+		--file /usr/share/lodge/apps/notes/web/nsgo.json \
 		--file /usr/share/lodge/apps/notes/web/index.html \
 		--manifest /usr/share/lodge/apps/notes/app.json
 
@@ -287,11 +309,11 @@ nsgo-lodge-evidence: nsgo-lodge-app ## Verify a browser draft across Lodge disco
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(NSGO_LODGE_E2E_REF) $(NSGO_LODGE)/e2e'
 	$(IN_NSL) 'command -v geckodriver >/dev/null && M4_EVIDENCE_DIR=$$PWD/$(NSGO_LODGE)/evidence LODGE_E2E=$$PWD/$(NSGO_LODGE)/e2e NOTES_WEB=$$PWD/$(NSGO_LODGE)/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 3m -v -run "^TestNSGoLodge" ./internal/webevidence'
 
-m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
-	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
+m4-evidence: legacy-lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/legacy-lodge/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
 
-porter-evidence: lodge-app lodge-e2e ## Record Porter's evidence through lodge (plan 0007, Phase 4) on loopback (nsl)
-	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/lodge/apps/notes go test -tags integration -count=1 -timeout 20m -v -run "^TestIPorter" ./internal/webevidence'
+porter-evidence: legacy-lodge-app lodge-e2e ## Record Porter's evidence through lodge (plan 0007, Phase 4) on loopback (nsl)
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/legacy-lodge/apps/notes go test -tags integration -count=1 -timeout 20m -v -run "^TestIPorter" ./internal/webevidence'
 
 # Task cards (docs/design/agent-workflow.md). The executor is Codex with the
 # user's model unless EXECUTOR_MODEL names one; or opencode with

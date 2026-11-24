@@ -48,6 +48,35 @@ jobs:
       - name: The committed sources match the lockfiles
         run: git diff --exit-code -- packaging/flatpak
 
+  web:
+    name: Build the matching Lodge editor
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: cmd/frostnotes-nsgo/go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.0.2
+        with:
+          node-version: "24.21.0"
+      - name: Package the web editor
+        run: |
+          corepack enable
+          args=()
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            args+=("NSGO_VERSION=${GITHUB_REF_NAME#v}" "VERSION=${GITHUB_REF_NAME#v}")
+          fi
+          make lodge-app IN_NSL='sh -c' "${args[@]}"
+          tar -C build/lodge/apps -czf frostnotes-lodge.tar.gz notes
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frostnotes-lodge
+          path: frostnotes-lodge.tar.gz
+          if-no-files-found: error
+
   flatpak:
     name: Flatpak (build and test)
     runs-on: ubuntu-24.04
@@ -88,6 +117,8 @@ jobs:
           VERSION: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
         run: packaging/flatpak/stamp-version.sh "${VERSION#v}" "$(printf '%.12s' "$COMMIT")"
+      - name: Record the source revision in the installed app
+        run: echo "$GITHUB_SHA" > packaging/flatpak/source-revision
       - name: Build and test
         uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
@@ -100,21 +131,50 @@ jobs:
           # file starts the cache afresh.
           cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/org.frostyard.Frostnotes.json', 'packaging/flatpak/go-sources.json') }}
 
-      - name: Export the OCI image
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        run: flatpak build-bundle --oci --arch=x86_64 repo frostnotes.oci "$APP_ID"
-
-      - name: Keep the OCI image for publishing
+  export:
+    name: Verify the packaged pair and export OCI
+    needs: [flatpak, web]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frostnotes-flatpak
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: frostnotes-lodge
+      - name: Check both installed revisions and the public Flatpak ref
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak ostree
+          ostree init --repo=repo --mode=archive-z2
+          flatpak build-import-bundle repo frostnotes.flatpak
+          ref="app/$APP_ID/x86_64/master"
+          test "$(ostree cat --repo=repo "$ref" /files/share/frostnotes/revision.txt)" = "$GITHUB_SHA"
+          test "$(tar -xOzf frostnotes-lodge.tar.gz notes/web/revision.txt)" = "$GITHUB_SHA"
+          printf '%s\n' "$GITHUB_SHA" > revision.txt
+          sha256sum frostnotes.flatpak frostnotes-lodge.tar.gz revision.txt > SHA256SUMS
+          flatpak build-bundle --oci --arch=x86_64 repo frostnotes.oci "$APP_ID" master
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frostnotes-linux-and-lodge
+          path: |
+            frostnotes.flatpak
+            frostnotes-lodge.tar.gz
+            revision.txt
+            SHA256SUMS
+          if-no-files-found: error
+      - name: Keep the tested OCI image for publishing
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frostnotes-oci
           path: frostnotes.oci
+          if-no-files-found: error
           retention-days: 1
 
   publish:
     name: Publish
-    needs: [sources, flatpak]
+    needs: [sources, flatpak, export]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     # GitHub-hosted on purpose: flatpak-index rejects attestations from
     # self-hosted runners.
@@ -139,7 +199,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
-        run: echo "$GITHUB_TOKEN" | skopeo login ghcr.io --username "$ACTOR" --password-stdin
+        run: |
+          mkdir -p "${DOCKER_CONFIG:-$HOME/.docker}"
+          echo "$GITHUB_TOKEN" | skopeo login --authfile "${DOCKER_CONFIG:-$HOME/.docker}/config.json" ghcr.io --username "$ACTOR" --password-stdin
 
       # The version and commit tags go first. latest moves only after the
       # digest is attested, so the remote never sees an unattested latest.
@@ -148,9 +210,9 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: |
-          skopeo copy --digestfile digest oci:frostnotes.oci "docker://$IMAGE:$VERSION"
+          skopeo copy --authfile "${DOCKER_CONFIG:-$HOME/.docker}/config.json" --format oci --digestfile digest oci:frostnotes.oci "docker://$IMAGE:$VERSION"
           digest="$(cat digest)"
-          skopeo copy --preserve-digests "docker://$IMAGE@$digest" "docker://$IMAGE:sha-${GITHUB_SHA::12}"
+          skopeo copy --authfile "${DOCKER_CONFIG:-$HOME/.docker}/config.json" --preserve-digests "docker://$IMAGE@$digest" "docker://$IMAGE:sha-${GITHUB_SHA::12}"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Attest the image
@@ -162,7 +224,7 @@ jobs:
       - name: Move latest to the attested digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
-        run: skopeo copy --preserve-digests "docker://$IMAGE@$DIGEST" "docker://$IMAGE:latest"
+        run: skopeo copy --authfile "${DOCKER_CONFIG:-$HOME/.docker}/config.json" --preserve-digests "docker://$IMAGE@$DIGEST" "docker://$IMAGE:latest"
 
       - name: Refresh the Frostyard remote
         if: env.DISPATCH_TOKEN != ''

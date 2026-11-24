@@ -144,6 +144,14 @@ export FROSTNOTES_LIBEXEC_DIR="$work/libexec"
 PATH="$work/bin:$bin:$PATH"
 export PATH
 
+# The fallback must use the same launcher and forward only frontend arguments.
+cat >"$work/libexec/frostnotes-mygo" <<'EOF'
+#!/bin/sh
+[ "$#" -eq 1 ] && [ "$1" = "fallback-probe" ] && touch "$SMOKE_MYGO_RAN"
+EOF
+chmod +x "$work/libexec/frostnotes-mygo"
+export SMOKE_MYGO_RAN="$work/fallback-ran"
+
 # A notesd log over 1 MiB, as a session that ran for weeks has: the launcher
 # keeps one old log and starts a new one.
 dd if=/dev/zero of="$state/notesd.log" bs=1024 count=1025 2>/dev/null
@@ -185,6 +193,9 @@ if [ -z "$ready" ]; then
     print_logs
     exit 1
 fi
+"$bin/frostnotes" --mygo fallback-probe >>"$work/launcher.log" 2>&1
+test -f "$SMOKE_MYGO_RAN"
+
 
 if [ ! -f "$state/notesd.log.1" ]; then
     echo "smoke test: the old notesd log did not move to $state/notesd.log.1" >&2

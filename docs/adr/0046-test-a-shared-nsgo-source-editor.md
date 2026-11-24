@@ -1,6 +1,6 @@
 # 0046 — Test a shared NSGo source editor
 
-- **Status:** Proposed
+- **Status:** Superseded by [ADR-0047](0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
 - **Date:** 2026-11-23
 
 ## Context

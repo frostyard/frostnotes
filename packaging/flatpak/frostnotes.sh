@@ -3,6 +3,7 @@
 # The manifest installs it as /app/bin/frostnotes, and the native app as
 # /app/libexec/frostnotes-app.
 #
+#   frostnotes --mygo        Open the MyGo fallback against the same notesd.
 #   frostnotes --notesd       Run notesd and nothing else: how a window's
 #                             launcher and `--background` start it. A second
 #                             notesd on the same data directory exits at once
@@ -197,4 +198,8 @@ fi
 # writes that answer to $state/background.json, which the app shows.
 "$request_background" >>"$state/background.log" 2>&1 &
 
+if [ "${1:-}" = "--mygo" ]; then
+    shift
+    app="$libexec/frostnotes-mygo"
+fi
 exec "$app" "$@"
