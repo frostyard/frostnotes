@@ -4,7 +4,6 @@
 # Frostnotes
 
 [![CI](https://github.com/frostyard/frostnotes/actions/workflows/ci.yml/badge.svg)](https://github.com/frostyard/frostnotes/actions/workflows/ci.yml)
-[![Listed on Awesome MyGo](https://awesomemygo.dev/badge.svg)](https://awesomemygo.dev/apps/frostnotes)
 
 **Plain markdown notes on your own computer.**
 
@@ -17,7 +16,7 @@ serves them to a web app and to agents.
 
 **Documentation:** [frostyard.org/docs/apps/frostnotes](https://frostyard.org/docs/apps/frostnotes/)
 
-![The desktop app in the Frostyard dark theme: a trip note in live preview with its properties, tasks and a table, the vault's folders on the left and the note's backlinks on the right](docs/images/editor-dark.png)
+![FrostNotes on Linux with an editable packing checklist and links to other notes](docs/images/nsgo-linux.png)
 
 ## What it does
 
@@ -33,9 +32,7 @@ serves them to a web app and to agents.
 - **Sync is built in.** Each device syncs with a self-hosted hub, the same
   notesd in a hub role, which keeps every revision and merges concurrent
   edits. No conflict copies. [Sync design](docs/design/sync.md)
-- **The desktop app** is a native Go app on MyGo and frostui with live
-  preview, drawn in frostui's Frostyard look, dark or light. It is a
-  sibling of [Frostmail](https://github.com/frostyard/frostmail). [App design](docs/design/app.md)
+- **Linux and Lodge** share an NSGo editor with inline Markdown, clickable tasks and wiki links, full-text search, autosave and conflict recovery. The Linux vault manager opens folders and pairs devices to a hub. The MyGo desktop remains available for history, attachments, backlinks and other advanced views. [App design](docs/design/app.md)
 - **The web app** is a React UI with a CodeMirror 6 editor, served by
   [lodge](https://github.com/frostyard/lodge), frostyard's tailnet-only
   web shell, with Obsidian's phone layout on a narrow screen.
@@ -50,7 +47,7 @@ serves them to a web app and to agents.
 | ![The trip note in live preview, in the Frostyard light theme](docs/images/editor.png) | ![A search for “soup” across the vault, beside a recipe whose note callout is drawn as a banner](docs/images/search.png) |
 | ![The Tasks pane: every open task in the vault, grouped by note, beside the trip note](docs/images/tasks.png) | ![A book note in the reading view, in the Frostyard dark theme, with its outline in the right pane](docs/images/dark.png) |
 
-<sub>The screenshots show a made-up vault (`dev/screenshots/vault`).</sub>
+<sub>The MyGo fallback screenshots show a made-up vault (`dev/screenshots/vault`).</sub>
 
 ## Install
 
@@ -64,6 +61,8 @@ flatpak remote-add --user --if-not-exists frostyard https://frostyard.github.io/
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user frostyard org.frostyard.Frostnotes
 ```
+
+For the MyGo fallback, run `flatpak run org.frostyard.Frostnotes --mygo`. Both editors use the same local vaults, sync pairing and background preference. Existing installations upgrade with `flatpak update org.frostyard.Frostnotes`.
 
 Other ways: each [release](https://github.com/frostyard/frostnotes/releases)
 has `frostyard-notesd`'s .deb, which runs notesd and notesctl as lodge's

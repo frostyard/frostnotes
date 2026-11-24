@@ -25,32 +25,22 @@
       concurrent edits merge without conflict copies.
     </p>
     <p>
-      The editor shows markdown as you type. Obsidian vaults open as they are,
-      with wikilinks, embeds, tags, callouts and properties. The
+      The shared Linux and web editor offers Markdown source, inline tasks and
+      wiki links. The included MyGo desktop offers revision history, attachments
+      and backlinks. The
       notesctl command and an MCP server give scripts and agents the same
       access.
     </p>
   </description>
   <launchable type="desktop-id">org.frostyard.Frostnotes.desktop</launchable>
-  <!-- Taken by make screenshots (the Tester, dev/screenshots/vault) on a
-       made-up vault, served from main of the public repository.
-       internal/packagecheck checks them. -->
   <screenshots>
     <screenshot type="default">
-      <caption>A note in the editor, with its properties, tasks and backlinks</caption>
+      <caption>A packing checklist and links in the shared Linux editor</caption>
+      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/nsgo-linux.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Properties and backlinks in the MyGo fallback</caption>
       <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/editor.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>Search across the vault, with a recipe open</caption>
-      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/search.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>Every open task in the vault, beside the note</caption>
-      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/tasks.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>The dark theme, with a note's outline</caption>
-      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/dark.png</image>
     </screenshot>
   </screenshots>
   <url type="homepage">https://github.com/frostyard/frostnotes</url>

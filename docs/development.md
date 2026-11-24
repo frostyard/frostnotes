@@ -44,6 +44,14 @@ under Xvfb against a real notesd, and `make desktop-evidence` records the
 -run TestEveryScreenDraws ./internal/desktop/window` writes each screen's
 picture to `DIR`.
 
+## Linux desktop and Flatpak releases
+
+Use `make desktop-run` for the default Linux workspace or `make desktop-mygo-run` for the fallback. The Flatpak launcher accepts `--mygo` after the app ID. Both use the same notesd. The released ref is `app/org.frostyard.Frostnotes/x86_64/master`.
+
+`make web-build`, `make lodge-app` and the release Debian package use the shared Wasm editor. The gateway must permit Wasm compilation in the app frame (Lodge #116). `make legacy-lodge-app` stages the previous frontend for its historical evidence suite.
+
+The Flatpak workflow builds the two Go frontends offline from the combined root and desktop module locks. Run `make flatpak-sources` after either changes. CI verifies the source revision in both downloaded artifacts and exports the same Flatpak ref as OCI. `make bump` publishes the next version from clean main. CI attests the OCI digest before moving `latest`. The existing Frostyard catalog reads that tag. [Cutover decision](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
+
 ## Try the shared NSGo editor
 
 From the repository root on x86-64 Linux, build the native app and browser assets from the same source.
