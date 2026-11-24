@@ -578,3 +578,29 @@ func TestOpenInTheFlatpakAllowsExplicitFile(t *testing.T) {
 		t.Fatalf("explicit file store in the Flatpak = %T, %v; want *File", st, err)
 	}
 }
+
+func TestPreviewPairingIsIndependentOfStable(t *testing.T) {
+	stable, _ := openFake(t)
+	ctx := t.Context()
+	preview, err := OpenSecretService(ctx, stable.conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview.application = OptionsFor("org.frostyard.Frostnotes.Preview").application
+	key := HubToken("test-hub")
+	if err := stable.Set(ctx, key, "stable"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := preview.Get(ctx, key); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unpaired preview read: %v", err)
+	}
+	if err := preview.Set(ctx, key, "preview"); err != nil {
+		t.Fatal(err)
+	}
+	if err := preview.Delete(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := stable.Get(ctx, key); err != nil || got != "stable" {
+		t.Fatalf("stable pairing = %q, %v", got, err)
+	}
+}

@@ -6,13 +6,19 @@ import "path/filepath"
 // AppID is the reverse-DNS application ID (frostyard/core ADR-0016).
 const AppID = "org.frostyard.Frostnotes"
 
+// PreviewAppID identifies the independently installable NSGo candidate.
+const PreviewAppID = AppID + ".Preview"
+
 // LockFile is the file in DataDir that the one notesd of the directory
 // holds a lock on (flock), from before it opens the database until it exits.
 const LockFile = "notesd.lock"
 
 // InFlatpak reports whether the environment is this application's Flatpak
-// sandbox (FLATPAK_ID is AppID): the app's own, not another Flatpak's.
-func InFlatpak(getenv func(string) string) bool { return getenv("FLATPAK_ID") == AppID }
+// sandbox, including the independently installable preview.
+func InFlatpak(getenv func(string) string) bool {
+	id := getenv("FLATPAK_ID")
+	return id == AppID || id == PreviewAppID
+}
 
 // Paths are notesd's file locations. Vaults live wherever the user keeps
 // them; nothing here is inside a vault (ADR-0003).

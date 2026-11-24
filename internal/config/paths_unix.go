@@ -27,7 +27,7 @@ func defaultDataDir(getenv func(string) string) (string, error) {
 
 // DefaultSocket is notesd's socket when FROSTNOTES_SOCKET is not set:
 // $XDG_RUNTIME_DIR/frostnotes/notesd.sock. In the Flatpak (FLATPAK_ID is
-// AppID) it is $XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock:
+// a FrostNotes app ID) it is $XDG_RUNTIME_DIR/app/<id>/frostnotes/notesd.sock:
 // Flatpak shares $XDG_RUNTIME_DIR/app/<id> between every sandbox of the
 // app, and the rest of $XDG_RUNTIME_DIR is private to each sandbox, so the
 // app and notesd (and notesctl) meet only there
@@ -38,7 +38,7 @@ func DefaultSocket(getenv func(string) string) (string, error) {
 		return "", errors.New("XDG_RUNTIME_DIR is not set; set FROSTNOTES_SOCKET")
 	}
 	if InFlatpak(getenv) {
-		run = filepath.Join(run, "app", AppID)
+		run = filepath.Join(run, "app", getenv("FLATPAK_ID"))
 	}
 	return filepath.Join(run, "frostnotes", "notesd.sock"), nil
 }

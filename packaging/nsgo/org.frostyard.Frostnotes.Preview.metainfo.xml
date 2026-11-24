@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.frostyard.Frostnotes.Preview</id>
+  <name>FrostNotes Preview</name>
+  <summary>Edit Markdown notes with the shared FrostNotes editor</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description><p>Create, search and edit Markdown notes in a local vault. This release candidate uses the NSGo editor shared with Notes in Lodge.</p></description>
+  <launchable type="desktop-id">org.frostyard.Frostnotes.Preview.desktop</launchable>
+  <url type="homepage">https://github.com/frostyard/frostnotes</url>
+  <developer id="org.frostyard"><name>Frostyard</name></developer>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="@VERSION@" date="@DATE@"/></releases>
+</component>
