@@ -15,9 +15,9 @@ import (
 // Without the room for them, the actions are one menu.
 
 // toolbarRoom is the least width of the pane under the toolbar that shows
-// the actions as buttons: New note, the editor's two modes, 5 icon
-// buttons and the menu, beside a title.
-const toolbarRoom core.Points = 660
+// the actions as buttons: New note, the editor's two modes, 4 icon
+// buttons, the palette's field and the menu, beside a title.
+const toolbarRoom core.Points = 760
 
 // tool is an action of the toolbar: an icon button there, and an item of a
 // narrow window's menu.
@@ -62,8 +62,8 @@ func (w *workspace) openNote() *notes.Document {
 	return w.doc.Get()
 }
 
-// noteTools act on the open note, findTools on the vault, and restTools are
-// those a person seldom needs, which are always in the menu.
+// noteTools act on the open note, vaultTools on the vault, and restTools
+// are those a person seldom needs, which are always in the menu.
 func (w *workspace) noteTools() []tool {
 	noNote := func() bool { return w.openNote() == nil }
 	return []tool{
@@ -77,11 +77,13 @@ func (w *workspace) noteTools() []tool {
 	}
 }
 
-func (w *workspace) findTools() []tool {
-	return []tool{
-		{label: quickOpen, icon: lucide.FileSearch, keys: "mod+k", off: w.noVault, run: func() { w.showAction(quickOpen) }},
-		{label: vaultSearch, icon: lucide.Search, keys: "mod+shift+f", off: w.noVault, run: func() { w.showAction(vaultSearch) }},
-	}
+func (w *workspace) vaultTools() []tool {
+	return []tool{{label: vaultSearch, icon: lucide.FileSearch, keys: "mod+shift+f", off: w.noVault, run: func() { w.showAction(vaultSearch) }}}
+}
+
+// palette is the palette's way in for a window with no room for its field.
+func (w *workspace) palette() tool {
+	return tool{label: paletteLabel, icon: lucide.Search, keys: "mod+k", off: w.noVault, run: func() { w.showAction(quickOpen) }}
 }
 
 func (w *workspace) restTools() []tool {
@@ -130,8 +132,9 @@ func bar(children ...core.Node) core.Node {
 }
 
 // actions is the toolbar's end. With the room: New note, the editor's two
-// modes, the note's and the vault's actions, and the menu of the rest.
-// Without it: New note and one menu of everything.
+// modes, the note's and the vault's actions, the palette as a field with
+// its keys, and the menu of the rest. Without it: New note and one menu of
+// everything.
 func (w *workspace) actions(cx *core.Scope) core.Node {
 	narrow := core.NewMemo(cx, func() bool {
 		window := cx.Env().Window().Width
@@ -152,14 +155,25 @@ func (w *workspace) actions(cx *core.Scope) core.Node {
 		}
 		return bar(
 			ui.Button{Text: newNote, Icon: lucide.FilePlus, Disabled: w.noVault, OnPress: create},
+			// The modes are icons, named by their tooltips, so that the
+			// palette's field has its room.
 			ui.Tabs[bool]{Variant: ui.TabsSegmented, Label: "Editor", Value: w.live.Get, OnChange: w.live.Set,
-				Options: []ui.Option[bool]{{Value: false, Label: "Source"}, {Value: true, Label: "Live preview"}}},
+				Options: []ui.Option[bool]{mode(false, "Source", lucide.Code), mode(true, "Live preview", lucide.Eye)}},
 			ui.Toolbar{Label: "Note and vault", Children: []core.Node{
 				ui.ToolbarGroup{Label: "Note", Children: buttons(w.noteTools())},
 				ui.ToolbarSeparator{},
-				ui.ToolbarGroup{Label: "Find", Children: buttons(w.findTools())}}},
+				ui.ToolbarGroup{Label: "Vault", Children: buttons(w.vaultTools())}}},
+			ui.SidebarButton{Text: paletteLabel, Icon: lucide.Search, Shortcut: "mod+k", Variant: ui.SidebarButtonField, OnPress: w.palette().run},
 			w.moreMenu(false))
 	})
+}
+
+// mode is one of the editor's 2 modes in the toolbar: its icon, named by a
+// tooltip and to assistive technology.
+func mode(live bool, name string, icon func() *core.SVG) ui.Option[bool] {
+	return ui.Option[bool]{Value: live, Label: name, Content: core.Dynamic(func(cx *core.Scope) core.Node {
+		return ui.Tooltip{Text: name, Trigger: ui.Icon(icon, 16, ui.ColorsOf(cx).Text)}
+	})}
 }
 
 // moreMenu is the toolbar's menu: the actions a person seldom needs, and,
@@ -175,7 +189,8 @@ func (w *workspace) moreMenu(all bool) core.Node {
 		}))
 		children = append(children, items(w.noteTools())...)
 		children = append(children, ui.MenuSeparator{})
-		children = append(children, items(w.findTools())...)
+		children = append(children, w.palette().item())
+		children = append(children, items(w.vaultTools())...)
 		children = append(children, ui.MenuSeparator{})
 	}
 	children = append(children, items(w.restTools())...)

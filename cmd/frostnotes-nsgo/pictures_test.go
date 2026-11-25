@@ -100,6 +100,9 @@ func TestPicturesOfQuickOpen(t *testing.T) {
 	app.Screenshot("quick-open")
 	app.Type("label:Find note", "plants")
 	app.Screenshot("quick-open-query")
+	app.Clear("label:Find note")
+	app.Type("label:Find note", "note")
+	app.Screenshot("palette-commands")
 }
 
 func TestPicturesOfVaultSearch(t *testing.T) {

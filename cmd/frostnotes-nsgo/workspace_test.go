@@ -294,7 +294,7 @@ func TestToolbarHoldsTheNotesActions(t *testing.T) {
 			t.Errorf("%s can be pressed with no note open", sel)
 		}
 	}
-	for _, sel := range []string{"label:New note", "label:Quick open", "label:Search vault", "role:tab Source", "role:tab Live preview", "label:More"} {
+	for _, sel := range []string{"label:New note", "label:" + paletteLabel, "label:Search vault", "role:tab Source", "role:tab Live preview", "label:More"} {
 		if !app.Enabled(sel) {
 			t.Errorf("%s cannot be pressed with a vault shown", sel)
 		}
@@ -324,7 +324,7 @@ func TestNarrowWindowKeepsTheActionsInOneMenu(t *testing.T) {
 	app, _ := startVault(t, map[string]string{"First.md": "First\n"}, 600, 760)
 	app.WaitFor("label:First", 10*time.Second)
 	app.Find("label:New note")
-	for _, sel := range []string{"role:tab Live preview", "label:Quick open", "label:Move to trash"} {
+	for _, sel := range []string{"role:tab Live preview", "label:" + paletteLabel, "label:Move to trash"} {
 		if app.Exists(sel) {
 			t.Errorf("%s is in the toolbar of a window 600 wide\n%s", sel, app.Dump())
 		}
@@ -332,7 +332,7 @@ func TestNarrowWindowKeepsTheActionsInOneMenu(t *testing.T) {
 	app.Press("label:First")
 	app.WaitFor("text:First.md · Saved", 10*time.Second)
 	app.Press("label:More")
-	for _, item := range []string{"Save", "Rename or move note", "Move to trash", "Quick open", "Search vault", "Restore deleted note", "Refresh vaults and notes"} {
+	for _, item := range []string{"Save", "Rename or move note", "Move to trash", paletteLabel, "Search vault", "Restore deleted note", "Refresh vaults and notes"} {
 		app.WaitFor("label:"+item, 5*time.Second)
 	}
 	app.Press("label:Show live preview")
@@ -373,6 +373,40 @@ func TestSettingsTakesTheVaultsPlaceAndGivesItBack(t *testing.T) {
 	app.Press("label:Cancel")
 	app.WaitForGone("label:Remove vault", 5*time.Second)
 	app.Find("id:settings")
+}
+
+// TestPaletteFindsNotesAndRunsCommands checks the palette: the toolbar's
+// field and mod+K open it, a note's name opens the note, and a command's
+// name runs the command, with those that have nothing to act on left out.
+func TestPaletteFindsNotesAndRunsCommands(t *testing.T) {
+	app, _ := startWorkspace(t)
+	app.Press("label:" + paletteLabel)
+	app.WaitFor("label:Find note", 5*time.Second)
+	// No note is open, so the palette offers nothing that acts on one.
+	app.Find("role:dialog >> text:Restore deleted note")
+	if app.Exists("role:dialog >> text:Move to trash") {
+		t.Errorf("the palette offers the trash with no note open\n%s", app.Dump())
+	}
+	app.Type("label:Find note", "Second")
+	app.Key("enter")
+	app.WaitFor("text:Second.md · Saved", 5*time.Second)
+	app.Key("mod+k")
+	app.WaitFor("label:Find note", 5*time.Second)
+	app.Type("label:Find note", "trash")
+	app.Key("enter")
+	app.WaitFor(`text:Move "Second.md" to the trash?`, 5*time.Second)
+	app.Press("label:Cancel")
+	app.WaitForGone("label:Trash note", 5*time.Second)
+	app.Key("mod+k")
+	app.WaitFor("label:Find note", 5*time.Second)
+	app.Type("label:Find note", "live preview")
+	app.Key("enter")
+	app.WaitFor("label:Edit line 1", 5*time.Second)
+	app.Key("mod+k")
+	app.WaitFor("label:Find note", 5*time.Second)
+	app.Type("label:Find note", "settings")
+	app.Key("enter")
+	app.WaitFor("id:settings", 5*time.Second)
 }
 
 func TestCreateAndFindNote(t *testing.T) {

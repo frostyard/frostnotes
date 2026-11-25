@@ -62,13 +62,14 @@ The client draws the kit's Frostyard look: Frostyard in the dark appearance and 
 
 The client keeps to the kit's standard for an app (frostui's `docs/specs/workspaceui.md`; frostmail's plan 0016, Phase 5), in these places:
 
-- **The toolbar** (`shell.go`). The window's toolbar holds the vault's name over the open note's path and state, New note, which is the window's one filled button, the editor's 2 modes as a segmented control, the note's actions (Save, Rename or move note, Move to trash) and the vault's (Quick open, Search vault) as icon buttons, and a More menu with Restore deleted note and Refresh vaults and notes. The note's actions are dim with no note open. Where the pane under the toolbar is under 660 wide, or the window under 720, New note is an icon button and one menu holds every other action, the editor's mode with them. Until 2026-11-24 the note's path, state and actions were a row over the editor, each of its buttons filled.
+- **The toolbar** (`shell.go`). The window's toolbar holds the vault's name over the open note's path and state, New note, which is the window's one filled button, the editor's 2 modes as a segmented control of 2 icons named by their tooltips, the note's actions (Save, Rename or move note, Move to trash) and Search vault as icon buttons, the palette as a field, "Search or run a command" with its keys, as FrostMail's and PocketGo's toolbars have it, and a More menu with Restore deleted note and Refresh vaults and notes. The note's actions are dim with no note open. Where the pane under the toolbar is under 760 wide, or the window under 720, New note is an icon button and one menu holds every other action, the editor's mode and the palette with them. Until 2026-11-24 the note's path, state and actions were a row over the editor, each of its buttons filled.
+- **The palette** (`find.go`) is Quick open with the app's commands under the vault's notes: a note's title or path opens the note, and a command's name runs it. The commands are the toolbar's and its menu's actions, the editor's 2 modes, and Settings on a desktop; one with nothing to act on, as the trash with no note open, is left out.
 - **The editor's pane** (`main.go`). What notesd has to say about the open note (overlapping edits, a refused save, a deletion, a failed load) is the kit's `Banner` over the note's text, in the tone of what happened, with Dismiss. A note still loading is NSGo's skeleton, and a pane with no note the kit's `EmptyState`. What goes wrong in the app itself is the kit's `Notice` over the window, in the danger tone.
 - **Dialogs** (`dialogs.go`). A form (New note, Rename or move note, Restore deleted note, and the vault forms) is NSGo's dialog on the kit's panel: Cancel, quiet and first, then the one filled button, and what went wrong as a `Banner` in the danger tone. Moving a note to the trash and removing a vault ask in NSGo's alert dialog, which names the note or the vault, with the action in the danger variant. The alert closes as its action starts, so a failure of the action shows over the window.
 - **Settings** (`vaults_native.go`) is NSGo's settings view, shown in place of the vault by the gear at the navigation's foot or mod+, and left by Done or a press of a vault's row. Its rows start the vault forms, show the shown vault's sync, and hold the device's choices. The tree and the editor are kept while it shows (`core.NewHolder`), so the open note and its undo history are there after it. Until 2026-11-24 this was a dialog, Manage vaults, of filled buttons. The Lodge build has no Settings.
 - **The navigation's foot** is the kit's `ConnectionItem`: a dot, green while notesd answers, and the connection's line.
 - **States.** The tree shows a skeleton until the vault's notes have been read, then its notes or the kit's `EmptyState`.
-- **Keys.** mod+K and mod+O are Quick open, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
+- **Keys.** mod+K and mod+O are the palette, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
 - **No look written as a number** (`TestNoLiteralLooks`), but 1 the kit has no token for: a Markdown heading's size in live preview. A padding takes the kit's spacing.
 
 Not done of the standard: the window's size, place and pane widths are not kept (rule 8), and nothing answers mod+F.
@@ -1137,11 +1138,12 @@ pictures now show the kit's Frostyard look
     steps there.
 
   No test skips on a target.
-- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 24 PNGs,
-  1160 by 760 and, for a narrow window, 600 by 760. 19 are in Frostyard
+- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 25 PNGs,
+  1160 by 760 and, for a narrow window, 600 by 760. 20 are in Frostyard
   light: no note selected, a note in source and in live preview, a line
-  under edit, the More menu, the 4 note dialogs, quick open with and
-  without a query, vault search, Settings and the join form, a notesd
+  under edit, the More menu, the 4 note dialogs, the palette with no
+  query, with a note's and with a command's, vault search, Settings and
+  the join form, a notesd
   with no vault, and the narrow tree, note, menu and navigation. 5, named
   `dark-`, are in Frostyard: a note in source and in live preview, the
   dialog that moves a note, Settings and the narrow note.

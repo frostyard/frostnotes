@@ -18,6 +18,32 @@ const (
 	vaultSearch = "Search vault"
 )
 
+// paletteLabel names the palette where the window shows it: the toolbar's
+// field, and the menu of a window with no room for the field. The 3 apps
+// on the kit name it so.
+const paletteLabel = "Search or run a command"
+
+// commandID starts the id of a command in the palette. A note's id is its
+// path in the vault, which starts with no colon.
+const commandID = ":command:"
+
+// commands are what the palette runs: every action of the toolbar and its
+// menu but the palette itself, the editor's 2 modes, and Settings where
+// the app has it.
+func (w *workspace) commands() []tool {
+	out := []tool{{label: newNote, keys: "mod+n", off: w.noVault, run: func() { w.showAction(newNote) }}}
+	out = append(out, w.noteTools()...)
+	out = append(out, w.vaultTools()...)
+	out = append(out, w.restTools()...)
+	out = append(out,
+		tool{label: "Show source", off: func() bool { return !w.live.Get() }, run: func() { w.live.Set(false) }},
+		tool{label: "Show live preview", off: w.live.Get, run: func() { w.live.Set(true) }})
+	if w.hasSettings {
+		out = append(out, tool{label: "Settings", keys: "mod+,", run: func() { w.settings.Set(true) }})
+	}
+	return out
+}
+
 func (w *workspace) showAction(action string) {
 	if w.vault.GetUntracked() != 0 {
 		w.action.Set(action)
@@ -25,8 +51,9 @@ func (w *workspace) showAction(action string) {
 }
 
 // bindNoteActions binds the app's keys (the kit's standard for an app,
-// rule 7): mod+K the palette, which here is Quick open, and mod+N the new
-// note. mod+O stays Quick open's older key.
+// rule 7): mod+K the palette, which is Quick open with the app's commands
+// under the notes, and mod+N the new note. mod+O stays the palette's older
+// key.
 func (w *workspace) bindNoteActions() {
 	for key, action := range map[string]string{"mod+n": newNote, "mod+k": quickOpen, "mod+o": quickOpen, "mod+shift+f": vaultSearch} {
 		w.cx.OnKey(key, func() { w.showAction(action) })
@@ -104,13 +131,35 @@ func (w *workspace) createDialog(cx *core.Scope) core.Node {
 func (w *workspace) findDialog(cx *core.Scope, action string) core.Node {
 	pick := ui.Command{Label: action, SearchLabel: "Find note", Placeholder: "Find by title or path", Empty: "No matching notes", OnSelect: func(p string) { w.action.Set(""); w.open(p) }}
 	if action == quickOpen {
+		// The palette: the vault's notes, by title or path, and then what
+		// the app can do, by name.
+		commands := w.commands()
+		pick.Placeholder, pick.Empty = "Find a note or run a command", "No matching notes or commands"
 		pick.Items = func() []base.CommandItem {
 			files := w.files.Get()
-			items := make([]base.CommandItem, 0, len(files))
+			items := make([]base.CommandItem, 0, len(files)+len(commands))
 			for _, f := range files {
-				items = append(items, base.CommandItem{ID: f.Path, Label: f.Title, Description: f.Path, Keywords: []string{f.Path}})
+				items = append(items, base.CommandItem{ID: f.Path, Label: f.Title, Description: f.Path, Keywords: []string{f.Path}, Group: "Notes"})
+			}
+			for _, c := range commands {
+				if c.off == nil || !c.off() {
+					items = append(items, base.CommandItem{ID: commandID + c.label, Label: c.label, Shortcut: c.keys, Group: "Commands"})
+				}
 			}
 			return items
+		}
+		pick.OnSelect = func(id string) {
+			w.action.Set("")
+			name, isCommand := strings.CutPrefix(id, commandID)
+			if !isCommand {
+				w.open(id)
+				return
+			}
+			for _, c := range commands {
+				if c.label == name {
+					c.run()
+				}
+			}
 		}
 	} else {
 		query := core.NewSignal(cx, "")
