@@ -70,12 +70,14 @@ The client keeps to the kit's standard for an app (frostui's `docs/specs/workspa
 - **The toolbar** (`shell.go`). The window's toolbar holds the vault's name over the open note's path and state, New note, which is the window's one filled button, the editor's 2 modes as a segmented control of 2 icons named by their tooltips, the note's actions (Save, Rename or move note, Move to trash) and Search vault as icon buttons, the palette as a field, "Search or run a command" with its keys, as FrostMail's and PocketGo's toolbars have it, and a More menu with Restore deleted note and Refresh vaults and notes. The note's actions are dim with no note open. Where the pane under the toolbar is under 760 wide, or the window under 720, New note is an icon button and one menu holds every other action, the editor's mode and the palette with them. Until 2026-11-24 the note's path, state and actions were a row over the editor, each of its buttons filled.
 - **The palette** (`find.go`) is Quick open with the app's commands under the vault's notes: a note's title or path opens the note, and a command's name runs it. The commands are the toolbar's and its menu's actions, the editor's 2 modes, and Settings on a desktop; one with nothing to act on, as the trash with no note open, is left out.
 - **The editor's pane** (`main.go`). What notesd has to say about the open note (overlapping edits, a refused save, a deletion, a failed load) is the kit's `Banner` over the note's text, in the tone of what happened, with Dismiss. A note still loading is NSGo's skeleton, and a pane with no note the kit's `EmptyState`. What goes wrong in the app itself is the kit's `Notice` over the window, in the danger tone.
+- **Source mode** (`source.go`) is NSGo's code editor (`nsgo/ui/editor`, v0.3.0) on the open note's document, at most 700 wide in the middle of the pane (Readable line length), with the MyGo client's defaults (`internal/desktop/prefs`; `TestSourceTakesTheMyGoDefaults` holds them equal, as the web build cannot import `prefs`): soft wrap, no line numbers, indentation guides, tabs of 4 and indenting with tabs, brackets and quotes paired as they are typed, and folds by headings, the frontmatter and indentation (`markup.Folds`). Their settings come in Phase 7 of [plan 0011](../plans/0011-nsgo-only-client.md). The typing reaches the document as the user's edits (`Document.Local`). Any other change of the document's text (a merge, another writer's change, a reload, a load after a failed one) never enters the editor as a new value, which NSGo's editor records as a step of its undo, with no way to keep an edit out of the history or to clear it: the editor starts again on the new text, with its carets, folds and first line in view mapped through the change. The user's undo history ends there, as live preview's does, so Ctrl+Z never takes back another writer's change ([ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md); [ADR-0049](../adr/0049-make-the-nsgo-client-the-only-client.md), decision 3; `TestUndoNeverTakesBackAnotherWritersChange`). Typing that reaches the editor before it starts again goes over the other change. A change of whether the note can be edited starts it again too.
+- **Highlighting in source mode** is the app's highlighter for the lines in view, which NSGo runs off the UI goroutine: `markup.Highlight` reads Obsidian's Markdown as the MyGo client's overlay does (`internal/desktop/editor/syntax.go`), with what is open where a line starts (the frontmatter, a fence, indented code, a `$$` block, a `%%` comment) read from the lines before it. Its kinds take the colors of NSGo's palette in light and dark: headings `title`; wikilinks, embeds, Markdown links and web addresses and footnotes `built`; tags and a callout's type `keyword`; code and the frontmatter's values `string`; math `number`; the frontmatter's keys and highlights `attr`; strikethrough `deletion`; and comments, block IDs, the frontmatter's fences, quote and list marks, rules and the marks of emphasis `comment`. NSGo v0.3.0 names no bold or italic kind for an app's tokens, so emphasis and strong text keep the text's color. The palette is NSGo's, not the kit's: the kit has no colors for code.
 - **Dialogs** (`dialogs.go`). A form (New note, Rename or move note, Restore deleted note, and the vault forms) is NSGo's dialog on the kit's panel: Cancel, quiet and first, then the one filled button, and what went wrong as a `Banner` in the danger tone. Moving a note to the trash and removing a vault ask in NSGo's alert dialog, which names the note or the vault, with the action in the danger variant. The alert closes as its action starts, so a failure of the action shows over the window.
 - **Settings** (`vaults_native.go`) is NSGo's settings view, shown in place of the vault by the gear at the navigation's foot or mod+, and left by Done or a press of a vault's row. Its rows start the vault forms, show the shown vault's sync, and hold the device's choices. The tree and the editor are kept while it shows (`core.NewHolder`), so the open note and its undo history are there after it. Until 2026-11-24 this was a dialog, Manage vaults, of filled buttons. The Lodge build has no Settings.
 - **The navigation's foot** is the kit's `ConnectionItem`: a dot, green while notesd answers, and the connection's line.
 - **States.** The tree shows a skeleton until the vault's notes have been read, then its notes or the kit's `EmptyState`.
 - **Keys.** mod+K and mod+O are the palette, mod+F the notes' filter, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
-- **No look written as a number** (`TestNoLiteralLooks`), but 1 the kit has no token for: a Markdown heading's size in live preview. A padding takes the kit's spacing.
+- **No look written as a number** (`TestNoLiteralLooks`), but 1 the kit has no token for: a Markdown heading's size in live preview. A padding takes the kit's spacing. Source mode's readable width, 700, is a measure of the text, which the kit has no token for either; the test reads no width.
 
 - **The window** (`window.go`) is kept on the device, in the client's storage: its size, its place where the platform reports one, and the navigation's width. A start shows it as it was left. A size under 480 by 360 is not kept, nor a maximized window's, and the window does not go under that size. A browser's window is not kept. The notes tree's width is not kept: the kit's `FileExplorer` reports no change of it.
 - **The filter** over the notes tree (`tree.go`) leaves the notes whose title or path holds its words, inside their folders, all open. mod+F puts the keyboard in it, from the editor too.
@@ -1103,13 +1105,40 @@ live UI tests and pictures of the look, kept before the look changed. The
 pictures now show the kit's Frostyard look
 ([above](#shared-nsgo-editor-preview)).
 
-- **The suite:** 8 workflows (`workspace_test.go`, `vaults_test.go`) and 9
-  picture tours (`pictures_test.go`), with the build tags `linux` and
+- **The suite:** 23 tests of workflows and parts (`workspace_test.go`,
+  `vaults_test.go`, `window_test.go`, `source_test.go`), the style test,
+  the typing gate's test and benchmark (`bench_test.go`) and 9 picture
+  tours (`pictures_test.go`), with the build tags `linux` and
   `integration`. NSGo's `nsgotest` drives the client by label and text.
-  Each test starts a real notesd on temp data; the tours' vault is 7
+  Each workflow starts a real notesd on temp data; the tours' vault is 7
   made-up notes written in `pictures_test.go`, 1 of them in a folder
-  inside a folder. 1 of the workflows reads no window: it checks the
-  shape `buildTree` gives a list of notes.
+  inside a folder. Some tests read no window: the shape `buildTree` gives
+  a list of notes, source mode's defaults and its highlighter's kinds.
+  Source mode's text is read from the editor's rows in view
+  (`sourceText`), as NSGo's editor keeps no value in its field.
+- **Keys around source mode.** `TestAppKeysAroundTheEditor` holds what
+  an app's key binding gets of Enter, Backspace and mod+V in NSGo
+  v0.3.0, which smart lists and paste need. Of the bindings of a key the
+  newest runs, and the editor binds its keys as it takes the keyboard.
+  A binding made around the editor before that gets mod+V, which the
+  editor does not bind, but not Enter or Backspace, which the editor
+  runs. A binding made once the editor has the keyboard (in a `Show` on
+  its focus, after the editor) gets all 3 first, and the editor does
+  nothing with them: such a binding runs the editor's command itself
+  (`Ref.Run`) when it has nothing to do.
+- **The typing gate on NSGo,** `make nsgo-bench`
+  (`BenchmarkTypingInALongNote` in `bench_test.go`): a keystroke in the
+  MyGo gate's 10,000-line note, in source mode at the note's end and in
+  live preview on its first line, under the same limits, 16 ms and 25 ms
+  with `CI=true` ([ADR-0043](../adr/0043-the-typing-gate-is-looser-on-ci.md)).
+  A keystroke is 1 step of NSGo's test host typing 1 character, headless:
+  the key and the edit reach the field, the client does its work, and
+  the host runs what was posted and commits what changed to its model of
+  the window. It draws no pixels, so GTK's layout and painting are not
+  in it, and the editor's highlighting runs off the UI goroutine. The
+  benchmark then saves and reads the note on disk, which must hold every
+  keystroke. CI does not run it yet; `make desktop-bench` stays MyGo's
+  gate until MyGo goes.
 - **Headless,** `make nsgo-check`, a part of `make verify`: `go test -tags
   integration` in `cmd/frostnotes-nsgo`. NSGo models the views, with
   approximate text and no pixels: `app.Screenshot` only logs.
@@ -1136,10 +1165,11 @@ pictures now show the kit's Frostyard look
     timer of the app never comes due: vault search waits 250 ms before it
     asks notesd, and the session dials again 1 s after its connection
     drops. `waitTimers` moves the clock while it waits, in both runs.
-  - A line break typed in a multiline field. The Linux test host sends it
-    as the Enter key, which does nothing in a text view: the lines arrive
-    as 1 line. `typeLines` enters the text as an input method's commit on
-    a target.
+  - A line break typed. The Linux test host sends it as the Enter key.
+    Source mode's editor takes Enter as a line break, so its tests type
+    line breaks on a target too (`replaceSource`). An input method's
+    commit of text with line breaks would reach the editor's 1-line field,
+    and GTK made each line break a space there (2026-11-25).
   - A paste. `App.Paste` reports a paste only headless, and on a target it
     skips the test. `TestSwitchNoteDuringAutosave` leaves out its paste and
     the undo after it on a target (`headlessStep`), and runs its other
@@ -1159,10 +1189,13 @@ pictures now show the kit's Frostyard look
   changed pictures. No test compares pixels.
   - The look they show, read from the pictures of 2026-11-24. Light: the
     navigation is `#e8f0f6`, the narrow window's ground `#f5f9fc`, the
-    accent `#0b6ea6`, and the source field `#ffffff`. Dark: `#081b2d`,
-    `#06111d`, `#47b8ef` and `#061826`. The content pane of a wide window
-    is `#f4f9fc` in light and `#06121e` in dark, 1 step from the ground's
-    color.
+    accent `#0b6ea6`. Dark: `#081b2d`, `#06111d` and `#47b8ef`. The
+    content pane of a wide window is `#f4f9fc` in light and `#06121e` in
+    dark, 1 step from the ground's color. Until 2026-11-25 source mode was
+    a field of its own, `#ffffff` in light and `#061826` in dark; since
+    then NSGo's editor has no ground of its own and stands on the pane's,
+    with its active line `#eaeff3` in light and `#0f1a27` in dark, read
+    from that day's pictures.
   - The text is the kit's bundled Inter. With the host's own Inter hidden
     from fontconfig (a `FONTCONFIG_FILE` that rejects the family), a take
     gave the same bytes for all 22 as a take without it; with it hidden

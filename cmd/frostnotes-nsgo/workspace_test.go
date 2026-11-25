@@ -23,7 +23,7 @@ func TestMain(m *testing.M) { nsgotest.Main(m) }
 
 // repoRoot finds the repository from the working directory, which is this
 // package's directory under go test and a directory below it on a target.
-func repoRoot(t *testing.T) string {
+func repoRoot(t testing.TB) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {
@@ -68,19 +68,6 @@ func headlessStep(t *testing.T, why string) bool {
 	return true
 }
 
-// typeLines types text with line breaks into a multiline field. On a target
-// NSGo v0.3.0's Linux test host sends a line break as the Enter key, which
-// submits a single-line field and does nothing in a text view, so there the
-// text goes into the same widget as an input method's commit.
-func typeLines(app *nsgotest.App, selector, text string) {
-	if nsgotest.Target() == "" {
-		app.Type(selector, text)
-		return
-	}
-	app.Focus(selector)
-	app.Commit(selector, text)
-}
-
 // Exercise the actual UI callbacks. Selecting the next note while the old
 // editor is dirty must flush that editor's base and text to its own path.
 func startWorkspace(t *testing.T) (*nsgotest.App, string) {
@@ -94,7 +81,7 @@ func startWorkspace(t *testing.T) (*nsgotest.App, string) {
 // holds only that vault, and opens the client on it in a window of the
 // given size, with NSGo's options. A nil files starts the client on a notesd
 // with no vault.
-func startVault(t *testing.T, files map[string]string, width, height core.Points, options ...nsgotest.Option) (*nsgotest.App, string) {
+func startVault(t testing.TB, files map[string]string, width, height core.Points, options ...nsgotest.Option) (*nsgotest.App, string) {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0700); err != nil {
@@ -185,16 +172,13 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	app, vault := startWorkspace(t)
 	app.Press("label:First")
 	app.WaitFor("text:Saved", 10*time.Second)
-	const source = "label:Markdown source"
-	app.Clear(source)
-	typeLines(app, source, "updated\n")
+	replaceSource(app, "updated\n")
 	app.Press("label:Second")
-	app.WaitUntil(10*time.Second, func() bool { return app.Exists(source) && app.Find(source).Text == "Second\n" })
+	app.WaitUntil(10*time.Second, func() bool { return app.Exists(source) && sourceText(app) == "Second" })
 	if app.Exists("text:No vaults available") {
 		t.Fatal("empty state alongside populated vault")
 	}
-	app.Clear(source)
-	typeLines(app, source, "# Garden 🌱\n- [ ] prune\nSee [[First|orchard]].\n```\n- [ ] literal\n```\n")
+	replaceSource(app, "# Garden 🌱\n- [ ] prune\nSee [[First|orchard]].\n```\n- [ ] literal\n```\n")
 	app.Press("role:tab Live preview")
 	app.WaitFor("label:Edit line 1", time.Second)
 	app.Press("label:Task on line 2")
@@ -358,7 +342,7 @@ func TestSettingsTakesTheVaultsPlaceAndGivesItBack(t *testing.T) {
 	}
 	app.Press("label:Close settings")
 	app.WaitFor("id:notes-tree", 5*time.Second)
-	if got := app.Find("label:Markdown source").Text; got != "First\n" {
+	if got := sourceText(app); got != "First" {
 		t.Errorf("after Settings the editor holds %q, want the open note", got)
 	}
 	app.Key("mod+,")
@@ -442,10 +426,9 @@ func TestCreateAndFindNote(t *testing.T) {
 
 func TestManageNotes(t *testing.T) {
 	app, vault := startWorkspace(t)
-	const field = "label:Markdown source"
 	app.Press("label:First")
 	app.WaitFor("text:Saved", 5*time.Second)
-	app.Type(field, "draft")
+	typeAtEnd(app, "draft")
 	// Rename from a second client before autosave. The active buffer
 	// follows note.moved and its save must land at the new path.
 	c, _, err := api.Dial(t.Context(), os.Getenv("FROSTNOTES_SOCKET"), "other-window")
@@ -468,7 +451,7 @@ func TestManageNotes(t *testing.T) {
 	app.Type("label:Destination path", "Plants/Renamed")
 	app.Press("label:Move")
 	app.WaitFor("text:Plants/Renamed.md", 5*time.Second)
-	app.Type(field, "+latest")
+	typeAtEnd(app, "+latest")
 	app.Press("label:Move to trash")
 	// The trash asks in an alert, which names the note.
 	app.WaitFor(`text:Move "Plants/Renamed.md" to the trash?`, 5*time.Second)
@@ -486,7 +469,7 @@ func TestManageNotes(t *testing.T) {
 	app.Press("label:Restore deleted note")
 	app.Type("label:Deleted note path", "Plants/Renamed.md")
 	app.Press("label:Restore")
-	app.WaitUntil(5*time.Second, func() bool { return app.Exists(field) && app.Find(field).Text == "First\ndraft+latest" })
+	app.WaitUntil(5*time.Second, func() bool { return app.Exists(source) && sourceText(app) == "First\ndraft+latest" })
 	// A second restore must never overwrite a live file.
 	if err := restoreDeleted(t.Context(), c, id, "Plants/Renamed.md"); err == nil {
 		t.Fatal("restored over a live note")
