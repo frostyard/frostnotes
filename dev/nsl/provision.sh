@@ -46,10 +46,12 @@ fetch() { # url sha256 dest
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
+# Firefox ESR's libraries: GTK 3, which WebKitGTK's packages brought in until
+# the Tauri shell went (2026-11-10), and the few it loads besides.
 apt-get install -y -q --no-install-recommends \
 	build-essential ca-certificates curl file git make pkg-config wget xz-utils \
 	libssl-dev xvfb xauth vim \
-	libasound2t64 libdbus-glib-1-2 libx11-xcb1 libxtst6
+	libasound2t64 libdbus-glib-1-2 libgtk-3-0t64 libx11-xcb1 libxtst6
 
 if [[ "$(/opt/node/bin/node --version 2>/dev/null)" != "v$NODE_VERSION" ]]; then
 	fetch "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \

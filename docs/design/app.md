@@ -91,7 +91,7 @@ The client keeps to the kit's standard for an app (frostui's `docs/specs/workspa
 
 On Linux, Settings creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
 
-The Lodge bundle starts the existing Lodge client handshake before mounting NSGo, follows the shell theme, and uses the same-origin notes API. Its config is revalidated separately from the immutable runtime assets. The loopback Lodge fixture exercises browser admission, offline editing, and conflict recovery over this route. [Run the Lodge evidence](../development.md#run-the-preview-inside-lodge)
+The client's web build (`make nsgo-lodge-app`) starts the existing Lodge client handshake before mounting NSGo, follows the shell theme, and uses the same-origin notes API. Its config is revalidated separately from the immutable runtime assets. Lodge served it from 2026-11-23 until it served the React app again ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md), [In a browser](#in-a-browser)); now nothing shipped holds it, and it is built only for a separate Lodge test install. The loopback Lodge fixture exercises browser admission, offline editing, and conflict recovery over this route. [Run the Lodge evidence](../development.md#run-the-preview-inside-lodge)
 
 ## Overview
 
@@ -695,10 +695,17 @@ another machine and on the user's phone
 ([ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md),
 [lodge ADR-0009](https://github.com/frostyard/lodge/blob/main/docs/adr/0009-apps-switch-in-frames-that-stay-loaded.md),
 [specs/ui.md](../specs/ui.md#in-a-browser)). It is the same code as the
-desktop's, with a different transport and frame:
+desktop's was before plan 0009, with a different transport and frame.
+Lodge serves this React app: from 2026-11-23 it served the NSGo client's
+web build instead ([ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)),
+and [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md) brought
+the React app back ([plan 0011](../plans/0011-nsgo-only-client.md),
+Phase 1).
 
 - **The build.** `make web-build` runs `vite build --mode web` in nsl
-  into `build/web/`, with Vite's `base` set to `/app/notes/`.
+  into `build/web/`, with Vite's `base` set to `/app/notes/`. It is the
+  one build of the web app: `make lodge-app`, `make lodge-package`,
+  `make deb`, the release and `flatpak.yml`'s Lodge archive all take it.
   - lodge serves it from `/usr/share/lodge/apps/notes/web/`
     ([lodge ADR-0007](https://github.com/frostyard/lodge/blob/main/docs/adr/0007-lodge-serves-every-apps-web-build-from-disk.md)),
     with notes' manifest, `packaging/lodge/app.json`, beside it.
@@ -709,7 +716,11 @@ desktop's, with a different transport and frame:
   - In that mode `main.tsx` connects through lodge, and the mock and
     the shell's commands stay out of the bundle.
   - The build carries `icon.svg`, from the icon's master, for lodge's
-    rail.
+    rail, and `revision.txt`, the commit it was built from, which
+    `flatpak.yml` checks in its Lodge archive.
+  - The `.deb`'s check (`make deb-check`) requires `index.html`,
+    `icon.svg` and `revision.txt`, and fails on any member of the NSGo
+    web build (`nsgo.json`, a `.wasm` module, Go's `wasm_exec` loader).
   - `index.html`'s viewport has `viewport-fit=cover`, so the safe-area
     insets the narrow layout uses are not zero on iOS.
   - There is no web manifest of notes' own: lodge installs once, for
@@ -829,6 +840,9 @@ desktop's, with a different transport and frame:
     nsl) inside lodge's development build on loopback, at a desktop size
     and at 390 × 844
     ([plan 0006](../plans/0006-m4-notes-inside-lodge.md#phase-7--the-users-hub-in-lodge-and-exit-evidence)).
+    It runs `make lodge-app`'s tree, or with `M4_NOTES_WEB` the tree a
+    `.deb` installs (`usr/share/lodge/apps/notes` under `dpkg-deb -x`'s
+    root).
 
 ## The Flatpak
 
@@ -1225,9 +1239,11 @@ pictures now show the kit's Frostyard look
     dark appearance's light text. The kit's compact shell paints its
     ground since v0.2.0: the picture's ground is `#06111d`.
 - **The web target** is not run. The test files are Linux-only, and each
-  test starts a notesd with `os/exec`, which a browser cannot. Lodge's
-  browser path stays with `make nsgo-lodge-evidence`
-  ([development.md](../development.md#run-the-preview-inside-lodge)).
+  test starts a notesd with `os/exec`, which a browser cannot. The web
+  build's browser path is `make nsgo-lodge-evidence`
+  ([development.md](../development.md#run-the-preview-inside-lodge)); the
+  app Lodge serves is the React app, whose evidence is `make m4-evidence`
+  ([In a browser](#in-a-browser)).
 
 ## Operational notes
 

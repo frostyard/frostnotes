@@ -224,25 +224,29 @@ ui-fmt: ## Format the app's sources and organize imports with Biome (nsl)
 ui-dev: build ## Run notesd -devgw and Vite in the nsl machine; open http://127.0.0.1:5173 on the host
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && cd .. && scripts/dev-app.sh --browser'
 
-# The released site and server package consume the same staging tree.
+# Lodge's web app is the React app (app/; docs/adr/0050-frostnotes-has-no-desktop-window.md),
+# built for the base /app/notes/. web-build is its one build: make deb, make
+# lodge-package, the release and flatpak.yml's Lodge archive stage it, and
+# make m4-evidence runs it in lodge's development build. revision.txt names
+# the commit, which flatpak.yml checks in the archive.
+web-build: ## Build the React app for Lodge into build/web, base /app/notes/ (nsl)
+	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec tsc --noEmit && pnpm exec vite build --mode web --outDir ../build/web --emptyOutDir'
+	cp packaging/icons/icon.svg build/web/icon.svg
+	printf '%s\n' '$(SOURCE_REVISION)' > build/web/revision.txt
+
+# notes' install tree for lodge (docs/specs/lodge-app.md, What notesd
+# installs): copy build/lodge/apps/notes to /usr/share/lodge/apps/notes.
+lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version and web/ (nsl)
+	rm -rf build/lodge/apps/notes && mkdir -p build/lodge/apps/notes
+	cp -R build/web build/lodge/apps/notes/web
+	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/lodge/apps/notes/app.json
+
+# The NSGo client's web build, for a separate Lodge test install only:
+# nothing shipped holds it, and plan 0011's Phase 3 removes it with the
+# client (docs/plans/0011-nsgo-only-client.md).
 NSGO_LODGE := build/nsgo-lodge
-web-build: nsgo-lodge-app ## Build the default Lodge web app into build/web
-	rm -rf build/web
-	cp -R $(NSGO_LODGE)/apps/notes/web build/web
-
-lodge-app: nsgo-lodge-app ## Stage the released Lodge app in build/lodge/apps/notes
-	mkdir -p build/lodge/apps
-	rm -rf build/lodge/apps/notes
-	cp -R $(NSGO_LODGE)/apps/notes build/lodge/apps/
-
-.PHONY: legacy-lodge-app
-legacy-lodge-app: ## Build the React frontend for its original Lodge evidence suite
-	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec tsc --noEmit && pnpm exec vite build --mode web --outDir ../build/legacy-lodge/apps/notes/web --emptyOutDir'
-	cp packaging/icons/icon.svg build/legacy-lodge/apps/notes/web/icon.svg
-	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/legacy-lodge/apps/notes/app.json
-
 .PHONY: nsgo-lodge-app
-nsgo-lodge-app: ## Stage the shared NSGo workspace for Lodge
+nsgo-lodge-app: ## Stage the NSGo client's web build in build/nsgo-lodge for a Lodge test install (not shipped)
 	cd cmd/frostnotes-nsgo && go tool nsgo build -target web -id org.frostyard.Frostnotes -version $(NSGO_VERSION) -channel none -installers=false -output ../../$(NSGO_LODGE)/release
 	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec vite build --mode nsgo --outDir ../$(NSGO_LODGE)/apps/notes/web --emptyOutDir'
 	mv $(NSGO_LODGE)/apps/notes/web/nsgo.html $(NSGO_LODGE)/apps/notes/web/index.html
@@ -294,9 +298,12 @@ deb-check: ## Check the .deb: exact member names, /usr only, root ownership, no 
 		--file /usr/lib/systemd/system/frostnotes.service \
 		--file /usr/lib/systemd/system/frostnotes-lodge.socket \
 		--file /usr/lib/sysusers.d/frostnotes.conf \
-		--file /usr/share/lodge/apps/notes/web/revision.txt \
-		--file /usr/share/lodge/apps/notes/web/nsgo.json \
 		--file /usr/share/lodge/apps/notes/web/index.html \
+		--file /usr/share/lodge/apps/notes/web/icon.svg \
+		--file /usr/share/lodge/apps/notes/web/revision.txt \
+		--forbid '/usr/share/lodge/apps/notes/web/nsgo.json' \
+		--forbid '*.wasm' \
+		--forbid '*/wasm_exec.*' \
 		--manifest /usr/share/lodge/apps/notes/app.json
 
 svu-version-check:
@@ -355,11 +362,16 @@ nsgo-lodge-evidence: nsgo-lodge-app ## Verify a browser draft across Lodge disco
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(NSGO_LODGE_E2E_REF) $(NSGO_LODGE)/e2e'
 	$(IN_NSL) 'command -v geckodriver >/dev/null && M4_EVIDENCE_DIR=$$PWD/$(NSGO_LODGE)/evidence LODGE_E2E=$$PWD/$(NSGO_LODGE)/e2e NOTES_WEB=$$PWD/$(NSGO_LODGE)/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 3m -v -run "^TestNSGoLodge" ./internal/webevidence'
 
-m4-evidence: legacy-lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
-	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/legacy-lodge/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
+# M4_NOTES_WEB is the notes install tree the evidence runs, relative to the
+# checkout: lodge-app's by default, or the one a .deb installs, from
+# dpkg-deb -x (usr/share/lodge/apps/notes under the extracted root).
+M4_NOTES_WEB ?= build/lodge/apps/notes
 
-porter-evidence: legacy-lodge-app lodge-e2e ## Record Porter's evidence through lodge (plan 0007, Phase 4) on loopback (nsl)
-	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/build/legacy-lodge/apps/notes go test -tags integration -count=1 -timeout 20m -v -run "^TestIPorter" ./internal/webevidence'
+m4-evidence: lodge-app lodge-e2e ## Record M4's exit evidence 1 on loopback (nsl)
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/$(M4_NOTES_WEB) $(XVFB) go test -tags integration -count=1 -timeout 20m -v -run "^TestI" ./internal/webevidence'
+
+porter-evidence: lodge-app lodge-e2e ## Record Porter's evidence through lodge (plan 0007, Phase 4) on loopback (nsl)
+	$(IN_NSL) 'M4_EVIDENCE_DIR=$$PWD/build/m4-evidence LODGE_E2E=$$PWD/build/lodge-e2e NOTES_WEB=$$PWD/$(M4_NOTES_WEB) go test -tags integration -count=1 -timeout 20m -v -run "^TestIPorter" ./internal/webevidence'
 
 # Task cards (docs/design/agent-workflow.md). The executor is Codex with the
 # user's model unless EXECUTOR_MODEL names one; or opencode with
