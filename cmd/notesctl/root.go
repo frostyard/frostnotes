@@ -27,6 +27,8 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().StringVar(&opts.vault, "vault", "", "The vault, by name or ID (default: the only one)")
 	root.AddCommand(
 		newHelloCmd(opts),
+		newStatusCmd(opts),
+		newBackgroundCmd(opts),
 		newShutdownCmd(opts),
 		newVaultCmd(opts),
 		newHubCmd(opts),

@@ -153,6 +153,28 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > revision.txt
           sha256sum frostnotes.flatpak frostnotes-lodge.tar.gz revision.txt > SHA256SUMS
           flatpak build-bundle --oci --arch=x86_64 repo frostnotes.oci "$APP_ID" master
+      # The Flatpak holds notesd, notesctl, the launcher and the Background
+      # helper, and no window (plan 0011, Phase 2): no client, no desktop
+      # entry, and no display, sound or GPU in its permissions. Its AppStream
+      # component, a console application, was composed with the app's icon,
+      # which the OCI image's labels carry to the Frostyard remote.
+      - name: The Flatpak holds notesd and notesctl, and no window
+        run: |
+          ref="app/$APP_ID/x86_64/master"
+          ostree ls --repo=repo "$ref" /files/bin/frostnotes /files/bin/notesd /files/bin/notesctl /files/libexec/frostnotes-request-background
+          for gone in /files/libexec/frostnotes-app /files/libexec/frostnotes-mygo /files/share/applications; do
+            if ostree ls --repo=repo "$ref" "$gone" >/dev/null 2>&1; then echo "the Flatpak still holds $gone" >&2; exit 1; fi
+          done
+          ostree cat --repo=repo "$ref" /metadata | tee metadata
+          if grep -Eq '^(sockets|devices)=' metadata; then echo "the Flatpak still asks for a display, sound or a device" >&2; exit 1; fi
+          grep -qx 'shared=network;' metadata
+          grep -qx 'filesystems=home;' metadata
+          ostree cat --repo=repo "$ref" "/files/share/app-info/xmls/$APP_ID.xml.gz" | gzip -d > appstream.xml
+          cat appstream.xml
+          grep -q '<component type="console-application"' appstream.xml
+          grep -q '<icon type="cached"' appstream.xml
+          ostree ls --repo=repo -R "$ref" /files/share/app-info/icons > icons.txt
+          grep -q "$APP_ID.png" icons.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frostnotes-linux-and-lodge

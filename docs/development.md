@@ -28,6 +28,18 @@ Every write, an agent's included, is kept as a version for 30 days:
 `notesctl versions PATH` lists them and `notesctl revert` undoes one
 ([design/vault.md](design/vault.md#versions)).
 
+On a desktop, Frostnotes has no window: an editor of Markdown files,
+Obsidian among them, opens the vault's folder, and notesd syncs what it
+writes. The setup is `notesctl`'s, as in the Flatpak
+([design/app.md](design/app.md#the-flatpak)):
+
+```sh
+build/notesctl hub join URL Notes       # pair with a hub (approve the code there) and sync its vault "Notes"
+build/notesctl hub pair URL             # pair again, after the hub revoked this device
+build/notesctl status                   # notesd, its vaults, their sync and the hubs
+build/notesctl sync status              # one line per synced vault
+```
+
 ## Run the native desktop app
 
 The native app ([plan 0009](plans/0009-mygo-desktop.md)) is pure Go, and needs
@@ -46,7 +58,7 @@ picture to `DIR`.
 
 ## Linux desktop and Flatpak releases
 
-Use `make desktop-run` for the default Linux workspace or `make desktop-mygo-run` for the fallback. The Flatpak launcher accepts `--mygo` after the app ID. Both use the same notesd. The released ref is `app/org.frostyard.Frostnotes/x86_64/master`.
+Use `make desktop-run` for the default Linux workspace or `make desktop-mygo-run` for the fallback, against a notesd you run. The Flatpak holds neither: it carries notesd and `notesctl` only, and its launcher starts notesd, asks the desktop to start it at login, and prints `notesctl status` ([design/app.md](design/app.md#the-flatpak), plan 0011's Phase 2). The released ref is `app/org.frostyard.Frostnotes/x86_64/master`.
 
 Lodge's web app is the React app in `app/` ([ADR-0050](adr/0050-frostnotes-has-no-desktop-window.md)). `make web-build` builds it in nsl into `build/web` for `/app/notes/`, and `make lodge-app` lays it out with its manifest in `build/lodge/apps/notes`. The release Debian package (`make deb`), `make lodge-package` and the Flatpak workflow's Lodge archive all take that build; the package's check fails on any file of the NSGo web build. `make m4-evidence` runs the build in Firefox inside Lodge's development build. To run it on what a package installs, extract the package and pass the tree:
 
@@ -55,7 +67,16 @@ dpkg-deb -x dist/frostyard-notesd_*_amd64.deb build/deb-x
 make m4-evidence M4_NOTES_WEB=build/deb-x/usr/share/lodge/apps/notes
 ```
 
-The Flatpak workflow builds the two Go frontends offline from the combined root and desktop module locks. Run `make flatpak-sources` after either changes. CI verifies the source revision in both downloaded artifacts and exports the same Flatpak ref as OCI. `make bump` publishes the next version from clean main. CI attests the OCI digest before moving `latest`. The existing Frostyard catalog reads that tag. [Cutover decision](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
+The Flatpak workflow builds notesd and `notesctl` offline from the root module's lock. Run `make flatpak-sources` after it changes. CI verifies the source revision in both downloaded artifacts, checks that the bundle holds notesd and `notesctl` and no window, and exports the same Flatpak ref as OCI. `make bump` publishes the next version from clean main. CI attests the OCI digest before moving `latest`. The existing Frostyard catalog reads that tag. [Cutover decision](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
+
+The Flatpak's smoke test runs without a Flatpak, on temporary directories and with stand-ins for the portals; it never touches your own notesd, config or keyring:
+
+```sh
+mkdir -p build/flatpak-bin
+CGO_ENABLED=0 go build -o build/flatpak-bin/ ./cmd/notesd ./cmd/notesctl
+install -m755 packaging/flatpak/frostnotes.sh build/flatpak-bin/frostnotes
+FROSTNOTES_BIN_DIR=$PWD/build/flatpak-bin sh packaging/flatpak/smoke-test.sh
+```
 
 ## Try the shared NSGo editor
 
@@ -137,6 +158,6 @@ gate has 3 parts (`make race-rest`, `race-sim` and `race-sim-checkptr`).
 
 On x86-64 Linux, use `NSL_MACHINE=trixie packaging/nsgo/build-rc.sh` with your provisioned nsl machine name. Install the GNOME 51 runtime and SDK and either flatpak-builder or org.flatpak.Builder first. The script builds a committed checkout into `build/nsgo-rc/frostnotes-<version>-rc.<commit>/`. The Flatpak and Lodge archive each carry the full commit recorded in `revision.txt`. Run `sha256sum -c SHA256SUMS` inside that directory.
 
-Install the bundle with `flatpak install --user ./frostnotes-*-x86_64.flatpak` and run `flatpak run org.frostyard.Frostnotes.Preview`. The preview has its own notesd, data directory, runtime socket and hub pairing in the desktop keyring. With the preview running, register a test notebook using `flatpak run --command=notesctl org.frostyard.Frostnotes.Preview vault add /absolute/path/to/test-notebook`.
+The preview takes its launcher from `packaging/flatpak/frostnotes.sh`, which since plan 0011's Phase 2 starts notesd and opens no window, so its `flatpak run` no longer shows the NSGo client; Phase 3 removes the preview with the client. Install the bundle with `flatpak install --user ./frostnotes-*-x86_64.flatpak` and run `flatpak run org.frostyard.Frostnotes.Preview`. The preview has its own notesd, data directory, runtime socket and hub pairing in the desktop keyring. With the preview running, register a test notebook using `flatpak run --command=notesctl org.frostyard.Frostnotes.Preview vault add /absolute/path/to/test-notebook`.
 
 The Lodge archive contains the complete `notes/` app tree for the existing Notes app ID: the React app, from `make lodge-app`. Stage the archive alongside the installed Notes tree and retain the previous tree for rollback. Open Notes from an admitted browser, select a test vault and verify the app by creating and reopening a note. The web app uses the installed notesd service.

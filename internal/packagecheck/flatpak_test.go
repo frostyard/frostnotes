@@ -1,10 +1,15 @@
 package packagecheck
 
 import (
+	"encoding/json/v2"
+	"encoding/xml"
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -164,18 +169,74 @@ func TestStampVersionRefusesAVersionAlreadyListed(t *testing.T) {
 	}
 }
 
-// The Flatpak builds the native app and nothing needs Rust or Node.
-func TestTheFlatpakBuildsOnlyGo(t *testing.T) {
+// The Flatpak builds notesd and notesctl and no window (ADR-0050, plan 0011,
+// Phase 2): no MyGo or NSGo client, nothing that needs Rust or Node, and
+// only the permissions a daemon of vault folders needs.
+func TestTheFlatpakBuildsNotesdAndNotesctlOnly(t *testing.T) {
 	dir, _ := stampInputs(t)
 	manifest := readString(t, filepath.Join(dir, flatpakManifest))
-	for _, want := range []string{"./cmd/frostnotes", "/app/libexec/frostnotes-app", "packaging/icons/icon.svg"} {
-		if !strings.Contains(manifest, want) {
-			t.Errorf("the manifest does not name %s", want)
+	var m struct {
+		FinishArgs []string `json:"finish-args"`
+		Modules    []struct {
+			BuildCommands []string `json:"build-commands"`
+		} `json:"modules"`
+	}
+	if err := json.Unmarshal([]byte(manifest), &m); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Modules) != 1 {
+		t.Fatalf("the manifest has %d modules, want 1", len(m.Modules))
+	}
+	build := strings.Join(m.Modules[0].BuildCommands, "\n")
+	for _, want := range []string{"./cmd/notesd ./cmd/notesctl\n", "/app/bin/frostnotes", "/app/libexec/frostnotes-request-background", "packaging/icons/icon.svg"} {
+		if !strings.Contains(build, want) {
+			t.Errorf("the build does not name %q", want)
 		}
 	}
-	for _, not := range []string{"rust-stable", "node24", "cargo", "pnpm", "tauri"} {
+	for _, not := range []string{"./cmd/frostnotes ", "cmd/frostnotes-nsgo", "frostnotes-app", "frostnotes-mygo", "mygo", "nsgo", ".desktop"} {
+		if strings.Contains(build, not) {
+			t.Errorf("the build still names %q", not)
+		}
+	}
+	for _, not := range []string{"NSGO", "rust-stable", "node24", "cargo", "pnpm", "tauri"} {
 		if strings.Contains(manifest, not) {
 			t.Errorf("the manifest still names %s", not)
 		}
+	}
+	// The network for the hub, the Secret Service for the device token, and
+	// the home directory for the vault folders; no display, sound or GPU.
+	want := []string{"--share=network", "--talk-name=org.freedesktop.secrets", "--filesystem=home"}
+	if !slices.Equal(m.FinishArgs, want) {
+		t.Errorf("finish-args = %q, want %q", m.FinishArgs, want)
+	}
+}
+
+// With no window the Flatpak has no desktop entry, and its AppStream
+// component is a console application that provides notesctl, with the
+// app's icon by name.
+func TestTheFlatpakIsAConsoleApplication(t *testing.T) {
+	if _, err := os.Stat("../../packaging/flatpak/org.frostyard.Frostnotes.desktop"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("packaging/flatpak still has a desktop entry: %v", err)
+	}
+	var meta struct {
+		Type       string   `xml:"type,attr"`
+		Launchable []string `xml:"launchable"`
+		Icon       struct {
+			Type string `xml:"type,attr"`
+			Name string `xml:",chardata"`
+		} `xml:"icon"`
+		Binaries []string `xml:"provides>binary"`
+	}
+	if err := xml.Unmarshal([]byte(readString(t, filepath.Join("../../packaging/flatpak", flatpakMetainfo))), &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta.Type != "console-application" || len(meta.Launchable) != 0 {
+		t.Errorf("component type %q with launchables %q, want a console-application with none", meta.Type, meta.Launchable)
+	}
+	if meta.Icon.Type != "stock" || meta.Icon.Name != "org.frostyard.Frostnotes" {
+		t.Errorf("icon %+v, want the stock icon org.frostyard.Frostnotes", meta.Icon)
+	}
+	if !slices.Contains(meta.Binaries, "notesctl") {
+		t.Errorf("provides %q, want notesctl", meta.Binaries)
 	}
 }

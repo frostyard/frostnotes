@@ -1,46 +1,42 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<component type="desktop-application">
+<component type="console-application">
   <id>org.frostyard.Frostnotes</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>Frostnotes</name>
-  <summary>Plain markdown notes on your own computer</summary>
+  <summary>Sync the Markdown notes your editor writes</summary>
   <developer id="org.frostyard">
     <name>Frostyard</name>
   </developer>
   <description>
     <p>
-      Frostnotes is a notes app in the spirit of Obsidian. Notes are plain
-      markdown files with YAML frontmatter, in a folder you own.
+      Frostnotes keeps folders of plain Markdown notes in sync between your
+      computers, through a hub that you host yourself. It has no window: you
+      edit the notes with any editor of Markdown files, Obsidian among them,
+      and notesd, the service inside this app, syncs what the editor writes.
     </p>
     <p>
-      A background service inside the app, notesd, watches your vaults, keeps
-      a search index with links, backlinks, tags and properties, and never
-      writes over an edit it has not seen. Frostnotes works on its own: it
-      needs no account, server or other app.
+      The service watches each vault folder, keeps a search index with links,
+      backlinks, tags and properties, keeps every version of a note for 30
+      days, and never writes over an edit it has not seen. The desktop starts
+      it at login.
     </p>
     <p>
-      Sync is optional and built in. When you join a vault to a hub that you
-      host yourself, such as one in lodge, each device keeps its own copy and
-      concurrent edits merge without conflict copies.
+      The hub, the same notesd on a server such as one in lodge, merges
+      concurrent edits without conflict copies, and lodge serves a web app
+      over its notes.
     </p>
     <p>
-      The shared Linux and web editor offers Markdown source, inline tasks and
-      wiki links. The included MyGo desktop offers revision history, attachments
-      and backlinks. The
-      notesctl command and an MCP server give scripts and agents the same
-      access.
+      You set it up with the notesctl command: register a folder as a vault,
+      pair this computer with the hub, and sync the vault with the hub's.
+      notesctl and its MCP server also give scripts and agents the notes.
     </p>
   </description>
-  <launchable type="desktop-id">org.frostyard.Frostnotes.desktop</launchable>
+  <icon type="stock">org.frostyard.Frostnotes</icon>
   <screenshots>
     <screenshot type="default">
-      <caption>A packing checklist and links in the shared Linux editor</caption>
-      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/nsgo-linux.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>Properties and backlinks in the MyGo fallback</caption>
-      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/editor.png</image>
+      <caption>A folder registered as a vault and synced with a hub, with notesctl</caption>
+      <image>https://raw.githubusercontent.com/frostyard/frostnotes/main/docs/images/notesctl-setup.png</image>
     </screenshot>
   </screenshots>
   <url type="homepage">https://github.com/frostyard/frostnotes</url>
@@ -51,7 +47,6 @@
   </provides>
   <categories>
     <category>Office</category>
-    <category>TextEditor</category>
   </categories>
   <releases>
     <release version="0.0.0" date="2026-10-26"/>
