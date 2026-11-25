@@ -21,7 +21,7 @@ import (
 func main() {
 	finish := desktopLifetime()
 	defer finish()
-	nsgo.Run(root, nsgo.WindowSize(1160, 760))
+	nsgo.Run(root, nsgo.WindowSize(1160, 760), nsgo.WindowConstraints(core.WindowConstraints{MinWidth: minWidth, MinHeight: minHeight}))
 }
 
 type environment struct{ *core.Scope }
@@ -73,6 +73,10 @@ type workspace struct {
 	hasSettings bool
 	// contentWidth is the width of the pane under the toolbar.
 	contentWidth *core.Signal[core.Points]
+	// filter is what the field over the notes tree holds, and filterInput
+	// the field, which mod+F focuses.
+	filter      *core.Signal[string]
+	filterInput *core.Ref
 }
 
 // connected is what connection holds while notesd answers.
@@ -111,6 +115,8 @@ func root(cx *core.Scope) core.Node {
 		settings:   core.NewSignal(cx, false),
 
 		contentWidth: core.NewSignal(cx, core.Points(0)),
+		filter:       core.NewSignal(cx, ""),
+		filterInput:  &core.Ref{},
 	}
 	w.session.OnChange(func() {
 		if w.session.State() == session.Connected {
@@ -141,6 +147,7 @@ func root(cx *core.Scope) core.Node {
 	})
 	w.bindNoteActions()
 	w.bindSettingsKey()
+	w.keepWindow(cx)
 	w.session.Start()
 	// The explorer outlives the views shown in its place, so a look at
 	// Settings leaves the tree, the editor and its history as they were.
@@ -155,6 +162,7 @@ func root(cx *core.Scope) core.Node {
 	settings := w.settingsView(cx)
 	w.hasSettings = settings != nil
 	shell := workspaceui.Shell{
+		Widths: w.paneWidths(), OnWidthsChange: w.savePanes,
 		Brand: "FrostNotes", Header: []core.Node{w.header()}, Actions: []core.Node{w.actions(cx)},
 		SidebarFooter: []core.Node{w.sidebarFoot()},
 		Sections:      w.vaultSections, Selected: func() string { return strconv.FormatInt(w.vault.Get(), 10) },

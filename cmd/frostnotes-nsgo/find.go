@@ -58,6 +58,23 @@ func (w *workspace) bindNoteActions() {
 	for key, action := range map[string]string{"mod+n": newNote, "mod+k": quickOpen, "mod+o": quickOpen, "mod+shift+f": vaultSearch} {
 		w.cx.OnKey(key, func() { w.showAction(action) })
 	}
+	// mod+F is the search of what is shown: the filter over the notes
+	// tree. It answers from the editor too, which has the keyboard most of
+	// the time.
+	w.cx.OnKeyWith("mod+f", core.KeyOptions{When: core.KeyAlways}, w.focusFilter)
+}
+
+// focusFilter puts the keyboard in the filter over the notes tree. Where
+// the window shows the note alone, it shows the tree first.
+func (w *workspace) focusFilter() {
+	if w.vault.GetUntracked() == 0 || w.action.GetUntracked() != "" {
+		return
+	}
+	w.settings.Set(false)
+	if w.cx.Env().Window().Width < 620 && w.preview.GetUntracked() {
+		w.preview.Set(false)
+	}
+	w.cx.Post(func() { w.filterInput.Focus() })
 }
 func (w *workspace) noteDialog(cx *core.Scope) core.Node {
 	action := w.action.Get()
