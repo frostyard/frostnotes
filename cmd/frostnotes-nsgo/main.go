@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"path"
 	"slices"
 	"strconv"
 	"time"
@@ -62,6 +61,8 @@ type workspace struct {
 	preview, live                            *core.Signal[bool]
 	appearance                               *core.Signal[core.Appearance]
 	catalogRequest, filesRequest, navigation int
+	// chosen is the notes tree's choice.
+	chosen *ui.Selection
 }
 
 func root(cx *core.Scope) core.Node {
@@ -124,8 +125,10 @@ func root(cx *core.Scope) core.Node {
 	w.bindNoteActions()
 	w.session.Start()
 	explorer := workspaceui.FileExplorer{
-		TreeWidth: 230, Tree: ui.Sidebar{SectionsFunc: w.noteSections, Selected: core.NewMemo(cx, w.selectedPath).Get, OnSelect: w.open},
-		Preview: w.editor(), HasPreview: w.preview.Get, BackToTree: func() { w.preview.Set(false) },
+		TreeWidth: 230, Tree: w.notesTree(cx),
+		// Back at the tree, no row is chosen, so a press of the note that
+		// was open opens it again.
+		Preview: w.editor(), HasPreview: w.preview.Get, BackToTree: func() { w.preview.Set(false); w.chosen.Clear() },
 	}
 	shell := workspaceui.Shell{
 		Brand: "FrostNotes", Header: []core.Node{core.Text{ContentFunc: w.title, Style: ui.TypeTitle}},
@@ -168,29 +171,6 @@ func (w *workspace) vaultSections() []ui.SidebarSection {
 		section.Note = core.Text{Content: "No vaults available"}
 	}
 	return []ui.SidebarSection{section}
-}
-
-func (w *workspace) noteSections() []ui.SidebarSection {
-	var sections []ui.SidebarSection
-	indices := map[string]int{}
-	for _, f := range w.files.Get() {
-		dir := path.Dir(f.Path)
-		i, ok := indices[dir]
-		if !ok {
-			title := dir
-			if dir == "." || dir == "/" {
-				title = "Notes"
-			}
-			i = len(sections)
-			indices[dir] = i
-			sections = append(sections, ui.SidebarSection{Title: title, Collapsible: true})
-		}
-		sections[i].Items = append(sections[i].Items, ui.SidebarItem{ID: f.Path, Text: f.Title, Icon: lucide.FileText})
-	}
-	if len(sections) == 0 {
-		return []ui.SidebarSection{{Title: "Notes", Note: core.Text{Content: "No notes available"}}}
-	}
-	return sections
 }
 
 func (w *workspace) selectedPath() string {

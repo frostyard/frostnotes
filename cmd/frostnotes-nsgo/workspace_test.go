@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -230,6 +231,56 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	if err != nil || string(got) != "updated\r\n" {
 		t.Fatalf("first note = %q, %v", got, err)
 	}
+}
+
+// TestBuildTreeNestsFoldersBeforeNotes checks the tree's shape: a folder
+// holds its folders, by name, before its notes, in notesd's order, and a
+// folder that holds only a folder is there.
+func TestBuildTreeNestsFoldersBeforeNotes(t *testing.T) {
+	tree := buildTree([]api.NoteEntry{
+		{Path: "Welcome.md", Title: "Welcome"}, {Path: "Plants/Quince.md", Title: "Quince"}, {Path: "Plants/Herbs/Mint.md", Title: "Mint"},
+		{Path: "Plants/Bulbs/Tulip.md", Title: "Tulip"}, {Path: "Archive/2025/Old.md", Title: "Old"}, {Path: "Plants/Fig.md", Title: "Fig"},
+	})
+	same := func(name string, got []any, want ...any) {
+		t.Helper()
+		if !slices.Equal(got, want) {
+			t.Errorf("%s holds %v, want %v", name, got, want)
+		}
+	}
+	same("the vault", tree.roots, folder("Archive"), folder("Plants"), "Welcome.md")
+	same("Plants", tree.children["Plants"], folder("Plants/Bulbs"), folder("Plants/Herbs"), "Plants/Quince.md", "Plants/Fig.md")
+	same("Archive", tree.children["Archive"], folder("Archive/2025"))
+	same("Archive/2025", tree.children["Archive/2025"], "Archive/2025/Old.md")
+	if got := tree.titles["Plants/Herbs/Mint.md"]; got != "Mint" {
+		t.Errorf("the note's title is %q", got)
+	}
+	if got := folder("Plants/Herbs").name(); got != "Herbs" {
+		t.Errorf("the folder's name is %q", got)
+	}
+}
+
+// TestNotesTreeNestsFoldsAndOpens checks the tree in the window: a note in
+// a folder inside a folder stands further in than its folder, a folder
+// closes over what it holds and opens again, and a press of a note opens
+// it.
+func TestNotesTreeNestsFoldsAndOpens(t *testing.T) {
+	app, _ := startVault(t, map[string]string{"Welcome.md": "Welcome\n", "Plants/Fig.md": "Fig\n", "Plants/Herbs/Basil.md": "Basil\n"}, 1150, 760)
+	row := func(name string) string { return "id:notes-tree >> label:" + name }
+	app.WaitFor(row("Basil"), 10*time.Second)
+	left := func(name string) core.Points { return app.Find(row(name) + " >> text:" + name).Bounds().Origin.X }
+	if plants, herbs, basil := left("Plants"), left("Herbs"), left("Basil"); !(plants < herbs && herbs < basil) {
+		t.Errorf("Plants, Herbs and Basil start at %v, %v and %v: each should stand further in", plants, herbs, basil)
+	}
+	if fig, herbs := left("Fig"), left("Herbs"); fig != herbs {
+		t.Errorf("Fig starts at %v and Herbs at %v: both are in Plants", fig, herbs)
+	}
+	app.Press(row("Herbs") + " >> label:Expand")
+	app.WaitForGone(row("Basil"), 5*time.Second)
+	app.Find(row("Fig"))
+	app.Press(row("Herbs") + " >> label:Expand")
+	app.WaitFor(row("Basil"), 5*time.Second)
+	app.Press(row("Basil"))
+	app.WaitFor("text:Plants/Herbs/Basil.md", 5*time.Second)
 }
 
 func TestCreateAndFindNote(t *testing.T) {

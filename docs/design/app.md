@@ -56,6 +56,8 @@ The default Linux and Lodge app uses the versioned workspace shell, file explore
 
 In the NSGo preview, **Live preview** renders headings, tasks and wiki links in the note. Clicking a line reveals its original Markdown in place. The shared scanner supplies byte ranges, and edits apply to the same document as source mode. Clicking a task changes its marker. Clicking a wiki link resolves the target through notesd. Undo and redo operate on local edits within the current preview. A remote text change clears that history. See [the live-preview design decision](../adr/0039-live-preview-is-replacements-over-the-source.md).
 
+The vault's notes are a tree (`cmd/frostnotes-nsgo/tree.go`): NSGo's `ui.Tree`, in which a folder holds its folders, by name, then its notes, and opens and closes by its chevron or a double press. A row is the kit's `NavLabel`, with a folder's or a note's icon, on the kit's soft rows. A press of a note's row opens it, the open note's row is the chosen one, and a vault's folders start open. notesd lists notes and no folders, so a folder shows because a note is in it or under it. Until 2026-11-24 the notes were a sidebar with a section for each folder's path, which showed no folder inside another (frostyard/frostmail's plan 0016, Phase 5).
+
 The client draws the kit's Frostyard look: Frostyard in the dark appearance and Frostyard light in the light one, with its text in Inter, which the kit bundles. `root` calls `workspaceui.Apply` before it builds a view, and the window's root view is `workspaceui.Frame`. Nothing else of the client's layout or controls changed with the look. On a desktop the vault manager has an Appearance row, the kit's System, Light and Dark choice. A press shows the choice at once and keeps it in the client's storage under `appearance` (`light` or `dark`; no entry is the system's), and a start shows the kept choice (`appearance.go`). The Lodge build has no such row and keeps nothing: Lodge sets its appearance (`app/src/nsgo-lodge.ts`). The look is frostmail's [ADR-0062](https://github.com/frostyard/frostmail/blob/main/docs/adr/0062-give-the-nsgo-client-the-frostyard-look-from-the-shared-kit.md) and [plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md); the kept pictures are [below](#the-nsgo-clients-live-suite).
 
 On Linux, the vault manager creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
@@ -1079,11 +1081,13 @@ live UI tests and pictures of the look, kept before the look changed. The
 pictures now show the kit's Frostyard look
 ([above](#shared-nsgo-editor-preview)).
 
-- **The suite:** 6 workflows (`workspace_test.go`, `vaults_test.go`) and 9
+- **The suite:** 8 workflows (`workspace_test.go`, `vaults_test.go`) and 9
   picture tours (`pictures_test.go`), with the build tags `linux` and
   `integration`. NSGo's `nsgotest` drives the client by label and text.
-  Each test starts a real notesd on temp data; the tours' vault is 6
-  made-up notes written in `pictures_test.go`.
+  Each test starts a real notesd on temp data; the tours' vault is 7
+  made-up notes written in `pictures_test.go`, 1 of them in a folder
+  inside a folder. 1 of the workflows reads no window: it checks the
+  shape `buildTree` gives a list of notes.
 - **Headless,** `make nsgo-check`, a part of `make verify`: `go test -tags
   integration` in `cmd/frostnotes-nsgo`. NSGo models the views, with
   approximate text and no pixels: `app.Screenshot` only logs.
