@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
@@ -63,7 +64,17 @@ type workspace struct {
 	catalogRequest, filesRequest, navigation int
 	// chosen is the notes tree's choice.
 	chosen *ui.Selection
+	// listed says the shown vault's notes have been read, so an empty tree
+	// is a vault with no notes and not one still being read.
+	listed *core.Signal[bool]
+	// settings shows Settings in place of the vault.
+	settings *core.Signal[bool]
+	// contentWidth is the width of the pane under the toolbar.
+	contentWidth *core.Signal[core.Points]
 }
+
+// connected is what connection holds while notesd answers.
+const connected = "Connected"
 
 func root(cx *core.Scope) core.Node {
 	cx.SetTitle("FrostNotes")
@@ -94,10 +105,14 @@ func root(cx *core.Scope) core.Node {
 		preview:    core.NewSignal(cx, false),
 		live:       core.NewSignal(cx, false),
 		appearance: core.NewSignal(cx, appearance),
+		listed:     core.NewSignal(cx, false),
+		settings:   core.NewSignal(cx, false),
+
+		contentWidth: core.NewSignal(cx, core.Points(0)),
 	}
 	w.session.OnChange(func() {
 		if w.session.State() == session.Connected {
-			w.connection.Set("Connected")
+			w.connection.Set(connected)
 			w.loadVaults()
 			return
 		}
@@ -123,32 +138,45 @@ func root(cx *core.Scope) core.Node {
 		}
 	})
 	w.bindNoteActions()
+	w.bindSettingsKey()
 	w.session.Start()
-	explorer := workspaceui.FileExplorer{
-		TreeWidth: 230, Tree: w.notesTree(cx),
-		// Back at the tree, no row is chosen, so a press of the note that
-		// was open opens it again.
-		Preview: w.editor(), HasPreview: w.preview.Get, BackToTree: func() { w.preview.Set(false); w.chosen.Clear() },
-	}
+	// The explorer outlives the views shown in its place, so a look at
+	// Settings leaves the tree, the editor and its history as they were.
+	explorer := core.NewHolder(cx, func(cx *core.Scope) core.Node {
+		return workspaceui.FileExplorer{
+			TreeWidth: 230, Tree: w.notesTree(cx),
+			// Back at the tree, no row is chosen, so a press of the note
+			// that was open opens it again.
+			Preview: w.editor(), HasPreview: w.preview.Get, BackToTree: func() { w.preview.Set(false); w.chosen.Clear() },
+		}
+	})
+	settings := w.settingsView(cx)
 	shell := workspaceui.Shell{
-		Brand: "FrostNotes", Header: []core.Node{core.Text{ContentFunc: w.title, Style: ui.TypeTitle}},
-		Actions:       append(w.vaultActions(), w.noteActions()...),
-		SidebarFooter: []core.Node{core.Text{ContentFunc: w.connectionLabel, Style: ui.TypeCaption.Merge(core.Style{Padding: core.All(12)})}},
+		Brand: "FrostNotes", Header: []core.Node{w.header()}, Actions: []core.Node{w.actions(cx)},
+		SidebarFooter: []core.Node{w.sidebarFoot()},
 		Sections:      w.vaultSections, Selected: func() string { return strconv.FormatInt(w.vault.Get(), 10) },
 		Navigate: func(key string) {
 			id, err := strconv.ParseInt(key, 10, 64)
-			if err == nil && id != w.vault.GetUntracked() {
+			if err != nil {
+				return
+			}
+			// A press of a vault's row leaves Settings, the shown vault's too.
+			w.settings.Set(false)
+			if id != w.vault.GetUntracked() {
 				w.leave(func() { w.selectVault(id) })
 			}
 		},
-		Content: []core.Node{core.Dynamic(func(*core.Scope) core.Node {
+		Content: []core.Node{core.View{Style: ui.FillRest, OnLayout: func(b core.Bounds) { w.contentWidth.Set(b.Size.Width) }, Children: []core.Node{core.Dynamic(func(*core.Scope) core.Node {
+			if settings != nil && w.settings.Get() {
+				return settings
+			}
 			if w.vault.Get() == 0 {
 				if welcome := w.vaultWelcome(); welcome != nil {
 					return welcome
 				}
 			}
-			return explorer
-		})},
+			return explorer.Place()
+		})}}},
 	}
 	return workspaceui.Frame(shell, core.Dynamic(w.notice), core.Dynamic(w.noteDialog))
 }
@@ -165,9 +193,9 @@ func (w *workspace) title() string {
 func (w *workspace) vaultSections() []ui.SidebarSection {
 	section := ui.SidebarSection{Title: "Vaults"}
 	for _, v := range w.vaults.Get() {
-		section.Items = append(section.Items, ui.SidebarItem{ID: strconv.FormatInt(v.ID, 10), Text: v.Name, Icon: lucide.Library})
+		section.Items = append(section.Items, ui.SidebarItem{ID: strconv.FormatInt(v.ID, 10), Text: v.Name, Content: workspaceui.NavLabel{Icon: lucide.Library, Text: v.Name}})
 	}
-	if len(section.Items) == 0 && w.connection.Get() == "Connected" {
+	if len(section.Items) == 0 && w.connection.Get() == connected {
 		section.Note = core.Text{Content: "No vaults available"}
 	}
 	return []ui.SidebarSection{section}
@@ -226,6 +254,7 @@ func (w *workspace) selectVault(id int64) {
 	w.vault.Set(id)
 	w.loadSync()
 	w.files.Set(nil)
+	w.listed.Set(false)
 	w.loadFiles()
 }
 
@@ -303,6 +332,7 @@ func (w *workspace) loadFiles() {
 				return
 			}
 			w.files.Set(fs)
+			w.listed.Set(true)
 		})
 	}()
 }
@@ -345,62 +375,66 @@ func (w *workspace) onEvent(_ int64, ev api.Event) {
 	}
 }
 
+// editor is the pane of the open note: what notesd has to say about it,
+// as a banner, over its text. The note's path, its state and its actions
+// are in the window's toolbar.
 func (w *workspace) editor() core.Node {
 	return core.Dynamic(func(*core.Scope) core.Node {
 		d := w.doc.Get()
 		if d == nil {
-			return workspaceui.Page(core.Text{Content: "Select a note to edit", Style: ui.TypeTitle})
-		}
-		status := func() string {
-			w.revision.Get()
-			if reason := d.ReadOnly(); reason != "" {
-				return reason
-			}
-			return [...]string{"Loading…", "Note is missing", "Saved", "Unsaved changes", "Saving…"}[d.Status()]
+			return workspaceui.EmptyState{Icon: lucide.FileText, Title: "Select a note to edit", Hint: "Choose a note in the tree, or make a new one."}
 		}
 		return core.View{Style: ui.FillRest.Merge(core.Style{Padding: core.All(16), Gap: 10}), Children: []core.Node{
-			workspaceui.Row(core.Text{ContentFunc: func() string { w.revision.Get(); return d.Path() }, Style: ui.TypeTitle}, core.Text{ContentFunc: status, Style: ui.TypeCaption}, ui.Button{TextFunc: func() string {
-				if w.live.Get() {
-					return "Source"
-				}
-				return "Live preview"
-			}, OnPress: func() { w.live.Set(!w.live.GetUntracked()) }}, ui.Button{Text: "Save", Icon: lucide.Save, Disabled: func() bool { w.revision.Get(); return !d.Unsaved() }, OnPress: d.RetryNow}, ui.IconButton{Label: moveNote, Icon: lucide.Pencil, OnPress: func() { w.showAction(moveNote) }}, ui.IconButton{Label: trashNote, Icon: lucide.Trash, OnPress: func() { w.showAction(trashNote) }}),
+			core.Dynamic(func(*core.Scope) core.Node { return w.noteBanner(d) }),
 			core.Show{When: func() bool { w.revision.Get(); return needsRecovery(d) }, Then: func(*core.Scope) core.Node {
 				return ui.Input{Label: "Recovered draft", Multiline: true, Readonly: true, Style: ui.FillRest, DefaultValue: d.Notice().Text}
 			}, Else: func(*core.Scope) core.Node {
-				return core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(*core.Scope) core.Node {
-					return ui.Input{Label: "Markdown source", Multiline: true, NoAutoCorrect: true, Style: ui.FillRest, Value: func() string { w.revision.Get(); return d.Text() }, Disabled: func() bool {
-						w.revision.Get()
-						return !d.Loaded() || d.Status() == notes.StatusMissing || d.ReadOnly() != ""
-					}, OnChange: func(value string) { d.Local(notes.Diff(d.Text(), value)) }}
+				return core.Show{When: func() bool {
+					w.revision.Get()
+					return !d.Loaded() && d.Status() != notes.StatusMissing && d.Notice() == nil
+				}, Then: func(*core.Scope) core.Node {
+					return ui.Skeleton{Lines: 6, Label: "Loading note"}
+				}, Else: func(*core.Scope) core.Node {
+					return core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(*core.Scope) core.Node {
+						return ui.Input{Label: "Markdown source", Multiline: true, NoAutoCorrect: true, Style: ui.FillRest, Value: func() string { w.revision.Get(); return d.Text() }, Disabled: func() bool {
+							w.revision.Get()
+							return !d.Loaded() || d.Status() == notes.StatusMissing || d.ReadOnly() != ""
+						}, OnChange: func(value string) { d.Local(notes.Diff(d.Text(), value)) }}
+					}}
 				}}
 			}},
 		}}
 	})
 }
 
-func (w *workspace) notice(*core.Scope) core.Node {
+// noteBanner is what notesd has to say about the open note, in the tone
+// of what happened, and nothing while it has nothing to say.
+func (w *workspace) noteBanner(d *notes.Document) core.Node {
 	w.revision.Get()
-	if d := w.doc.Get(); d != nil {
-		if n := d.Notice(); n != nil {
-			title, detail := "Could not save", n.Reason
-			switch n.Kind {
-			case notes.NoticeConflict:
-				title = "Edits overlapped"
-				detail = fmt.Sprintf("The overlapping lines from %s are in the note. Your draft is in version %d.", n.By, n.Version)
-			case notes.NoticeRefused:
-				title = "Save base is unavailable"
-				detail = "Copy the recovered draft from the editor before dismissing this message. Dismiss to return to the stored note."
-			case notes.NoticeDeleted:
-				title = "Note deleted"
-			case notes.NoticeLoadFailed:
-				title = "Could not open note"
-			}
-			return workspaceui.Notice{Kind: ui.ToastWarning, Title: title, Detail: detail, OnDismiss: d.Dismiss}
-		}
+	n := d.Notice()
+	if n == nil {
+		return nil
 	}
+	tone, icon, text := workspaceui.Danger, lucide.CircleAlert, "Could not save. "+n.Reason
+	switch n.Kind {
+	case notes.NoticeConflict:
+		tone, icon = workspaceui.Warning, lucide.TriangleAlert
+		text = fmt.Sprintf("Edits overlapped. The overlapping lines from %s are in the note. Your draft is in version %d.", n.By, n.Version)
+	case notes.NoticeRefused:
+		text = "Save base is unavailable. Copy the recovered draft below before dismissing this message. Dismiss to return to the stored note."
+	case notes.NoticeDeleted:
+		tone, icon = workspaceui.Warning, lucide.TriangleAlert
+		text = strings.TrimSpace("Note deleted. " + n.Reason)
+	case notes.NoticeLoadFailed:
+		text = "Could not open note. " + n.Reason
+	}
+	return workspaceui.Banner{Tone: tone, Icon: icon, Text: text, Action: "Dismiss", OnAction: d.Dismiss}
+}
+
+// notice is what went wrong in the app itself, over the window.
+func (w *workspace) notice(*core.Scope) core.Node {
 	if msg := w.problem.Get(); msg != "" {
-		return workspaceui.Notice{Kind: ui.ToastWarning, Title: "Workspace", Detail: msg, OnDismiss: func() { w.problem.Set("") }}
+		return workspaceui.Notice{Kind: ui.ToastError, Title: "Something went wrong", Detail: msg, OnDismiss: func() { w.problem.Set("") }}
 	}
 	return nil
 }

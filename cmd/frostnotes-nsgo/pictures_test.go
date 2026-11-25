@@ -59,12 +59,15 @@ func TestPicturesOfANote(t *testing.T) {
 	app.Press("label:Quince")
 	app.WaitFor("text:Saved", 10*time.Second)
 	app.Screenshot("note-source")
-	app.Press("label:Live preview")
+	app.Press("role:tab Live preview")
 	app.WaitFor("label:Edit line 1", 5*time.Second)
 	app.Screenshot("note-live-preview")
 	app.Press("label:Edit line 9")
 	app.WaitFor("label:Markdown line", 5*time.Second)
 	app.Screenshot("note-live-preview-line")
+	app.Press("label:More")
+	app.WaitFor("label:Restore deleted note", 5*time.Second)
+	app.Screenshot("more-menu")
 }
 
 func TestPicturesOfDialogs(t *testing.T) {
@@ -84,6 +87,7 @@ func TestPicturesOfDialogs(t *testing.T) {
 	app.WaitFor("label:Trash note", 5*time.Second)
 	app.Screenshot("dialog-trash-note")
 	app.Press("label:Cancel")
+	app.Press("label:More")
 	app.Press("label:Restore deleted note")
 	app.WaitFor("label:Deleted note path", 5*time.Second)
 	app.Screenshot("dialog-restore-note")
@@ -110,9 +114,9 @@ func TestPicturesOfVaultSearch(t *testing.T) {
 
 func TestPicturesOfVaults(t *testing.T) {
 	app := pictureWorkspace(t, pictureWidth, false)
-	app.Press("label:Manage vaults")
+	app.Press("label:Settings")
 	app.WaitFor("label:Create new vault", 5*time.Second)
-	app.Screenshot("vault-manager")
+	app.Screenshot("settings")
 	app.Press("label:Join a vault on a hub")
 	app.WaitFor("label:Hub URL", 5*time.Second)
 	app.Type("label:Hub URL", "https://hub.example.test")
@@ -136,29 +140,34 @@ func TestPicturesOfANarrowWindow(t *testing.T) {
 	app.Press("label:Quince")
 	app.WaitFor("text:Saved", 10*time.Second)
 	app.Screenshot("narrow-note")
+	app.Press("label:More")
+	app.WaitFor("label:Show live preview", 5*time.Second)
+	app.Screenshot("narrow-menu")
+	app.Key("Escape")
+	app.WaitForGone("label:Show live preview", 5*time.Second)
 	app.Press("label:Navigation")
 	app.WaitFor("label:Vault", 5*time.Second)
 	app.Screenshot("narrow-navigation")
 }
 
 // The same views in Frostyard, the dark theme: a note in source and in live
-// preview, a dialog with a field, and the vault manager, which holds the
-// choice of appearance.
+// preview, a dialog with a field, and Settings, which holds the choice of
+// appearance.
 func TestPicturesInDark(t *testing.T) {
 	app := pictureWorkspace(t, pictureWidth, true)
 	app.Press("label:Quince")
 	app.WaitFor("text:Saved", 10*time.Second)
 	app.Screenshot("dark-note-source")
-	app.Press("label:Live preview")
+	app.Press("role:tab Live preview")
 	app.WaitFor("label:Edit line 1", 5*time.Second)
 	app.Screenshot("dark-note-live-preview")
 	app.Press("label:Rename or move note")
 	app.WaitFor("label:Destination path", 5*time.Second)
 	app.Screenshot("dark-dialog-move-note")
 	app.Press("label:Cancel")
-	app.Press("label:Manage vaults")
+	app.Press("label:Settings")
 	app.WaitFor("label:Create new vault", 5*time.Second)
-	app.Screenshot("dark-vault-manager")
+	app.Screenshot("dark-settings")
 }
 
 func TestPicturesOfANarrowWindowInDark(t *testing.T) {
