@@ -15,11 +15,10 @@ import (
 // kit part, an NSGo control or a token, and writes no look as a number. It
 // reads the package's own files, not the app.
 //
-// A color and a corner are not written at all. The 2 numbers the lists
-// below allow are those the kit has no token for yet: the editor's inset, which waits
-// for the kit's spacing, and the size of a Markdown heading in live
-// preview, which the kit has no scale for. A file's count there may only go
-// down, and the rule is whole when the list is empty.
+// A color, a corner and a padding are not written at all: a padding takes
+// the kit's spacing. 1 text size is left, the size of a Markdown heading in
+// live preview, which the kit has no scale for. A file's count there may
+// only go down, and the rule is whole when the list is empty.
 func TestNoLiteralLooks(t *testing.T) {
 	never := []struct {
 		what string
@@ -27,13 +26,14 @@ func TestNoLiteralLooks(t *testing.T) {
 	}{
 		{"a color written as a number", regexp.MustCompile(`core\.RGBA?\(|\b0x[0-9a-fA-F]{6,8}\b`)},
 		{"a corner written as a number", regexp.MustCompile(`CornerRadius:\s*[0-9]`)},
+		// A number anywhere in what a padding is built from.
+		{"a padding written as a number", regexp.MustCompile(`Padding:\s*core\.(All|Symmetric|Edges)[({][^)}]*\b[0-9]`)},
 	}
 	counted := []struct {
 		what string
 		re   *regexp.Regexp
 		left map[string]int
 	}{
-		{"paddings", regexp.MustCompile(`Padding:\s*core\.(All|Symmetric|Edges)`), map[string]int{"main.go": 1}},
 		{"text sizes", regexp.MustCompile(`FontSize\s*[:=]|ui\.Text\(.*,\s*[0-9]+,\s*ui\.`), map[string]int{"inline.go": 1}},
 	}
 	dir := filepath.Join(repoRoot(t), "cmd", "frostnotes-nsgo")
@@ -67,6 +67,14 @@ func TestNoLiteralLooks(t *testing.T) {
 				seen[i][name] += len(rule.re.FindAllString(line, -1))
 			}
 		}
+	}
+	for _, bad := range []string{"Padding: core.All(16)", "Padding: core.Edges{Left: core.Points(depth * 12)}"} {
+		if !never[2].re.MatchString(bad) {
+			t.Errorf("the padding rule misses %q", bad)
+		}
+	}
+	if good := "Padding: core.All(workspaceui.SpaceL)"; never[2].re.MatchString(good) {
+		t.Errorf("the padding rule refuses %q", good)
 	}
 	for i, rule := range counted {
 		for name, got := range seen[i] {
