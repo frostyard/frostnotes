@@ -96,7 +96,9 @@ func guardBrowserDraft(cx *core.Scope, dirty func() bool) {
 const ownAppearance = false
 
 // Lodge supplies its own vault catalog and manages the server's filesystem.
-func (w *workspace) vaultActions() []core.Node                 { return nil }
+func (w *workspace) settingsButton() []core.Node               { return nil }
+func (w *workspace) settingsView(*core.Scope) core.Node        { return nil }
+func (w *workspace) bindSettingsKey()                          {}
 func (w *workspace) vaultWelcome() core.Node                   { return nil }
 func (w *workspace) vaultDialog(*core.Scope, string) core.Node { return nil }
 func isVaultAction(string) bool                                { return false }

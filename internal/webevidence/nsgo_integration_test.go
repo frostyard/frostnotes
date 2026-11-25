@@ -19,9 +19,9 @@ func TestNSGoLodgeReconnect(t *testing.T) {
 	b.navigate(w.url + "/notes")
 	b.frame(b.waitFind(`iframe.frame[title="Notes"]`, 30*time.Second))
 	b.await(30*time.Second, "Garden in the NSGo note list", func() bool {
-		return b.truthy(`return [...document.querySelectorAll("[role=button]")].some(el=>el.textContent.trim()==="Garden")`)
+		return b.truthy(`return [...document.querySelectorAll("[role=treeitem]")].some(el=>el.textContent.trim()==="Garden")`)
 	})
-	b.script(nil, `[...document.querySelectorAll("[role=button]")].find(el=>el.textContent.trim()==="Garden").click()`)
+	b.script(nil, `[...document.querySelectorAll("[role=treeitem]")].find(el=>el.textContent.trim()==="Garden").click()`)
 	waitText := func(want string) {
 		t.Helper()
 		b.await(15*time.Second, "open editor to show "+want, func() bool {
@@ -213,6 +213,8 @@ func TestNSGoLodgeManage(t *testing.T) {
 	click("Move to trash")
 	click("Trash note")
 	b.await(8*time.Second, "trashed editor closed", func() bool { return b.truthy(`return document.body.innerText.includes("Select a note to edit")`) })
+	// The toolbar's menu holds what a person seldom needs.
+	click("More")
 	click("Restore deleted note")
 	click("Deleted note path")
 	b.keys("Plants/Orchard.md")

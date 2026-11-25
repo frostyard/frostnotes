@@ -21,36 +21,94 @@ import (
 )
 
 const (
-	manageVaults = "Manage vaults"
-	createVault  = "Create new vault"
-	openVault    = "Open folder as vault"
-	joinVault    = "Join a vault on a hub"
-	linkVault    = "Sync this vault with a hub"
-	pairAgain    = "Pair again"
-	forgetVault  = "Remove vault from list"
+	settingsLabel = "Settings"
+
+	createVault = "Create new vault"
+	openVault   = "Open folder as vault"
+	joinVault   = "Join a vault on a hub"
+	linkVault   = "Sync this vault with a hub"
+	pairAgain   = "Pair again"
+	forgetVault = "Remove vault from list"
 )
 
 func isVaultAction(a string) bool {
 	switch a {
-	case manageVaults, createVault, openVault, joinVault, linkVault, pairAgain, forgetVault:
+	case createVault, openVault, joinVault, linkVault, pairAgain, forgetVault:
 		return true
 	}
 	return false
 }
 
-func (w *workspace) vaultActions() []core.Node {
-	return []core.Node{ui.IconButton{Label: manageVaults, Icon: lucide.Library, OnPress: func() { w.action.Set(manageVaults) }}}
+// settingsButton is the way to Settings, at the navigation's foot.
+func (w *workspace) settingsButton() []core.Node {
+	return []core.Node{ui.IconButton{Label: settingsLabel, Icon: lucide.Settings, Selected: w.settings.Get, OnPress: func() { w.settings.Set(!w.settings.GetUntracked()) }}}
 }
-func (w *workspace) vaultButtons() []core.Node {
-	var nodes []core.Node
-	for _, action := range []string{createVault, openVault, joinVault} {
-		nodes = append(nodes, ui.Button{Text: action, OnPress: func() { w.action.Set(action) }})
-	}
-	return nodes
+
+// bindSettingsKey binds mod+, to Settings (the kit's standard for an app,
+// rule 7).
+func (w *workspace) bindSettingsKey() {
+	w.cx.OnKey("mod+,", func() { w.settings.Set(true) })
 }
+
+// vaultWelcome is what a device with no vault shows: the 3 ways to get
+// one, the first of them the pane's one filled button.
 func (w *workspace) vaultWelcome() core.Node {
-	return workspaceui.Page(append([]core.Node{core.Text{Content: "Open a vault", Style: ui.TypeTitle}}, w.vaultButtons()...)...)
+	start := func(action string, variant ui.ButtonVariant) core.Node {
+		return ui.Button{Text: action, Variant: variant, OnPress: func() { w.action.Set(action) }}
+	}
+	return core.Dynamic(func(cx *core.Scope) core.Node {
+		colors := ui.ColorsOf(cx)
+		return core.View{TestID: "welcome", Style: ui.FillRest.Merge(core.Style{AlignItems: core.AlignCenter, JustifyContent: core.JustifyCenter, Gap: 8}), Children: []core.Node{
+			ui.Icon(lucide.Library, 32, colors.Faint),
+			core.Text{Content: "Open a vault", Style: ui.TypeTitle},
+			core.Text{Content: "A vault is a folder of Markdown notes.", Style: ui.TypeCaption, StyleFunc: ui.Colored(colors.Muted)},
+			core.View{Style: core.Style{Margin: core.Edges{Top: 8}}, Children: []core.Node{workspaceui.Row(start(createVault, ui.ButtonPrimary), start(openVault, ui.ButtonSecondary), start(joinVault, ui.ButtonSecondary))}}}}
+	})
 }
+
+// settingsView is Settings: NSGo's settings view, shown in place of the
+// vault. Its rows start the vault's forms, which are dialogs.
+func (w *workspace) settingsView(cx *core.Scope) core.Node {
+	background, hasBackground := system.GetBackground(os.Getenv)
+	keep := core.NewSignal(cx, background.KeepRunning)
+	category := core.NewSignal(cx, "settings")
+	narrow := func() bool { return cx.Env().Window().Width < 720 }
+	start := func(text, action string) core.Node {
+		return ui.Button{Text: text, Label: action, Variant: ui.ButtonSecondary, Size: ui.SizeSmall, OnPress: func() { w.action.Set(action) }}
+	}
+	return core.Dynamic(func(*core.Scope) core.Node {
+		groups := []ui.SettingsGroup{{ID: "vaults", Title: "Vaults", Items: []ui.SettingsItem{
+			{ID: "create", Title: "New vault", Description: "Make a folder on this device for a new vault.", Control: start("Create…", createVault)},
+			{ID: "open", Title: "Existing folder", Description: "Use a folder of Markdown files as a vault.", Control: start("Open…", openVault)},
+			{ID: "join", Title: "Vault on a hub", Description: "Pair this device with a hub and take a vault from it.", Control: start("Join…", joinVault)},
+		}}}
+		if w.vault.Get() != 0 {
+			sync := ui.SettingsItem{ID: "sync", Title: "Sync", Description: "This vault is on this device alone.", Control: start("Set up…", linkVault)}
+			if s := w.syncInfo.Get(); s != nil && s.State == api.SyncStateRevoked {
+				sync.Description, sync.Control = "The hub no longer accepts this device.", start("Pair again…", pairAgain)
+			} else if s != nil {
+				sync.Description, sync.Control = fmt.Sprintf("%s on %s", s.HubVault, s.URL), nil
+			}
+			groups = append(groups, ui.SettingsGroup{ID: "vault", Title: w.title(), Items: []ui.SettingsItem{sync,
+				{ID: "forget", Title: "Remove from this device", Description: "Takes the vault off this device’s list. Its folder and files stay on disk.", Control: start("Remove…", forgetVault)}}})
+		}
+		device := []ui.SettingsItem{{ID: "appearance", Title: "Appearance", Description: "The window’s light or dark look.", Control: workspaceui.AppearanceChoice{Value: w.appearance.Get, OnChange: w.saveAppearance}}}
+		if hasBackground {
+			device = append(device, ui.SettingsItem{ID: "background", Title: "Keep syncing when no window is open", Control: ui.Switch{Label: "Keep syncing when no window is open", Checked: keep.Get, OnChange: func(on bool) {
+				b, err := system.SetBackground(os.Getenv, on)
+				if err != nil {
+					w.problem.Set(err.Error())
+					return
+				}
+				keep.Set(b.KeepRunning)
+			}}})
+		}
+		groups = append(groups, ui.SettingsGroup{ID: "device", Title: "This device", Items: device})
+		return ui.Settings{TestID: "settings", Title: settingsLabel, Category: category, Narrow: narrow, HideSidebar: true, HideSearch: true, HideHeading: true,
+			Categories: []ui.SettingsCategory{{ID: "settings", Title: settingsLabel, Groups: groups}}}
+	})
+}
+
 func (w *workspace) connectionLabel() string {
 	conn := w.connection.Get()
 	if s := w.syncInfo.Get(); conn == "Connected" && s != nil {
@@ -89,31 +147,7 @@ func (w *workspace) vaultDialog(cx *core.Scope, action string) core.Node {
 	if action == forgetVault {
 		return w.forgetVaultDialog(cx)
 	}
-	if action != manageVaults {
-		return w.vaultForm(cx, action)
-	}
-	nodes := w.vaultButtons()
-	if w.vault.Get() != 0 {
-		nodes = append(nodes, ui.Button{Text: forgetVault, OnPress: func() { w.action.Set(forgetVault) }})
-		if s := w.syncInfo.Get(); s == nil {
-			nodes = append(nodes, ui.Button{Text: linkVault, OnPress: func() { w.action.Set(linkVault) }})
-		} else if s.State == api.SyncStateRevoked {
-			nodes = append(nodes, ui.Button{Text: pairAgain, OnPress: func() { w.action.Set(pairAgain) }})
-		}
-	}
-	if b, ok := system.GetBackground(os.Getenv); ok {
-		keep := core.NewSignal(cx, b.KeepRunning)
-		nodes = append(nodes, ui.Checkbox{Text: "Keep syncing when no window is open", Checked: keep.Get, OnChange: func(on bool) {
-			b, err := system.SetBackground(os.Getenv, on)
-			if err != nil {
-				w.problem.Set(err.Error())
-				return
-			}
-			keep.Set(b.KeepRunning)
-		}})
-	}
-	nodes = append(nodes, w.appearanceRow())
-	return ui.Dialog{Title: manageVaults, Open: func() bool { return true }, OnOpenChange: w.closeDialog, Children: nodes}
+	return w.vaultForm(cx, action)
 }
 
 func (w *workspace) vaultForm(cx *core.Scope, action string) core.Node {
@@ -132,35 +166,38 @@ func (w *workspace) vaultForm(cx *core.Scope, action string) core.Node {
 		}
 	}
 	var fields []core.Node
-	field := func(label string, s *core.Signal[string]) {
-		fields = append(fields, ui.Input{Label: label, Placeholder: label, Value: s.Get, OnChange: s.Set, Disabled: busy.Get})
+	add := func(label string, s *core.Signal[string]) {
+		fields = append(fields, field(label, label, s, busy.Get, nil))
 	}
 	if pairing {
-		field("Hub URL", addr)
-		field("Device name (optional)", device)
+		add("Hub URL", addr)
+		add("Device name (optional)", device)
 	}
 	if action != openVault && action != pairAgain {
 		label := "Vault name"
 		if pairing {
 			label = "Hub vault name"
 		}
-		field(label, name)
+		add(label, name)
 	}
 	if folder {
 		label := "Parent folder"
 		if action == openVault {
 			label = "Vault folder"
 		}
-		field(label, location)
-		fields = append(fields, ui.Button{Text: "Browse…", Disabled: busy.Get, OnPress: func() {
-			cx.PickDirectories(core.PickDirectoriesOptions{Title: label}, func(d []core.Directory, err error) {
-				if err != nil {
-					problem.Set(err.Error())
-				} else if len(d) > 0 {
-					location.Set(d[0].Path)
-				}
-			})
-		}})
+		// The folder's field and the button that picks it share a row.
+		path := field(label, label, location, busy.Get, nil)
+		path.Style = core.Style{FlexGrow: 1, FlexShrink: 1, MinWidth: core.Pt(0)}
+		fields = append(fields, core.View{Style: core.Style{Direction: core.Row, AlignItems: core.AlignCenter, Gap: 8}, Children: []core.Node{path,
+			ui.Button{Text: "Browse…", Variant: ui.ButtonSecondary, Disabled: busy.Get, OnPress: func() {
+				cx.PickDirectories(core.PickDirectoriesOptions{Title: label}, func(d []core.Directory, err error) {
+					if err != nil {
+						problem.Set(err.Error())
+					} else if len(d) > 0 {
+						location.Set(d[0].Path)
+					}
+				})
+			}}}})
 	}
 	submit := func() {
 		c := w.session.Client()
@@ -229,6 +266,8 @@ func (w *workspace) vaultForm(cx *core.Scope, action string) core.Node {
 				}
 				w.action.Set("")
 				if v != nil {
+					// The new vault is what the window shows next, not Settings.
+					w.settings.Set(false)
 					w.leave(func() { w.selectVault(v.ID); w.loadVaults() })
 				} else {
 					w.loadSync()
@@ -236,8 +275,16 @@ func (w *workspace) vaultForm(cx *core.Scope, action string) core.Node {
 			})
 		}()
 	}
-	fields = append(fields, core.Text{ContentFunc: status.Get}, core.Text{ContentFunc: problem.Get})
-	return ui.Dialog{Open: func() bool { return true }, Title: action, OnOpenChange: w.closeDialog, Children: fields, Footer: []core.Node{ui.Button{Text: "Cancel", OnPress: func() { w.action.Set("") }}, ui.Button{Text: "Continue", Disabled: busy.Get, OnPress: submit}}}
+	// What the pairing waits for, such as the code to approve on the hub.
+	fields = append(fields, core.Dynamic(func(*core.Scope) core.Node {
+		if text := status.Get(); text != "" {
+			return workspaceui.Banner{Tone: workspaceui.Accent, Icon: lucide.Info, Text: text}
+		}
+		return nil
+	}))
+	// A pairing in progress can be cancelled, so busy does not hold the
+	// dialog open.
+	return w.form(cx, form{title: action, fields: fields, problem: problem.Get, ready: func() bool { return !busy.Get() }, confirm: "Continue", submit: submit})
 }
 
 func (w *workspace) forgetVaultDialog(cx *core.Scope) core.Node {
@@ -249,30 +296,25 @@ func (w *workspace) forgetVaultDialog(cx *core.Scope) core.Node {
 			break
 		}
 	}
-	busy := core.NewSignal(cx, false)
-	problem := core.NewSignal(cx, "")
 	remove := func() {
 		c := w.session.Client()
-		if c == nil || id == 0 || busy.GetUntracked() {
+		if c == nil || id == 0 {
 			return
 		}
-		busy.Set(true)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			err := c.Vault().Remove(ctx, &api.VaultRemoveParams{ID: id})
-			cx.Post(func() {
+			w.cx.Post(func() {
 				if err != nil {
-					busy.Set(false)
-					problem.Set(err.Error())
+					w.problem.Set(err.Error())
 					return
 				}
-				w.action.Set("")
 				w.loadVaults()
 			})
 		}()
 	}
-	return ui.Dialog{Open: func() bool { return true }, Title: forgetVault, Description: fmt.Sprintf("Remove %q from this device’s vault list? Its folder and files stay on disk.", name), OnOpenChange: w.closeDialog, Children: []core.Node{core.Text{ContentFunc: problem.Get}}, Footer: []core.Node{ui.Button{Text: "Cancel", OnPress: func() { w.action.Set("") }}, ui.Button{Text: "Remove", Disabled: busy.Get, OnPress: func() { w.leave(remove) }}}}
+	return w.destroy(cx, fmt.Sprintf("Remove %q from this device?", name), "The vault leaves this device’s list. Its folder and files stay on disk.", "Remove vault", func() { w.leave(remove) })
 }
 
 func desktopLifetime() func() {

@@ -152,7 +152,7 @@ func startVault(t *testing.T, files map[string]string, width, height core.Points
 // device.
 func TestAppearanceChoiceIsKept(t *testing.T) {
 	app, _ := startWorkspace(t)
-	app.Press("label:Manage vaults")
+	app.Press("label:Settings")
 	app.WaitFor("role:tab Dark", 5*time.Second)
 	app.Press("role:tab Dark")
 	if app.Appearance != core.AppearanceDark {
@@ -174,7 +174,7 @@ func TestKeptAppearanceShowsAtStart(t *testing.T) {
 	if app.Appearance != core.AppearanceLight {
 		t.Fatalf("the app asked for appearance %v at its start, want light", app.Appearance)
 	}
-	app.Press("label:Manage vaults")
+	app.Press("label:Settings")
 	app.WaitFor("role:tab Light", 5*time.Second)
 	if !app.Find("role:tab Light").Props.Selected {
 		t.Fatalf("the choice does not show Light as chosen\n%s", app.Dump())
@@ -195,7 +195,7 @@ func TestSwitchNoteDuringAutosave(t *testing.T) {
 	}
 	app.Clear(source)
 	typeLines(app, source, "# Garden 🌱\n- [ ] prune\nSee [[First|orchard]].\n```\n- [ ] literal\n```\n")
-	app.Press("label:Live preview")
+	app.Press("role:tab Live preview")
 	app.WaitFor("label:Edit line 1", time.Second)
 	app.Press("label:Task on line 2")
 	app.Press("label:Edit line 2")
@@ -283,6 +283,98 @@ func TestNotesTreeNestsFoldsAndOpens(t *testing.T) {
 	app.WaitFor("text:Plants/Herbs/Basil.md", 5*time.Second)
 }
 
+// TestToolbarHoldsTheNotesActions checks the window's toolbar: the open
+// note's path and state stand under the vault's name, the note's actions
+// are dim until a note is open, and New note is there with no note.
+func TestToolbarHoldsTheNotesActions(t *testing.T) {
+	app, _ := startWorkspace(t)
+	note := []string{"label:Save", "label:Rename or move note", "label:Move to trash"}
+	for _, sel := range note {
+		if app.Enabled(sel) {
+			t.Errorf("%s can be pressed with no note open", sel)
+		}
+	}
+	for _, sel := range []string{"label:New note", "label:Quick open", "label:Search vault", "role:tab Source", "role:tab Live preview", "label:More"} {
+		if !app.Enabled(sel) {
+			t.Errorf("%s cannot be pressed with a vault shown", sel)
+		}
+	}
+	app.Press("label:First")
+	app.WaitFor("text:First.md · Saved", 10*time.Second)
+	if app.Enabled("label:Save") {
+		t.Error("Save can be pressed on a saved note")
+	}
+	for _, sel := range note[1:] {
+		if !app.Enabled(sel) {
+			t.Errorf("%s cannot be pressed with a note open", sel)
+		}
+	}
+	app.Type("label:Markdown source", "more")
+	app.WaitUntil(5*time.Second, func() bool { return app.Enabled("label:Save") || app.Exists("text:First.md · Saved") })
+	// The actions a person seldom needs are in the menu.
+	app.Press("label:More")
+	app.WaitFor("label:Restore deleted note", 5*time.Second)
+	app.Find("label:Refresh vaults and notes")
+}
+
+// TestNarrowWindowKeepsTheActionsInOneMenu checks the toolbar of a window
+// with no room for the buttons: New note stays, and one menu holds the
+// rest, the editor's mode with them.
+func TestNarrowWindowKeepsTheActionsInOneMenu(t *testing.T) {
+	app, _ := startVault(t, map[string]string{"First.md": "First\n"}, 600, 760)
+	app.WaitFor("label:First", 10*time.Second)
+	app.Find("label:New note")
+	for _, sel := range []string{"role:tab Live preview", "label:Quick open", "label:Move to trash"} {
+		if app.Exists(sel) {
+			t.Errorf("%s is in the toolbar of a window 600 wide\n%s", sel, app.Dump())
+		}
+	}
+	app.Press("label:First")
+	app.WaitFor("text:First.md · Saved", 10*time.Second)
+	app.Press("label:More")
+	for _, item := range []string{"Save", "Rename or move note", "Move to trash", "Quick open", "Search vault", "Restore deleted note", "Refresh vaults and notes"} {
+		app.WaitFor("label:"+item, 5*time.Second)
+	}
+	app.Press("label:Show live preview")
+	app.WaitFor("label:Edit line 1", 5*time.Second)
+	app.Press("label:More")
+	app.WaitFor("label:Show source", 5*time.Second)
+}
+
+// TestSettingsTakesTheVaultsPlaceAndGivesItBack checks Settings: the gear
+// at the navigation's foot and mod+, show it in place of the vault, and
+// Done gives the vault back with its note still open.
+func TestSettingsTakesTheVaultsPlaceAndGivesItBack(t *testing.T) {
+	app, _ := startWorkspace(t)
+	app.Press("label:First")
+	app.WaitFor("text:First.md · Saved", 10*time.Second)
+	app.Press("label:Settings")
+	app.WaitFor("id:settings", 5*time.Second)
+	for _, sel := range []string{"label:Create new vault", "label:Open folder as vault", "label:Join a vault on a hub", "label:Sync this vault with a hub", "label:Remove vault from list", "role:tab Dark"} {
+		app.Find(sel)
+	}
+	if app.Exists("id:notes-tree") || app.Exists("label:New note") {
+		t.Errorf("the vault or its toolbar shows with Settings\n%s", app.Dump())
+	}
+	app.Press("label:Close settings")
+	app.WaitFor("id:notes-tree", 5*time.Second)
+	if got := app.Find("label:Markdown source").Text; got != "First\n" {
+		t.Errorf("after Settings the editor holds %q, want the open note", got)
+	}
+	app.Key("mod+,")
+	app.WaitFor("id:settings", 5*time.Second)
+	// A press of the vault's row leaves Settings.
+	app.Press("label:Vault")
+	app.WaitFor("id:notes-tree", 5*time.Second)
+	// Removing a vault asks in an alert, which names it.
+	app.Press("label:Settings")
+	app.Press("label:Remove vault from list")
+	app.WaitFor(`text:Remove "Vault" from this device?`, 5*time.Second)
+	app.Press("label:Cancel")
+	app.WaitForGone("label:Remove vault", 5*time.Second)
+	app.Find("id:settings")
+}
+
 func TestCreateAndFindNote(t *testing.T) {
 	app, vault := startWorkspace(t)
 	app.Press("label:New note")
@@ -344,7 +436,10 @@ func TestManageNotes(t *testing.T) {
 	app.WaitFor("text:Plants/Renamed.md", 5*time.Second)
 	app.Type(field, "+latest")
 	app.Press("label:Move to trash")
+	// The trash asks in an alert, which names the note.
+	app.WaitFor(`text:Move "Plants/Renamed.md" to the trash?`, 5*time.Second)
 	app.Press("label:Cancel")
+	app.WaitForGone("label:Trash note", 5*time.Second)
 	app.Press("label:Move to trash")
 	app.Press("label:Trash note")
 	app.WaitFor("text:Select a note to edit", 5*time.Second)
@@ -353,6 +448,7 @@ func TestManageNotes(t *testing.T) {
 			t.Fatalf("%s after trash: %v", p, err)
 		}
 	}
+	app.Press("label:More")
 	app.Press("label:Restore deleted note")
 	app.Type("label:Deleted note path", "Plants/Renamed.md")
 	app.Press("label:Restore")
@@ -361,4 +457,24 @@ func TestManageNotes(t *testing.T) {
 	if err := restoreDeleted(t.Context(), c, id, "Plants/Renamed.md"); err == nil {
 		t.Fatal("restored over a live note")
 	}
+}
+
+// TestEscapeLeavesAForm checks that Escape closes a form whose field has
+// the keyboard, and the alert that asks before the trash.
+func TestEscapeLeavesAForm(t *testing.T) {
+	app, _ := startWorkspace(t)
+	app.Press("label:First")
+	app.WaitFor("text:First.md · Saved", 10*time.Second)
+	for _, form := range [][2]string{{"label:New note", "label:Note path"}, {"label:Rename or move note", "label:Destination path"}} {
+		app.Press(form[0])
+		app.WaitFor(form[1], 5*time.Second)
+		app.Focus(form[1])
+		app.Key("Escape")
+		app.WaitForGone(form[1], 5*time.Second)
+	}
+	app.Press("label:Move to trash")
+	app.WaitFor("label:Trash note", 5*time.Second)
+	app.Key("Escape")
+	app.WaitForGone("label:Trash note", 5*time.Second)
+	app.Find("text:First.md · Saved")
 }

@@ -179,5 +179,12 @@ func (w *workspace) notesTree(cx *core.Scope) core.Node {
 				return nil
 			})
 		},
-		Empty: workspaceui.EmptyState{Icon: lucide.FileText, Title: "No notes yet", Hint: "New note adds the first."}}
+		// An empty tree is a vault with no notes only once its notes have
+		// been read.
+		Empty: core.Dynamic(func(*core.Scope) core.Node {
+			if !w.listed.Get() {
+				return ui.Skeleton{Lines: 4, Label: "Loading notes"}
+			}
+			return workspaceui.EmptyState{Icon: lucide.FileText, Title: "No notes yet", Hint: "New note adds the first."}
+		})}
 }

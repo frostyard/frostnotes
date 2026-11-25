@@ -58,9 +58,22 @@ In the NSGo preview, **Live preview** renders headings, tasks and wiki links in 
 
 The vault's notes are a tree (`cmd/frostnotes-nsgo/tree.go`): NSGo's `ui.Tree`, in which a folder holds its folders, by name, then its notes, and opens and closes by its chevron or a double press. A row is the kit's `NavLabel`, with a folder's or a note's icon, on the kit's soft rows. A press of a note's row opens it, the open note's row is the chosen one, and a vault's folders start open. notesd lists notes and no folders, so a folder shows because a note is in it or under it. Until 2026-11-24 the notes were a sidebar with a section for each folder's path, which showed no folder inside another (frostyard/frostmail's plan 0016, Phase 5).
 
-The client draws the kit's Frostyard look: Frostyard in the dark appearance and Frostyard light in the light one, with its text in Inter, which the kit bundles. `root` calls `workspaceui.Apply` before it builds a view, and the window's root view is `workspaceui.Frame`. Nothing else of the client's layout or controls changed with the look. On a desktop the vault manager has an Appearance row, the kit's System, Light and Dark choice. A press shows the choice at once and keeps it in the client's storage under `appearance` (`light` or `dark`; no entry is the system's), and a start shows the kept choice (`appearance.go`). The Lodge build has no such row and keeps nothing: Lodge sets its appearance (`app/src/nsgo-lodge.ts`). The look is frostmail's [ADR-0062](https://github.com/frostyard/frostmail/blob/main/docs/adr/0062-give-the-nsgo-client-the-frostyard-look-from-the-shared-kit.md) and [plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md); the kept pictures are [below](#the-nsgo-clients-live-suite).
+The client draws the kit's Frostyard look: Frostyard in the dark appearance and Frostyard light in the light one, with its text in Inter, which the kit bundles. `root` calls `workspaceui.Apply` before it builds a view, and the window's root view is `workspaceui.Frame`. On a desktop Settings has an Appearance row, the kit's System, Light and Dark choice. A press shows the choice at once and keeps it in the client's storage under `appearance` (`light` or `dark`; no entry is the system's), and a start shows the kept choice (`appearance.go`). The Lodge build has no such row and keeps nothing: Lodge sets its appearance (`app/src/nsgo-lodge.ts`). The look is frostmail's [ADR-0062](https://github.com/frostyard/frostmail/blob/main/docs/adr/0062-give-the-nsgo-client-the-frostyard-look-from-the-shared-kit.md) and [plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md); the kept pictures are [below](#the-nsgo-clients-live-suite).
 
-On Linux, the vault manager creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
+The client keeps to the kit's standard for an app (frostui's `docs/specs/workspaceui.md`; frostmail's plan 0016, Phase 5), in these places:
+
+- **The toolbar** (`shell.go`). The window's toolbar holds the vault's name over the open note's path and state, New note, which is the window's one filled button, the editor's 2 modes as a segmented control, the note's actions (Save, Rename or move note, Move to trash) and the vault's (Quick open, Search vault) as icon buttons, and a More menu with Restore deleted note and Refresh vaults and notes. The note's actions are dim with no note open. Where the pane under the toolbar is under 660 wide, or the window under 720, New note is an icon button and one menu holds every other action, the editor's mode with them. Until 2026-11-24 the note's path, state and actions were a row over the editor, each of its buttons filled.
+- **The editor's pane** (`main.go`). What notesd has to say about the open note (overlapping edits, a refused save, a deletion, a failed load) is the kit's `Banner` over the note's text, in the tone of what happened, with Dismiss. A note still loading is NSGo's skeleton, and a pane with no note the kit's `EmptyState`. What goes wrong in the app itself is the kit's `Notice` over the window, in the danger tone.
+- **Dialogs** (`dialogs.go`). A form (New note, Rename or move note, Restore deleted note, and the vault forms) is NSGo's dialog on the kit's panel: Cancel, quiet and first, then the one filled button, and what went wrong as a `Banner` in the danger tone. Moving a note to the trash and removing a vault ask in NSGo's alert dialog, which names the note or the vault, with the action in the danger variant. The alert closes as its action starts, so a failure of the action shows over the window.
+- **Settings** (`vaults_native.go`) is NSGo's settings view, shown in place of the vault by the gear at the navigation's foot or mod+, and left by Done or a press of a vault's row. Its rows start the vault forms, show the shown vault's sync, and hold the device's choices. The tree and the editor are kept while it shows (`core.NewHolder`), so the open note and its undo history are there after it. Until 2026-11-24 this was a dialog, Manage vaults, of filled buttons. The Lodge build has no Settings.
+- **The navigation's foot** is the kit's `ConnectionItem`: a dot, green while notesd answers, and the connection's line.
+- **States.** The tree shows a skeleton until the vault's notes have been read, then its notes or the kit's `EmptyState`.
+- **Keys.** mod+K and mod+O are Quick open, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
+- **No look written as a number** (`TestNoLiteralLooks`), but 2 the kit has no token for yet: the editor's inset, and a Markdown heading's size in live preview.
+
+Not done of the standard: the window's size, place and pane widths are not kept (rule 8), and nothing answers mod+F.
+
+On Linux, Settings creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
 
 The Lodge bundle starts the existing Lodge client handshake before mounting NSGo, follows the shell theme, and uses the same-origin notes API. Its config is revalidated separately from the immutable runtime assets. The loopback Lodge fixture exercises browser admission, offline editing, and conflict recovery over this route. [Run the Lodge evidence](../development.md#run-the-preview-inside-lodge)
 
@@ -1124,14 +1137,14 @@ pictures now show the kit's Frostyard look
     steps there.
 
   No test skips on a target.
-- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 22 PNGs,
-  1160 by 760 and, for a narrow window, 600 by 760. 17 are in Frostyard
+- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 24 PNGs,
+  1160 by 760 and, for a narrow window, 600 by 760. 19 are in Frostyard
   light: no note selected, a note in source and in live preview, a line
-  under edit, the 4 note dialogs, quick open with and without a query,
-  vault search, the vault manager and its join form, a notesd with no
-  vault, and the narrow tree, note and navigation. 5, named `dark-`, are
-  in Frostyard: a note in source and in live preview, the dialog that
-  moves a note, the vault manager and the narrow note.
+  under edit, the More menu, the 4 note dialogs, quick open with and
+  without a query, vault search, Settings and the join form, a notesd
+  with no vault, and the narrow tree, note, menu and navigation. 5, named
+  `dark-`, are in Frostyard: a note in source and in live preview, the
+  dialog that moves a note, Settings and the narrow note.
   `make nsgo-pictures` takes them again. A change of the look commits its
   changed pictures. No test compares pixels.
   - The look they show, read from the pictures of 2026-11-24. Light: the

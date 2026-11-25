@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostui/workspaceui"
 	"github.com/nsgo-dev/nsgo/base"
 	"github.com/nsgo-dev/nsgo/core"
-	"github.com/nsgo-dev/nsgo/icons/lucide"
 	"github.com/nsgo-dev/nsgo/ui"
 )
 
@@ -23,16 +23,14 @@ func (w *workspace) showAction(action string) {
 		w.action.Set(action)
 	}
 }
+
+// bindNoteActions binds the app's keys (the kit's standard for an app,
+// rule 7): mod+K the palette, which here is Quick open, and mod+N the new
+// note. mod+O stays Quick open's older key.
 func (w *workspace) bindNoteActions() {
-	for key, action := range map[string]string{"mod+n": newNote, "mod+o": quickOpen, "mod+shift+f": vaultSearch} {
+	for key, action := range map[string]string{"mod+n": newNote, "mod+k": quickOpen, "mod+o": quickOpen, "mod+shift+f": vaultSearch} {
 		w.cx.OnKey(key, func() { w.showAction(action) })
 	}
-}
-func (w *workspace) noteActions() []core.Node {
-	button := func(action string, icon func() *core.SVG) core.Node {
-		return ui.IconButton{Label: action, Icon: icon, Disabled: func() bool { return w.vault.Get() == 0 }, OnPress: func() { w.showAction(action) }}
-	}
-	return []core.Node{button(newNote, lucide.FilePlus), button(quickOpen, lucide.FolderOpen), button(vaultSearch, lucide.Search), button(restoreNote, lucide.ArchiveRestore), ui.IconButton{Label: "Refresh vaults and notes", Icon: lucide.RefreshCw, OnPress: w.loadVaults}}
 }
 func (w *workspace) noteDialog(cx *core.Scope) core.Node {
 	action := w.action.Get()
@@ -97,10 +95,10 @@ func (w *workspace) createDialog(cx *core.Scope) core.Node {
 			})
 		}()
 	}
-	return ui.Dialog{Open: func() bool { return true }, Title: newNote, OnOpenChange: w.closeDialog, Description: "Enter a name or a path relative to this vault.", Children: []core.Node{
-		ui.Input{Label: "Note path", Placeholder: "Folder/Note.md", AutoFocus: true, Value: name.Get, OnChange: name.Set, OnSubmit: func(string) { create() }},
-		core.Text{ContentFunc: problem.Get, Style: ui.TypeCaption},
-	}, Footer: []core.Node{ui.Button{Text: "Cancel", OnPress: func() { w.action.Set("") }}, ui.Button{Text: "Create", OnPress: create, Disabled: func() bool { return busy.Get() || strings.TrimSpace(name.Get()) == "" }}}}
+	path := field("Note path", "Folder/Note.md", name, nil, create)
+	path.AutoFocus = true
+	return w.form(cx, form{title: newNote, detail: "Enter a name or a path relative to this vault.", fields: []core.Node{path},
+		problem: problem.Get, busy: busy.Get, ready: func() bool { return strings.TrimSpace(name.Get()) != "" }, confirm: "Create", submit: create})
 }
 
 func (w *workspace) findDialog(cx *core.Scope, action string) core.Node {
@@ -173,5 +171,5 @@ func (w *workspace) findDialog(cx *core.Scope, action string) core.Node {
 			})
 		})
 	}
-	return ui.CommandDialog{Open: func() bool { return true }, OnOpenChange: w.closeDialog, Command: pick}
+	return ui.CommandDialog{Style: core.Style{Background: workspaceui.ColorsOf(cx).Panel()}, Open: func() bool { return true }, OnOpenChange: w.closeDialog, Command: pick}
 }
