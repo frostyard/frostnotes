@@ -67,8 +67,10 @@ type workspace struct {
 	// listed says the shown vault's notes have been read, so an empty tree
 	// is a vault with no notes and not one still being read.
 	listed *core.Signal[bool]
-	// settings shows Settings in place of the vault.
-	settings *core.Signal[bool]
+	// settings shows Settings in place of the vault, where the app has
+	// Settings: hasSettings.
+	settings    *core.Signal[bool]
+	hasSettings bool
 	// contentWidth is the width of the pane under the toolbar.
 	contentWidth *core.Signal[core.Points]
 }
@@ -151,6 +153,7 @@ func root(cx *core.Scope) core.Node {
 		}
 	})
 	settings := w.settingsView(cx)
+	w.hasSettings = settings != nil
 	shell := workspaceui.Shell{
 		Brand: "FrostNotes", Header: []core.Node{w.header()}, Actions: []core.Node{w.actions(cx)},
 		SidebarFooter: []core.Node{w.sidebarFoot()},
