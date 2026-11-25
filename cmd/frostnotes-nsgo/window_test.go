@@ -13,6 +13,12 @@ import (
 	"github.com/nsgo-dev/nsgo/nsgotest"
 )
 
+// windowKey is where the kit keeps the window (workspaceui.KeepWindow),
+// and keptWindow what it keeps there.
+const windowKey = "window"
+
+type keptWindow struct{ Width, Height core.Points }
+
 // desktopWindow is a desktop's environment, where the window is the app's
 // to keep.
 var desktopWindow = nsgotest.Environment(core.Environment{OS: "linux", Idiom: core.IdiomDesktop, PixelRatio: 1})
@@ -101,4 +107,41 @@ func TestFilterNarrowsTheTree(t *testing.T) {
 	app.Focus("label:Markdown source")
 	app.Key("mod+f")
 	app.WaitUntil(5*time.Second, func() bool { return app.Find(filter).Focused })
+}
+
+// TestTreeWidthIsKept checks that the notes' tree opens at the width the
+// device kept, and that a drag of its edge is kept.
+func TestTreeWidthIsKept(t *testing.T) {
+	app, _ := startVault(t, map[string]string{"First.md": "First\n"}, 1150, 760, desktopWindow,
+		nsgotest.Storage(map[string]string{treeKey: `300`}))
+	app.WaitFor("label:First", 10*time.Second)
+	edge := func() core.Points { return app.Find("label:Resize file tree").Bounds().Origin.X }
+	first := edge()
+	app.Drag("label:Resize file tree", core.Point{X: 40})
+	app.Advance(time.Second)
+	var kept core.Points
+	app.WaitUntil(5*time.Second, func() bool {
+		text, _ := app.Storage().GetItem(treeKey)
+		return json.Unmarshal([]byte(text), &kept) == nil && kept > 300
+	})
+	if moved := edge() - first; moved <= 0 {
+		t.Errorf("the tree's edge moved %v after a drag of 40 to the right", moved)
+	}
+}
+
+// TestTreeOpensAtItsFirstWidth checks a first start, and that the kept
+// width is where the tree's edge is.
+func TestTreeOpensAtItsFirstWidth(t *testing.T) {
+	wide, _ := startVault(t, map[string]string{"First.md": "First\n"}, 1150, 760, desktopWindow,
+		nsgotest.Storage(map[string]string{treeKey: `300`}))
+	wide.WaitFor("label:First", 10*time.Second)
+	kept := wide.Find("label:Resize file tree").Bounds().Origin.X
+	app, _ := startVault(t, map[string]string{"First.md": "First\n"}, 1150, 760, desktopWindow)
+	app.WaitFor("label:First", 10*time.Second)
+	if first := app.Find("label:Resize file tree").Bounds().Origin.X; kept-first != 300-treeFirst {
+		t.Errorf("the tree's edge is at %v with 300 kept and at %v with nothing kept: want them %v apart", kept, first, 300-treeFirst)
+	}
+	if _, saved := app.Storage().GetItem(treeKey); saved {
+		t.Error("the tree's width is kept before it changed")
+	}
 }

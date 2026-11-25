@@ -11,6 +11,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/livepreview"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
+	"github.com/frostyard/frostui/workspaceui"
 	"github.com/nsgo-dev/nsgo/core"
 	"github.com/nsgo-dev/nsgo/ui"
 )
@@ -244,9 +245,7 @@ func (e *inlineView) field(cx *core.Scope, item func() previewLine) core.Node {
 func (e *inlineView) renderLine(cx *core.Scope, l previewLine) core.Node {
 	style := ui.TypeBody.Merge(core.Style{MinHeight: core.Pt(26)})
 	if l.heading > 0 {
-		style = ui.TypeTitle.Merge(style)
-		style.FontSize = core.Points(26 - min(l.heading, 6)*2)
-		style.FontWeight = core.FontWeightSemibold
+		style = style.Merge(workspaceui.Heading(l.heading))
 	}
 	spans := []core.Span{}
 	// TextCaretAt counts rendered UTF-16 units. Record where each changed

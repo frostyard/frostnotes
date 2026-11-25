@@ -34,7 +34,7 @@ func TestNoLiteralLooks(t *testing.T) {
 		re   *regexp.Regexp
 		left map[string]int
 	}{
-		{"text sizes", regexp.MustCompile(`FontSize\s*[:=]|ui\.Text\(.*,\s*[0-9]+,\s*ui\.`), map[string]int{"inline.go": 1}},
+		{"text sizes", regexp.MustCompile(`FontSize\s*[:=]|ui\.Text\(.*,\s*[0-9]+,\s*ui\.`), nil},
 	}
 	dir := filepath.Join(repoRoot(t), "cmd", "frostnotes-nsgo")
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
