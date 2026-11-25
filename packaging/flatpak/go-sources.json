@@ -25,6 +25,18 @@
   },
   {
     "type": "file",
+    "url": "https://proxy.golang.org/github.com/alecthomas/chroma/v2/@v/v2.27.0.mod",
+    "sha256": "eeaef52bd74315d588d6799990ba08cc209a70e748473c3a4333349944871a10",
+    "dest": "goproxy/github.com/alecthomas/chroma/v2/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/alecthomas/chroma/v2/@v/v2.27.0.zip",
+    "sha256": "8eb074aaf4a7b4cf406e81062cf5d6b54c32797be53f5287d88ef570fa73625f",
+    "dest": "goproxy/github.com/alecthomas/chroma/v2/@v"
+  },
+  {
+    "type": "file",
     "url": "https://proxy.golang.org/github.com/andybalholm/brotli/@v/v1.3.0.mod",
     "sha256": "9836ed7059e6b6be9d42e666c866deea8646d5815216fcf6216966074744cb1f",
     "dest": "goproxy/github.com/andybalholm/brotli/@v"
@@ -190,6 +202,18 @@
     "url": "https://proxy.golang.org/github.com/davecgh/go-spew/@v/v1.1.1.zip",
     "sha256": "6b44a843951f371b7010c754ecc3cabefe815d5ced1c5b9409fb2d697e8a890d",
     "dest": "goproxy/github.com/davecgh/go-spew/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/dlclark/regexp2/v2/@v/v2.11.0.mod",
+    "sha256": "369b6fa60dfc57254cc1baee2becffe594ec1b4ec4f63f46a3c714fb1e2eb107",
+    "dest": "goproxy/github.com/dlclark/regexp2/v2/@v"
+  },
+  {
+    "type": "file",
+    "url": "https://proxy.golang.org/github.com/dlclark/regexp2/v2/@v/v2.11.0.zip",
+    "sha256": "d492153b38c482547b347a114d4ccfdb12b4f1f57835d2ce974f914d27e2bad1",
+    "dest": "goproxy/github.com/dlclark/regexp2/v2/@v"
   },
   {
     "type": "file",

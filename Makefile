@@ -74,6 +74,12 @@ desktop-smoke: desktop-build ## Start the native app under Xvfb against a real n
 desktop-bench: ## Time a keystroke in a 10,000-line note; fails over 16 ms (25 ms with CI=true, ADR-0043)
 	go test -bench BenchmarkTypingInALongNote -benchtime 100x ./internal/desktop/editor/
 
+# The NSGo client's typing gate: the same note and limits, in source mode and
+# live preview, headless on a real notesd (cmd/frostnotes-nsgo/bench_test.go).
+.PHONY: nsgo-bench
+nsgo-bench: ## Time a keystroke in a 10,000-line note in the NSGo client; fails over 16 ms (25 ms with CI=true, ADR-0043)
+	cd cmd/frostnotes-nsgo && env -u DISPLAY -u WAYLAND_DISPLAY go test -tags integration -count=1 -run '^$$' -bench '^BenchmarkTypingInALongNote$$' -benchtime 100x .
+
 desktop-evidence: ## Record the native app's evidence: a 10,000-note vault within a frame, a phone's edit within 2 s
 	go test -tags integration -count=1 -v -timeout 20m -run '^(TestALargeVaultStaysWithinAFrame|TestAnEditOnThePhoneReachesTheDesktop)$$' ./internal/desktop/window
 

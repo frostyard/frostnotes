@@ -408,11 +408,8 @@ func (w *workspace) editor() core.Node {
 				}, Then: func(*core.Scope) core.Node {
 					return ui.Skeleton{Lines: 6, Label: "Loading note"}
 				}, Else: func(*core.Scope) core.Node {
-					return core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(*core.Scope) core.Node {
-						return ui.Input{Label: "Markdown source", Multiline: true, NoAutoCorrect: true, Style: ui.FillRest, Value: func() string { w.revision.Get(); return d.Text() }, Disabled: func() bool {
-							w.revision.Get()
-							return !d.Loaded() || d.Status() == notes.StatusMissing || d.ReadOnly() != ""
-						}, OnChange: func(value string) { d.Local(notes.Diff(d.Text(), value)) }}
+					return core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(cx *core.Scope) core.Node {
+						return w.sourceEditor(cx, d)
 					}}
 				}}
 			}},
