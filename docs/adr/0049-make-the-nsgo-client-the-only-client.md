@@ -1,6 +1,6 @@
 # 0049 — Make the NSGo client the only client
 
-- **Status:** Proposed
+- **Status:** Accepted (Brian approved #287, 2026-11-25)
 - **Date:** 2026-11-25
 
 ## Context

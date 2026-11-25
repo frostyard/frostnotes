@@ -55,10 +55,11 @@ pull request's last commit replaces the Tauri shell.
 
 [Plan 0011](docs/plans/0011-nsgo-only-client.md) and
 [ADR-0049](docs/adr/0049-make-the-nsgo-client-the-only-client.md)
-(Proposed, 2026-11-25) make the NSGo client (`cmd/frostnotes-nsgo`) the
+(Accepted, 2026-11-25) make the NSGo client (`cmd/frostnotes-nsgo`) the
 only client: it first gets the MyGo client's features, all of which the
 owner kept on 2026-11-25, with source mode on NSGo's code editor, and then
-MyGo is removed. No phase has started.
+MyGo is removed. Phase 1 is built (#288: the editor's plain logic in
+`internal/desktop/markup`); Phase 2 is in progress.
 
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)

@@ -1,6 +1,6 @@
 # 0022 — The editor saves as you type and applies merges as remote changes
 
-- **Status:** Accepted
+- **Status:** Accepted; its editable merge view superseded by [0049](0049-make-the-nsgo-client-the-only-client.md)
 - **Date:** 2026-10-17
 
 ## Context

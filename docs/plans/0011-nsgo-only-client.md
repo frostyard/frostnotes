@@ -10,7 +10,8 @@ its Phase 5, and it supersedes the fallback of
 [ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md).
 
 Status (2026-11-25): the owner answered the plan's questions
-([below](#the-owners-answers)). No phase has started.
+([below](#the-owners-answers)) and approved ADR-0049 (#287). Phase 1 is
+built (#288). Phase 2 is in progress.
 
 ## What the NSGo client lacks
 
@@ -72,7 +73,7 @@ the window kept on the device, an Update links choice on each move, a
 read-only recovered draft on a refused base, and the kit's look with its
 pictures. Each stays.
 
-## Phase 1 — Logic out of MyGo's packages (S)
+## Phase 1 — Logic out of MyGo's packages (S, built: #288)
 
 - The formatting commands, smart lists, links under the caret, frontmatter
   and its properties, and the attachment rules (`FreePath`, `EmbedFor`,
@@ -104,7 +105,8 @@ Implements [design/app.md, Editor](../design/app.md#editor).
   scroll mapped through the change. The user's undo history ends there,
   as live preview's does today. Ctrl+Z never undoes another writer's
   change.
-- An NSGo issue asks for hidden and replaced ranges, widgets in and
+- An NSGo issue ([nsgo-dev/nsgo#2409](https://github.com/nsgo-dev/nsgo/issues/2409),
+  filed 2026-11-25) asks for hidden and replaced ranges, widgets in and
   between lines, lines of their own height, and an edit kept out of the
   history (as MyGo's `EditRemote`).
 - The typing gate covers NSGo's source mode and live preview: a keystroke
@@ -222,7 +224,7 @@ The owner's answers 8, 9 and 10.
 ## Later / ideas
 
 - Live preview on NSGo's code editor, once it has hidden ranges and
-  widgets (Phase 2's issue).
+  widgets ([nsgo-dev/nsgo#2409](https://github.com/nsgo-dev/nsgo/issues/2409)).
 - Zoom, once NSGo has it.
 
 ## Open questions
