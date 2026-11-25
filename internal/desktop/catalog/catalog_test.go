@@ -7,7 +7,7 @@ import (
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
-	"github.com/frostyard/frostnotes/internal/desktop/editor"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 )
 
 func start(t *testing.T, files map[string]string) (*Catalog, *desktoptest.Notesd, *desktoptest.Loop) {
@@ -80,14 +80,14 @@ func TestTheCatalogFollowsTheVault(t *testing.T) {
 	}
 	loop.Until(t, "the tags", func() bool { return len(src.Tags()) == 1 })
 
-	var got []editor.Target
-	src.Subpaths("Plan", false, func(ts []editor.Target) { got = ts })
+	var got []markup.Target
+	src.Subpaths("Plan", false, func(ts []markup.Target) { got = ts })
 	loop.Until(t, "the headings", func() bool { return got != nil })
 	if got[0].Label != "Goals" {
 		t.Errorf("%+v", got)
 	}
 	got = nil
-	src.Subpaths("Plan", true, func(ts []editor.Target) { got = ts })
+	src.Subpaths("Plan", true, func(ts []markup.Target) { got = ts })
 	loop.Until(t, "the blocks", func() bool { return got != nil })
 	if got[0].Label != "blk" || got[0].Detail != "text ^blk" {
 		t.Errorf("%+v", got)
@@ -114,7 +114,7 @@ func TestUploadingAnAttachment(t *testing.T) {
 	var embeds string
 	var err error
 	done := false
-	src.Upload([]editor.File{{Name: "a.png", Data: []byte("image")}, {Name: "a.png", Data: []byte("second")}}, func(e string, er error) { embeds, err, done = e, er, true })
+	src.Upload([]markup.File{{Name: "a.png", Data: []byte("image")}, {Name: "a.png", Data: []byte("second")}}, func(e string, er error) { embeds, err, done = e, er, true })
 	loop.Until(t, "the upload", func() bool { return done })
 	if err != nil {
 		t.Fatal(err)
@@ -137,9 +137,9 @@ func TestUploadingAnAttachment(t *testing.T) {
 	if found != 2 {
 		t.Fatalf("%d uploaded", found)
 	}
-	big := make([]byte, editor.MaxAttach+1)
+	big := make([]byte, markup.MaxAttach+1)
 	done = false
-	src.Upload([]editor.File{{Name: "big.bin", Data: big}}, func(_ string, er error) { err, done = er, true })
+	src.Upload([]markup.File{{Name: "big.bin", Data: big}}, func(_ string, er error) { err, done = er, true })
 	loop.Until(t, "the refusal", func() bool { return done })
 	if err == nil {
 		t.Fatal("a file over 10 MB uploaded")
@@ -152,7 +152,7 @@ func TestUploadReadsTheSettingBeforeItsWorker(t *testing.T) {
 	src := c.Sources(func() string { return "Plan.md" }, func(string) (string, bool) { return "", false })
 	var embeds string
 	done := false
-	src.Upload([]editor.File{{Name: "a.png", Data: []byte("x")}}, func(e string, _ error) { embeds, done = e, true })
+	src.Upload([]markup.File{{Name: "a.png", Data: []byte("x")}}, func(e string, _ error) { embeds, done = e, true })
 	c.Wikilinks = false
 	loop.Until(t, "the upload", func() bool { return done })
 	if !strings.HasPrefix(embeds, "![[") {

@@ -6,6 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
@@ -13,9 +14,9 @@ func TestTheConflictNotice(t *testing.T) {
 	f := openEditor(t, "a.md", "line\n")
 	f.Write("a.md", f.doc.Base(), "theirs\n")
 	f.caret(0)
-	f.ed.Run(func(text string, sels []Sel) Edit {
+	f.ed.Run(func(text string, sels []markup.Sel) markup.Edit {
 		cs, _ := notes.ChangesOf(len(text), notes.Change{From: 0, To: 4, Insert: "mine"})
-		return Edit{Changes: cs, Sels: sels}
+		return markup.Edit{Changes: cs, Sels: sels}
 	})
 	f.save()
 	var compared int64

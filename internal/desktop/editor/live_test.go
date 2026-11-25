@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/reading"
 )
 
@@ -67,10 +68,10 @@ func TestSourceModeShowsTheText(t *testing.T) {
 func TestAClickFollowsALinkATagAndAFootnote(t *testing.T) {
 	note := "see [[Plan|the plan]] and #garden and a ref[^n]\n\n[^n]: the note\n\nlast\n"
 	f := openEditor(t, "a.md", note)
-	var followed Link
+	var followed markup.Link
 	var where Where
 	var tag string
-	f.ed.Follow = func(l Link, w Where) { followed, where = l, w }
+	f.ed.Follow = func(l markup.Link, w Where) { followed, where = l, w }
 	f.ed.FollowTag = func(s string) { tag = s }
 	f.tt.Frame()
 	if err := f.tt.Click("the plan"); err != nil {

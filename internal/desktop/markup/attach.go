@@ -1,4 +1,4 @@
-package editor
+package markup
 
 import (
 	"fmt"
@@ -6,12 +6,8 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/egoist/mygo/transfer"
-	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
@@ -52,21 +48,6 @@ func (f File) Read() ([]byte, error) {
 		return nil, fmt.Errorf("%s is over 10 MB: copy it into the vault's folder instead", f.Name)
 	}
 	return data, nil
-}
-
-// Uploader stores attachments beside a note (ADR-0023) and reports the
-// embeds to insert, through done on the UI thread.
-type Uploader interface {
-	Upload(files []File, done func(embeds string, err error))
-}
-
-// Clipboard is what the editor asks of the system's clipboard when text is
-// pasted; the window gives it MyGo's.
-type Clipboard interface {
-	// Files are the local paths on the clipboard.
-	Files() []string
-	// PNG is an image on the clipboard, nil for none.
-	PNG() []byte
 }
 
 // AttachmentFolder is where a note's attachments go, by the setting as
@@ -145,105 +126,19 @@ func CleanName(name string) string {
 	return strings.TrimSpace(strings.NewReplacer("\\", "-", "/", "-", ":", "-").Replace(name))
 }
 
-// insertEmbeds writes text at the caret, the caret after it; at the start
-// of a line that holds text, the text gets a line of its own.
-func (e *NoteEditor) insertEmbeds(text string) {
-	e.Run(func(doc string, sels []Sel) Edit {
-		pos := min(sels[len(sels)-1].Head, len(doc)) // the text may be shorter by now
-		l := lineAt(doc, pos)
-		own := ""
-		if pos == l.from && l.to > l.from {
-			own = "\n"
-		}
-		cs, err := notes.ChangesOf(len(doc), notes.Change{From: pos, To: pos, Insert: text + own})
-		if err != nil {
-			return Edit{Changes: notes.EmptyChanges(len(doc)), Sels: sels}
-		}
-		return Edit{Changes: cs, Sels: []Sel{caret(pos + len(text))}}
-	})
-}
-
-func (e *NoteEditor) report(err error) {
-	if e.OnError != nil {
-		e.OnError(err)
+// InsertEmbeds is the edit that writes text at the last caret, the caret
+// after it; at the start of a line that holds text, the text gets a line
+// of its own.
+func InsertEmbeds(doc string, sels []Sel, text string) Edit {
+	pos := min(sels[len(sels)-1].Head, len(doc)) // the text may be shorter by now
+	l := lineAt(doc, pos)
+	own := ""
+	if pos == l.from && l.to > l.from {
+		own = "\n"
 	}
-}
-
-// Attach uploads files beside the note and inserts their embeds at the
-// caret.
-func (e *NoteEditor) Attach(files []File) {
-	if e.Uploads == nil || len(files) == 0 {
-		return
+	cs, err := notes.ChangesOf(len(doc), notes.Change{From: pos, To: pos, Insert: text + own})
+	if err != nil {
+		return Edit{Changes: notes.EmptyChanges(len(doc)), Sels: sels}
 	}
-	release := func() {}
-	if e.Hold != nil {
-		release = e.Hold()
-	}
-	e.Uploads.Upload(files, func(embeds string, err error) {
-		defer release()
-		if err != nil {
-			e.report(err)
-			return
-		}
-		e.insertEmbeds(embeds)
-	})
-}
-
-// AttachPaths attaches local files, which the upload reads off the UI
-// thread.
-func (e *NoteEditor) AttachPaths(paths []string) {
-	files := make([]File, 0, len(paths))
-	for _, p := range paths {
-		files = append(files, File{Name: CleanName(filepath.Base(p)), Path: p})
-	}
-	e.Attach(files)
-}
-
-// paste attaches the files or image on the clipboard; it reports whether
-// there was one, else the editor pastes text.
-func (e *NoteEditor) paste() bool {
-	if e.Clipboard == nil || e.Uploads == nil || e.State.ReadOnly {
-		return false
-	}
-	if paths := e.Clipboard.Files(); len(paths) > 0 {
-		e.AttachPaths(paths)
-		return true
-	}
-	if png := e.Clipboard.PNG(); png != nil {
-		if len(png) > MaxAttach {
-			e.report(fmt.Errorf("the pasted image is over 10 MB"))
-			return true
-		}
-		e.Attach([]File{{Name: PastedName(e.now(), "png"), Data: png}})
-		return true
-	}
-	return false
-}
-
-func (e *NoteEditor) now() time.Time {
-	if e.Now != nil {
-		return e.Now()
-	}
-	return time.Now()
-}
-
-// dropOptions accept files dropped from another app.
-var dropOptions = transfer.DropOptions{Formats: []transfer.Format{transfer.FileList}}
-
-// acceptDrops attaches files dropped on the editor, at its caret.
-func (e *NoteEditor) acceptDrops(el ui.Element) {
-	if e.Uploads == nil || e.State.ReadOnly {
-		return
-	}
-	if _, over := ui.DataDragOver(el, dropOptions); over {
-		el.Opacity(0.8)
-	}
-	if drop, ok := ui.DropData(el, dropOptions); ok {
-		paths, err := drop.Data.Files()
-		if err != nil {
-			e.report(err)
-			return
-		}
-		e.AttachPaths(paths)
-	}
+	return Edit{Changes: cs, Sels: []Sel{caret(pos + len(text))}}
 }

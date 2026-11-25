@@ -1,4 +1,4 @@
-package editor
+package markup
 
 import (
 	"bytes"
@@ -493,8 +493,8 @@ func PropertyType(key string, value any, vaultType string) string {
 	return TypeText
 }
 
-// valueText is a value as a text field shows it.
-func valueText(v any) string {
+// ValueText is a value as a text field shows it.
+func ValueText(v any) string {
 	switch x := v.(type) {
 	case nil:
 		return ""
@@ -510,16 +510,16 @@ func valueText(v any) string {
 	return fmt.Sprint(v)
 }
 
-// listItems is a list value's items as text; any other value is one item.
-func listItems(v any) []string {
+// ListItems is a list value's items as text; any other value is one item.
+func ListItems(v any) []string {
 	if l, ok := v.([]any); ok {
 		out := make([]string, len(l))
 		for i, x := range l {
-			out[i] = valueText(x)
+			out[i] = ValueText(x)
 		}
 		return out
 	}
-	if t := valueText(v); t != "" {
+	if t := ValueText(v); t != "" {
 		return []string{t}
 	}
 	return nil

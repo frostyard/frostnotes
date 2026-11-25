@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/frostyard/frostui"
 
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
@@ -95,7 +96,7 @@ func (v *NoteView) startAfterFrontmatter() {
 	}
 	v.placed = d.Path()
 	text := d.Text()
-	if at := len(text) - len(Body(text)); at > 0 && v.Editor.State.Cursor() == 0 {
+	if at := len(text) - len(markup.Body(text)); at > 0 && v.Editor.State.Cursor() == 0 {
 		v.Editor.State.Select(at, at)
 	}
 }
@@ -143,7 +144,7 @@ type PropertiesPanel struct {
 	Folded      bool
 
 	text   string
-	parsed Frontmatter
+	parsed markup.Frontmatter
 	drafts map[string]*fieldDraft
 	adding string
 	isAdd  bool
@@ -180,8 +181,8 @@ func (p *PropertiesPanel) Commit() {
 		if p.Types != nil {
 			vault = p.Types()[prop.Key]
 		}
-		kind := PropertyType(prop.Key, prop.Value, vault)
-		if d.valueFocus && d.value != valueText(prop.Value) {
+		kind := markup.PropertyType(prop.Key, prop.Value, vault)
+		if d.valueFocus && d.value != markup.ValueText(prop.Value) {
 			p.set(prop.Key, typedText(d.value, kind))
 		}
 		if d.keyFocus && d.key != prop.Key && strings.TrimSpace(d.key) != "" {
@@ -200,12 +201,12 @@ func (p *PropertiesPanel) apply(next string, err error) {
 }
 
 func (p *PropertiesPanel) set(key string, value any) {
-	next, err := SetProperties(p.doc.Text(), map[string]any{key: value})
+	next, err := markup.SetProperties(p.doc.Text(), map[string]any{key: value})
 	p.apply(next, err)
 }
 
 func (p *PropertiesPanel) rename(from, to string) {
-	next, err := RenameProperty(p.doc.Text(), from, to)
+	next, err := markup.RenameProperty(p.doc.Text(), from, to)
 	p.apply(next, err)
 	delete(p.drafts, from)
 }
@@ -213,7 +214,7 @@ func (p *PropertiesPanel) rename(from, to string) {
 // View draws the panel; it draws nothing without properties.
 func (p *PropertiesPanel) View(c *ui.Context) ui.Element {
 	if text := p.doc.Text(); text != p.text || p.parsed.Properties == nil {
-		p.text, p.parsed = text, ReadFrontmatter(text)
+		p.text, p.parsed = text, markup.ReadFrontmatter(text)
 	}
 	if !p.doc.Loaded() || !p.parsed.Exists && !p.isAdd {
 		return ui.Box(c).Height(0)
@@ -251,7 +252,7 @@ func (p *PropertiesPanel) View(c *ui.Context) ui.Element {
 	})
 }
 
-func (p *PropertiesPanel) draft(prop Property) *fieldDraft {
+func (p *PropertiesPanel) draft(prop markup.Property) *fieldDraft {
 	d := p.drafts[prop.Key]
 	if d == nil {
 		d = &fieldDraft{key: prop.Key}
@@ -260,13 +261,13 @@ func (p *PropertiesPanel) draft(prop Property) *fieldDraft {
 	return d
 }
 
-func (p *PropertiesPanel) row(c *ui.Context, prop Property) {
+func (p *PropertiesPanel) row(c *ui.Context, prop markup.Property) {
 	d := p.draft(prop)
 	vault := ""
 	if p.Types != nil {
 		vault = p.Types()[prop.Key]
 	}
-	kind := PropertyType(prop.Key, prop.Value, vault)
+	kind := markup.PropertyType(prop.Key, prop.Value, vault)
 	ui.Row(c).Gap(frostui.SpaceS).AlignItems(ui.Center).Children(func() {
 		key := ui.TextInputBase(c, &d.key).Label("Property name").Width(160)
 		focused := key.Focused()
@@ -285,12 +286,12 @@ func (p *PropertiesPanel) row(c *ui.Context, prop Property) {
 	})
 }
 
-func (p *PropertiesPanel) value(c *ui.Context, prop Property, kind string, d *fieldDraft) {
+func (p *PropertiesPanel) value(c *ui.Context, prop markup.Property, kind string, d *fieldDraft) {
 	changed := !same(d.seen, prop.Value)
 	d.seen = prop.Value
 	label := prop.Key
 	switch kind {
-	case TypeCheckbox:
+	case markup.TypeCheckbox:
 		b, _ := prop.Value.(bool)
 		if changed {
 			d.check = b
@@ -298,12 +299,12 @@ func (p *PropertiesPanel) value(c *ui.Context, prop Property, kind string, d *fi
 		if ui.Checkbox(c, &d.check, "").Label(label).Changed() {
 			p.set(prop.Key, d.check)
 		}
-	case TypeMultitext, TypeAliases, TypeTags:
+	case markup.TypeMultitext, markup.TypeAliases, markup.TypeTags:
 		if changed {
-			d.list = listItems(prop.Value)
+			d.list = markup.ListItems(prop.Value)
 		}
 		var suggestions []string
-		if kind == TypeTags && p.Suggestions != nil {
+		if kind == markup.TypeTags && p.Suggestions != nil {
 			suggestions = p.Suggestions()
 		}
 		if ui.TokenField(c, &d.list, suggestions).Label(label).Grow(1).Changed() {
@@ -313,16 +314,16 @@ func (p *PropertiesPanel) value(c *ui.Context, prop Property, kind string, d *fi
 			}
 			p.set(prop.Key, out)
 		}
-	case TypeDate:
+	case markup.TypeDate:
 		if changed {
-			d.when, _ = time.Parse("2006-01-02", valueText(prop.Value))
+			d.when, _ = time.Parse("2006-01-02", markup.ValueText(prop.Value))
 		}
 		if ui.DateInput(c, &d.when).Label(label).Changed() {
 			p.set(prop.Key, d.when.Format("2006-01-02"))
 		}
-	case TypeDatetime:
+	case markup.TypeDatetime:
 		if changed {
-			d.when = parseDateTime(valueText(prop.Value))
+			d.when = parseDateTime(markup.ValueText(prop.Value))
 		}
 		a := ui.DateInput(c, &d.when).Label(label).Changed()
 		b := ui.TimeInput(c, &d.when).Label(label + " time").Changed()
@@ -331,11 +332,11 @@ func (p *PropertiesPanel) value(c *ui.Context, prop Property, kind string, d *fi
 		}
 	default:
 		if changed {
-			d.value = valueText(prop.Value)
+			d.value = markup.ValueText(prop.Value)
 		}
 		in := ui.TextInputBase(c, &d.value).Label(label).Grow(1)
 		focused := in.Focused()
-		if (in.Submitted() || d.valueFocus && !focused) && d.value != valueText(prop.Value) {
+		if (in.Submitted() || d.valueFocus && !focused) && d.value != markup.ValueText(prop.Value) {
 			p.set(prop.Key, typedText(d.value, kind))
 		}
 		d.valueFocus = focused
@@ -353,7 +354,7 @@ func parseDateTime(s string) time.Time {
 
 // typedText is a text field's value as its type stores it.
 func typedText(s, kind string) any {
-	if kind == TypeNumber {
+	if kind == markup.TypeNumber {
 		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 			return n
 		}

@@ -1,8 +1,4 @@
-// Package panes draws the desktop app's sidebars' panes
-// (docs/specs/ui.md#sidebars-and-panes, plan 0009): Files, Search,
-// Backlinks, Outgoing links, Tags, All properties, Outline and Tasks. They
-// read notesd through their Env and ask the window to act through Actions.
-package panes
+package catalog
 
 import (
 	"path"
@@ -113,7 +109,7 @@ func BuildTree(files []api.VaultFile, folders []string, sort string, showUnsuppo
 		}
 		n := &Node{Path: p, Name: path.Base(p), Type: "folder"}
 		t.Nodes[p] = n
-		parent := parentOf(p)
+		parent := Parent(p)
 		ensure(parent).Children = append(ensure(parent).Children, p)
 		return n
 	}
@@ -131,7 +127,7 @@ func BuildTree(files []api.VaultFile, folders []string, sort string, showUnsuppo
 			name = base[:len(base)-len(ext)-1]
 		}
 		t.Nodes[f.Path] = &Node{Path: f.Path, Name: name, Extension: Extension(f.Path), Type: typ, modified: f.ModifiedAt.UnixMilli(), full: base}
-		parent := ensure(parentOf(f.Path))
+		parent := ensure(Parent(f.Path))
 		parent.Children = append(parent.Children, f.Path)
 	}
 	for _, n := range t.Nodes {
@@ -141,7 +137,8 @@ func BuildTree(files []api.VaultFile, folders []string, sort string, showUnsuppo
 	return t
 }
 
-func parentOf(p string) string {
+// Parent is the folder that holds p, "" for the vault's root.
+func Parent(p string) string {
 	if i := strings.LastIndexByte(p, '/'); i >= 0 {
 		return p[:i]
 	}

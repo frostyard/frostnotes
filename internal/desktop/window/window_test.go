@@ -24,6 +24,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
 	"github.com/frostyard/frostnotes/internal/desktop/editor"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/reading"
 	"github.com/frostyard/frostnotes/internal/desktop/session"
@@ -634,7 +635,7 @@ func TestTheBreadcrumbRevealsAFolder(t *testing.T) {
 // heldUploads answers an upload when the test says.
 type heldUploads struct{ done func(string, error) }
 
-func (u *heldUploads) Upload(_ []editor.File, done func(string, error)) { u.done = done }
+func (u *heldUploads) Upload(_ []markup.File, done func(string, error)) { u.done = done }
 
 func (f *fixture) openNoteTab(p string) *editor.NoteEditor {
 	f.t.Helper()
@@ -654,7 +655,7 @@ func TestAnUploadOutlastsAModeSwitch(t *testing.T) {
 	e := f.openNoteTab("a.md")
 	up := &heldUploads{}
 	e.Uploads = up
-	e.Attach([]editor.File{{Name: "p.png", Data: []byte("x")}})
+	e.Attach([]markup.File{{Name: "p.png", Data: []byte("x")}})
 	f.a.toggleMode() // the only tab of the note leaves edit mode
 	f.until("the reading view", func() bool { return f.a.activeEditor() == nil })
 	up.done("![[p.png]]", nil)
@@ -713,7 +714,7 @@ func TestAPagePreviewsLinkFollowsTheOpenRules(t *testing.T) {
 	f.a.cfg.OpenURL = func(u string) error { opened = append(opened, u); return nil }
 	f.a.previews["a.md\x00b"] = &preview{text: "see [mail](" + hiddenAttach + ") here", done: true}
 	draw := f.a.linkPreview(func() string { return "a.md" })
-	tt := ui.NewTester(func(c *ui.Context) { draw(c, editor.Link{Target: "b"}) }, 400, 300)
+	tt := ui.NewTester(func(c *ui.Context) { draw(c, markup.Link{Target: "b"}) }, 400, 300)
 	if err := tt.Click("mail"); err != nil {
 		t.Fatal(err)
 	}
@@ -774,7 +775,7 @@ func TestALinkResolvedAfterAVaultSwitchIsDropped(t *testing.T) {
 	}
 	f.openVault()
 	f.until("the catalog", func() bool { return f.a.hasFile("a.md") })
-	f.a.followLink(editor.Link{Target: "New note"}, "a.md", editor.WhereHere)
+	f.a.followLink(markup.Link{Target: "New note"}, "a.md", editor.WhereHere)
 	before := f.a.vault
 	f.a.vault = other  // the answer comes after the switch
 	for i := range 3 { // the resolve's answer, and a create that would follow it
@@ -1175,13 +1176,13 @@ func TestALinkOpensAtItsHeading(t *testing.T) {
 	f.Create("b.md", "# One\n\ntext\n\n# Two\n")
 	f.openVault()
 	e := f.openNoteTab("a.md")
-	f.a.followLink(editor.Link{Target: "", Subpath: "#Local"}, "a.md", editor.WhereHere)
+	f.a.followLink(markup.Link{Target: "", Subpath: "#Local"}, "a.md", editor.WhereHere)
 	f.tt.Frame()
 	f.tt.Frame()
 	if got := e.Binding().Buffer().Pos(e.State.Cursor()).Line; got != 2 {
 		t.Fatalf("own heading: line %d", got)
 	}
-	f.a.followLink(editor.Link{Target: "b", Subpath: "#Two"}, "a.md", editor.WhereTab)
+	f.a.followLink(markup.Link{Target: "b", Subpath: "#Two"}, "a.md", editor.WhereTab)
 	f.until("b at its heading", func() bool {
 		b := f.a.activeEditor()
 		return f.a.activeFile() == "b.md" && b != nil && b.Binding().Document().Loaded() && f.a.pending == nil && b.Binding().Buffer().Pos(b.State.Cursor()).Line == 4

@@ -46,7 +46,12 @@ the web app's code.
 
 The native app's code is `cmd/frostnotes` and `internal/desktop/`
 ([plan 0009](../plans/0009-mygo-desktop.md#packages)); how its screens differ
-is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
+is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app). Its plain
+logic imports neither MyGo nor frostui, so the NSGo client can use it too:
+`internal/desktop/markup` (the formatting commands, smart lists, the link or
+tag under the caret, frontmatter and properties, the attachment rules),
+`catalog` (a vault's files, the Files and Tags panes' trees, the quick
+switcher's match), `notes`, `livepreview` and `system`.
 
 ## Shared NSGo editor preview
 
@@ -510,6 +515,7 @@ under the vault's Default location for new attachments and a name no
 file has (a nameless pasted image is `Pasted image YYYYMMDDHHmmss.png`),
 then inserts `![[name]]` (a markdown image without wikilinks) at the
 cursor, on a line of its own at a line's start (`editor/attach.ts`, M4).
+The native app keeps these rules in `internal/desktop/markup/attach.go`.
 
 The servers of a hash (`internal/blobhttp`;
 [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports)) name the
@@ -609,9 +615,10 @@ content type by extension, from one table:
   (`ViewBoundary`); the rest of the window works on.
 - Links to the web open in the system browser (`http`, `https`, `mailto`
   only). In the native app, `internal/desktop/system/open.go` checks a
-  link's scheme and passes a `mailto` link through frostui's
-  `SanitizeMailto`, which keeps only its addressees, subject and body and
-  drops its fragment. It opens a vault file only when it is a regular,
+  link's scheme and passes a `mailto` link through `SanitizeMailto`, its
+  copy of frostui's rule, which keeps only its addressees, subject and body
+  and drops its fragment; `cmd/frostnotes`' tests hold the copy to
+  frostui's results. It opens a vault file only when it is a regular,
   non-executable file inside the vault folder, of a document or media type,
   never a script, a `.desktop` entry or HTML; what passes goes through
   frostui's allow-listed `Opener`. In a browser, a web link opens in a new

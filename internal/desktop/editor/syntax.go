@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"unicode"
-	"unicode/utf8"
 
 	code "github.com/egoist/mygo/ui/editor"
+
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 )
 
 // The tokenizer's own states, above the bits MyGo's Markdown lexer uses
@@ -178,7 +178,7 @@ func overlay(line string, kinds []code.TokenKind) (open bool) {
 			}
 		}
 	}
-	for _, t := range tagRanges(line) {
+	for _, t := range markup.TagRanges(line) {
 		if free(t[0], t[1]) && kinds[t[0]] != code.TokenLink {
 			set(t[0], t[1], code.TokenType)
 		}
@@ -209,39 +209,6 @@ func overlay(line string, kinds []code.TokenKind) (open bool) {
 		i = e
 	}
 	return false
-}
-
-// tagRanges finds #tags as specs/markdown.md reads them: after the start
-// or a space, letters, combining marks, digits, _, - and /, not only digits.
-func tagRanges(line string) [][2]int {
-	var out [][2]int
-	for i := 0; i < len(line); i++ {
-		if line[i] != '#' || i > 0 && !isSpaceBefore(line, i) {
-			continue
-		}
-		j := i + 1
-		digits := true
-		for j < len(line) {
-			r, size := utf8.DecodeRuneInString(line[j:])
-			if !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsDigit(r) && r != '_' && r != '-' && r != '/' {
-				break
-			}
-			if !unicode.IsDigit(r) {
-				digits = false
-			}
-			j += size
-		}
-		if j > i+1 && !digits {
-			out = append(out, [2]int{i, j})
-			i = j - 1
-		}
-	}
-	return out
-}
-
-func isSpaceBefore(line string, i int) bool {
-	r, _ := utf8.DecodeLastRuneInString(line[:i])
-	return unicode.IsSpace(r)
 }
 
 // frontLine highlights a line of YAML frontmatter: a key and its value.

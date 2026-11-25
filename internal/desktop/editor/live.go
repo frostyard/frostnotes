@@ -10,6 +10,7 @@ import (
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/internal/desktop/livepreview"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/mathview"
 	"github.com/frostyard/frostnotes/internal/desktop/media"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
@@ -392,11 +393,11 @@ func (e *NoteEditor) taskBox(p livepreview.Piece) code.Replacement {
 
 // setTask writes a task's mark, the character before its closing bracket.
 func (e *NoteEditor) setTask(at code.Replacement, mark string) {
-	e.Run(func(text string, _ []Sel) Edit {
+	e.Run(func(text string, _ []markup.Sel) markup.Edit {
 		cs, err := notes.ChangesOf(len(text), notes.Change{From: at.End - 2, To: at.End - 1, Insert: mark})
 		if err != nil {
-			return Edit{}
+			return markup.Edit{}
 		}
-		return Edit{Changes: cs}
+		return markup.Edit{Changes: cs}
 	})
 }

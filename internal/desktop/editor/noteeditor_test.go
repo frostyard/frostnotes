@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/frostnotes/internal/desktop/desktoptest"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 )
 
@@ -167,9 +168,9 @@ func TestObsidianKeysInTheEditor(t *testing.T) {
 
 func TestFollowingALink(t *testing.T) {
 	f := openEditor(t, "a.md", "see [[Plan#Goals|the plan]] and https://example.com/x\n")
-	var got []Link
+	var got []markup.Link
 	var where []Where
-	f.ed.Follow = func(l Link, w Where) {
+	f.ed.Follow = func(l markup.Link, w Where) {
 		got = append(got, l)
 		where = append(where, w)
 	}
@@ -188,10 +189,10 @@ func TestFollowingALink(t *testing.T) {
 	}
 }
 
-type fakeSources struct{ targets []Target }
+type fakeSources struct{ targets []markup.Target }
 
-func (s fakeSources) LinkTargets(query string, limit int) []Target {
-	var out []Target
+func (s fakeSources) LinkTargets(query string, limit int) []markup.Target {
+	var out []markup.Target
 	for _, t := range s.targets {
 		if fuzzyMatch(strings.ToLower(t.Label), strings.ToLower(query)) {
 			out = append(out, t)
@@ -204,17 +205,17 @@ func (fakeSources) Tags() []string { return []string{"project", "garden"} }
 
 func (fakeSources) Resolve(string) string { return "" }
 
-func (fakeSources) Subpaths(_ string, blocks bool, done func([]Target)) {
+func (fakeSources) Subpaths(_ string, blocks bool, done func([]markup.Target)) {
 	if blocks {
-		done([]Target{{Insert: "abc", Label: "abc", Detail: "a line"}})
+		done([]markup.Target{{Insert: "abc", Label: "abc", Detail: "a line"}})
 		return
 	}
-	done([]Target{{Insert: "Goals", Label: "Goals"}})
+	done([]markup.Target{{Insert: "Goals", Label: "Goals"}})
 }
 
 func TestCompletingALink(t *testing.T) {
 	f := openEditor(t, "a.md", "")
-	f.ed.Sources = fakeSources{targets: []Target{{Insert: "Garden plan", Label: "Garden plan"}, {Insert: "Journal/2026-11-10", Label: "2026-11-10", Detail: "Journal"}}}
+	f.ed.Sources = fakeSources{targets: []markup.Target{{Insert: "Garden plan", Label: "Garden plan"}, {Insert: "Journal/2026-11-10", Label: "2026-11-10", Detail: "Journal"}}}
 	for _, k := range []string{"[", "[", "g", "a", "r", "d"} {
 		f.tt.Type(k) // a key at a time, as a person types
 	}
