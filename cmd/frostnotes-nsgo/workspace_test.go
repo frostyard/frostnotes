@@ -458,3 +458,23 @@ func TestManageNotes(t *testing.T) {
 		t.Fatal("restored over a live note")
 	}
 }
+
+// TestEscapeLeavesAForm checks that Escape closes a form whose field has
+// the keyboard, and the alert that asks before the trash.
+func TestEscapeLeavesAForm(t *testing.T) {
+	app, _ := startWorkspace(t)
+	app.Press("label:First")
+	app.WaitFor("text:First.md · Saved", 10*time.Second)
+	for _, form := range [][2]string{{"label:New note", "label:Note path"}, {"label:Rename or move note", "label:Destination path"}} {
+		app.Press(form[0])
+		app.WaitFor(form[1], 5*time.Second)
+		app.Focus(form[1])
+		app.Key("Escape")
+		app.WaitForGone(form[1], 5*time.Second)
+	}
+	app.Press("label:Move to trash")
+	app.WaitFor("label:Trash note", 5*time.Second)
+	app.Key("Escape")
+	app.WaitForGone("label:Trash note", 5*time.Second)
+	app.Find("text:First.md · Saved")
+}
