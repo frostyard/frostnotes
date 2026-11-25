@@ -384,7 +384,7 @@ func (w *workspace) editor() core.Node {
 		if d == nil {
 			return workspaceui.EmptyState{Icon: lucide.FileText, Title: "Select a note to edit", Hint: "Choose a note in the tree, or make a new one."}
 		}
-		return core.View{Style: ui.FillRest.Merge(core.Style{Padding: core.All(16), Gap: 10}), Children: []core.Node{
+		return core.View{Style: ui.FillRest.Merge(core.Style{Padding: core.All(workspaceui.SpaceL), Gap: 10}), Children: []core.Node{
 			core.Dynamic(func(*core.Scope) core.Node { return w.noteBanner(d) }),
 			core.Show{When: func() bool { w.revision.Get(); return needsRecovery(d) }, Then: func(*core.Scope) core.Node {
 				return ui.Input{Label: "Recovered draft", Multiline: true, Readonly: true, Style: ui.FillRest, DefaultValue: d.Notice().Text}

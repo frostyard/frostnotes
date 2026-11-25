@@ -52,7 +52,7 @@ is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
 
 [ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md) promotes this editor to the Linux and Lodge defaults. The Flatpak also includes MyGo for workflows such as revision history.
 
-The default Linux and Lodge app uses the versioned workspace shell, file explorer and notices of frostui’s `workspaceui` module (`github.com/frostyard/frostui/workspaceui`, v0.3.0). FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
+The default Linux and Lodge app uses the versioned workspace shell, file explorer and notices of frostui’s `workspaceui` module (`github.com/frostyard/frostui/workspaceui`, v0.4.0). FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
 
 In the NSGo preview, **Live preview** renders headings, tasks and wiki links in the note. Clicking a line reveals its original Markdown in place. The shared scanner supplies byte ranges, and edits apply to the same document as source mode. Clicking a task changes its marker. Clicking a wiki link resolves the target through notesd. Undo and redo operate on local edits within the current preview. A remote text change clears that history. See [the live-preview design decision](../adr/0039-live-preview-is-replacements-over-the-source.md).
 
@@ -69,7 +69,7 @@ The client keeps to the kit's standard for an app (frostui's `docs/specs/workspa
 - **The navigation's foot** is the kit's `ConnectionItem`: a dot, green while notesd answers, and the connection's line.
 - **States.** The tree shows a skeleton until the vault's notes have been read, then its notes or the kit's `EmptyState`.
 - **Keys.** mod+K and mod+O are Quick open, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
-- **No look written as a number** (`TestNoLiteralLooks`), but 2 the kit has no token for yet: the editor's inset, and a Markdown heading's size in live preview.
+- **No look written as a number** (`TestNoLiteralLooks`), but 1 the kit has no token for: a Markdown heading's size in live preview. A padding takes the kit's spacing.
 
 Not done of the standard: the window's size, place and pane widths are not kept (rule 8), and nothing answers mod+F.
 
