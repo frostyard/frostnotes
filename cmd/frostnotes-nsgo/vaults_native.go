@@ -56,14 +56,9 @@ func (w *workspace) vaultWelcome() core.Node {
 	start := func(action string, variant ui.ButtonVariant) core.Node {
 		return ui.Button{Text: action, Variant: variant, OnPress: func() { w.action.Set(action) }}
 	}
-	return core.Dynamic(func(cx *core.Scope) core.Node {
-		colors := ui.ColorsOf(cx)
-		return core.View{TestID: "welcome", Style: ui.FillRest.Merge(core.Style{AlignItems: core.AlignCenter, JustifyContent: core.JustifyCenter, Gap: 8}), Children: []core.Node{
-			ui.Icon(lucide.Library, 32, colors.Faint),
-			core.Text{Content: "Open a vault", Style: ui.TypeTitle},
-			core.Text{Content: "A vault is a folder of Markdown notes.", Style: ui.TypeCaption, StyleFunc: ui.Colored(colors.Muted)},
-			core.View{Style: core.Style{Margin: core.Edges{Top: 8}}, Children: []core.Node{workspaceui.Row(start(createVault, ui.ButtonPrimary), start(openVault, ui.ButtonSecondary), start(joinVault, ui.ButtonSecondary))}}}}
-	})
+	return core.View{TestID: "welcome", Style: ui.FillRest, Children: []core.Node{workspaceui.EmptyState{
+		Icon: lucide.Library, Title: "Open a vault", Hint: "A vault is a folder of Markdown notes.",
+		Actions: []core.Node{start(createVault, ui.ButtonPrimary), start(openVault, ui.ButtonSecondary), start(joinVault, ui.ButtonSecondary)}}}}
 }
 
 // settingsView is Settings: NSGo's settings view, shown in place of the

@@ -46,6 +46,8 @@ func (e environment) After(d time.Duration, f func()) func() {
 }
 
 type workspace struct {
+	// treePending cancels the tree width waiting to be kept.
+	treePending func() bool
 	removed     map[int64][]string
 	syncInfo    *core.Signal[*api.SyncStatus]
 	syncRequest int
@@ -147,13 +149,13 @@ func root(cx *core.Scope) core.Node {
 	})
 	w.bindNoteActions()
 	w.bindSettingsKey()
-	w.keepWindow(cx)
+	workspaceui.KeepWindow(cx, minWidth, minHeight)
 	w.session.Start()
 	// The explorer outlives the views shown in its place, so a look at
 	// Settings leaves the tree, the editor and its history as they were.
 	explorer := core.NewHolder(cx, func(cx *core.Scope) core.Node {
 		return workspaceui.FileExplorer{
-			TreeWidth: 230, Tree: w.notesTree(cx),
+			TreeWidth: w.treeWidth(), OnTreeWidthChange: w.keepTree, Tree: w.notesTree(cx),
 			// Back at the tree, no row is chosen, so a press of the note
 			// that was open opens it again.
 			Preview: w.editor(), HasPreview: w.preview.Get, BackToTree: func() { w.preview.Set(false); w.chosen.Clear() },
