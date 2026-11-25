@@ -1,6 +1,6 @@
 # 0047 — Use the shared NSGo editor on Linux and Lodge
 
-- **Status:** Accepted
+- **Status:** Accepted; its MyGo fallback superseded by [0049](0049-make-the-nsgo-client-the-only-client.md)
 - **Date:** 2026-11-23
 
 ## Context
