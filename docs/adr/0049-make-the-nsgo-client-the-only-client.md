@@ -1,6 +1,6 @@
 # 0049 — Make the NSGo client the only client
 
-- **Status:** Accepted (Brian approved #287, 2026-11-25)
+- **Status:** Superseded by [0050](0050-frostnotes-has-no-desktop-window.md) (Brian approved this ADR in #287, 2026-11-25)
 - **Date:** 2026-11-25
 
 ## Context

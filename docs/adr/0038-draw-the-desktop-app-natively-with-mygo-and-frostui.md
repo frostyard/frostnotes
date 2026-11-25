@@ -1,6 +1,6 @@
 # 0038 — Draw the desktop app natively with MyGo and frostui
 
-- **Status:** Accepted (Brian, 2026-11-10); its choice of MyGo superseded by [0049](0049-make-the-nsgo-client-the-only-client.md)
+- **Status:** Accepted (Brian, 2026-11-10); its choice of MyGo superseded by [0049](0049-make-the-nsgo-client-the-only-client.md), and its native desktop app by [0050](0050-frostnotes-has-no-desktop-window.md)
 - **Date:** 2026-11-10
 
 ## Context
