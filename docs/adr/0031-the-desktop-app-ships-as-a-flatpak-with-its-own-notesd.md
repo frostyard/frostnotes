@@ -1,6 +1,6 @@
 # 0031 — The desktop app ships as a Flatpak with its own notesd
 
-- **Status:** Accepted (Brian, 2026-10-26); amended by [0045](0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md) (no plain file in the Flatpak without the user asking)
+- **Status:** Accepted (Brian, 2026-10-26); amended by [0045](0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md) (no plain file in the Flatpak without the user asking) and by [0050](0050-frostnotes-has-no-desktop-window.md) (no window: notesd and notesctl only)
 - **Date:** 2026-10-26
 
 ## Context

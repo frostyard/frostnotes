@@ -53,13 +53,14 @@ marks, blocks and embeds; heading sizes and completed-task strike-through use My
 ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The draft
 pull request's last commit replaces the Tauri shell.
 
-[Plan 0011](docs/plans/0011-nsgo-only-client.md) and
-[ADR-0049](docs/adr/0049-make-the-nsgo-client-the-only-client.md)
-(Accepted, 2026-11-25) make the NSGo client (`cmd/frostnotes-nsgo`) the
-only client: it first gets the MyGo client's features, all of which the
-owner kept on 2026-11-25, with source mode on NSGo's code editor, and then
-MyGo is removed. Phase 1 is built (#288: the editor's plain logic in
-`internal/desktop/markup`); Phase 2 is in progress.
+[ADR-0050](docs/adr/0050-frostnotes-has-no-desktop-window.md) (the
+owner's decision of 2026-11-25) gives Frostnotes no desktop window:
+Obsidian edits a desktop's vault folder, the Flatpak's notesd syncs it
+with the hub, and Lodge serves the React app (`app/`) again. Both desktop
+clients, `cmd/frostnotes` (MyGo) and `cmd/frostnotes-nsgo` (NSGo), are
+being removed ([plan 0011](docs/plans/0011-nsgo-only-client.md)); no
+phase has started. It supersedes ADR-0049, which made the NSGo client the
+only client (#287 to #291).
 
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
