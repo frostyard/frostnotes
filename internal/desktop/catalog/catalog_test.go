@@ -159,3 +159,51 @@ func TestUploadReadsTheSettingBeforeItsWorker(t *testing.T) {
 		t.Fatalf("embeds %q", embeds)
 	}
 }
+
+func TestLinkedNotePathFollowsTheLinkThenTheSettings(t *testing.T) {
+	folder := &api.VaultSettings{NewNoteLocation: api.NewNoteLocationFolder, NewNoteFolder: "Inbox/"}
+	current := &api.VaultSettings{NewNoteLocation: api.NewNoteLocationCurrent}
+	root := &api.VaultSettings{NewNoteLocation: api.NewNoteLocationRoot}
+	for _, tc := range []struct {
+		target   string
+		settings *api.VaultSettings
+		current  string
+		want     string
+	}{
+		{"Seeds", root, "Garden/Plan.md", "Seeds.md"},
+		{"Seeds", folder, "Garden/Plan.md", "Inbox/Seeds.md"},
+		{"Seeds", current, "Garden/Plan.md", "Garden/Seeds.md"},
+		{"Seeds", current, "Plan.md", "Seeds.md"},
+		{"Shed/Tools", folder, "Plan.md", "Shed/Tools.md"},
+		{"/Seeds.md", folder, "Plan.md", "Inbox/Seeds.md"},
+		{"Seeds", nil, "Plan.md", "Seeds.md"},
+		{"  ", root, "Plan.md", ""},
+	} {
+		if got := LinkedNotePath(tc.target, tc.settings, tc.current); got != tc.want {
+			t.Errorf("LinkedNotePath(%q, %v, %q) = %q, want %q", tc.target, tc.settings, tc.current, got, tc.want)
+		}
+	}
+}
+
+func TestRenamedKeepsTheFolderAndTheExtension(t *testing.T) {
+	for _, tc := range []struct {
+		from, title, want string
+		ok                bool
+	}{
+		{"Garden/Plan.md", "Plan for spring", "Garden/Plan for spring.md", true},
+		{"Plan.md", " Beds ", "Beds.md", true},
+		{"Plan.MD", "Beds", "Beds.MD", true},
+		{"Plan.md", "Plan", "", false},
+		{"Plan.md", "", "", false},
+		{"Plan.md", "a/b", "", false},
+		{"Plan.md", "a:b", "", false},
+	} {
+		got, ok := Renamed(tc.from, tc.title)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("Renamed(%q, %q) = %q, %v; want %q, %v", tc.from, tc.title, got, ok, tc.want, tc.ok)
+		}
+	}
+	if got := Title("Garden/Plan.md"); got != "Plan" {
+		t.Errorf("Title = %q", got)
+	}
+}

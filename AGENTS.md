@@ -142,12 +142,13 @@ file a step names before writing its frostnotes counterpart.
   what live preview hides and draws (no MyGo import); `markup` what the
   editor does to a note's text: the formatting commands, smart lists, the
   link or tag under the caret, frontmatter and properties, the attachment
-  rules, and source mode's highlighting and folds for the NSGo client (no
-  MyGo or frostui import); `editor` source mode and
+  rules, and source mode's highlighting, folds, completions and table of
+  formatting commands for the NSGo client (no MyGo or frostui import); `editor` source mode and
   live preview on MyGo's code editor; `reading`, `history` and `panes` their
   views; `workspace`, `commands` and `prefs` plain data; `catalog` a vault's
-  files, the Files and Tags panes' trees and the quick switcher's match (no
-  MyGo or frostui import); `system` paths, notesd's log, the background
+  files, the Files and Tags panes' trees, the quick switcher's match, the
+  editor's completions and where a linked or renamed note goes (no MyGo or
+  frostui import; the NSGo client uses it too); `system` paths, notesd's log, the background
   setting and the open rules (no MyGo or frostui import; `open.go` carries
   frostui's mailto rule, which `cmd/frostnotes`' tests hold it to); `uikit`
   tab strips and splits (imports only std, MyGo, purego and
