@@ -489,3 +489,56 @@ func subpaths(text string, blocks bool) []markup.Target {
 	}
 	return out
 }
+
+// LinkedNotePath is where following an unresolved link to target creates
+// its note, as Obsidian does: under the link's own folders when it names
+// any, else where the vault's settings put new notes (from the folder of
+// the note at current with "current"). It is "" for a target with no name.
+func LinkedNotePath(target string, settings *api.VaultSettings, current string) string {
+	file := strings.TrimLeft(strings.TrimSpace(target), "/")
+	if file == "" {
+		return ""
+	}
+	if !strings.HasSuffix(strings.ToLower(file), ".md") {
+		file += ".md"
+	}
+	if strings.Contains(file, "/") || settings == nil {
+		return file
+	}
+	folder := ""
+	switch settings.NewNoteLocation {
+	case api.NewNoteLocationFolder:
+		folder = strings.Trim(settings.NewNoteFolder, "/")
+	case api.NewNoteLocationCurrent:
+		if d := path.Dir(current); current != "" && d != "." {
+			folder = d
+		}
+	}
+	if folder == "" {
+		return file
+	}
+	return folder + "/" + file
+}
+
+// Title is the name a file shows as its title: its name without ".md".
+func Title(p string) string { return nameOf(p) }
+
+// Renamed is where the file at p goes when its title becomes title, in the
+// same folder and with the same extension. ok is false when the title is
+// empty, unchanged, or holds a character a name cannot ("/", "\" or ":").
+func Renamed(p, title string) (to string, ok bool) {
+	title = strings.TrimSpace(title)
+	if title == "" || title == Title(p) || strings.ContainsAny(title, `/\:`) {
+		return "", false
+	}
+	base := path.Base(p)
+	ext := base[len(bare(base)):]
+	if !strings.HasSuffix(strings.ToLower(base), ".md") {
+		ext = path.Ext(base)
+	}
+	to = title + ext
+	if d := path.Dir(p); d != "." {
+		to = d + "/" + to
+	}
+	return to, true
+}

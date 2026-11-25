@@ -104,7 +104,9 @@ func TestFilterNarrowsTheTree(t *testing.T) {
 	app.WaitFor(row("Welcome"), 5*time.Second)
 	app.Press(row("Fig"))
 	app.WaitFor("text:Plants/Fig.md · Saved", 5*time.Second)
-	app.Focus("label:Markdown source")
+	// From the editor mod+F finds in the note (TestFindAndReplaceInTheNote);
+	// from anywhere else it is the filter.
+	app.Focus("label:Note title")
 	app.Key("mod+f")
 	app.WaitUntil(5*time.Second, func() bool { return app.Find(filter).Focused })
 }

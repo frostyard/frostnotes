@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 )
 
 var keyNames = map[string]ui.Key{
@@ -109,6 +111,38 @@ func TestThePalettesKeys(t *testing.T) {
 		}
 		if found != 2 {
 			t.Errorf("%+v", s.Keys)
+		}
+	}
+}
+
+// The NSGo client's formatting commands (markup.Commands) are this table's,
+// with its titles and its keys in the editor, while both clients are kept
+// (plan 0011).
+func TestTheFormattingCommandsAreTheTables(t *testing.T) {
+	byID := map[string]Spec{}
+	for _, s := range Table() {
+		byID[s.ID] = s
+	}
+	for _, c := range markup.Commands() {
+		s, ok := byID[c.ID]
+		if !ok {
+			t.Errorf("%s is not in the table", c.ID)
+			continue
+		}
+		if c.Title != s.Title {
+			t.Errorf("%s is %q here and %q in markup", c.ID, s.Title, c.Title)
+		}
+		var keys []string
+		for _, k := range s.Keys {
+			if k.Scope == InEditor && k.Mods == ui.Cmd && k.Key >= ui.KeyA && k.Key <= ui.KeyZ {
+				keys = append(keys, "mod+"+string(rune('a'+k.Key-ui.KeyA)))
+			}
+			if k.Scope == InEditor && k.Mods == ui.Cmd && k.Key == ui.KeySlash {
+				keys = append(keys, "mod+/")
+			}
+		}
+		if want := strings.Join(keys, ", "); c.Keys != want {
+			t.Errorf("%s's keys are %q in markup and %q here", c.ID, c.Keys, want)
 		}
 	}
 }

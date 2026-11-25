@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/catalog"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/session"
 	"github.com/frostyard/frostui/workspaceui"
@@ -79,6 +80,19 @@ type workspace struct {
 	// the field, which mod+F focuses.
 	filter      *core.Signal[string]
 	filterInput *core.Ref
+	// source is source mode's editor while it shows (source.go).
+	source *sourceEditor
+	// catalog is the shown vault's files, aliases and tags, for
+	// completions and links, and vaultSettings its settings (links.go).
+	catalog       *catalog.Catalog
+	catalogVault  int64
+	vaultSettings *api.VaultSettings
+	// jump is the heading or block to show once its note shows, and
+	// searchQuery what Search vault opens with.
+	jump        jump
+	searchQuery string
+	// rename is the inline title's move waiting on Update links (title.go).
+	rename *pendingRename
 }
 
 // connected is what connection holds while notesd answers.
@@ -269,6 +283,7 @@ func (w *workspace) selectVault(id int64) {
 	w.files.Set(nil)
 	w.listed.Set(false)
 	w.loadFiles()
+	w.loadVaultData()
 }
 
 func (w *workspace) open(p string) {
@@ -312,6 +327,7 @@ func (w *workspace) loadVaults() {
 			if slices.ContainsFunc(vs, func(v api.Vault) bool { return v.ID == w.vault.GetUntracked() }) {
 				w.loadFiles()
 				w.loadSync()
+				w.loadVaultData()
 				return
 			}
 
@@ -352,6 +368,9 @@ func (w *workspace) loadFiles() {
 
 func (w *workspace) onEvent(_ int64, ev api.Event) {
 	id := w.vault.GetUntracked()
+	if w.catalog != nil {
+		w.catalog.Event(ev)
+	}
 	switch e := ev.(type) {
 	case api.SyncChanged:
 		if id == e.Status.VaultID {
@@ -407,10 +426,12 @@ func (w *workspace) editor() core.Node {
 					return !d.Loaded() && d.Status() != notes.StatusMissing && d.Notice() == nil
 				}, Then: func(*core.Scope) core.Node {
 					return ui.Skeleton{Lines: 6, Label: "Loading note"}
-				}, Else: func(*core.Scope) core.Node {
-					return core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(cx *core.Scope) core.Node {
-						return w.sourceEditor(cx, d)
-					}}
+				}, Else: func(cx *core.Scope) core.Node {
+					// The note's name over its text (title.go).
+					return core.View{Style: ui.FillRest, Children: []core.Node{w.inlineTitle(cx, d),
+						core.Show{When: w.live.Get, Then: func(cx *core.Scope) core.Node { return w.inlineEditor(cx, d) }, Else: func(cx *core.Scope) core.Node {
+							return w.sourceEditor(cx, d)
+						}}}}
 				}}
 			}},
 		}}

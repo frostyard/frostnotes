@@ -46,8 +46,18 @@ func editorDefaults() sourcePrefs {
 // through the change. The user's undo history ends there, and Ctrl+Z never
 // takes back another writer's change (ADR-0022; ADR-0049, decision 3).
 type sourceEditor struct {
+	w   *workspace
 	d   *notes.Document
 	ref *editor.Ref
+	// writable says the note can be edited now.
+	writable func() bool
+	// sels are the editor's selections as it last reported them: before
+	// an edit, when OnChange hears it.
+	sels []editor.Selection
+	// hasKeys holds the app's keys over the editor's while it has the
+	// keyboard (bindKeys).
+	hasKeys *core.Signal[bool]
+	find    *finder
 	// last is the editor's text as the document last had it: typing since
 	// is the user's.
 	last string
@@ -76,12 +86,21 @@ type restoreState struct {
 
 // sourceEditor is the source mode of document d.
 func (w *workspace) sourceEditor(cx *core.Scope, d *notes.Document) core.Node {
-	s := &sourceEditor{d: d, ref: &editor.Ref{}, last: d.Text()}
+	s := &sourceEditor{w: w, d: d, ref: &editor.Ref{}, last: d.Text()}
 	s.text = core.NewSignal(cx, s.last)
 	s.starts = core.NewSignal(cx, 0)
+	s.hasKeys = core.NewSignal(cx, false)
+	s.find = newFinder(cx)
 	writable := core.NewMemo(cx, func() bool {
 		w.revision.Get()
 		return d.Loaded() && d.Status() != notes.StatusMissing && d.ReadOnly() == ""
+	})
+	s.writable = writable.GetUntracked
+	w.source = s
+	cx.Cleanup(func() {
+		if w.source == s {
+			w.source = nil
+		}
 	})
 	wasWritable := writable.GetUntracked()
 	// What changed the document's text that the editor did not type, and
@@ -104,7 +123,7 @@ func (w *workspace) sourceEditor(cx *core.Scope, d *notes.Document) core.Node {
 		return out
 	}, slices.Equal)
 	p := editorDefaults()
-	return core.View{Style: ui.FillRest.Merge(core.Style{AlignItems: core.AlignCenter}), Children: []core.Node{core.Dynamic(func(cx *core.Scope) core.Node {
+	return core.View{Style: ui.FillRest.Merge(core.Style{AlignItems: core.AlignCenter}), Children: []core.Node{s.findBar(p.ReadableLineLength), core.Dynamic(func(cx *core.Scope) core.Node {
 		s.starts.Get()
 		focus := s.restore != nil && s.restore.focus
 		return uieditor.Editor{
@@ -121,10 +140,26 @@ func (w *workspace) sourceEditor(cx *core.Scope, d *notes.Document) core.Node {
 			Style:    s.style(p.ReadableLineLength),
 			OnChange: s.typed,
 			OnLayout: func(core.Bounds) { s.restored() },
-			OnFocus:  func() { s.focused = true },
-			OnBlur:   func() { s.focused = false },
+			OnFocus:  func() { s.focused = true; s.hasKeys.Set(true) },
+			OnBlur:   func() { s.focused = false; s.hasKeys.Set(false) },
+			// [[ notes, [[note# headings, [[note#^ blocks and #tags
+			// (complete.go).
+			Completion: true, CompletionTriggerCharacters: []string{"[[", "#", "^"},
+			OnCompletionRequest: s.complete,
+			OnSelectionChange:   func(sels []editor.Selection) { s.sels = sels },
+			// Ctrl+click and F12 follow the link or tag under the pointer;
+			// Ctrl over one underlines it.
+			OnDefinitionRequest: s.definition,
+			Search:              s.find.search,
+			OnSearchChange:      s.find.result.Set,
 		}
-	})}}
+	}),
+		// After the editor, so that its bindings are made after the
+		// editor's own and win (TestAppKeysAroundTheEditor).
+		core.Show{When: s.hasKeys.Get, Then: func(cx *core.Scope) core.Node {
+			s.bindKeys(cx)
+			return core.Group{}
+		}}}}
 }
 
 // style is the editor's box: the pane's height, and at most readableWidth
@@ -159,7 +194,9 @@ func (s *sourceEditor) typed(text string) {
 		// The document refused the edit, or holds another writer's change
 		// too: the editor starts again on the document's text.
 		s.restart()
+		return
 	}
+	s.wrapTyped(before, text)
 }
 
 // restart starts the editor again on the document's text, keeping what
@@ -202,6 +239,7 @@ func (s *sourceEditor) restart() {
 func (s *sourceEditor) restored() {
 	r := s.restore
 	if r == nil {
+		s.takeJump()
 		return
 	}
 	s.restore = nil

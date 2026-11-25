@@ -35,6 +35,7 @@ func (w *workspace) commands() []tool {
 	out = append(out, w.noteTools()...)
 	out = append(out, w.vaultTools()...)
 	out = append(out, w.restTools()...)
+	out = append(out, w.editTools()...)
 	out = append(out,
 		tool{label: "Show source", off: func() bool { return !w.live.Get() }, run: func() { w.live.Set(false) }},
 		tool{label: "Show live preview", off: w.live.Get, run: func() { w.live.Set(true) }})
@@ -59,8 +60,8 @@ func (w *workspace) bindNoteActions() {
 		w.cx.OnKey(key, func() { w.showAction(action) })
 	}
 	// mod+F is the search of what is shown: the filter over the notes
-	// tree. It answers from the editor too, which has the keyboard most of
-	// the time.
+	// tree. In source mode's editor it finds in the note instead (edit.go),
+	// whose binding, made once the editor has the keyboard, wins.
 	w.cx.OnKeyWith("mod+f", core.KeyOptions{When: core.KeyAlways}, w.focusFilter)
 }
 
@@ -88,6 +89,8 @@ func (w *workspace) noteDialog(cx *core.Scope) core.Node {
 		return nil
 	case restoreNote:
 		return w.restoreDialog(cx)
+	case updateLinks:
+		return w.updateLinksDialog(cx)
 	case quickOpen, vaultSearch:
 		return w.findDialog(cx, action)
 	default:
@@ -179,7 +182,9 @@ func (w *workspace) findDialog(cx *core.Scope, action string) core.Node {
 			}
 		}
 	} else {
-		query := core.NewSignal(cx, "")
+		// A tag followed from the editor opens the search on it.
+		pick.DefaultQuery, w.searchQuery = w.searchQuery, ""
+		query := core.NewSignal(cx, pick.DefaultQuery)
 		results := core.NewSignalFunc(cx, []base.CommandItem(nil), nil)
 		loading := core.NewSignal(cx, false)
 		problem := core.NewSignal(cx, "")

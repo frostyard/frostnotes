@@ -59,7 +59,8 @@ func waitSource(t *testing.T, app *nsgotest.App, timeout time.Duration, text str
 }
 
 // replaceSource types text over the note's whole text in source mode, a
-// line at a time, with the Enter key between, which the editor binds. On a
+// line at a time, with Shift+Enter between, which the editor binds to a
+// plain line break: Enter continues a list (smart lists). On a
 // target, an input method's commit of a line break reaches the editor's
 // 1-line field, which turns it into a space on GTK, and a line break in
 // typed text left the line before in that field, typed again after it
@@ -69,7 +70,7 @@ func replaceSource(app *nsgotest.App, text string) {
 	app.Key("mod+a")
 	for i, line := range strings.Split(text, "\n") {
 		if i > 0 {
-			app.Key("enter")
+			app.Key("shift+enter")
 		}
 		if line != "" {
 			app.Type(source, line)
