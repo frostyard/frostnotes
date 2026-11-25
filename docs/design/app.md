@@ -69,10 +69,11 @@ The client keeps to the kit's standard for an app (frostui's `docs/specs/workspa
 - **Settings** (`vaults_native.go`) is NSGo's settings view, shown in place of the vault by the gear at the navigation's foot or mod+, and left by Done or a press of a vault's row. Its rows start the vault forms, show the shown vault's sync, and hold the device's choices. The tree and the editor are kept while it shows (`core.NewHolder`), so the open note and its undo history are there after it. Until 2026-11-24 this was a dialog, Manage vaults, of filled buttons. The Lodge build has no Settings.
 - **The navigation's foot** is the kit's `ConnectionItem`: a dot, green while notesd answers, and the connection's line.
 - **States.** The tree shows a skeleton until the vault's notes have been read, then its notes or the kit's `EmptyState`.
-- **Keys.** mod+K and mod+O are the palette, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
+- **Keys.** mod+K and mod+O are the palette, mod+F the notes' filter, mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings.
 - **No look written as a number** (`TestNoLiteralLooks`), but 1 the kit has no token for: a Markdown heading's size in live preview. A padding takes the kit's spacing.
 
-Not done of the standard: the window's size, place and pane widths are not kept (rule 8), and nothing answers mod+F.
+- **The window** (`window.go`) is kept on the device, in the client's storage: its size, its place where the platform reports one, and the navigation's width. A start shows it as it was left. A size under 480 by 360 is not kept, nor a maximized window's, and the window does not go under that size. A browser's window is not kept. The notes tree's width is not kept: the kit's `FileExplorer` reports no change of it.
+- **The filter** over the notes tree (`tree.go`) leaves the notes whose title or path holds its words, inside their folders, all open. mod+F puts the keyboard in it, from the editor too.
 
 On Linux, Settings creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
 

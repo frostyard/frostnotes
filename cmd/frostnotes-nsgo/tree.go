@@ -4,6 +4,7 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"strings"
 
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostui/workspaceui"
@@ -89,13 +90,17 @@ func buildTree(files []api.NoteEntry) noteTree {
 // notesTree is the tree of the vault's notes. A press of a note's row
 // opens it, and the row of the note that is open is the chosen one.
 func (w *workspace) notesTree(cx *core.Scope) core.Node {
-	tree := core.NewMemoFunc(cx, func() noteTree { return buildTree(w.files.Get()) }, func(noteTree, noteTree) bool { return false })
+	// The tree holds the notes the filter's words match, all of them with
+	// no word.
+	tree := core.NewMemoFunc(cx, func() noteTree { return buildTree(matching(w.files.Get(), w.filter.Get())) }, func(noteTree, noteTree) bool { return false })
+	filtering := func() bool { return strings.TrimSpace(w.filter.Get()) != "" }
 	// A vault's folders start open, and those the user closes stay closed
-	// while the vault is shown.
+	// while the vault is shown. Another vault starts with no filter.
 	closed := core.NewSignalFunc(cx, map[folder]bool{}, func(_, _ map[folder]bool) bool { return false })
 	cx.Effect(func() {
 		w.vault.Get()
 		closed.Set(map[folder]bool{})
+		w.filter.Set("")
 	})
 	selection := ui.NewSelection(cx, false)
 	w.chosen = selection
@@ -130,7 +135,7 @@ func (w *workspace) notesTree(cx *core.Scope) core.Node {
 			w.open(p)
 		}
 	})
-	return ui.Tree{Label: "Notes", TestID: "notes-tree", Style: ui.FillRest, Selection: selection, ToggleLabel: "Expand", RowStyleFunc: workspaceui.SoftRows(cx),
+	notes := ui.Tree{Label: "Notes", TestID: "notes-tree", Style: ui.FillRest, Selection: selection, ToggleLabel: "Expand", RowStyleFunc: workspaceui.SoftRows(cx),
 		Roots: func() []any { return tree.Get().roots },
 		Children: func(k any) []any {
 			if f, ok := k.(folder); ok {
@@ -139,8 +144,9 @@ func (w *workspace) notesTree(cx *core.Scope) core.Node {
 			return nil
 		},
 		Expanded: func(k any) bool {
+			// A filter shows every folder that holds a match, open.
 			f, ok := k.(folder)
-			return ok && !closed.Get()[f]
+			return ok && (filtering() || !closed.Get()[f])
 		},
 		OnExpand: func(k any, open bool) {
 			f, ok := k.(folder)
@@ -185,6 +191,36 @@ func (w *workspace) notesTree(cx *core.Scope) core.Node {
 			if !w.listed.Get() {
 				return ui.Skeleton{Lines: 4, Label: "Loading notes"}
 			}
+			if filtering() {
+				return workspaceui.EmptyState{Icon: lucide.Search, Title: "No matching notes", Hint: "No note's title or path holds these words."}
+			}
 			return workspaceui.EmptyState{Icon: lucide.FileText, Title: "No notes yet", Hint: "New note adds the first."}
 		})}
+	// The filter stands over the tree, as the search field over FrostMail's
+	// list and the filter over PocketGo's sessions do. mod+F focuses it.
+	return core.View{Style: ui.FillRest, Children: []core.Node{
+		core.View{Style: core.Style{Padding: core.All(workspaceui.SpaceS)}, Children: []core.Node{
+			workspaceui.SearchField{Placeholder: "Filter notes", Keys: "mod+f", Ref: w.filterInput, Value: w.filter.Get, OnChange: w.filter.Set}}},
+		notes}}
+}
+
+// matching are the notes whose title or path holds every word of the
+// filter, whatever its case: every note for no word.
+func matching(files []api.NoteEntry, filter string) []api.NoteEntry {
+	words := strings.Fields(strings.ToLower(filter))
+	if len(words) == 0 {
+		return files
+	}
+	var out []api.NoteEntry
+	for _, f := range files {
+		text := strings.ToLower(f.Title + "\n" + f.Path)
+		holds := true
+		for _, word := range words {
+			holds = holds && strings.Contains(text, word)
+		}
+		if holds {
+			out = append(out, f)
+		}
+	}
+	return out
 }
