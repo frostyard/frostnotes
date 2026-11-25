@@ -70,6 +70,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0046 — Test a shared NSGo source editor](adr/0046-test-a-shared-nsgo-source-editor.md)
 - [0047 — Use the shared NSGo editor on Linux and Lodge](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
 - [0048 — The race gate runs in 3 parts](adr/0048-the-race-gate-runs-in-3-parts.md)
+- [0049 — Make the NSGo client the only client](adr/0049-make-the-nsgo-client-the-only-client.md)
 
 ### Design
 
@@ -107,6 +108,7 @@ Building from source, the nsl machine for the app and the gates:
 - [0008 — M6, the standalone desktop app](plans/0008-m6-the-standalone-desktop-app.md)
 - [0009 — The desktop app on MyGo and frostui](plans/0009-mygo-desktop.md)
 - [0010 — M5, queries](plans/0010-m5-queries.md)
+- [0011 — NSGo as the only client](plans/0011-nsgo-only-client.md)
 
 ## Conventions
 

@@ -50,7 +50,7 @@ is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app).
 
 ## Shared NSGo editor preview
 
-[ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md) promotes this editor to the Linux and Lodge defaults. The Flatpak also includes MyGo for workflows such as revision history.
+[ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md) promotes this editor to the Linux and Lodge defaults. The Flatpak also includes MyGo for workflows such as revision history. [ADR-0049](../adr/0049-make-the-nsgo-client-the-only-client.md) makes this client the only one: it gets the MyGo client's features first, and then MyGo is removed ([plan 0011](../plans/0011-nsgo-only-client.md)).
 
 The default Linux and Lodge app uses the versioned workspace shell, file explorer and notices of frostui’s `workspaceui` module (`github.com/frostyard/frostui/workspaceui`, v0.4.0). FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
 

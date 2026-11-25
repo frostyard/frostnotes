@@ -53,6 +53,13 @@ marks, blocks and embeds; heading sizes and completed-task strike-through use My
 ([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The draft
 pull request's last commit replaces the Tauri shell.
 
+[Plan 0011](docs/plans/0011-nsgo-only-client.md) and
+[ADR-0049](docs/adr/0049-make-the-nsgo-client-the-only-client.md)
+(Proposed, 2026-11-25) make the NSGo client (`cmd/frostnotes-nsgo`) the
+only client: it first gets the MyGo client's features, all of which the
+owner kept on 2026-11-25, with source mode on NSGo's code editor, and then
+MyGo is removed. No phase has started.
+
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
 (a sibling checkout at `../frostmail` when present): read the frostmail
