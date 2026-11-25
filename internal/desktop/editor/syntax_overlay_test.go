@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	code "github.com/egoist/mygo/ui/editor"
+
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 )
 
 // overlaySlow is overlay without its fast path: every pattern on every
@@ -48,7 +50,7 @@ func overlaySlow(line string, kinds []code.TokenKind) (open bool) {
 			set(m[0], m[1], code.TokenString)
 		}
 	}
-	for _, t := range tagRanges(line) {
+	for _, t := range markup.TagRanges(line) {
 		if free(t[0], t[1]) && kinds[t[0]] != code.TokenLink {
 			set(t[0], t[1], code.TokenType)
 		}

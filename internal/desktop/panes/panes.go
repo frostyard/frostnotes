@@ -1,3 +1,7 @@
+// Package panes draws the desktop app's sidebars' panes
+// (docs/specs/ui.md#sidebars-and-panes, plan 0009): Files, Search,
+// Backlinks, Outgoing links, Tags, All properties, Outline and Tasks. They
+// read notesd through their Env and ask the window to act through Actions.
 package panes
 
 import (
@@ -433,9 +437,9 @@ func (o *Outgoing) View(c *ui.Context) ui.Element {
 type Tags struct {
 	Env        *Env
 	ByCount    bool
-	state      ui.OutlineState[*TagNode]
+	state      ui.OutlineState[*catalog.TagNode]
 	chosen     int
-	roots      []*TagNode
+	roots      []*catalog.TagNode
 	counts     []api.TagCount
 	generation uint64
 }
@@ -466,10 +470,10 @@ func (p *Tags) rebuild() {
 	for n := range p.state.Open.All() {
 		open[strings.ToLower(n.Tag)] = true
 	}
-	p.roots = TagTree(p.counts, p.ByCount)
+	p.roots = catalog.TagTree(p.counts, p.ByCount)
 	p.state.Open.Clear()
-	var restore func([]*TagNode)
-	restore = func(nodes []*TagNode) {
+	var restore func([]*catalog.TagNode)
+	restore = func(nodes []*catalog.TagNode) {
 		for _, n := range nodes {
 			if open[strings.ToLower(n.Tag)] {
 				p.state.Open.Add(n)
@@ -492,9 +496,9 @@ func (p *Tags) View(c *ui.Context) ui.Element {
 			p.chosen = -1
 			p.state.List.Selected = &p.chosen
 		}
-		list := ui.Outline(c, &p.state, p.roots, func(n *TagNode) []*TagNode {
+		list := ui.Outline(c, &p.state, p.roots, func(n *catalog.TagNode) []*catalog.TagNode {
 			return n.Children
-		}, func(n *TagNode) {
+		}, func(n *catalog.TagNode) {
 			r := ui.Row(c).Grow(1).Gap(frostui.SpaceXS).AlignItems(ui.Center).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("#" + n.Tag)
 			if r.Clicked() {
 				p.Env.Actions.SearchFor("tag:#" + n.Tag)
@@ -505,7 +509,7 @@ func (p *Tags) View(c *ui.Context) ui.Element {
 			})
 		}).Grow(1)
 		if list.Submitted() && p.chosen >= 0 {
-			if n, ok := p.state.List.Key(p.chosen).(*TagNode); ok {
+			if n, ok := p.state.List.Key(p.chosen).(*catalog.TagNode); ok {
 				p.Env.Actions.SearchFor("tag:#" + n.Tag)
 			}
 		}

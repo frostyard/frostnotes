@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/frostyard/frostui"
 
+	"github.com/frostyard/frostnotes/internal/desktop/catalog"
 	"github.com/frostyard/frostnotes/internal/desktop/uikit"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
 )
@@ -40,7 +41,7 @@ type Files struct {
 
 	list           frostui.SourceList[string]
 	made           bool
-	tree           *Tree
+	tree           *catalog.Tree
 	builtFor       int
 	sort           string
 	unsup          bool
@@ -55,7 +56,7 @@ func (f *Files) rebuild() {
 	if f.tree != nil && f.sort == w.Files.Sort && f.unsup == f.ShowUnsupported && f.builtFor == cat.Generation() {
 		return
 	}
-	f.tree = BuildTree(cat.Files(), cat.Folders(), w.Files.Sort, f.ShowUnsupported)
+	f.tree = catalog.BuildTree(cat.Files(), cat.Folders(), w.Files.Sort, f.ShowUnsupported)
 	f.sort, f.unsup, f.builtFor = w.Files.Sort, f.ShowUnsupported, cat.Generation()
 }
 
@@ -161,7 +162,7 @@ func (f *Files) menu(m *ui.Menu, p, _ string) {
 
 // accepts says whether folder takes the dragged row.
 func (f *Files) accepts(folder, p string) bool {
-	return f.isFolder(folder) && p != folder && parentOf(p) != folder && !strings.HasPrefix(folder+"/", p+"/")
+	return f.isFolder(folder) && p != folder && catalog.Parent(p) != folder && !strings.HasPrefix(folder+"/", p+"/")
 }
 
 func (f *Files) move(p, folder string) {
@@ -226,8 +227,8 @@ func (f *Files) folders() []string {
 
 func (f *Files) sortMenu(m *ui.Menu) {
 	for _, s := range []struct{ id, title string }{
-		{SortAlphabetical, "File name (A to Z)"}, {SortAlphabeticalReverse, "File name (Z to A)"},
-		{SortModified, "Modified time (new to old)"}, {SortModifiedReverse, "Modified time (old to new)"},
+		{catalog.SortAlphabetical, "File name (A to Z)"}, {catalog.SortAlphabeticalReverse, "File name (Z to A)"},
+		{catalog.SortModified, "Modified time (new to old)"}, {catalog.SortModifiedReverse, "Modified time (old to new)"},
 	} {
 		if m.Item(s.title).Checked(f.Store.Workspace().Files.Sort == s.id).Chosen() {
 			f.Store.Update(func(w *workspace.Workspace) { w.Files.Sort = s.id })
@@ -308,7 +309,7 @@ func (f *Files) View(c *ui.Context) ui.Element {
 				f.Actions.NewFolder("")
 			}
 		})
-		if p, ok := ui.Drop[string](list); ok && parentOf(p) != "" {
+		if p, ok := ui.Drop[string](list); ok && catalog.Parent(p) != "" {
 			f.move(p, "")
 		}
 	})

@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	code "github.com/egoist/mygo/ui/editor"
 
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/reading"
 )
 
@@ -43,24 +44,17 @@ const (
 	WhereWindow
 )
 
-// Target is a note [[ completes to.
-type Target struct {
-	Insert string // the link text, as the vault's link format writes it
-	Label  string // what the list shows
-	Detail string // its folder, dimmed
-}
-
 // Sources is what the editor completes from: the vault's notes and tags,
 // which the session keeps.
 type Sources interface {
 	// LinkTargets lists the notes [[ completes to for query, best first.
-	LinkTargets(query string, limit int) []Target
+	LinkTargets(query string, limit int) []markup.Target
 	// Tags lists the vault's tags, by how many notes have them.
 	Tags() []string
 	// Subpaths lists the headings, or the block IDs, of the note target
 	// leads to ("" is the note being edited), through done on the UI
 	// thread; done is not called when it leads to no note.
-	Subpaths(target string, blocks bool, done func([]Target))
+	Subpaths(target string, blocks bool, done func([]markup.Target))
 	// Resolve is the file a link names, "" for none.
 	Resolve(target string) string
 }
@@ -73,11 +67,11 @@ type NoteEditor struct {
 	Prefs   Prefs
 	Sources Sources
 	// Follow opens a link: Alt + Enter, Ctrl + click and their variants.
-	Follow func(l Link, where Where)
+	Follow func(l markup.Link, where Where)
 	// FollowTag searches for a tag, the same way.
 	FollowTag func(tag string)
 	// Preview builds a link's page preview in a hover; nil for none.
-	Preview func(c *ui.Context, l Link)
+	Preview func(c *ui.Context, l markup.Link)
 	// Uploads and Clipboard let files be pasted and dropped; nil for
 	// none. OnError shows what went wrong, Now is the clock.
 	Uploads   Uploader
@@ -165,16 +159,16 @@ func (e *NoteEditor) View(c *ui.Context) ui.Element {
 	return el
 }
 
-func (e *NoteEditor) sels() []Sel {
+func (e *NoteEditor) sels() []markup.Sel {
 	ss := e.State.Selections()
-	out := make([]Sel, len(ss))
+	out := make([]markup.Sel, len(ss))
 	for i, s := range ss {
-		out[i] = Sel{s.Anchor, s.Head}
+		out[i] = markup.Sel{Anchor: s.Anchor, Head: s.Head}
 	}
 	return out
 }
 
-func (e *NoteEditor) setSels(sels []Sel) {
+func (e *NoteEditor) setSels(sels []markup.Sel) {
 	out := make([]code.Selection, len(sels))
 	for i, s := range sels {
 		out[i] = code.Selection{Anchor: s.Anchor, Head: s.Head}
@@ -186,7 +180,7 @@ func (e *NoteEditor) setSels(sels []Sel) {
 
 // Run applies a command's edit as the user's: one step of undo, saved as
 // typing is.
-func (e *NoteEditor) Run(cmd func(text string, sels []Sel) Edit) bool {
+func (e *NoteEditor) Run(cmd func(text string, sels []markup.Sel) markup.Edit) bool {
 	e.b.Sync()
 	d := e.b.Document()
 	if e.State.ReadOnly || !d.Loaded() || d.ReadOnly() != "" {
@@ -225,8 +219,8 @@ func (e *NoteEditor) input(ev ui.InputEvent) bool {
 		return e.key(ev.Mods, ev.Key)
 	case ui.InputText:
 		if e.Prefs.AutoPairMarkdown {
-			if e.Run(func(text string, sels []Sel) Edit {
-				ed, _ := WrapInMark(text, sels, ev.Text)
+			if e.Run(func(text string, sels []markup.Sel) markup.Edit {
+				ed, _ := markup.WrapInMark(text, sels, ev.Text)
 				return ed
 			}) {
 				return true
@@ -242,22 +236,22 @@ func (e *NoteEditor) input(ev ui.InputEvent) bool {
 // key runs the editor's own keys; it reports whether it took the key.
 func (e *NoteEditor) key(mods ui.Modifiers, key ui.Key) bool {
 	cmd, alt, shift := ui.Cmd, ui.Alt, ui.Shift
-	run := func(f func(string, []Sel) Edit) bool { e.Run(f); return true }
+	run := func(f func(string, []markup.Sel) markup.Edit) bool { e.Run(f); return true }
 	switch {
 	case mods == cmd && key == ui.KeyV, mods == shift && key == ui.KeyInsert:
 		return e.paste()
 	case mods == cmd && key == ui.KeyB:
-		return run(func(t string, s []Sel) Edit { return ToggleMark(t, s, "**") })
+		return run(func(t string, s []markup.Sel) markup.Edit { return markup.ToggleMark(t, s, "**") })
 	case mods == cmd && key == ui.KeyI:
-		return run(func(t string, s []Sel) Edit { return ToggleMark(t, s, "*") })
+		return run(func(t string, s []markup.Sel) markup.Edit { return markup.ToggleMark(t, s, "*") })
 	case mods == cmd && key == ui.KeyK:
-		return run(InsertLink)
+		return run(markup.InsertLink)
 	case mods == cmd && key == ui.KeyL:
-		return run(ToggleChecklist)
+		return run(markup.ToggleChecklist)
 	case mods == cmd && key == ui.KeySlash:
-		return run(ToggleComment)
+		return run(markup.ToggleComment)
 	case mods == cmd && key == ui.KeyD:
-		return run(DeleteParagraph)
+		return run(markup.DeleteParagraph)
 	case mods == cmd && key == ui.KeyS:
 		e.b.Sync()
 		e.b.Document().Save()
@@ -271,13 +265,13 @@ func (e *NoteEditor) key(mods ui.Modifiers, key ui.Key) bool {
 	case mods == cmd|alt|shift && key == ui.KeyEnter:
 		return e.followAt(e.State.Cursor(), WhereWindow)
 	case mods == 0 && key == ui.KeyEnter && e.Prefs.SmartLists:
-		return e.Run(func(t string, s []Sel) Edit {
-			ed, _ := ContinueMarkup(t, s)
+		return e.Run(func(t string, s []markup.Sel) markup.Edit {
+			ed, _ := markup.ContinueMarkup(t, s)
 			return ed
 		})
 	case mods == 0 && key == ui.KeyBackspace && e.Prefs.SmartLists:
-		return e.Run(func(t string, s []Sel) Edit {
-			ed, _ := DeleteMarkupBackward(t, s)
+		return e.Run(func(t string, s []markup.Sel) markup.Edit {
+			ed, _ := markup.DeleteMarkupBackward(t, s)
 			return ed
 		})
 	}
@@ -289,11 +283,11 @@ func (e *NoteEditor) key(mods ui.Modifiers, key ui.Key) bool {
 func (e *NoteEditor) followAt(offset int, where Where) bool {
 	e.b.Sync()
 	text := e.b.Document().Text()
-	if l, ok := LinkAt(text, offset); ok && e.Follow != nil {
+	if l, ok := markup.LinkAt(text, offset); ok && e.Follow != nil {
 		e.Follow(l, where)
 		return true
 	}
-	if tag, ok := TagAt(text, offset); ok && e.FollowTag != nil {
+	if tag, ok := markup.TagAt(text, offset); ok && e.FollowTag != nil {
 		e.FollowTag(tag)
 		return true
 	}
@@ -304,7 +298,7 @@ func (e *NoteEditor) hover(r code.HoverRequest) {
 	if e.Preview == nil {
 		return
 	}
-	l, ok := LinkAt(e.b.Buffer().String(), r.Offset)
+	l, ok := markup.LinkAt(e.b.Buffer().String(), r.Offset)
 	if !ok || l.URL != "" {
 		return
 	}
@@ -376,7 +370,7 @@ func (e *NoteEditor) inOpenLink() bool {
 func (e *NoteEditor) completeSubpath(at int, target string, blocks bool, query string, closed bool) {
 	version := e.b.Buffer().Version()
 	start := at - len(query)
-	e.Sources.Subpaths(target, blocks, func(found []Target) {
+	e.Sources.Subpaths(target, blocks, func(found []markup.Target) {
 		if e.b.Buffer().Version() != version || e.State.Cursor() != at {
 			return // the text or the caret moved on; the next key asks again
 		}

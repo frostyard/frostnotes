@@ -16,6 +16,7 @@ import (
 	"github.com/frostyard/frostnotes/api"
 	"github.com/frostyard/frostnotes/internal/desktop/commands"
 	"github.com/frostyard/frostnotes/internal/desktop/editor"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/desktop/panes"
 	"github.com/frostyard/frostnotes/internal/desktop/prefs"
@@ -242,7 +243,7 @@ func (a *App) followNote(p, sub string, newTab bool) {
 // opens outside the app, and an unresolved note link creates the note, as
 // Obsidian does: under its own folders when it names any, else where new
 // notes go.
-func (a *App) followLink(l editor.Link, from string, w editor.Where) {
+func (a *App) followLink(l markup.Link, from string, w editor.Where) {
 	if l.URL != "" {
 		a.report(a.openExternal(l.URL))
 		return
@@ -288,8 +289,8 @@ type preview struct {
 const previewLines = 12
 
 // linkPreview draws the page preview of a link in the note at from.
-func (a *App) linkPreview(from func() string) func(*ui.Context, editor.Link) {
-	return func(c *ui.Context, l editor.Link) {
+func (a *App) linkPreview(from func() string) func(*ui.Context, markup.Link) {
+	return func(c *ui.Context, l markup.Link) {
 		key := from() + "\x00" + l.Target
 		p := a.previews[key]
 		if p == nil {
@@ -346,7 +347,7 @@ func (a *App) loadPreview(p *preview, from, target string) {
 		return nil
 	}, func(err error) {
 		p.done, p.failed = true, err != nil
-		lines := strings.Split(strings.TrimSpace(editor.Body(text)), "\n")
+		lines := strings.Split(strings.TrimSpace(markup.Body(text)), "\n")
 		p.text = strings.Join(lines[:min(len(lines), previewLines)], "\n")
 	})
 }
@@ -656,16 +657,16 @@ func (a *App) insertTemplate(template string) {
 func (a *App) applyTemplate(e *editor.NoteEditor, content string) {
 	e.Binding().Sync()
 	d := e.Binding().Document()
-	if fm := editor.ReadFrontmatter(content); fm.Exists && len(fm.Properties) > 0 {
-		mine := editor.ReadFrontmatter(d.Text())
+	if fm := markup.ReadFrontmatter(content); fm.Exists && len(fm.Properties) > 0 {
+		mine := markup.ReadFrontmatter(d.Text())
 		add := map[string]any{}
 		for _, p := range fm.Properties {
-			if !slices.ContainsFunc(mine.Properties, func(q editor.Property) bool { return q.Key == p.Key }) {
+			if !slices.ContainsFunc(mine.Properties, func(q markup.Property) bool { return q.Key == p.Key }) {
 				add[p.Key] = p.Value
 			}
 		}
 		if len(add) > 0 {
-			next, err := editor.SetProperties(d.Text(), add)
+			next, err := markup.SetProperties(d.Text(), add)
 			if err != nil {
 				a.notify("Cannot add the template's properties: " + err.Error())
 			} else {
@@ -673,7 +674,7 @@ func (a *App) applyTemplate(e *editor.NoteEditor, content string) {
 			}
 		}
 	}
-	e.State.Insert(editor.Body(content))
+	e.State.Insert(markup.Body(content))
 }
 
 func (a *App) addFileProperty() {
@@ -688,8 +689,8 @@ func (a *App) addFileProperty() {
 		a.notify(reason)
 		return
 	}
-	if !editor.ReadFrontmatter(d.Text()).Exists {
-		at := editor.FrontmatterStart(d.Text())
+	if !markup.ReadFrontmatter(d.Text()).Exists {
+		at := markup.FrontmatterStart(d.Text())
 		cs, err := notes.ChangesOf(len(d.Text()), notes.Change{From: at, To: at, Insert: "---\n---\n"})
 		if err != nil {
 			a.report(err)
@@ -701,7 +702,7 @@ func (a *App) addFileProperty() {
 		tc.ed.Properties.Add()
 		return
 	}
-	e.State.GoTo(code.Pos{Line: editor.FrontmatterLastLine(d.Text())})
+	e.State.GoTo(code.Pos{Line: markup.FrontmatterLastLine(d.Text())})
 	e.State.Insert("\n")
 }
 
@@ -754,7 +755,7 @@ func (a *App) followCaret(w editor.Where) {
 		return
 	}
 	e.Binding().Sync()
-	if l, ok := editor.LinkAt(e.Binding().Document().Text(), e.State.Cursor()); ok {
+	if l, ok := markup.LinkAt(e.Binding().Document().Text(), e.State.Cursor()); ok {
 		a.followLink(l, e.Binding().Document().Path(), w)
 	}
 }
@@ -801,7 +802,7 @@ func (a *App) commandActions() map[string]func() {
 	onActive := func(op func(*workspace.Workspace, string)) func() {
 		return up(func(w *workspace.Workspace) { op(w, w.ActiveTab().ID) })
 	}
-	format := func(cmd func(string, []editor.Sel) editor.Edit) func() {
+	format := func(cmd func(string, []markup.Sel) markup.Edit) func() {
 		return func() {
 			if e := a.activeEditor(); e != nil {
 				e.Run(cmd)
@@ -809,10 +810,10 @@ func (a *App) commandActions() map[string]func() {
 		}
 	}
 	mark := func(m string) func() {
-		return format(func(t string, s []editor.Sel) editor.Edit { return editor.ToggleMark(t, s, m) })
+		return format(func(t string, s []markup.Sel) markup.Edit { return markup.ToggleMark(t, s, m) })
 	}
 	pair := func(before, after string) func() {
-		return format(func(t string, s []editor.Sel) editor.Edit { return editor.InsertPair(t, s, before, after) })
+		return format(func(t string, s []markup.Sel) markup.Edit { return markup.InsertPair(t, s, before, after) })
 	}
 	run := func(cmd code.Command) func() {
 		return func() {
@@ -863,17 +864,17 @@ func (a *App) commandActions() map[string]func() {
 		"editor:toggle-strikethrough":    mark("~~"),
 		"editor:toggle-highlight":        mark("=="),
 		"editor:toggle-code":             mark("`"),
-		"editor:insert-link":             format(editor.InsertLink),
-		"editor:toggle-checklist-status": format(editor.ToggleChecklist),
-		"editor:toggle-comments":         format(editor.ToggleComment),
-		"editor:delete-paragraph":        format(editor.DeleteParagraph),
+		"editor:insert-link":             format(markup.InsertLink),
+		"editor:toggle-checklist-status": format(markup.ToggleChecklist),
+		"editor:toggle-comments":         format(markup.ToggleComment),
+		"editor:delete-paragraph":        format(markup.DeleteParagraph),
 		"editor:set-heading":             func() { a.Shell.Palette.ShowSource(sourceHeadings) },
 		"editor:insert-wikilink":         pair("[[", "]]"),
 		"editor:insert-embed":            pair("![[", "]]"),
 		"editor:insert-tag":              pair("#", ""),
-		"editor:toggle-blockquote":       format(editor.ToggleBlockquote),
-		"editor:toggle-bullet-list":      format(editor.ToggleBulletList),
-		"editor:toggle-numbered-list":    format(editor.ToggleNumberedList),
+		"editor:toggle-blockquote":       format(markup.ToggleBlockquote),
+		"editor:toggle-bullet-list":      format(markup.ToggleBulletList),
+		"editor:toggle-numbered-list":    format(markup.ToggleNumberedList),
 		"editor:indent-list":             run(code.Indent),
 		"editor:unindent-list":           run(code.Outdent),
 		"editor:attach-file":             a.attachFile,
@@ -910,7 +911,7 @@ func (a *App) commandActions() map[string]func() {
 		m["workspace:goto-tab-"+strconv.Itoa(n)] = up(func(w *workspace.Workspace) { w.GotoTab(n) })
 	}
 	for level := 0; level <= 6; level++ {
-		m["editor:set-heading-"+strconv.Itoa(level)] = format(func(t string, s []editor.Sel) editor.Edit { return editor.SetHeading(t, s, level) })
+		m["editor:set-heading-"+strconv.Itoa(level)] = format(func(t string, s []markup.Sel) markup.Edit { return markup.SetHeading(t, s, level) })
 	}
 	return m
 }
@@ -949,7 +950,7 @@ func (a *App) applies(id string) bool {
 		if e == nil {
 			return false
 		}
-		_, ok := editor.LinkAt(e.Binding().Document().Text(), e.State.Cursor())
+		_, ok := markup.LinkAt(e.Binding().Document().Text(), e.State.Cursor())
 		return ok
 	}
 	if strings.HasPrefix(id, "editor:") {

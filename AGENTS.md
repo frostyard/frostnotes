@@ -138,11 +138,17 @@ file a step names before writing its frostnotes counterpart.
 - `cmd/frostnotes`, `internal/desktop/`: the native desktop app (plan 0009).
   `window` joins the rest under frostui's shell; `session` is the notesd
   connection; `notes` documents, saves and merges (no MyGo import); `livepreview`
-  what live preview hides and draws (no MyGo import); `editor` source mode and
+  what live preview hides and draws (no MyGo import); `markup` what the
+  editor does to a note's text: the formatting commands, smart lists, the
+  link or tag under the caret, frontmatter and properties, the attachment
+  rules (no MyGo or frostui import); `editor` source mode and
   live preview on MyGo's code editor; `reading`, `history` and `panes` their
   views; `workspace`, `commands` and `prefs` plain data; `catalog` a vault's
-  files; `system` paths, notesd's log, the background setting and the open
-  rules; `uikit` tab strips and splits (imports only std, MyGo, purego and
+  files, the Files and Tags panes' trees and the quick switcher's match (no
+  MyGo or frostui import); `system` paths, notesd's log, the background
+  setting and the open rules (no MyGo or frostui import; `open.go` carries
+  frostui's mailto rule, which `cmd/frostnotes`' tests hold it to); `uikit`
+  tab strips and splits (imports only std, MyGo, purego and
   frostui); `desktoptest` the tests' UI loop and real notesd. `make
   desktop-build`, `desktop-run`, `desktop-smoke` (Xvfb) and `desktop-evidence`.
 - `internal/sandbox`: a Flatpak sandbox's file grants (`/.flatpak-info`) and the

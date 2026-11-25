@@ -12,11 +12,12 @@ import (
 	"github.com/frostyard/frostui"
 
 	"github.com/frostyard/frostnotes/api"
+	"github.com/frostyard/frostnotes/internal/desktop/catalog"
 	"github.com/frostyard/frostnotes/internal/desktop/editor"
 	"github.com/frostyard/frostnotes/internal/desktop/history"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/media"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
-	"github.com/frostyard/frostnotes/internal/desktop/panes"
 	"github.com/frostyard/frostnotes/internal/desktop/reading"
 	"github.com/frostyard/frostnotes/internal/desktop/uikit"
 	"github.com/frostyard/frostnotes/internal/desktop/workspace"
@@ -157,7 +158,7 @@ func (a *App) noteEditor(d *notes.Document, v workspace.View) *editor.NoteEditor
 	src := a.Catalog.Sources(d.Path, a.openText)
 	e.Sources, e.Uploads = src, src
 	e.Clipboard, e.OnError = a.cfg.Clipboard, a.report
-	e.Follow = func(l editor.Link, where editor.Where) { a.followLink(l, d.Path(), where) }
+	e.Follow = func(l markup.Link, where editor.Where) { a.followLink(l, d.Path(), where) }
 	e.FollowTag = func(tag string) { a.searchFor("tag:#" + tag) }
 	e.Preview = a.linkPreview(d.Path)
 	e.Hold = func() func() {
@@ -296,7 +297,7 @@ func (a *App) loadFile(tc *tabContent) {
 		return
 	}
 	tc.fileRead = true
-	if panes.FileType(tc.view.Path) != "image" {
+	if catalog.FileType(tc.view.Path) != "image" {
 		return
 	}
 	hash := a.fileHash(tc.view.Path)
@@ -569,7 +570,7 @@ func (a *App) tabView(c *ui.Context, tab *workspace.Tab) {
 			if a.pending != nil && a.pending.tabID == tab.ID && a.pending.path == tc.doc.Path() && tc.doc.Loaded() {
 				line := a.pending.line
 				if a.pending.subpath != "" {
-					line = editor.SubpathLine(tc.doc.Text(), a.pending.subpath)
+					line = markup.SubpathLine(tc.doc.Text(), a.pending.subpath)
 				}
 				if a.pending.subpath == "" || line > 0 {
 					goToLine(tc.ed.Editor, line)

@@ -1,7 +1,8 @@
 // Package catalog is what the desktop app knows of a vault's files
 // (docs/design/app.md#data): the files and folders from notesd, the notes'
 // aliases and the tags, kept up to date from its events, with the link
-// text and completions the editor asks for. It imports no window.
+// text and completions the editor asks for, and the Files and Tags panes'
+// trees (tree.go). It imports no UI toolkit, neither MyGo nor frostui.
 package catalog
 
 import (
@@ -12,11 +13,10 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/frostyard/frostui"
+	"unicode"
 
 	"github.com/frostyard/frostnotes/api"
-	"github.com/frostyard/frostnotes/internal/desktop/editor"
+	"github.com/frostyard/frostnotes/internal/desktop/markup"
 	"github.com/frostyard/frostnotes/internal/desktop/notes"
 	"github.com/frostyard/frostnotes/internal/markdown"
 )
@@ -286,6 +286,43 @@ type Match struct {
 	Score int
 }
 
+// Score scores how well query matches text, as frostui.Match does, so the
+// quick switcher ranks as the command palette: every rune of query must
+// appear in text in order, ignoring case. A higher score is a better
+// match; runs of consecutive runes, the start of words and a match at the
+// start count more, and a shorter text wins among equals. ok is false
+// when query does not match; an empty query matches with 0.
+func Score(query, text string) (score int, ok bool) {
+	q := []rune(strings.ToLower(strings.TrimSpace(query)))
+	if len(q) == 0 {
+		return 0, true
+	}
+	t := []rune(strings.ToLower(text))
+	qi, run := 0, 0
+	for ti := 0; ti < len(t) && qi < len(q); ti++ {
+		if t[ti] != q[qi] {
+			run = 0
+			continue
+		}
+		score++
+		if ti == 0 {
+			score += 8
+		} else if !unicode.IsLetter(t[ti-1]) && !unicode.IsDigit(t[ti-1]) {
+			score += 5
+		}
+		if run > 0 {
+			score += 3 * run
+		}
+		run++
+		qi++
+	}
+	if qi < len(q) {
+		return 0, false
+	}
+	score -= len(t) / 16
+	return score, true
+}
+
 // Search ranks the files and aliases for query, best first, at most limit:
 // the quick switcher's and [['s results. Non-notes are left out unless
 // files is true.
@@ -295,11 +332,11 @@ func (c *Catalog) Search(query string, limit int, files bool) []Match {
 		if !files && f.Kind != api.FileKindNote {
 			continue
 		}
-		if s, ok := frostui.Match(query, bare(f.Path)); ok {
+		if s, ok := Score(query, bare(f.Path)); ok {
 			out = append(out, Match{Path: f.Path, Score: s})
 		}
 		for _, a := range c.aliases[f.Path] {
-			if s, ok := frostui.Match(query, a); ok {
+			if s, ok := Score(query, a); ok {
 				out = append(out, Match{Path: f.Path, Alias: a, Score: s})
 			}
 		}
@@ -316,9 +353,9 @@ func (c *Catalog) Sources(from func() string, text func(path string) (string, bo
 
 // Upload stores files beside the note (ADR-0023), by the vault's settings,
 // and gives the embeds to insert, one per line.
-func (s *NoteSources) Upload(files []editor.File, done func(embeds string, err error)) {
+func (s *NoteSources) Upload(files []markup.File, done func(embeds string, err error)) {
 	c := s.c
-	folder := editor.AttachmentFolder(c.AttachmentFolder, s.from())
+	folder := markup.AttachmentFolder(c.AttachmentFolder, s.from())
 	paths := make(map[string]bool, len(c.files))
 	names := map[string]int{}
 	for _, f := range c.files {
@@ -334,12 +371,12 @@ func (s *NoteSources) Upload(files []editor.File, done func(embeds string, err e
 			if err != nil {
 				return err
 			}
-			p := editor.FreePath(folder, f.Name, func(x string) bool { return paths[x] })
+			p := markup.FreePath(folder, f.Name, func(x string) bool { return paths[x] })
 			if _, err := n.Upload(ctx, &api.NoteUploadParams{VaultID: c.vault, Path: p, Data: base64.StdEncoding.EncodeToString(data)}); err != nil {
 				return fmt.Errorf("upload %s: %w", f.Name, err)
 			}
 			base := path.Base(p)
-			embeds = append(embeds, editor.EmbedFor(p, wikilinks, names[base] == 0))
+			embeds = append(embeds, markup.EmbedFor(p, wikilinks, names[base] == 0))
 			paths[p] = true
 			names[base]++
 		}
@@ -359,20 +396,20 @@ type NoteSources struct {
 }
 
 // LinkTargets lists the notes [[ completes to.
-func (s *NoteSources) LinkTargets(query string, limit int) []editor.Target {
-	var out []editor.Target
+func (s *NoteSources) LinkTargets(query string, limit int) []markup.Target {
+	var out []markup.Target
 	from := s.from()
 	if strings.TrimSpace(query) == "" {
 		for _, f := range s.c.files[:min(len(s.c.files), limit)] {
-			out = append(out, editor.Target{Insert: s.c.LinkText(f.Path, from), Label: bare(f.Path)})
+			out = append(out, markup.Target{Insert: s.c.LinkText(f.Path, from), Label: bare(f.Path)})
 		}
 		return out
 	}
 	for _, m := range s.c.Search(query, limit, true) {
 		if m.Alias != "" {
-			out = append(out, editor.Target{Insert: s.c.LinkText(m.Path, from) + "|" + m.Alias, Label: m.Alias, Detail: bare(m.Path)})
+			out = append(out, markup.Target{Insert: s.c.LinkText(m.Path, from) + "|" + m.Alias, Label: m.Alias, Detail: bare(m.Path)})
 		} else {
-			out = append(out, editor.Target{Insert: s.c.LinkText(m.Path, from), Label: bare(m.Path)})
+			out = append(out, markup.Target{Insert: s.c.LinkText(m.Path, from), Label: bare(m.Path)})
 		}
 	}
 	return out
@@ -400,7 +437,7 @@ func (s *NoteSources) Tags() []string {
 
 // Subpaths lists the headings or block IDs of the note target leads to
 // ("" is the note being edited), from its text.
-func (s *NoteSources) Subpaths(target string, blocks bool, done func([]editor.Target)) {
+func (s *NoteSources) Subpaths(target string, blocks bool, done func([]markup.Target)) {
 	from := s.from()
 	finish := func(text string) { done(subpaths(text, blocks)) }
 	if target == "" {
@@ -433,9 +470,9 @@ func (s *NoteSources) Subpaths(target string, blocks bool, done func([]editor.Ta
 	})
 }
 
-func subpaths(text string, blocks bool) []editor.Target {
+func subpaths(text string, blocks bool) []markup.Target {
 	doc := markdown.Parse([]byte(text))
-	var out []editor.Target
+	var out []markup.Target
 	if blocks {
 		lines := strings.Split(text, "\n")
 		for _, b := range doc.Blocks {
@@ -443,12 +480,12 @@ func subpaths(text string, blocks bool) []editor.Target {
 			if b.Line >= 1 && b.Line <= len(lines) {
 				detail = strings.TrimSpace(lines[b.Line-1])
 			}
-			out = append(out, editor.Target{Insert: b.ID, Label: b.ID, Detail: detail})
+			out = append(out, markup.Target{Insert: b.ID, Label: b.ID, Detail: detail})
 		}
 		return out
 	}
 	for _, h := range doc.Headings {
-		out = append(out, editor.Target{Insert: h.Text, Label: h.Text})
+		out = append(out, markup.Target{Insert: h.Text, Label: h.Text})
 	}
 	return out
 }

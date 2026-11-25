@@ -217,18 +217,6 @@
   },
   {
     "type": "file",
-    "url": "https://proxy.golang.org/github.com/egoist/mygo/@v/v0.10.0.mod",
-    "sha256": "c5f553e2f93ddcff569f7fd95902e334f7a972d6819db1d5ca075b7e7c79cc18",
-    "dest": "goproxy/github.com/egoist/mygo/@v"
-  },
-  {
-    "type": "file",
-    "url": "https://proxy.golang.org/github.com/egoist/mygo/@v/v0.10.0.zip",
-    "sha256": "53b0ce8c4bf7581deb3891a2e8cf75267a5804a82ed6de0d5d68b8440d8c395a",
-    "dest": "goproxy/github.com/egoist/mygo/@v"
-  },
-  {
-    "type": "file",
     "url": "https://proxy.golang.org/github.com/evanw/esbuild/@v/v0.28.2.mod",
     "sha256": "2d48dbed6151e653adc9ab5d8869cba012d167f13352e45880e59104e1e02b9b",
     "dest": "goproxy/github.com/evanw/esbuild/@v"
