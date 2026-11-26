@@ -476,30 +476,9 @@ controls and drags the window), the status bar and, centred between them,
 12/16 `--text-secondary` text: "Connecting to notesd…", and after a
 failure "Reconnecting to notesd… (<reason>)", retried every second.
 
-In the desktop app inside the Flatpak, while the connection is lost (not
-while a retry is in flight, which hides it until the next failure), a
-block under that text (at most 560 wide, left-aligned, 12/16, 16 below
-it; `aria-label` "Why notesd is not running") says why, from the end of
-`notesd.log` (the shell's `notesd_log`,
-[design/app.md](../design/app.md#the-flatpak)):
-
-- **The launcher's last line is its portal failure** ("notesd did not
-  start through the Flatpak portal"): "notesd did not start, because the
-  Flatpak portal did not start it. To fix it:" and a numbered list: "Run
-  `flatpak override --user --show org.frostyard.Frostnotes`: it must not
-  list a blocked `org.freedesktop.portal.Flatpak`." "Remove the overrides
-  with `flatpak override --user --reset org.frostyard.Frostnotes`, if it
-  does." "Check the Flatpak portal with `systemctl --user status
-  flatpak-portal.service`." Then: "The Flatpak portal starts on demand
-  through D-Bus. It comes with the `flatpak` package." (The service of
-  `org.freedesktop.portal.Flatpak` is `flatpak-portal`, not
-  `xdg-desktop-portal`, which can run while the Flatpak portal is absent.)
-- **Any other last line:** "The last line of notesd's log: <line>".
-- **Both:** "The log: <path>" (the path of `notesd.log` in the app's state
-  directory). A log that is empty or missing adds only this line.
-
-The commands are monospace on `--bg-code` and selectable. Outside the
-Flatpak, and in the web app, nothing is added.
+The web app adds nothing under it. On a desktop, where no window runs, `notesctl status`
+says why notesd is not running, from the end of `notesd.log`
+([design/app.md](../design/app.md#the-flatpak)).
 
 ### Menus
 
@@ -561,17 +540,12 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 | Daily notes | Date format; New file location; Template file location | `YYYY-MM-DD`; vault root; none | vault |
 | Templates | Template folder location; Date format; Time format | none; `YYYY-MM-DD`; `HH:mm` | vault |
 | Sync | the window's vault's hub, hub vault, state and conflicts; Join…, Pair again… and Leave for its sync | | |
-| Background ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)) | Keep syncing when no window is open: On, notesd outlives the last window and may start at login; Off, it stops with the last window and starts no more at login | on | device |
-| | Desktop permission: what the Background portal last answered, read-only (Allowed at login, Allowed, Refused with the way to allow it, Not asked yet, or that the desktop did not answer, with the helper's error; Asking the desktop… while no answer read the counter at or after the change (its `generation` is at least the change's), which the window reads again every 2 s while the dialog is open) | | |
 
 "App" settings are the app's preferences, "vault" settings are the
 vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset
 ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)).
-"Device" settings belong to the installed app on that machine, not to a
-vault: the Background section's off file is
-`$XDG_CONFIG_HOME/frostnotes/background-off`, which the shell writes and the
-launcher reads. The section is drawn only in the Flatpak, where
-`background_get` answers
+A desktop's Background setting is not here: no window runs there, and
+`notesctl background` turns it on and off
 ([design/app.md](../design/app.md#the-flatpak)).
 
 The Sync section shows the window's vault's sync where notesd syncs and
