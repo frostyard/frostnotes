@@ -15,7 +15,8 @@ out=packaging/flatpak
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 go build -o "$tmp/flatpakgo" ./tools/flatpakgo
+# The Flatpak builds notesd and notesctl only, from the root module; the
+# NSGo client's module is not in it (plan 0011, Phase 2).
 "$tmp/flatpakgo" >"$tmp/daemon.json"
-(cd cmd/frostnotes-nsgo && "$tmp/flatpakgo") >"$tmp/desktop.json"
-jq -s 'add | unique_by(.url) | sort_by(.dest, .url)' "$tmp/daemon.json" "$tmp/desktop.json" >"$tmp/combined.json"
-mv "$tmp/combined.json" "$out/go-sources.json"
+jq 'unique_by(.url) | sort_by(.dest, .url)' "$tmp/daemon.json" >"$tmp/sorted.json"
+mv "$tmp/sorted.json" "$out/go-sources.json"

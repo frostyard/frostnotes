@@ -7,16 +7,18 @@
 
 **Plain markdown notes on your own computer.**
 
-Frostnotes is a desktop app for people who keep notes as plain markdown
-files, in the spirit of Obsidian. The notes stay in a folder you own; a
-daemon, notesd, indexes them, syncs them through a hub you host, and
-serves them to a web app and to agents.
+Frostnotes is for people who keep notes as plain markdown files, in the
+spirit of Obsidian. The notes stay in a folder you own, and you edit them
+with any editor of Markdown files, Obsidian among them. A daemon, notesd,
+indexes the folder, syncs it through a hub you host, and serves the notes
+to a web app and to agents. On a desktop it has no window: the Flatpak
+runs notesd in the background, and you set it up with `notesctl`.
 
 **Status:** pre-release. The [roadmap](docs/plans/0002-roadmap.md) says what works and what comes next.
 
 **Documentation:** [frostyard.org/docs/apps/frostnotes](https://frostyard.org/docs/apps/frostnotes/)
 
-![FrostNotes on Linux with an editable packing checklist and links to other notes](docs/images/nsgo-linux.png)
+![A terminal that registers ~/Notes as a vault, joins a hub's vault, and shows notesd's status with notesctl](docs/images/notesctl-setup.png)
 
 ## What it does
 
@@ -32,7 +34,11 @@ serves them to a web app and to agents.
 - **Sync is built in.** Each device syncs with a self-hosted hub, the same
   notesd in a hub role, which keeps every revision and merges concurrent
   edits. No conflict copies. [Sync design](docs/design/sync.md)
-- **On Linux** an NSGo editor has inline Markdown, clickable tasks and wiki links, full-text search, autosave and conflict recovery. Its Settings open folders and pair devices to a hub. The MyGo desktop remains available for history, attachments, backlinks and other advanced views. [App design](docs/design/app.md)
+- **Any editor on the desktop.** Obsidian, or any other editor of
+  Markdown files, edits the vault folder; notesd sees its writes and syncs
+  them. The Flatpak holds notesd and `notesctl` and no window, starts
+  notesd at login, and `notesctl` registers folders, pairs the computer
+  with a hub and shows sync. [The Flatpak](docs/design/app.md#the-flatpak)
 - **The web app** is a React UI with a CodeMirror 6 editor, served by
   [lodge](https://github.com/frostyard/lodge), frostyard's tailnet-only
   web shell, with Obsidian's phone layout on a narrow screen.
@@ -42,18 +48,11 @@ serves them to a web app and to agents.
 - **Obsidian vaults open as they are:** wikilinks, embeds, tags, callouts
   and properties. [Markdown dialect](docs/specs/markdown.md)
 
-| | |
-| --- | --- |
-| ![The trip note in live preview, in the Frostyard light theme](docs/images/editor.png) | ![A search for “soup” across the vault, beside a recipe whose note callout is drawn as a banner](docs/images/search.png) |
-| ![The Tasks pane: every open task in the vault, grouped by note, beside the trip note](docs/images/tasks.png) | ![A book note in the reading view, in the Frostyard dark theme, with its outline in the right pane](docs/images/dark.png) |
-
-<sub>The MyGo fallback screenshots show a made-up vault (`dev/screenshots/vault`).</sub>
-
 ## Install
 
 Frostnotes is on the [Frostyard Flatpak remote](https://github.com/frostyard/flatpak-index),
-with its own notesd inside. Add the remote and Flathub (for the runtime)
-once, for your user, then install Frostnotes and update it with
+with notesd and `notesctl` inside. Add the remote and Flathub (for the
+runtime) once, for your user, then install Frostnotes and update it with
 `flatpak update`:
 
 ```sh
@@ -62,7 +61,23 @@ flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/fl
 flatpak install --user frostyard org.frostyard.Frostnotes
 ```
 
-For the MyGo fallback, run `flatpak run org.frostyard.Frostnotes --mygo`. Both editors use the same local vaults, sync pairing and background preference. Existing installations upgrade with `flatpak update org.frostyard.Frostnotes`.
+Then start notesd, which also asks the desktop to start it at each login,
+and set up a vault from a terminal:
+
+```sh
+flatpak run org.frostyard.Frostnotes      # start notesd, and show its status
+alias notesctl='flatpak run --command=notesctl org.frostyard.Frostnotes'
+notesctl vault add ~/Notes                # the folder your editor opens
+notesctl hub join URL Notes               # pair with the hub and sync its vault "Notes"
+notesctl status                           # notesd, the vaults and their sync
+```
+
+`hub join` prints a code to approve on the hub (`notesctl hub approve
+CODE` there). `notesctl status` also says why
+notesd is not running, from the end of its log. `notesctl background off`
+stops the desktop from starting notesd at login, and `notesctl background
+on` turns that back on. An install from a release with a window keeps its
+vaults, its pairing and its background setting when it updates.
 
 Other ways: each [release](https://github.com/frostyard/frostnotes/releases)
 has `frostyard-notesd`'s .deb, which runs notesd and notesctl as lodge's
@@ -86,8 +101,7 @@ in a 0600 file in that data directory
 
 ## Problem records
 
-notesd and the desktop app write their panics, and a few coded errors of
-notesd (a database that does not migrate, a write that does not reach the
+notesd writes its panics, and a few of its coded errors (a database that does not migrate, a write that does not reach the
 disk, a failed merge, a lost watch event, a sync protocol fault), to the
 local systemd journal. They send nothing over a network. A record holds the
 app ID (`org.frostyard.Frostnotes`), its release version, the runtime (Go

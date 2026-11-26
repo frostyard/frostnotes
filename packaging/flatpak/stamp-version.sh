@@ -5,9 +5,9 @@
 # prints it, and rpc.hello sends it, so a copy installed from the OCI image
 # names the release it holds. Software centres show the metainfo's newest
 # release, which is how the release reaches a user's installed app. So the tag's
-# version goes into the ldflags of the manifest, which name notesd's, notesctl's
-# and the app's version (its problem records carry it, ADR-0036), and with the
-# UTC date into the metainfo's <releases>. The committed files keep "flatpak": a
+# version goes into the ldflags of the manifest, which name notesd's and
+# notesctl's version (notesd's problem records carry it, ADR-0036), and with
+# the UTC date into the metainfo's <releases>. The committed files keep "flatpak": a
 # build of main names itself flatpak, and no release is listed before one exists.
 #
 # Usage: stamp-version.sh VERSION COMMIT [DIR]
@@ -60,8 +60,6 @@ fi
 # The manifest: name the version and the commit in notesd's ldflags, replacing
 # the word that a main build reports.
 sed -i "s/-X main\.version=flatpak/-X main.version=$version -X main.commit=$commit/" "$manifest"
-sed -i "s/\"NSGO_VERSION\": \"[^\"]*\"/\"NSGO_VERSION\": \"$version\"/" "$manifest"
-grep -Fq -- "\"NSGO_VERSION\": \"$version\"" "$manifest" || die "the NSGo build did not take the stamp"
 grep -Fq -- "$new" "$manifest" || die "$manifest did not take the stamp"
 if grep -Fq -- "$old" "$manifest"; then
 	die "$manifest still holds '$old'"

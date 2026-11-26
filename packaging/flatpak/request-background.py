@@ -8,9 +8,9 @@ the request's Response signal first, makes the call, and stays on the bus
 in a GLib main loop until the Response arrives or 10 minutes pass.
 
 The helper reads the app's setting itself: while
-`${XDG_CONFIG_HOME:-~/.config}/frostnotes/background-off` exists, the
-setting "Keep syncing when no window is open" is off, and the request asks
-for no autostart, so the portal removes the autostart entry
+`${XDG_CONFIG_HOME:-~/.config}/frostnotes/background-off` exists, background
+activity is off (`notesctl background off`), and the request asks for no
+autostart, so the portal removes the autostart entry
 (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md). It
 takes an exclusive lock on
 `${XDG_STATE_HOME:-~/.local/state}/frostnotes/background.lock` before it
@@ -20,20 +20,23 @@ for the portal makes it ask again, at most 3 times in all: the answer that
 the app reads is the last request's.
 
 Whatever happens, the helper writes its outcome to
-`$XDG_STATE_HOME/frostnotes/` for the app to read, and exits 0: an answer
-to `background.json`, and a failure that could not take the lock to
+`$XDG_STATE_HOME/frostnotes/` for `notesctl status` and `notesctl
+background` to read, and exits 0: an answer to `background.json`, and a
+failure that could not take the lock to
 `background-failure-<generation>.json`. A missing portal or a refusal
-changes nothing else for the app.
+changes nothing else. The launcher and `notesctl background` wait for it:
+the portal drops a request whose caller left the bus.
 
-Each request reads the shell's counter of changes as `generation`, under
+Each request reads the counter of changes (`background-gen`, which
+`notesctl background` and the desktop clients bump) as `generation`, under
 its lock and immediately before it reads the setting; the last request's is
 the one in the outcome. A failure reads the counter when it writes. A
 failure that cannot take the lock never writes `background.json`, so it
 cannot replace a newer answer: it writes `background-failure-<generation>.json`
-beside the answer, and removes the failures of lower generations. The app
+beside the answer, and removes the failures of lower generations. notesctl
 shows the newest of the two, and an answer wins a tie. A helper that did
 take the lock removes, after it wrote its answer, the failures up to that
-answer's generation. The app compares those numbers with the one its own
+answer's generation. notesctl compares those numbers with the one its own
 change left, so it can tell an answer about the new setting from an answer
 about an old one (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md).
 """
@@ -47,7 +50,7 @@ import time
 
 TIMEOUT_SECONDS = 600
 MAX_REQUESTS = 3
-REASON = "Keep your notes in sync without a window"
+REASON = "Keep your notes in sync in the background"
 COMMANDLINE = ["frostnotes", "--background"]
 
 PORTAL = "org.freedesktop.portal.Desktop"
@@ -73,7 +76,7 @@ def state_dir():
 
 
 def generation():
-    """The shell's counter of changes; a missing or bad file counts 0."""
+    """The counter of changes; a missing or bad file counts 0."""
     try:
         with open(os.path.join(state_dir(), GEN_NAME), encoding="utf-8") as handle:
             return int(handle.read().strip())
@@ -82,7 +85,7 @@ def generation():
 
 
 def off_file():
-    """The app's setting: it exists while "Keep syncing" is off."""
+    """The app's setting: it exists while background activity is off."""
     base = os.environ.get("XDG_CONFIG_HOME")
     if not base:
         base = os.path.join(os.path.expanduser("~"), ".config")

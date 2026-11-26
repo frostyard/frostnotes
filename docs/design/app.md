@@ -847,24 +847,44 @@ Phase 1).
 ## The Flatpak
 
 Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
-[ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates)
-and [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md);
+[ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md) (updates),
+[ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)
+(background activity), [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)
+(no window; [plan 0011, Phase 2](../plans/0011-nsgo-only-client.md)) and
+[core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md);
 built in [M6](../plans/0002-roadmap.md) (core's
 [Plan 0010, Phase 5](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md)).
-The desktop app installs as `org.frostyard.Frostnotes`, from `packaging/flatpak/`.
-The metainfo lists 4 screenshots in `docs/images`: the editor, search and
-the Tasks pane in Frostyard light, and the reading view in Frostyard. The
-README shows them under a fifth, the editor in Frostyard
-(`editor-dark.png`), which the metainfo does not list. `make screenshots`
-takes all 5 at 1280 x 800 (`TestMetainfoScreenshots`, on
-`dev/screenshots/vault`, a made-up vault, drawn by MyGo's Tester with the
-app's logo in the brand tile, as `cmd/frostnotes` registers it), and
-`internal/packagecheck` checks the metainfo's 4.
+`org.frostyard.Frostnotes`, from `packaging/flatpak/`, holds notesd and
+`notesctl` and no window. A desktop edits its vault folders with any editor
+of Markdown files, Obsidian among them; notesd's watcher sees the editor's
+writes and syncs them with the hub like any other writer's. Lodge's web app
+reads the hub.
 
-- **What is inside.** `/app/bin/frostnotes` is the launcher, `/app/bin/notesd`
-  and `/app/bin/notesctl` are the Go binaries, and `/app/libexec/frostnotes-app`
-  is the native app. `flatpak run --command=notesctl org.frostyard.Frostnotes`
-  is the CLI on a desktop.
+- **What is inside.** `/app/bin/frostnotes` is the launcher (the manifest's
+  `command`), `/app/bin/notesd` and `/app/bin/notesctl` are the Go binaries,
+  and `/app/libexec/frostnotes-request-background` is the Background
+  portal's helper. `flatpak run --command=notesctl org.frostyard.Frostnotes`
+  is the CLI on a desktop (an alias makes it `notesctl`). The build makes no
+  desktop client: neither the MyGo client (`cmd/frostnotes`) nor the NSGo
+  client (`cmd/frostnotes-nsgo`), which stay in the repository until
+  plan 0011's Phase 3.
+- **No desktop entry; a console application.** With no window, a desktop
+  entry would open nothing, so the Flatpak installs none, and its AppStream
+  component is a `console-application`: AppStream requires a
+  `desktop-application` to name a desktop entry as its launchable, and a
+  console application to provide a binary (`notesctl`). The metainfo names
+  the app's icon as a `stock` icon, so `appstreamcli compose` caches it, and
+  the OCI image's labels carry it to the Frostyard remote. Its one
+  screenshot, `docs/images/notesctl-setup.png`, is a terminal picture of a
+  setup with `notesctl` (`vault add`, `hub join`, `sync status`, `status`):
+  the output of a real run of the built notesd and `notesctl` in the
+  Flatpak's environment against a hub notesd on loopback, with a stand-in
+  Background helper that grants the request, and the temporary directories
+  shown as `/home/ana` and `/run/user/1000`. `internal/packagecheck` checks
+  the type, the icon, the provided binary and the screenshot's file.
+  Without a desktop entry the app grid shows nothing for it, and GNOME
+  Settings' Apps, which lists desktop entries, does not list it either;
+  whether GNOME's Background Apps menu lists its notesd is not checked.
 - **Go.** The build uses Go's own tarball, pinned by version and checksum in
   the manifest, as Flathub's Go extension can lag `go.mod` after a security
   release. `GOTOOLCHAIN=local` makes a mismatch fail the build, and
@@ -875,92 +895,108 @@ app's logo in the brand tile, as `cmd/frostnotes` registers it), and
   **The launcher** (`frostnotes.sh`): `frostnotes --notesd` runs
   `exec notesd -log $XDG_STATE_HOME/frostnotes/notesd.log`, with the shell
   also appending notesd's output to that file. `frostnotes --background`,
-  the autostart entry's command line, which entries that an older release
-  wrote still hold, runs the same, unless the app's background setting is
-  off: then it appends one line to `notesd.log` ("frostnotes: background
-  activity is off in Settings; notesd does not start at login") and exits 0
-  ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)).
+  the autostart entry's command line, runs the same, unless background
+  activity is off: then it appends one line to `notesd.log` ("frostnotes:
+  background activity is off (notesctl background on turns it on); notesd
+  does not start at login") and exits 0.
   notesd rotates the log itself, once it holds
   the data directory's lock: a log over 1 MiB moves to `notesd.log.1`, then
   notesd appends its output there. A shell check cannot do this, since 2
   launchers can both pass it, and a duplicate would move the log of the
   notesd that runs. The shell's redirect keeps what notesd says before the
   lock, such as "another notesd uses".
-  `frostnotes [ARGS]`, when no notesd answers `notesctl hello` (within 2 s),
-  runs `flatpak-spawn --latest-version frostnotes --notesd`, so the Flatpak portal
-  starts notesd in a new sandbox that outlives the window (until logout,
-  while the app may run in the background),
-  and waits for about 10 s (the clock's) for it. Then it ends `flatpak-spawn` with
+  `frostnotes` with no option (`flatpak run org.frostyard.Frostnotes`), when
+  no notesd answers `notesctl hello` (within 2 s), runs `flatpak-spawn
+  --latest-version frostnotes --notesd`, so the Flatpak portal starts notesd
+  in a new sandbox that outlives the launcher (until logout), and waits for
+  about 10 s (the clock's) for it. Then it ends `flatpak-spawn` with
   `SIGKILL`: `flatpak-spawn` waits for its command and would keep the
-  window's sandbox alive, it forwards every signal it can catch to notesd,
+  launcher's sandbox alive, it forwards every signal it can catch to notesd,
   and without `--watch-bus` the portal keeps notesd when it goes. With no
-  portal the launcher logs an error and
-  starts no notesd of its own (one in the window's sandbox would die with a
-  duplicate window), so the app shows that notesd is not running. It then starts the
-  Background request in the background and `exec`s the app.
+  portal the launcher writes an error to `notesd.log` and starts no notesd
+  of its own: one in its sandbox would die when the launcher exits.
+  It then runs the Background request and waits for it: with no window,
+  the launcher's sandbox ends when it exits, and the portal drops a request
+  whose caller left the bus. Last, it `exec`s `notesctl status`, whose
+  output and exit status are the launcher's. Any other option (the old
+  `--mygo`, or a window's arguments) fails with exit 2 and says that
+  Frostnotes has no window; `--help` names the setup's commands.
   The request is `frostnotes-request-background`, a PyGObject helper that
   keeps its bus connection open until the portal's `Response`: the
   portal closes a request when its caller leaves the bus, so a one-shot
   `gdbus call` cannot ask the user. Allowed once, the portal runs
-  `frostnotes --background` at login, so sync goes on with no window.
-  The helper reads the app's background setting itself, under an exclusive
+  `frostnotes --background` at login, so sync goes on with nothing open.
+  The helper reads the background setting itself, under an exclusive
   lock (`$XDG_STATE_HOME/frostnotes/background.lock`), so the last change
   wins: with the setting off the request carries `autostart` false and the
   portal removes the entry, and a setting that changed while the portal
   answered makes the helper ask again, at most 3 times.
-  When the user turns the permission off (GNOME Settings, Apps, Run in
-  Background), the desktop ends a notesd that runs with no window: on
-  GNOME 48, about 45 s after the last window closes, and within seconds
-  of a login that started it, with no clean stop in `notesd.log`. The launcher's next request is then refused,
-  and the portal deletes the autostart entry; turned on again, the
-  permission brings the entry back only at the next launch of the app
-  ([plan 0008, Phase 3](../plans/0008-m6-the-standalone-desktop-app.md#record)).
-- **Background activity is a setting**
+  When the user refuses the permission, the desktop ends a notesd that runs
+  with no window: on GNOME 48, about 45 s after the last window closed,
+  and within seconds of a login that started it, with no clean stop in
+  `notesd.log` ([plan 0008, Phase 3](../plans/0008-m6-the-standalone-desktop-app.md#record)).
+  Without a desktop entry GNOME Settings does not list the app, so
+  `notesctl` names the permission store's command instead: `flatpak
+  permission-set background background org.frostyard.Frostnotes yes`.
+- **Background activity is a `notesctl` command**
   ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)):
-  "Keep syncing when no window is open", On by default. Off is the existence
-  of `$XDG_CONFIG_HOME/frostnotes/background-off` — in the Flatpak the app's
-  own config directory, which all of its sandboxes share — and On is its
-  absence. The app (`internal/desktop/system`) writes or removes it, and the
-  launcher's request helper reads it: while it exists, the request carries
+  on by default, `notesctl background off` turns it off and `notesctl
+  background on` back on; `notesctl background` shows it and the desktop's
+  last answer. A command of `notesctl`, not a launcher flag: `notesctl` is
+  the setup's one command line, it runs in the app's sandbox with the same
+  config and state directories, it can wait for the portal's answer and
+  read it back, and its Go code has unit tests on `rpctest`. Off is the
+  existence of `$XDG_CONFIG_HOME/frostnotes/background-off` — in the
+  Flatpak the app's own config directory, which all of its sandboxes share
+  — and On is its absence. `internal/flatpakapp` writes or removes it, then
+  counts the change in `background-gen`, then runs the request helper and
+  waits for it (`Change`, `Ask`); while the file exists, the request carries
   `autostart` false and the portal removes the autostart entry, and
-  `frostnotes --background` starts no notesd at a login. The helper writes
-  its outcome to
+  `frostnotes --background` starts no notesd at a login. Off does not stop
+  the notesd that runs: it runs until logout, or `notesctl shutdown`, and
+  the command says so. The helper writes its outcome to
   `$XDG_STATE_HOME/frostnotes/background.json`, atomically: when it asked,
   whether it asked for autostart, the response (0 granted, 1 cancelled,
   2 other, none for no answer), the desktop's `background` and `autostart`
-  permissions, an error, and `generation`: the shell's counter of changes, as
-  the request read it. A change is counted: `background_set` writes the file
-  first, then bumps the counter in `background-gen`, then starts the helper,
-  and answers the new number. Each request of the helper reads the counter
-  under its lock, before it reads the file, so `generation >= awaited` marks
-  an answer about the new setting, from this change's helper or from a later
-  one. A failure reads the counter too, at the moment it writes. A helper
-  that cannot take the lock never writes `background.json`, so it can
-  replace no newer answer: it writes its failure to
-  `background-failure-<generation>.json` in the same directory, and, after
-  it wrote that file, removes the failures of lower generations. When that
-  write fails, the older failures stay. The shell reads that file and those
-  failures, and shows the newer of the two; an answer wins a tie. A helper
-  that did take the lock removes, after it wrote its answer, the failures
-  up to that answer's generation. A file name counts only in the exact form
-  `background-failure-<digits>.json`. The settings' Background section
-  (`app/src/app/Settings.tsx`'s
-  `backgroundSection`, over `app/src/data/background.ts`) shows the switch
-  and, from those files, what the desktop allows, refused, or did not
-  answer.
-  While the dialog is open the window reads the file again every 2 s, with
-  no limit, so a late answer shows; while no answer has `generation >=
-  awaited`, the row says "Asking the desktop…". The section is drawn only
-  that is in the Flatpak. With the file, the app also stops notesd when its
-  last window closes: on its
-  exit, in the primary instance and in the Flatpak only, it runs
-  `notesctl shutdown` and waits at most 35 s, then kills it. A second
-  launch ends at the single-instance lock, before it could stop a notesd.
-  Off therefore holds also where the desktop's
-  permission is on; with the permission off, the desktop's own stop wins.
+  permissions, an error, and `generation`: the counter of changes, as the
+  request read it. Each request of the helper reads the counter under its
+  lock, before it reads the file, so `generation >= awaited` marks an answer
+  about the new setting, from this change's helper or from a later one;
+  `notesctl background on|off` shows the answer only then, and else says
+  that it is not in yet. A failure reads the counter too, at the moment it
+  writes. A helper that cannot take the lock never writes
+  `background.json`, so it can replace no newer answer: it writes its
+  failure to `background-failure-<generation>.json` in the same directory,
+  and, after it wrote that file, removes the failures of lower generations.
+  When that write fails, the older failures stay. `internal/flatpakapp`
+  reads that file and those failures, and shows the newer of the two; an
+  answer wins a tie. A helper that did take the lock removes, after it
+  wrote its answer, the failures up to that answer's generation. A file
+  name counts only in the exact form `background-failure-<digits>.json`.
+- **What a window did is a `notesctl` command.** `vault add PATH` (with
+  `--create` and `--name`) registers a folder; `hub join URL NAME` pairs the
+  device when it must, waits for the code's approval on the hub, and syncs
+  the vault with the hub's vault NAME, pairing again once when the hub
+  refused the token; `hub pair URL` pairs, or pairs again, without a vault;
+  `sync status`, `sync conflicts` and `sync leave` show and end a vault's
+  sync; and `status` shows whether notesd answers, each vault with its sync,
+  the hubs this device paired with and the background setting. When notesd
+  does not answer, `status` says why: the last 10 lines with text of
+  `notesd.log` (`internal/flatpakapp`'s `ReadNotesdLog`, which reads at most
+  its last 8 KiB, in the Flatpak only), and, when the last line is the
+  launcher's portal failure (`frostnotes: notesd did not start through the
+  Flatpak portal (flatpak-spawn); see $state/notesd.log`), the fix: "Run
+  `flatpak override --user --show org.frostyard.Frostnotes`: it must not
+  list a blocked `org.freedesktop.portal.Flatpak`. Remove the overrides with
+  `flatpak override --user --reset org.frostyard.Frostnotes`, if it does.
+  Check the Flatpak portal with `systemctl --user status
+  flatpak-portal.service`." It then exits non-zero. `internal/packagecheck`
+  holds the launcher's sentence to `flatpakapp.PortalFailure`. The desktop
+  clients read the same files through `internal/desktop/system`, until
+  Phase 3 removes them.
 - **Updates.** `flatpak update` installs a new deployment and leaves the
   sandbox of a running notesd alone ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
-  So a new window replaces a notesd of an older build, only forward:
+  So the launcher replaces a notesd of an older build, only forward:
   - *Build.* A Flatpak notesd reports its `build` in `rpc.hello`: the
     `app-commit` of `[Instance]` in `/.flatpak-info` (`FROSTNOTES_FLATPAK_INFO`
     names another file, for tests), which differs for every build, even of
@@ -975,10 +1011,7 @@ app's logo in the brand tile, as `cmd/frostnotes` registers it), and
     error, or lose its reply when its connection closes. A write that
     committed stays whole and is indexed (a client having gone does not
     stop that); one that did not commit is not made. So a client must not
-    treat a write without an answer as absent: the editor sends its text
-    again on the same base, which merges with no conflict, since the file
-    already holds it
-    ([documents](#documents-saves-and-merges)). `notesctl shutdown` calls it
+    treat a write without an answer as absent. `notesctl shutdown` calls it
     and waits, 30 s in all, until the socket no longer answers and the
     lock is free.
   - *Replace.* When a notesd answers and `flatpak-spawn` exists, the
@@ -987,105 +1020,106 @@ app's logo in the brand tile, as `cmd/frostnotes` registers it), and
     deployment). When both are known and differ, it runs `notesctl
     shutdown` and starts notesd as above, now of the latest build. An empty
     build, or a call that fails or runs late (each is bounded: 2 s, 10 s,
-    35 s), keeps the notesd that runs. Windows that stay open reconnect to
-    the new notesd by themselves. The bounds hold, so a stuck notesd or
-    portal delays the window by the sum of those bounds at most, and does not block it:
-    the latest-build query writes to a temporary file in the state
-    directory, which the launcher reads only when the query succeeded and
-    removes on every path, and not to a pipe in a command substitution.
-    flatpak-spawn hands its pipe to the portal and to the new sandbox,
-    which the timeout does not kill, so a substitution would wait for
-    them past the bound. `notesctl hello --build` stays a substitution:
+    35 s), keeps the notesd that runs. The bounds hold, so a stuck notesd
+    or portal delays the launcher by the sum of those bounds at most, and
+    does not block it: the latest-build query writes to a temporary file in
+    the state directory, which the launcher reads only when the query
+    succeeded and removes on every path, and not to a pipe in a command
+    substitution. flatpak-spawn hands its pipe to the portal and to the new
+    sandbox, which the timeout does not kill, so a substitution would wait
+    for them past the bound. `notesctl hello --build` stays a substitution:
     it runs in this sandbox, and its only writer is the process the
     timeout kills.
-  - *The first update.* A notesd from before this change reports no build
-    and has no `rpc.shutdown`, so the update that brings these keeps it
-    until logout; every update after that replaces it.
+  - *Until the launcher runs.* After `flatpak update`, the notesd that runs
+    stays at its build until the next `flatpak run org.frostyard.Frostnotes`
+    or the next login, whose autostart entry runs the latest deployment.
+  - *From a release with a window.* The update keeps the app ID, the data
+    directory (the app's `XDG_DATA_HOME`: the index, versions and sync
+    state), the socket, the config and state directories and the device
+    token in the Secret Service ([ADR-0045](../adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)),
+    so an install keeps its vaults and its pairing. The autostart entry that
+    the portal wrote runs `frostnotes --background`, which this launcher
+    still takes, so sync starts at the next login as before. The app's
+    desktop entry goes with the update, and a background setting that a
+    window turned off stays off.
 - **The socket** is `$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock`
   when `FLATPAK_ID` is the app ID, the one runtime directory Flatpak shares
-  between the app's sandboxes. `internal/config` computes it. The data directory is the app's
-  `XDG_DATA_HOME`, shared by the app and notesd, so the app reads `blobs/` as
-  usual.
-- **Permissions:** Wayland or X11, the GPU, the network, the Secret Service
-  and the home directory (vaults are watched and written in place; the
-  document portal cannot do that). Where `HOME` is `/var/home/<user>`
-  (Snow, Fedora's atomic desktops), the host's `/home` does not exist in
-  the sandbox, so notesd reads a vault path under `/home` as the same
-  path under `/var/home` when only that exists.
-- **Refused permissions** say why in the window
-  ([plan 0008, G5](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review);
-  the texts are in [specs/ui.md](../specs/ui.md#connecting)):
-  - *No Flatpak portal.* The launcher's last act is a line in `notesd.log`:
-    `frostnotes: notesd did not start through the Flatpak portal
-    (flatpak-spawn); see $state/notesd.log`. While the window cannot reach
-    notesd it reads `system.ReadNotesdLog`, which answers only when
-    `FLATPAK_ID` is the app ID. It reads at most
-    the last 8 KiB of the log and returns the log's path, its last line
-    with text and whether that line starts with the launcher's sentence
-    (`internal/packagecheck` reads both `notesd_log.rs` and
-    `frostnotes.sh`, so a change of the sentence on either side fails it;
-    the Flatpak tests the crate from `app/` alone, so a Rust test cannot
-    read the launcher). The window (`Connecting`, `features/connecting/NotesdCause.tsx`)
-    then says that the Flatpak portal did not start notesd, and what to
-    check; for any other last line it shows the line. It always names the
-    log. Outside the Flatpak, and in lodge's web build, it shows nothing
-    more. Only the window that has never reached notesd shows it; a window
-    that lost notesd later keeps its work, and the status bar says that it
-    is reconnecting.
-  - *A narrowed `--filesystem`.* A vault outside the sandbox's file access
-    fails with a plain `no such file or directory` or `permission denied`.
-    `internal/sandbox` reads `[Context] filesystems=` of `/.flatpak-info`
-    as a GLib key-file string list (`\;` is a literal semicolon; `\\`,
-    `\s`, `\n`, `\t` and `\r` are escapes) and says how far a path is
-    covered: `host`, `home`, `~/x`, absolute paths, `xdg-*` with a subpath,
-    `:ro`, `:rw`, `:create` and `!` negations; the deepest entry that holds
-    a path decides, a later entry beating an earlier one. It guesses
-    nothing. The user's folders (`xdg-documents` and the like) come from
-    `user-dirs.dirs` in `$XDG_CONFIG_HOME` (in a Flatpak, the copy that
-    Flatpak places in `~/.var/app/<ID>/config`), then in `~/.config`;
-    `xdg-data`, `xdg-config`, `xdg-cache` and `xdg-state` are the host's
-    (`HOST_XDG_*_HOME`) or the XDG defaults under the home. A bad escape,
-    an unknown token or modifier, or a folder that cannot be resolved makes
-    the grants *uncertain*, and then no refusal is explained: coverage
-    cannot be disproved. Nor is a path that Flatpak always exposes: the
-    app's own `~/.var/app/<ID>`, `/app`, `/usr`, `/etc`, `/tmp`,
-    `/var/tmp`, `/run` (except `/run/media`), `/proc`, `/sys`, `/dev`, the
-    runtime directory and the document portal's mount in it. When
-    `vault.add` (Open folder as vault and Create new vault) fails with `ENOENT`, `EACCES` or `EPERM` on a path the grants
-    do not cover, or with `EROFS` on one they cover at most read only,
-    notesd answers `invalidParams` with "Frostnotes cannot reach PATH
-    because the Flatpak's file access does not include it; grant it with:
-    `flatpak override --user --filesystem=PATH org.frostyard.Frostnotes`,
-    then log out and in (notesd keeps its sandbox until then)." PATH is
-    the vault's own folder for an existing vault, and the folder that
-    holds the new vault when `create` is set: the new folder does not
-    exist yet, and Flatpak mounts only paths that exist when the sandbox
-    starts, so a grant of the new path alone would not let the user create
-    it after the next login. A path the grants cover keeps its plain error. The app shows that message as the
-    notice, as it is, with no action: the message holds a path that the
-    person chose, so the app takes no command out of it. A vault that was
-    registered and then left outside the grants fails its scan, not
-    `vault.add`; the window shows no scan error yet, so that case stays in
-    `notesd.log`.
+  between the app's sandboxes. `internal/config` computes it. The data
+  directory is the app's `XDG_DATA_HOME`, shared by notesd and `notesctl`.
+- **Permissions:** the network (sync with the hub), the Secret Service
+  (`--talk-name=org.freedesktop.secrets`, the device token) and the home
+  directory (`--filesystem=home`: vaults are watched and written in place,
+  and the document portal cannot do that). The window's permissions are
+  gone: `--socket=wayland` and `--socket=fallback-x11` (a display),
+  `--share=ipc` (X11's shared memory), `--device=dri` (the GPU that drew
+  the window) and `--socket=pulseaudio` (sound); nothing in notesd or
+  `notesctl` uses them. The Background portal and the Flatpak portal need
+  no permission. Where `HOME` is `/var/home/<user>` (Snow, Fedora's atomic
+  desktops), the host's `/home` does not exist in the sandbox, so notesd
+  reads a vault path under `/home` as the same path under `/var/home` when
+  only that exists.
+- **A narrowed `--filesystem`.** A vault outside the sandbox's file access
+  fails with a plain `no such file or directory` or `permission denied`.
+  `internal/sandbox` reads `[Context] filesystems=` of `/.flatpak-info`
+  as a GLib key-file string list (`\;` is a literal semicolon; `\\`,
+  `\s`, `\n`, `\t` and `\r` are escapes) and says how far a path is
+  covered: `host`, `home`, `~/x`, absolute paths, `xdg-*` with a subpath,
+  `:ro`, `:rw`, `:create` and `!` negations; the deepest entry that holds
+  a path decides, a later entry beating an earlier one. It guesses
+  nothing. The user's folders (`xdg-documents` and the like) come from
+  `user-dirs.dirs` in `$XDG_CONFIG_HOME` (in a Flatpak, the copy that
+  Flatpak places in `~/.var/app/<ID>/config`), then in `~/.config`;
+  `xdg-data`, `xdg-config`, `xdg-cache` and `xdg-state` are the host's
+  (`HOST_XDG_*_HOME`) or the XDG defaults under the home. A bad escape,
+  an unknown token or modifier, or a folder that cannot be resolved makes
+  the grants *uncertain*, and then no refusal is explained: coverage
+  cannot be disproved. Nor is a path that Flatpak always exposes: the
+  app's own `~/.var/app/<ID>`, `/app`, `/usr`, `/etc`, `/tmp`,
+  `/var/tmp`, `/run` (except `/run/media`), `/proc`, `/sys`, `/dev`, the
+  runtime directory and the document portal's mount in it. When
+  `vault.add` (`notesctl vault add`, with or without `--create`) fails with
+  `ENOENT`, `EACCES` or `EPERM` on a path the grants do not cover, or with
+  `EROFS` on one they cover at most read only, notesd answers
+  `invalidParams` with "Frostnotes cannot reach PATH because the Flatpak's
+  file access does not include it; grant it with: `flatpak override --user
+  --filesystem=PATH org.frostyard.Frostnotes`, then log out and in (notesd
+  keeps its sandbox until then)." PATH is the vault's own folder for an
+  existing vault, and the folder that holds the new vault when `create` is
+  set: the new folder does not exist yet, and Flatpak mounts only paths
+  that exist when the sandbox starts, so a grant of the new path alone
+  would not let the user create it after the next login. A path the grants
+  cover keeps its plain error. `notesctl` prints the message as it is. A
+  vault that was registered and then left outside the grants fails its
+  scan, not `vault.add`; that case stays in `notesd.log`.
 - **The build** is offline: `make flatpak-sources` writes `go-sources.json`
-  from `go.mod` and `go.sum`, and the
-  `Flatpak` workflow (`.github/workflows/flatpak.yml`) checks they are
-  current, then builds and tests the manifest (the smoke test starts notesd
-  through the launcher with a stand-in `flatpak-spawn`, checks that the
-  launcher ends it, that notesd lives on and that the log turns over, checks
-  the data directory's lock, and replaces a notesd of build A with one of build B,
-  keeping the note written before, keeps one of the latest build, requires a
-  window's spawn to say `--notesd`, starts the request helper with no
-  arguments, and checks that `frostnotes --background` starts no notesd and
-  exits 0 while the background setting is off). Run `make flatpak-sources`
-  after any change to `go.mod` or `go.sum`.
+  from the root module's `go.mod` and `go.sum` (the NSGo client's module is
+  not built, so its modules are not in it), and the `Flatpak` workflow
+  (`.github/workflows/flatpak.yml`) checks they are current, then builds and
+  tests the manifest. Its test commands compile and import the Python
+  helper, validate the metainfo (`appstreamcli validate`), check that
+  `/app` holds the 4 programs and no client or desktop entry, and run the
+  smoke test: it starts notesd through the launcher with a stand-in
+  `flatpak-spawn`, checks that the launcher ends it, that notesd lives on,
+  that the launcher waited for the Background request (started with no
+  arguments) and ended with `notesctl status`, and that the log turns over;
+  checks that `--mygo` fails; checks the data directory's lock; writes and
+  reads a note, and reads one written into the folder by another writer;
+  replaces a notesd of build A with one of build B, keeping the note written
+  before, keeps one of the latest build, requires the launcher's spawn to
+  say `--notesd`; turns background activity off and on with `notesctl
+  background`, and checks that `frostnotes --background` starts no notesd
+  and exits 0 while it is off; and, with a portal that refuses, checks that
+  the launcher fails and `notesctl status` names the fix. The workflow's
+  export job then checks the bundle: the 4 programs and no client, no
+  desktop entry, no display, sound or device in its metadata, and a
+  composed AppStream `console-application` with a cached icon. Run `make
+  flatpak-sources` after any change to `go.mod` or `go.sum`.
   A `vX.Y.Z` tag builds a release: `packaging/flatpak/stamp-version.sh`
-  stamps the version and the commit into the manifest's ldflags (which the
-  app's [problem records](#problem-records) carry too) and the version, with
-  its date, into
-  the metainfo, and the workflow then publishes the OCI image
-  to `ghcr.io/frostyard/frostnotes` as `vX.Y.Z` and `sha-<commit>`, moving
-  `latest` only after it attested the digest. The Frostyard remote
+  stamps the version and the commit into the manifest's ldflags (which
+  notesd's [problem records](#problem-records) carry too) and the version,
+  with its date, into the metainfo, and the workflow then publishes the OCI
+  image to `ghcr.io/frostyard/frostnotes` as `vX.Y.Z` and `sha-<commit>`,
+  moving `latest` only after it attested the digest. The Frostyard remote
   (`frostyard/flatpak-index`) lists only attested digests
   ([core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)).
 

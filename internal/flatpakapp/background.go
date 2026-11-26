@@ -1,4 +1,4 @@
-package system
+package flatpakapp
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 )
 
 // The Flatpak's setting for background activity
@@ -23,14 +22,16 @@ import (
 // is the helper's: frostnotes-request-background writes background.json,
 // or background-failure-<generation>.json when it cannot take its lock.
 const (
-	offFile     = "background-off"
-	answerFile  = "background.json"
-	logFile     = "background.log"
-	genFile     = "background-gen"
-	helper      = "frostnotes-request-background"
-	libexec     = "/app/libexec"
-	shutdownMax = 35 * time.Second
+	offFile    = "background-off"
+	answerFile = "background.json"
+	logFile    = "background.log"
+	genFile    = "background-gen"
+	helper     = "frostnotes-request-background"
+	libexec    = "/app/libexec"
 )
+
+// offText is what the off file says to a person who finds it.
+const offText = "Off: notesd does not start at login; `notesctl background on` turns it on (ADR-0033).\n"
 
 var failureRe = regexp.MustCompile(`^background-failure-([0-9]+)\.json$`)
 
@@ -45,15 +46,15 @@ type PortalAnswer struct {
 	Generation         *uint64 `json:"generation"`
 }
 
-// Background is the setting and the portal's last answer, for the window.
+// Background is the setting and the portal's last answer.
 type Background struct {
-	// KeepRunning: notesd keeps syncing after the last window closes, and
-	// the portal may start it at login.
-	KeepRunning bool
-	Portal      *PortalAnswer
+	// KeepRunning: the portal may start notesd at login, and notesd keeps
+	// syncing with no client.
+	KeepRunning bool          `json:"keepRunning"`
+	Portal      *PortalAnswer `json:"portal"`
 	// Generation is this change's number, 0 from GetBackground and when
 	// the helper could not start.
-	Generation uint64
+	Generation uint64 `json:"generation,omitzero"`
 }
 
 // GetBackground reports the setting in the Flatpak; ok is false anywhere
@@ -65,43 +66,15 @@ func GetBackground(getenv Getenv) (b Background, ok bool) {
 	return backgroundState(getenv), true
 }
 
-// SetBackground writes the setting, asks the Background portal again, and
-// answers the new state.
+// errNotFlatpak answers a change of the setting outside the Flatpak.
+var errNotFlatpak = errors.New("the background setting belongs to the Flatpak org.frostyard.Frostnotes; elsewhere notesd runs as its service manager starts it")
+
+// SetBackground writes the setting, starts the Background portal's request
+// without waiting for it, and answers the new state. A process that stays
+// in its sandbox until the portal answers, as a window does, can use it;
+// one that exits sooner uses Change and Ask.
 func SetBackground(getenv Getenv, keepRunning bool) (Background, error) {
-	if !InFlatpak(getenv) {
-		return Background{}, errors.New("the background setting belongs to the Flatpak")
-	}
-	return setBackground(getenv, keepRunning)
-}
-
-func offPath(getenv Getenv) (string, error) {
-	d, err := ConfigDir(getenv)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(d, offFile), nil
-}
-
-func setBackground(getenv Getenv, keepRunning bool) (Background, error) {
-	off, err := offPath(getenv)
-	if err != nil {
-		return Background{}, err
-	}
-	if keepRunning {
-		if err := os.Remove(off); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return Background{}, fmt.Errorf("remove %s: %w", off, err)
-		}
-	} else {
-		if err := os.MkdirAll(filepath.Dir(off), 0o755); err != nil {
-			return Background{}, fmt.Errorf("create %s: %w", filepath.Dir(off), err)
-		}
-		if err := os.WriteFile(off, []byte("Off: notesd stops when the last window closes (ADR-0033).\n"), 0o644); err != nil {
-			return Background{}, fmt.Errorf("write %s: %w", off, err)
-		}
-	}
-	// The file first, and only then the counter: a helper that reads the
-	// counter after this moment answers about this setting.
-	gen, err := bumpGeneration(getenv)
+	gen, err := Change(getenv, keepRunning)
 	if err != nil {
 		return Background{}, err
 	}
@@ -111,6 +84,72 @@ func setBackground(getenv Getenv, keepRunning bool) (Background, error) {
 		b.Generation = gen
 	}
 	return b, nil
+}
+
+// Change writes the setting and counts the change, in the Flatpak only. It
+// answers the change's number: an answer of the portal whose generation is
+// at least that read the new setting. Ask then asks the portal.
+func Change(getenv Getenv, keepRunning bool) (uint64, error) {
+	if !InFlatpak(getenv) {
+		return 0, errNotFlatpak
+	}
+	off, err := offPath(getenv)
+	if err != nil {
+		return 0, err
+	}
+	if keepRunning {
+		if err := os.Remove(off); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return 0, fmt.Errorf("remove %s: %w", off, err)
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(off), 0o755); err != nil {
+			return 0, fmt.Errorf("create %s: %w", filepath.Dir(off), err)
+		}
+		if err := os.WriteFile(off, []byte(offText), 0o644); err != nil {
+			return 0, fmt.Errorf("write %s: %w", off, err)
+		}
+	}
+	// The file first, and only then the counter: a helper that reads the
+	// counter after this moment answers about this setting.
+	return bumpGeneration(getenv)
+}
+
+// Ask runs the Background portal's request helper and waits until it
+// exits: it stays on the bus until the portal answers, at most 10 minutes,
+// and the portal drops a request whose caller left. The helper reads the
+// setting itself, writes its outcome for GetBackground and always exits 0;
+// Ask fails only when it cannot run it, or when ctx ends first. Its output
+// is appended to background.log in the state directory.
+func Ask(ctx context.Context, getenv Getenv) error {
+	if !InFlatpak(getenv) {
+		return errNotFlatpak
+	}
+	d, err := StateDir(getenv)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		return err
+	}
+	log, err := os.OpenFile(filepath.Join(d, logFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer log.Close()
+	cmd := exec.CommandContext(ctx, helperPath(getenv))
+	cmd.Stdout, cmd.Stderr = log, log
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ask the Background portal (%s): %w", cmd.Path, err)
+	}
+	return nil
+}
+
+func offPath(getenv Getenv) (string, error) {
+	d, err := ConfigDir(getenv)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, offFile), nil
 }
 
 func backgroundState(getenv Getenv) Background {
@@ -227,24 +266,4 @@ func bumpGeneration(getenv Getenv) (uint64, error) {
 		return 0, err
 	}
 	return next, nil
-}
-
-// StopOnExit stops notesd when the app exits with the setting Off, so
-// that Off holds also where the desktop's own background permission is on.
-// Only the process that owns the window calls it, and only the Flatpak
-// stops notesd: elsewhere notesd is a service of its own.
-func StopOnExit(ctx context.Context, getenv Getenv) {
-	if !InFlatpak(getenv) {
-		return
-	}
-	off, err := offPath(getenv)
-	if err != nil {
-		return
-	}
-	if _, err := os.Stat(off); err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, shutdownMax)
-	defer cancel()
-	_ = exec.CommandContext(ctx, "notesctl", "shutdown").Run()
 }

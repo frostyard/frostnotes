@@ -5,11 +5,6 @@
   "sdk": "org.gnome.Sdk",
   "command": "frostnotes",
   "finish-args": [
-    "--socket=wayland",
-    "--socket=fallback-x11",
-    "--socket=pulseaudio",
-    "--share=ipc",
-    "--device=dri",
     "--share=network",
     "--talk-name=org.freedesktop.secrets",
     "--filesystem=home"
@@ -27,20 +22,15 @@
           "GOFLAGS": "-trimpath -buildvcs=false -modcacherw",
           "GOMODCACHE": "/run/build/frostnotes/.gomodcache",
           "GOCACHE": "/run/build/frostnotes/.gocache",
-          "CGO_ENABLED": "0",
-          "NSGO_VERSION": "0.1.0"
+          "CGO_ENABLED": "0"
         }
       },
       "build-commands": [
-        "go build -tags mygo_noinspector -ldflags '-s -w -X main.version=flatpak -X github.com/egoist/mygo.production=1' -o build/ ./cmd/notesd ./cmd/notesctl ./cmd/frostnotes",
+        "go build -ldflags '-s -w -X main.version=flatpak' -o build/ ./cmd/notesd ./cmd/notesctl",
         "install -Dm755 -t /app/bin build/notesd build/notesctl",
-        "install -Dm755 build/frostnotes /app/libexec/frostnotes-mygo",
-        "cd cmd/frostnotes-nsgo && go tool nsgo build -target linux_x64 -id org.frostyard.Frostnotes -version \"$NSGO_VERSION\" -channel none -installers=false -output ../../build/nsgo",
-        "install -Dm755 \"build/nsgo/FrostNotes-$NSGO_VERSION-linux_x64/FrostNotes\" /app/libexec/frostnotes-app",
         "install -Dm644 packaging/flatpak/source-revision /app/share/frostnotes/revision.txt",
         "install -Dm755 packaging/flatpak/frostnotes.sh /app/bin/frostnotes",
         "install -Dm755 packaging/flatpak/request-background.py /app/libexec/frostnotes-request-background",
-        "install -Dm644 packaging/flatpak/org.frostyard.Frostnotes.desktop -t /app/share/applications",
         "install -Dm644 packaging/flatpak/org.frostyard.Frostnotes.metainfo.xml -t /app/share/metainfo",
         "install -Dm644 packaging/icons/icon.svg /app/share/icons/hicolor/scalable/apps/org.frostyard.Frostnotes.svg",
         "install -Dm644 packaging/icons/128x128.png /app/share/icons/hicolor/128x128/apps/org.frostyard.Frostnotes.png",
@@ -77,10 +67,10 @@
       "test-commands": [
         "python3 -m py_compile packaging/flatpak/request-background.py",
         "python3 -c \"from gi.repository import Gio, GLib\"",
-        "desktop-file-validate /app/share/applications/org.frostyard.Frostnotes.desktop",
         "appstreamcli validate --no-net /app/share/metainfo/org.frostyard.Frostnotes.metainfo.xml",
         "sh packaging/flatpak/smoke-test.sh",
-        "test -x /app/libexec/frostnotes-app && test -x /app/libexec/frostnotes-mygo"
+        "test -x /app/bin/notesd && test -x /app/bin/notesctl && test -x /app/bin/frostnotes && test -x /app/libexec/frostnotes-request-background",
+        "test ! -e /app/libexec/frostnotes-app && test ! -e /app/libexec/frostnotes-mygo && test ! -e /app/share/applications"
       ],
       "run-tests": true
     }

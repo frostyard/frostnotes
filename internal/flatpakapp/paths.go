@@ -1,7 +1,9 @@
-// Package system is what the desktop app needs of the system around it
-// (plan 0009): where its files live, the end of notesd's log, and the
-// Flatpak's background setting. It imports no UI.
-package system
+// Package flatpakapp is what the Flatpak org.frostyard.Frostnotes keeps
+// beside notesd: where its files live, the end of notesd's log, and the
+// setting for background activity (docs/design/app.md#the-flatpak).
+// notesctl reads and changes them; the desktop clients read them too
+// (internal/desktop/system). It imports no UI.
+package flatpakapp
 
 import (
 	"errors"
@@ -18,7 +20,7 @@ const dir = "frostnotes"
 // Getenv reads the environment; tests pass their own.
 type Getenv func(string) string
 
-// InFlatpak reports whether the app runs in its own Flatpak.
+// InFlatpak reports whether this process runs in the app's own Flatpak.
 func InFlatpak(getenv Getenv) bool { return config.InFlatpak(getenv) }
 
 func abs(v string) (string, bool) { return v, filepath.IsAbs(v) }

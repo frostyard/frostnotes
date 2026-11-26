@@ -1,4 +1,4 @@
-package system
+package flatpakapp
 
 import (
 	"os"
@@ -118,31 +118,68 @@ func TestPortalAnswers(t *testing.T) {
 	}
 }
 
-func TestOnlyLastFlatpakWindowStopsBackgroundSync(t *testing.T) {
-	env, cfg, _ := flatpak(t)
-	writeTo(t, filepath.Join(cfg, offFile), "off")
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "notesctl"), []byte("#!/bin/sh\nprintf '%s' \"$1\" > \"$WINDOW_EXIT_LOG\"\n"), 0700); err != nil {
+func TestNotesdLogKeepsTheLastLines(t *testing.T) {
+	env, _, state := flatpak(t)
+	var b strings.Builder
+	for i := range 15 {
+		b.WriteString("line " + strconv.Itoa(i) + "\n\n")
+	}
+	writeTo(t, filepath.Join(state, "notesd.log"), b.String())
+	log, _ := ReadNotesdLog(env)
+	if len(log.Lines) != tailLines || log.Lines[0] != "line 5" || log.Lines[tailLines-1] != "line 14" || log.LastLine != "line 14" {
+		t.Errorf("%q, last %q", log.Lines, log.LastLine)
+	}
+}
+
+// Ask runs the helper and waits for it, so a process that exits after it,
+// as notesctl does, does not end the portal's request.
+func TestAskWaitsForTheHelpersAnswer(t *testing.T) {
+	env, cfg, state := flatpak(t)
+	helper := filepath.Join(env("FROSTNOTES_LIBEXEC_DIR"), "frostnotes-request-background")
+	// The fake answers as the real one does: the counter it read, and
+	// autostart only while the off file is missing.
+	writeTo(t, helper, `#!/bin/sh
+dir="$XDG_STATE_HOME/frostnotes"
+gen=$(cat "$dir/background-gen" 2>/dev/null || echo 0)
+auto=true
+[ -e "$XDG_CONFIG_HOME/frostnotes/background-off" ] && auto=false
+echo "asked with autostart $auto"
+printf '{"at":"t","autostartRequested":%s,"response":0,"background":true,"autostart":%s,"error":null,"generation":%s}\n' "$auto" "$auto" "$gen" >"$dir/background.json"
+`)
+	if err := os.Chmod(helper, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	log := filepath.Join(bin, "shutdown.log")
-	t.Setenv("PATH", bin)
-	t.Setenv("WINDOW_EXIT_LOG", log)
-	first, err := WindowLifetime(env)
-	if err != nil {
+	t.Setenv("XDG_STATE_HOME", env("XDG_STATE_HOME"))
+	t.Setenv("XDG_CONFIG_HOME", env("XDG_CONFIG_HOME"))
+	gen, err := Change(env, false)
+	if err != nil || gen != 1 {
+		t.Fatalf("change: %d %v", gen, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(cfg, offFile)); err != nil || !strings.Contains(string(data), "notesctl background on") {
+		t.Errorf("the off file: %q %v", data, err)
+	}
+	if err := Ask(t.Context(), env); err != nil {
 		t.Fatal(err)
 	}
-	second, err := WindowLifetime(env)
-	if err != nil {
-		t.Fatal(err)
+	b, _ := GetBackground(env)
+	if b.KeepRunning || b.Portal == nil || b.Portal.Generation == nil || *b.Portal.Generation != gen || *b.Portal.Autostart {
+		t.Fatalf("%+v %+v", b, b.Portal)
 	}
-	first()
-	if _, err := os.Stat(log); !os.IsNotExist(err) {
-		t.Fatalf("first close called notesctl: %v", err)
+	if data, _ := os.ReadFile(filepath.Join(state, logFile)); !strings.Contains(string(data), "asked with autostart false") {
+		t.Errorf("background.log: %q", data)
 	}
-	second()
-	got, err := os.ReadFile(log)
-	if err != nil || string(got) != "shutdown" {
-		t.Fatalf("last close: %q, %v", got, err)
+}
+
+func TestAskAndChangeBelongToTheFlatpak(t *testing.T) {
+	none := func(string) string { return "" }
+	if _, err := Change(none, false); err == nil {
+		t.Error("changed outside the Flatpak")
+	}
+	if err := Ask(t.Context(), none); err == nil {
+		t.Error("asked outside the Flatpak")
+	}
+	env, _, _ := flatpak(t) // no helper in its libexec directory
+	if err := Ask(t.Context(), env); err == nil {
+		t.Error("asked without a helper")
 	}
 }

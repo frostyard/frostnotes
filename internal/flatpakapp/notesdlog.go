@@ -1,9 +1,10 @@
-package system
+package flatpakapp
 
 import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -16,15 +17,21 @@ const tail = 8 * 1024
 // launcher.
 const PortalFailure = "frostnotes: notesd did not start through the Flatpak portal (flatpak-spawn)"
 
-// NotesdLog is what the window learns from notesd.log: why notesd is not
-// running (docs/design/app.md#the-flatpak).
+// tailLines is how many of the log's last lines with text NotesdLog keeps.
+const tailLines = 10
+
+// NotesdLog is what notesd.log says of why notesd is not running
+// (docs/design/app.md#the-flatpak).
 type NotesdLog struct {
-	Path string
+	Path string `json:"path"`
 	// LastLine is the log's last line that holds text, "" for none.
-	LastLine string
+	LastLine string `json:"lastLine"`
+	// Lines are the log's last lines that hold text, at most 10, oldest
+	// first; LastLine is the last of them.
+	Lines []string `json:"lines"`
 	// PortalRefused says that line is the launcher's: the Flatpak portal
 	// did not start notesd.
-	PortalRefused bool
+	PortalRefused bool `json:"portalRefused"`
 }
 
 // ReadNotesdLog reports the end of notesd.log in the Flatpak; ok is false
@@ -41,8 +48,12 @@ func ReadNotesdLog(getenv Getenv) (log NotesdLog, ok bool) {
 }
 
 func describeLog(path string) NotesdLog {
-	line := lastLine(readTail(path))
-	return NotesdLog{Path: path, LastLine: line, PortalRefused: strings.HasPrefix(line, PortalFailure)}
+	lines := lastLines(readTail(path), tailLines)
+	line := ""
+	if len(lines) > 0 {
+		line = lines[len(lines)-1]
+	}
+	return NotesdLog{Path: path, LastLine: line, Lines: lines, PortalRefused: strings.HasPrefix(line, PortalFailure)}
 }
 
 func readTail(path string) string {
@@ -65,12 +76,15 @@ func readTail(path string) string {
 	return strings.ToValidUTF8(string(b), "�")
 }
 
-func lastLine(text string) string {
+// lastLines are text's last n lines that hold text, trimmed, oldest first.
+func lastLines(text string, n int) []string {
 	lines := strings.Split(text, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
+	var out []string
+	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
 		if t := strings.TrimSpace(lines[i]); t != "" {
-			return t
+			out = append(out, t)
 		}
 	}
-	return ""
+	slices.Reverse(out)
+	return out
 }

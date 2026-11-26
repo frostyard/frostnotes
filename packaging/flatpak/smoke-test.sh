@@ -1,12 +1,15 @@
 #!/bin/sh
-# The Flatpak's smoke test, run by flatpak-builder's test-commands: the
-# launcher's normal path starts notesd through flatpak-spawn, as the
-# Background portal does at login, and leaves no flatpak-spawn behind; a
-# second notesd on the same data directory exits; a note written through
-# notesctl reads back. The portal and the app are fakes, since the build
-# sandbox has no portal and no display. It needs no Secret Service: nothing
-# here pairs, and without one the Flatpak's notesd keeps no secrets and still
-# serves notes (docs/adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md).
+# The Flatpak's smoke test, run by flatpak-builder's test-commands. The
+# Flatpak holds notesd, notesctl, the launcher and the Background helper, and
+# no window (docs/design/app.md#the-flatpak): the launcher's normal path
+# starts notesd through flatpak-spawn, as the Background portal does at
+# login, leaves no flatpak-spawn behind, waits for the Background request and
+# ends with `notesctl status`; a second notesd on the same data directory
+# exits; a note written through notesctl reads back; and an option of the
+# old windows (--mygo) fails. The portals are fakes, since the build sandbox
+# has none. It needs no Secret Service: nothing here pairs, and without one
+# the Flatpak's notesd keeps no secrets and still serves notes
+# (docs/adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md).
 #
 # An update replaces the engine, only forward (docs/adr/0032-an-update-replaces-the-running-notesd.md):
 # once a notesd of build A runs, the fake flatpak-spawn answers
@@ -15,17 +18,20 @@
 # written before the stop still there. A notesd of the latest build is kept.
 # A latest-build query that leaves a detached process holding its output, as
 # the portal does, and prints no build: the launcher must not wait for the
-# process, must keep the running notesd and must run the app within its bounds.
+# process, must keep the running notesd and must finish within its bounds.
 # The fake flatpak-spawn fails, and records the fault, when the launcher calls
 # it without --latest-version.
 #
 # The setting for background activity
 # (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md) is the
-# off file: the launcher starts the request helper with no arguments, since
-# the helper reads the setting itself; and `frostnotes --background`, the
-# autostart entry's command line, starts no notesd and exits 0 while the file
-# exists. A window's spawn of notesd must use `--notesd`, which the fake
-# flatpak-spawn requires.
+# off file, which `notesctl background off` writes and `notesctl background
+# on` removes: the launcher starts the request helper with no arguments, since
+# the helper reads the setting itself, and waits for it; and `frostnotes
+# --background`, the autostart entry's command line, starts no notesd and
+# exits 0 while the file exists. The launcher's spawn of notesd must use
+# `--notesd`, which the fake flatpak-spawn requires. When the portal does not
+# start notesd, `notesctl status`, the launcher's last word, says so and how
+# to fix it, and the launcher fails.
 #
 # FROSTNOTES_BIN_DIR is where frostnotes, notesd and notesctl are; the
 # default is the Flatpak's /app/bin. The test cleans up after itself.
@@ -57,10 +63,10 @@ print_logs() {
         echo "--- $state/notesd.log.1, its end" >&2
         tail -n 20 "$state/notesd.log.1" | tr -d '\000' >&2 || true
     fi
-    for f in "$state/notesd.log" "$work/launcher.log"; do
+    for f in "$state/notesd.log" "$state/background.log" "$work/launcher.log"; do
         if [ -f "$f" ]; then
             echo "--- $f" >&2
-            cat "$f" >&2
+            tr -d '\000' <"$f" | tail -n 40 >&2
         fi
     done
 }
@@ -76,13 +82,14 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path="$work/no-bus"
 unset FROSTNOTES_SOCKET FROSTNOTES_DATA_DIR FROSTNOTES_FLATPAK_INFO
 
 # A fake flatpak-spawn, first on PATH. It drops --latest-version (the launcher
-# must pass it: without the flag, the real portal would run the window's own,
-# perhaps old, build), and runs the command with FROSTNOTES_FLATPAK_INFO
+# must pass it: without the flag, the real portal would run the launcher's
+# own, perhaps old, build), and runs the command with FROSTNOTES_FLATPAK_INFO
 # pointing at the "latest" deployment's info file, which the test controls.
-# For `frostnotes` it requires --notesd (a window's spawn must not take the
-# autostart's --background path, which the setting can turn off), records its
-# own PID and its child's, as the portal's spawn does in a sandbox of its own,
-# and waits for the child. The app and the Background helper exit at once.
+# For `frostnotes` it requires --notesd (the launcher's spawn must not take
+# the autostart's --background path, which the setting can turn off), records
+# its own PID and its child's, as the portal's spawn does in a sandbox of its
+# own, and waits for the child; with SMOKE_SPAWN_FAIL set it fails at once,
+# as a refused portal does.
 cat >"$work/bin/flatpak-spawn" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" != "--latest-version" ]; then
@@ -93,8 +100,12 @@ shift
 export FROSTNOTES_FLATPAK_INFO="$SMOKE_LATEST_INFO"
 if [ "${1:-}" = "frostnotes" ]; then
     if [ "${2:-}" != "--notesd" ]; then
-        echo "fake flatpak-spawn: a window's notesd must start with --notesd: $*" | tee -a "$SMOKE_SPAWN_FAULT" >&2
+        echo "fake flatpak-spawn: the launcher's notesd must start with --notesd: $*" | tee -a "$SMOKE_SPAWN_FAULT" >&2
         exit 2
+    fi
+    if [ -n "${SMOKE_SPAWN_FAIL:-}" ]; then
+        echo "fake flatpak-spawn: the portal refused" >&2
+        exit 1
     fi
     echo "$$" >"$SMOKE_SPAWN_PID"
     "$@" &
@@ -117,14 +128,20 @@ else
 fi
 EOF
 chmod +x "$work/bin/flatpak-spawn"
-printf '#!/bin/sh\nexit 0\n' >"$work/libexec/frostnotes-app"
 # The Background helper records its arguments: the test checks that the
-# launcher starts it with none, since it reads the setting itself.
+# launcher starts it with none, since it reads the setting itself. It answers
+# as the real one does when the portal grants the request: with the counter
+# of changes and the setting it read.
 cat >"$work/libexec/frostnotes-request-background" <<'EOF'
 #!/bin/sh
 printf 'args:%s\n' "$*" >>"$SMOKE_REQUEST_ARGS"
+dir="$XDG_STATE_HOME/frostnotes"
+gen=$(cat "$dir/background-gen" 2>/dev/null || echo 0)
+auto=true
+[ -e "$XDG_CONFIG_HOME/frostnotes/background-off" ] && auto=false
+printf '{"at":"t","autostartRequested":%s,"response":0,"background":true,"autostart":%s,"error":null,"generation":%s}\n' "$auto" "$auto" "$gen" >"$dir/background.json"
 EOF
-chmod +x "$work/libexec/frostnotes-app" "$work/libexec/frostnotes-request-background"
+chmod +x "$work/libexec/frostnotes-request-background"
 SMOKE_SPAWN_PID="$work/spawn.pid"
 SMOKE_CHILD_PID="$work/notesd.pid"
 SMOKE_SPAWN_FAULT="$work/spawn.fault"
@@ -144,19 +161,12 @@ export FROSTNOTES_LIBEXEC_DIR="$work/libexec"
 PATH="$work/bin:$bin:$PATH"
 export PATH
 
-# The fallback must use the same launcher and forward only frontend arguments.
-cat >"$work/libexec/frostnotes-mygo" <<'EOF'
-#!/bin/sh
-[ "$#" -eq 1 ] && [ "$1" = "fallback-probe" ] && touch "$SMOKE_MYGO_RAN"
-EOF
-chmod +x "$work/libexec/frostnotes-mygo"
-export SMOKE_MYGO_RAN="$work/fallback-ran"
-
 # A notesd log over 1 MiB, as a session that ran for weeks has: the launcher
 # keeps one old log and starts a new one.
 dd if=/dev/zero of="$state/notesd.log" bs=1024 count=1025 2>/dev/null
 
-"$bin/frostnotes" >"$work/launcher.log" 2>&1
+rc=0
+"$bin/frostnotes" >"$work/launcher.log" 2>&1 || rc=$?
 
 for _ in $(seq 1 20); do
     if [ -s "$SMOKE_CHILD_PID" ]; then
@@ -193,9 +203,51 @@ if [ -z "$ready" ]; then
     print_logs
     exit 1
 fi
-"$bin/frostnotes" --mygo fallback-probe >>"$work/launcher.log" 2>&1
-test -f "$SMOKE_MYGO_RAN"
 
+socket="$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock"
+if [ ! -S "$socket" ]; then
+    echo "smoke test: no socket at $socket" >&2
+    find "$XDG_RUNTIME_DIR" >&2
+    print_logs
+    exit 1
+fi
+
+# The launcher waited for the Background request, which it started with no
+# arguments, and ended with `notesctl status`: it exited 0, and named the
+# socket, the first step of a setup and the desktop's answer.
+if [ "$rc" -ne 0 ]; then
+    echo "smoke test: the launcher exited $rc; want 0 with notesd running" >&2
+    print_logs
+    exit 1
+fi
+for want in "answers on $socket" \
+    "no vaults: register a folder with: notesctl vault add PATH" \
+    "background: on, notesd starts at login when the desktop allows it; the desktop allows it to run in the background and starts it at login"; do
+    if ! grep -qF "$want" "$work/launcher.log"; then
+        echo "smoke test: the launcher's notesctl status does not say '$want'" >&2
+        print_logs
+        exit 1
+    fi
+done
+if [ "$(cat "$SMOKE_REQUEST_ARGS" 2>/dev/null || true)" != "args:" ]; then
+    echo "smoke test: the launcher did not wait for one Background request with no arguments" >&2
+    print_logs
+    exit 1
+fi
+
+# The windows' options are gone: --mygo fails and says why, and --help names
+# the setup.
+rc=0
+"$bin/frostnotes" --mygo >"$work/mygo.log" 2>&1 || rc=$?
+if [ "$rc" -ne 2 ] || ! grep -q "has no window" "$work/mygo.log"; then
+    echo "smoke test: 'frostnotes --mygo' exited $rc; want 2, and that Frostnotes has no window" >&2
+    cat "$work/mygo.log" >&2
+    exit 1
+fi
+if ! "$bin/frostnotes" --help | grep -qF "notesctl vault add"; then
+    echo "smoke test: 'frostnotes --help' does not name the setup" >&2
+    exit 1
+fi
 
 if [ ! -f "$state/notesd.log.1" ]; then
     echo "smoke test: the old notesd log did not move to $state/notesd.log.1" >&2
@@ -205,14 +257,6 @@ fi
 size="$(wc -c <"$state/notesd.log")"
 if [ "$size" -gt 1048576 ]; then
     echo "smoke test: notesd.log holds $size bytes; want a new log of at most 1 MiB" >&2
-    print_logs
-    exit 1
-fi
-
-socket="$XDG_RUNTIME_DIR/app/org.frostyard.Frostnotes/frostnotes/notesd.sock"
-if [ ! -S "$socket" ]; then
-    echo "smoke test: no socket at $socket" >&2
-    find "$XDG_RUNTIME_DIR" >&2
     print_logs
     exit 1
 fi
@@ -276,6 +320,26 @@ fi
 if [ ! -f "$work/vault/smoke.md" ]; then
     echo "smoke test: the note is not a file in the vault" >&2
     print_logs
+    exit 1
+fi
+# A file that another editor writes into the vault folder is a note too.
+printf 'from another editor\n' >"$work/vault/other.md"
+found=
+for _ in $(seq 1 40); do
+    if [ "$(notesctl cat other.md 2>/dev/null || true)" = "from another editor" ]; then
+        found=1
+        break
+    fi
+    sleep 0.25
+done
+if [ -z "$found" ]; then
+    echo "smoke test: notesd did not see a file another editor wrote into the vault" >&2
+    print_logs
+    exit 1
+fi
+if ! notesctl status | grep -qF "vault 1 \"smoke\" at $work/vault: not synced"; then
+    echo "smoke test: notesctl status does not show the vault" >&2
+    notesctl status >&2 || true
     exit 1
 fi
 
@@ -360,7 +424,7 @@ fi
 
 # A latest-build query that leaves a detached process on its output, and
 # prints no build: the launcher does not wait for it, keeps the notesd and
-# runs the app, all within 20 s (the query's bound is 10 s).
+# finishes, all within 20 s (the query's bound is 10 s).
 SMOKE_LATEST_INFO="$work/info-b"
 SMOKE_SPAWN_DETACH=1
 export SMOKE_LATEST_INFO SMOKE_SPAWN_DETACH
@@ -398,45 +462,27 @@ if [ -e "$SMOKE_SPAWN_FAULT" ]; then
     exit 1
 fi
 
-# The app's setting for background activity is the off file
-# (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md). The
-# request helper reads it itself, so the launcher starts the helper with no
-# arguments; and `frostnotes --background`, the autostart entry's command
-# line, starts no notesd while the file exists. The launcher starts the
-# helper in the background, so wait for the fake helper's record, at most 5 s.
-# The second `frostnotes --background` above, with notesd running, shows the
-# other way: without the file it reaches notesd's lock.
+# Background activity is a notesctl command
+# (docs/adr/0033-a-setting-keeps-notesd-running-without-a-window.md):
+# `notesctl background off` writes the off file and waits for the request
+# helper's answer about it; the helper reads the setting itself.
 off="$XDG_CONFIG_HOME/frostnotes/background-off"
-asked() {
-    # asked: one launch, and the request it starts must have no arguments.
-    rm -f "$SMOKE_REQUEST_ARGS"
-    "$bin/frostnotes" >"$work/launcher.log" 2>&1
-    for _ in $(seq 1 50); do
-        if [ -s "$SMOKE_REQUEST_ARGS" ]; then
-            break
-        fi
-        sleep 0.1
-    done
-    args="$(cat "$SMOKE_REQUEST_ARGS" 2>/dev/null || true)"
-    if [ -z "$args" ]; then
-        echo "smoke test: the launcher did not ask the Background portal" >&2
-        print_logs
-        exit 1
-    fi
-    if [ "$args" != "args:" ]; then
-        echo "smoke test: the launcher started the helper with '$args'; want no arguments" >&2
-        print_logs
-        exit 1
-    fi
-}
-
-mkdir -p "$XDG_CONFIG_HOME/frostnotes"
-rm -f "$off"
-asked
+rm -f "$SMOKE_REQUEST_ARGS"
+if ! notesctl background off >"$work/notesctl.log" 2>&1 ||
+    ! grep -qF "background: off, notesd does not start at login; the desktop allows it to run in the background, and does not start it at login" "$work/notesctl.log"; then
+    echo "smoke test: notesctl background off did not show the desktop's answer" >&2
+    cat "$work/notesctl.log" >&2
+    print_logs
+    exit 1
+fi
+if [ ! -e "$off" ] || [ "$(cat "$SMOKE_REQUEST_ARGS" 2>/dev/null || true)" != "args:" ]; then
+    echo "smoke test: notesctl background off did not write $off and ask once with no arguments" >&2
+    print_logs
+    exit 1
+fi
 
 # With the setting off, the autostart's command line starts no notesd, says so
 # in notesd.log and exits 0; the notesd that runs keeps running.
-printf 'off\n' >"$off"
 rc=0
 "$bin/frostnotes" --background >/dev/null 2>&1 || rc=$?
 if [ "$rc" -ne 0 ]; then
@@ -444,7 +490,7 @@ if [ "$rc" -ne 0 ]; then
     print_logs
     exit 1
 fi
-off_line="frostnotes: background activity is off in Settings; notesd does not start at login"
+off_line="frostnotes: background activity is off (notesctl background on turns it on); notesd does not start at login"
 if ! tail -n 1 "$state/notesd.log" | grep -qxF "$off_line"; then
     echo "smoke test: notesd.log does not end with '$off_line' with the setting off" >&2
     print_logs
@@ -455,10 +501,34 @@ if ! kill -0 "$pid" 2>/dev/null; then
     print_logs
     exit 1
 fi
-rm -f "$off"
+if ! notesctl background on >"$work/notesctl.log" 2>&1 || [ -e "$off" ]; then
+    echo "smoke test: notesctl background on did not remove $off" >&2
+    cat "$work/notesctl.log" >&2
+    exit 1
+fi
 
 kill -TERM "$pid"
 # Wait until it has gone, before the cleanup removes its directories.
 wait_gone "$pid" || true
 pid=
+
+# When the portal does not start notesd, the launcher says so in notesd.log,
+# and its notesctl status shows that line and the fix, and fails.
+rm -f "$SMOKE_SPAWN_PID" "$SMOKE_CHILD_PID"
+rc=0
+SMOKE_SPAWN_FAIL=1 "$bin/frostnotes" >"$work/launcher.log" 2>&1 || rc=$?
+if [ "$rc" -eq 0 ] || [ -e "$SMOKE_CHILD_PID" ]; then
+    echo "smoke test: with the portal refusing, the launcher exited $rc; want a failure and no notesd" >&2
+    print_logs
+    exit 1
+fi
+for want in "notesd does not answer on $socket" \
+    "frostnotes: notesd did not start through the Flatpak portal (flatpak-spawn); see $state/notesd.log" \
+    "The Flatpak portal did not start notesd. To fix it:"; do
+    if ! grep -qF "$want" "$work/launcher.log"; then
+        echo "smoke test: with the portal refusing, the launcher does not say '$want'" >&2
+        print_logs
+        exit 1
+    fi
+done
 echo "smoke test passed"

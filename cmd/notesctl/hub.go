@@ -21,7 +21,7 @@ func newHubCmd(opts *rootOptions) *cobra.Command {
 	}
 	cmd.AddCommand(newHubStatusCmd(opts), newHubServeCmd(opts), newHubVaultsCmd(opts),
 		newHubPendingCmd(opts), newHubApproveCmd(opts), newHubDevicesCmd(opts),
-		newHubRevokeCmd(opts), newHubJoinCmd(opts), newHubURLCmd(opts), newHubRelocateCmd(opts))
+		newHubRevokeCmd(opts), newHubPairCmd(opts), newHubJoinCmd(opts), newHubURLCmd(opts), newHubRelocateCmd(opts))
 	return cmd
 }
 
@@ -333,6 +333,34 @@ func newHubJoinCmd(opts *rootOptions) *cobra.Command {
 				_, err = fmt.Fprintf(cmd.OutOrStdout(), "syncing %s at %s: %s\n", status.HubVault, status.URL, status.State)
 				return err
 			})
+		},
+	}
+	cmd.Flags().StringVar(&device, "device", "", "This device's name on the hub (default: host name)")
+	return cmd
+}
+
+func newHubPairCmd(opts *rootOptions) *cobra.Command {
+	var device string
+	cmd := &cobra.Command{
+		Use:   "pair URL",
+		Short: "Pair this device with a hub, or pair it again",
+		Long: `Ask the hub at URL to pair this device, print the code to approve on the hub
+("notesctl hub approve CODE" there), and wait until it is approved or
+expires. A device paired with that hub already gets a new token, as after
+the hub revoked the old one; its vaults keep syncing with the new token.
+"notesctl hub join" pairs too, when it must, and then syncs a vault.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, _, err := opts.dial(cmd.Context())
+			if err != nil {
+				return err
+			}
+			defer c.Close()
+			params := &api.SyncPairParams{URL: strings.TrimSuffix(args[0], "/")}
+			if cmd.Flags().Changed("device") {
+				params.Name = &device
+			}
+			return pairNew(cmd.Context(), cmd.OutOrStdout(), c.Sync(), params)
 		},
 	}
 	cmd.Flags().StringVar(&device, "device", "", "This device's name on the hub (default: host name)")

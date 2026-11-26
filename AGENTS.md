@@ -149,12 +149,16 @@ file a step names before writing its frostnotes counterpart.
   views; `workspace`, `commands` and `prefs` plain data; `catalog` a vault's
   files, the Files and Tags panes' trees, the quick switcher's match, the
   editor's completions and where a linked or renamed note goes (no MyGo or
-  frostui import; the NSGo client uses it too); `system` paths, notesd's log, the background
-  setting and the open rules (no MyGo or frostui import; `open.go` carries
+  frostui import; the NSGo client uses it too); `system` the open rules and, from
+  `internal/flatpakapp`, paths, notesd's log and the background setting (no MyGo or frostui import; `open.go` carries
   frostui's mailto rule, which `cmd/frostnotes`' tests hold it to); `uikit`
   tab strips and splits (imports only std, MyGo, purego and
   frostui); `desktoptest` the tests' UI loop and real notesd. `make
   desktop-build`, `desktop-run`, `desktop-smoke` (Xvfb) and `desktop-evidence`.
+- `internal/flatpakapp`: what the Flatpak keeps beside notesd (its config
+  and state directories, the end of `notesd.log`, the background setting
+  and the Background portal's answer); `notesctl status` and `notesctl
+  background` read and change them ([design/app.md](docs/design/app.md#the-flatpak)).
 - `internal/sandbox`: a Flatpak sandbox's file grants (`/.flatpak-info`) and the
   explanation of a file error they cause; the engine uses it for `vault.add`
   ([design/app.md](docs/design/app.md#the-flatpak)).
@@ -183,10 +187,10 @@ file a step names before writing its frostnotes counterpart.
   ADR-0013).
   `app/patches/` holds pnpm patches of dependencies and `app/src/styles/preflight.css`
   the app's copy of Tailwind's preflight, each for a measured cost (ADR-0025).
-- `packaging/flatpak/`: the desktop app's Flatpak (manifest, launcher,
-  Background-portal helper, AppStream, smoke test and the generated
-  `go-sources.json`); `scripts/flatpak-sources.sh` (`make flatpak-sources`)
-  regenerates it with `tools/flatpakgo`;
+- `packaging/flatpak/`: the Flatpak, which holds notesd and `notesctl` and
+  no window (manifest, launcher, Background-portal helper, AppStream, smoke
+  test and the generated `go-sources.json`); `scripts/flatpak-sources.sh`
+  (`make flatpak-sources`) regenerates it with `tools/flatpakgo`;
   `stamp-version.sh` stamps a tag's version into the manifest and the
   metainfo; CI's `flatpak.yml` builds it and publishes the image to GHCR on a
   `v*` tag
