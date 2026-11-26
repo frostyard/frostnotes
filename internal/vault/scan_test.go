@@ -239,6 +239,37 @@ func TestScanRemovesWriteTemps(t *testing.T) {
 	}
 }
 
+func TestReindexAnnouncesScanningBeforeWakingActor(t *testing.T) {
+	ctx := t.Context()
+	// Drive the real scan by hand to check the handoff without depending on
+	// whether the scheduler lets an empty scan finish inside Reindex.
+	var tv *testVault
+	tv = newTestVault(t, nil, func(cfg *Config) {
+		cfg.Publish = func([]api.EventEnvelope) {
+			if len(tv.v.scanReq) != 0 {
+				t.Error("reindex woke the scan actor before announcing scanning")
+			}
+		}
+	})
+	if st, err := tv.v.Reindex(ctx); err != nil || st.State != api.ScanStateScanning {
+		t.Fatalf("Reindex = %+v, %v; want scanning", st, err)
+	}
+	select {
+	case <-tv.v.scanReq:
+	default:
+		t.Fatal("reindex did not wake the scan actor")
+	}
+	if !tv.v.reindex.Swap(false) {
+		t.Fatal("reindex did not request a rebuild")
+	}
+	if _, err := tv.v.runScan(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := tv.v.Status(ctx); err != nil || st.State != api.ScanStateIdle || st.ScannedAt == nil {
+		t.Fatalf("Status after empty reindex = %+v, %v; want a completed scan", st, err)
+	}
+}
+
 func TestReindexKeepsIDsAndVersions(t *testing.T) {
 	tv := newTestVault(t, map[string]string{"A.md": "[[B]]", "B.md": "b"}, nil)
 	tv.scan()

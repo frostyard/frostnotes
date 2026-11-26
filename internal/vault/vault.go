@@ -229,13 +229,15 @@ func (v *Vault) Status(ctx context.Context) (api.ScanStatus, error) {
 // Reindex asks for a scan that reads every file again and rebuilds its
 // index rows, and returns the status.
 func (v *Vault) Reindex(ctx context.Context) (api.ScanStatus, error) {
-	v.reindex.Store(true)
-	v.requestScan()
+	// Announce the scan before waking the actor. A fast scan could otherwise
+	// finish first and have its idle status overwritten here.
 	v.setStatus(func(s *api.ScanStatus) {
 		if s.State != api.ScanStateScanning {
 			s.State, s.Done, s.Total = api.ScanStateScanning, 0, 0
 		}
 	}, true)
+	v.reindex.Store(true)
+	v.requestScan()
 	return v.Status(ctx)
 }
 
