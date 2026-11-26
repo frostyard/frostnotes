@@ -32,7 +32,7 @@ serves them to a web app and to agents.
 - **Sync is built in.** Each device syncs with a self-hosted hub, the same
   notesd in a hub role, which keeps every revision and merges concurrent
   edits. No conflict copies. [Sync design](docs/design/sync.md)
-- **Linux and Lodge** share an NSGo editor with inline Markdown, clickable tasks and wiki links, full-text search, autosave and conflict recovery. On Linux its Settings open folders and pair devices to a hub. The MyGo desktop remains available for history, attachments, backlinks and other advanced views. [App design](docs/design/app.md)
+- **On Linux** an NSGo editor has inline Markdown, clickable tasks and wiki links, full-text search, autosave and conflict recovery. Its Settings open folders and pair devices to a hub. The MyGo desktop remains available for history, attachments, backlinks and other advanced views. [App design](docs/design/app.md)
 - **The web app** is a React UI with a CodeMirror 6 editor, served by
   [lodge](https://github.com/frostyard/lodge), frostyard's tailnet-only
   web shell, with Obsidian's phone layout on a narrow screen.

@@ -48,7 +48,12 @@ picture to `DIR`.
 
 Use `make desktop-run` for the default Linux workspace or `make desktop-mygo-run` for the fallback. The Flatpak launcher accepts `--mygo` after the app ID. Both use the same notesd. The released ref is `app/org.frostyard.Frostnotes/x86_64/master`.
 
-`make web-build`, `make lodge-app` and the release Debian package use the shared Wasm editor. The gateway must permit Wasm compilation in the app frame (Lodge #116). `make legacy-lodge-app` stages the previous frontend for its historical evidence suite.
+Lodge's web app is the React app in `app/` ([ADR-0050](adr/0050-frostnotes-has-no-desktop-window.md)). `make web-build` builds it in nsl into `build/web` for `/app/notes/`, and `make lodge-app` lays it out with its manifest in `build/lodge/apps/notes`. The release Debian package (`make deb`), `make lodge-package` and the Flatpak workflow's Lodge archive all take that build; the package's check fails on any file of the NSGo web build. `make m4-evidence` runs the build in Firefox inside Lodge's development build. To run it on what a package installs, extract the package and pass the tree:
+
+```sh
+dpkg-deb -x dist/frostyard-notesd_*_amd64.deb build/deb-x
+make m4-evidence M4_NOTES_WEB=build/deb-x/usr/share/lodge/apps/notes
+```
 
 The Flatpak workflow builds the two Go frontends offline from the combined root and desktop module locks. Run `make flatpak-sources` after either changes. CI verifies the source revision in both downloaded artifacts and exports the same Flatpak ref as OCI. `make bump` publishes the next version from clean main. CI attests the OCI digest before moving `latest`. The existing Frostyard catalog reads that tag. [Cutover decision](adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md)
 
@@ -99,7 +104,7 @@ With the FrostNotes nsl machine provisioned, run `make nsgo-lodge-evidence`. It 
 
 The same evidence target checks inline editing in Firefox. It compares the checkbox edit, heading edit and undo with the file on disk, then follows a wiki link.
 
-For a separate Lodge test installation, `make nsgo-lodge-app` builds the app tree alone. The gateway needs [Lodge’s Wasm frame policy](https://github.com/frostyard/lodge/pull/116). The preview uses the existing Notes manifest and app ID inside this separate staging tree.
+For a separate Lodge test installation, `make nsgo-lodge-app` builds the app tree alone. Nothing shipped holds it: Lodge's web app is the React app. The gateway needs [Lodge’s Wasm frame policy](https://github.com/frostyard/lodge/pull/116). The preview uses the existing Notes manifest and app ID inside this separate staging tree.
 
 ## Set up the nsl machine
 
@@ -134,4 +139,4 @@ On x86-64 Linux, use `NSL_MACHINE=trixie packaging/nsgo/build-rc.sh` with your p
 
 Install the bundle with `flatpak install --user ./frostnotes-*-x86_64.flatpak` and run `flatpak run org.frostyard.Frostnotes.Preview`. The preview has its own notesd, data directory, runtime socket and hub pairing in the desktop keyring. With the preview running, register a test notebook using `flatpak run --command=notesctl org.frostyard.Frostnotes.Preview vault add /absolute/path/to/test-notebook`.
 
-The Lodge archive contains the complete `notes/` app tree for the existing Notes app ID. Use a Lodge gateway with Wasm app-frame support. Stage the archive alongside the installed Notes tree and retain the previous tree for rollback. Open Notes from an admitted browser, select a test vault and verify the new editor by creating and reopening a note. The web bundle uses the installed notesd service.
+The Lodge archive contains the complete `notes/` app tree for the existing Notes app ID: the React app, from `make lodge-app`. Stage the archive alongside the installed Notes tree and retain the previous tree for rollback. Open Notes from an admitted browser, select a test vault and verify the app by creating and reopening a note. The web app uses the installed notesd service.

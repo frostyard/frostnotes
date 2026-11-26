@@ -24,11 +24,10 @@ git -C "$root" archive "$revision" | tar -x -C "$stage/src"
 go_root=$(go env GOROOT)
 export PATH="$go_root/bin:$PATH" GOWORK=off
 cd "$stage/src"
-make nsgo-lodge-app VERSION="$version" SOURCE_REVISION="$revision"
-web=build/nsgo-lodge/apps/notes/web
+# Lodge's web app is the React app (make lodge-app; docs/adr/0050-frostnotes-has-no-desktop-window.md).
+make lodge-app VERSION="$version" SOURCE_REVISION="$revision"
 printf '%s\n' "$revision" > "$result/revision.txt"
-cp "$result/revision.txt" "$web/"
-tar -czf "$result/$name-lodge.tar.gz" -C build/nsgo-lodge/apps notes
+tar -czf "$result/$name-lodge.tar.gz" -C build/lodge/apps notes
 
 (cd cmd/frostnotes-nsgo && go tool nsgo build -target linux_x64 -version "$release" -channel none -installers=false -output "$stage/dist")
 mv "$stage/dist/FrostNotes-$release-linux_x64" "$stage/native"

@@ -48,26 +48,25 @@ jobs:
       - name: The committed sources match the lockfiles
         run: git diff --exit-code -- packaging/flatpak
 
+  # Lodge's web app, the React app (make lodge-app; ADR-0050), at the same
+  # revision as the Flatpak.
   web:
-    name: Build the matching Lodge editor
+    name: Build the Lodge web app (make lodge-app)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: cmd/frostnotes-nsgo/go.mod
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.0.2
         with:
           node-version: "24.21.0"
-      - name: Package the web editor
+      - name: Package the web app
         run: |
           corepack enable
           args=()
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-            args+=("NSGO_VERSION=${GITHUB_REF_NAME#v}" "VERSION=${GITHUB_REF_NAME#v}")
+            args+=("VERSION=${GITHUB_REF_NAME#v}")
           fi
           make lodge-app IN_NSL='sh -c' "${args[@]}"
           tar -C build/lodge/apps -czf frostnotes-lodge.tar.gz notes

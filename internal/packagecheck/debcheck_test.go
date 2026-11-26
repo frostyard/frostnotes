@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -17,7 +18,10 @@ import (
 // files, so each rule is shown to fail a bad package.
 const debCheck = "../../packaging/deb-check.py"
 
-// The package, a version, and the payload arguments make deb-check passes.
+// The package, a version, and the payload arguments make deb-check passes
+// (TestMakeDebCheckPassesTheseArguments holds the Makefile to them). The web
+// build is the React app; the NSGo client's web build is forbidden by name
+// (docs/adr/0050-frostnotes-has-no-desktop-window.md).
 const debPkg, debVersion = "frostyard-notesd", "1.2.3"
 
 var debArgs = []string{
@@ -27,6 +31,11 @@ var debArgs = []string{
 	"--file", "/usr/lib/systemd/system/frostnotes-lodge.socket",
 	"--file", "/usr/lib/sysusers.d/frostnotes.conf",
 	"--file", "/usr/share/lodge/apps/notes/web/index.html",
+	"--file", "/usr/share/lodge/apps/notes/web/icon.svg",
+	"--file", "/usr/share/lodge/apps/notes/web/revision.txt",
+	"--forbid", "/usr/share/lodge/apps/notes/web/nsgo.json",
+	"--forbid", "*.wasm",
+	"--forbid", "*/wasm_exec.*",
 }
 
 // debManifest is the --manifest path, or "" for none.
@@ -51,16 +60,19 @@ func exe(name string) debEntry {
 }
 
 // goodDeb is the members of a package that passes: the directories, each
-// --exec as a binary, each --file, and the manifest at debVersion.
+// --exec as a binary, each --file, the React app's bundle, and the manifest
+// at debVersion.
 func goodDeb() []debEntry {
 	out := []debEntry{{name: "./usr/", typ: tar.TypeDir, mode: 0o755}, {name: "./usr/bin/", typ: tar.TypeDir, mode: 0o755}}
 	for i := 0; i+1 < len(debArgs); i += 2 {
-		if debArgs[i] == "--exec" {
+		switch debArgs[i] {
+		case "--exec":
 			out = append(out, exe("."+debArgs[i+1]))
-		} else {
+		case "--file":
 			out = append(out, file("."+debArgs[i+1], "x"))
 		}
 	}
+	out = append(out, file("./usr/share/lodge/apps/notes/web/assets/index-abc123.js", "x"))
 	if debManifest != "" {
 		out = append(out, file("."+debManifest, `{"contract": 1, "version": "`+debVersion+`"}`))
 	}
@@ -196,6 +208,9 @@ func TestDebCheckFailsABadPackage(t *testing.T) {
 		{"a binary that is not executable", good, append(without("."+bin), file("."+bin, "\x7fELF")), "mode 0755"},
 		{"a binary that is a link", good, append(without("."+bin), debEntry{name: "." + bin, typ: tar.TypeSymlink, mode: 0o777, link: "missing"}), bin + " is missing"},
 		{"an empty required file", good, append(without("."+req), file("."+req, "")), "is empty"},
+		{"the NSGo web build's configuration", good, with(file("./usr/share/lodge/apps/notes/web/nsgo.json", "{}")), "forbidden"},
+		{"a Wasm module", good, with(file("./usr/share/lodge/apps/notes/web/assets/frostnotes.wasm", "\x00asm")), "forbidden"},
+		{"Go's Wasm loader", good, with(file("./usr/share/lodge/apps/notes/web/assets/wasm_exec.0a1b.js", "x")), "forbidden"},
 	}
 	if debManifest != "" {
 		m := "." + debManifest
@@ -214,5 +229,33 @@ func TestDebCheckFailsABadPackage(t *testing.T) {
 				t.Errorf("deb-check's output lacks %q:\n%s", c.want, out)
 			}
 		})
+	}
+}
+
+// make deb-check passes debArgs: each flag and its path, quoted or not, is in
+// the Makefile's deb-check recipe, so the package these tests pass is the
+// one make deb checks.
+func TestMakeDebCheckPassesTheseArguments(t *testing.T) {
+	b, err := os.ReadFile("../../Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipe := regexp.MustCompile(`(?m)^deb-check:.*\n((?:\t.*\n)+)`).FindSubmatch(b)
+	if recipe == nil {
+		t.Fatal("the Makefile has no deb-check recipe")
+	}
+	got := strings.NewReplacer("'", "", "\\\n", " ", "\t", " ").Replace(string(recipe[1]))
+	words := strings.Fields(got)
+	pairs := map[string]bool{}
+	for i := 0; i+1 < len(words); i++ {
+		pairs[words[i]+" "+words[i+1]] = true
+	}
+	for i := 0; i+1 < len(debArgs); i += 2 {
+		if !pairs[debArgs[i]+" "+debArgs[i+1]] {
+			t.Errorf("make deb-check does not pass %s %s", debArgs[i], debArgs[i+1])
+		}
+	}
+	if !pairs["--manifest "+debManifest] {
+		t.Errorf("make deb-check does not pass --manifest %s", debManifest)
 	}
 }
