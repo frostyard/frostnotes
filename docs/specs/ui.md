@@ -140,8 +140,8 @@ it every `em` above.
  ribbon 44   left sidebar 260          workspace (rest)                 right sidebar 300
 ```
 
-- **Window:** default 1200 × 780, minimum 640 × 400 (as
-  `cmd/frostnotes` makes it), no system title bar.
+- **Window:** the browser's page, or lodge's frame in it; below 600 wide
+  it is the [narrow layout](#narrow-windows).
 - **Panes:** the ribbon is 44 wide. The left sidebar defaults to 260
   wide and the right to 300, each between 200 and 600; the workspace
   takes the rest, at least 320. Sidebars, splits and the workspace are
@@ -363,7 +363,7 @@ refused base ("Not saved: notesd no longer has the version this text
 started from. Your text is kept." Compare), a deleted note ("This note
 was deleted." Restore, Close), a failed save ("Not saved: <reason>.
 Retrying." Retry now), a note that could not be read ("Cannot read this
-note: <reason>." Retry, in the native app).
+note: <reason>.").
 
 ### Editor and reading view
 
@@ -476,30 +476,9 @@ controls and drags the window), the status bar and, centred between them,
 12/16 `--text-secondary` text: "Connecting to notesd…", and after a
 failure "Reconnecting to notesd… (<reason>)", retried every second.
 
-In the desktop app inside the Flatpak, while the connection is lost (not
-while a retry is in flight, which hides it until the next failure), a
-block under that text (at most 560 wide, left-aligned, 12/16, 16 below
-it; `aria-label` "Why notesd is not running") says why, from the end of
-`notesd.log` (the shell's `notesd_log`,
-[design/app.md](../design/app.md#the-flatpak)):
-
-- **The launcher's last line is its portal failure** ("notesd did not
-  start through the Flatpak portal"): "notesd did not start, because the
-  Flatpak portal did not start it. To fix it:" and a numbered list: "Run
-  `flatpak override --user --show org.frostyard.Frostnotes`: it must not
-  list a blocked `org.freedesktop.portal.Flatpak`." "Remove the overrides
-  with `flatpak override --user --reset org.frostyard.Frostnotes`, if it
-  does." "Check the Flatpak portal with `systemctl --user status
-  flatpak-portal.service`." Then: "The Flatpak portal starts on demand
-  through D-Bus. It comes with the `flatpak` package." (The service of
-  `org.freedesktop.portal.Flatpak` is `flatpak-portal`, not
-  `xdg-desktop-portal`, which can run while the Flatpak portal is absent.)
-- **Any other last line:** "The last line of notesd's log: <line>".
-- **Both:** "The log: <path>" (the path of `notesd.log` in the app's state
-  directory). A log that is empty or missing adds only this line.
-
-The commands are monospace on `--bg-code` and selectable. Outside the
-Flatpak, and in the web app, nothing is added.
+The web app adds nothing under it. On a desktop, where no window runs, `notesctl status`
+says why notesd is not running, from the end of `notesd.log`
+([design/app.md](../design/app.md#the-flatpak)).
 
 ### Menus
 
@@ -561,17 +540,12 @@ rows. Changes apply at once. Defaults are Obsidian 1.14.4's.
 | Daily notes | Date format; New file location; Template file location | `YYYY-MM-DD`; vault root; none | vault |
 | Templates | Template folder location; Date format; Time format | none; `YYYY-MM-DD`; `HH:mm` | vault |
 | Sync | the window's vault's hub, hub vault, state and conflicts; Join…, Pair again… and Leave for its sync | | |
-| Background ([ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md)) | Keep syncing when no window is open: On, notesd outlives the last window and may start at login; Off, it stops with the last window and starts no more at login | on | device |
-| | Desktop permission: what the Background portal last answered, read-only (Allowed at login, Allowed, Refused with the way to allow it, Not asked yet, or that the desktop did not answer, with the helper's error; Asking the desktop… while no answer read the counter at or after the change (its `generation` is at least the change's), which the window reads again every 2 s while the dialog is open) | | |
 
 "App" settings are the app's preferences, "vault" settings are the
 vault's `.frostnotes/vault.yaml`, read from `.obsidian/` while unset
 ([ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md)).
-"Device" settings belong to the installed app on that machine, not to a
-vault: the Background section's off file is
-`$XDG_CONFIG_HOME/frostnotes/background-off`, which the shell writes and the
-launcher reads. The section is drawn only in the Flatpak, where
-`background_get` answers
+A desktop's Background setting is not here: no window runs there, and
+`notesctl background` turns it on and off
 ([design/app.md](../design/app.md#the-flatpak)).
 
 The Sync section shows the window's vault's sync where notesd syncs and
@@ -982,42 +956,13 @@ belongs to the field, a prompt or a menu.
 
 ## In the native desktop app
 
-The native app ([plan 0009](../plans/0009-mygo-desktop.md#the-window),
-[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))
-has this spec's commands, keys, panes, settings and notices. It draws them
-with frostui, which changes these:
-
-- The look is frostui's Frostyard (dark) or Frostyard light, not this
-  spec's tokens ([ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md),
-  [the native look](../design/app.md#the-native-look)): Appearance's Theme
-  Light or Dark picks one, System the one of the desktop's light or dark.
-  The desktop's high contrast and text size apply, its accent does not.
-  Text is Inter in frostui's styles, corners nearly square, and the
-  selected row of the vault list, the history and the panes is frostui's
-  (the selected fill and a 1px accent rule).
-- The title bar row is frostui's top bar, and tab strips sit under it, one
-  for each tab group. There is no ribbon.
-- [Connecting](#connecting) is frostui's connecting screen. Why notesd is not
-  running is behind its Details button.
-- The prompts are one palette with sources. Ctrl + K opens it, except in a
-  note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
-  opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
-- The status bar starts with the connection, "Local" or the hub's host.
-- Live preview draws headings in Inter, bold, at their hierarchy's multiple
-  of the editor's font size, and dims/strikes completed tasks off selected
-  lines; selection restores source styles. Code blocks' lines, fences
-  included, sit on frostui's code color, selected or not; the reading view
-  draws code blocks on it inside a hairline.
-  Math draws as vector paths ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md));
-  audio and video have playback controls in standalone embeds and attachment tabs. An image within a line draws under it.
-  In source mode, the
-  frontmatter's first line stays visible while the properties panel shows.
-- The status bar's editing mode opens a menu with Reading view, Live Preview
-  and Source mode; choosing an editing mode also sets its default.
-- Reading tasks toggle their original source marker with undo/redo; stale or
-  embedded task actions cannot write. Block links scroll to their rendered block
-  ([rendering contract](render.md#markdown-for-native-views)).
-- Spellcheck is absent from native Settings ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md)); the web app retains its browser setting.
+There is none. The native desktop app
+([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
+[ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md))
+and the NSGo client were removed in
+[plan 0011](../plans/0011-nsgo-only-client.md)'s Phase 3: Frostnotes has
+no desktop window ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)).
+This spec binds the React app, in a browser and in lodge.
 
 ## Rules
 
@@ -1048,6 +993,4 @@ with frostui, which changes these:
 - Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) (rooted links inside lodge); frostmail's `docs/specs/ui.md` for the tokens and the chrome
 - Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the vault manager's join, in the app, is G1, and the window's reasons for a refused permission (Connecting; the Flatpak's refused folder in the vault manager) are G5, of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)
-- Native live preview: [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)
-- The native look: [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) (frostui's Frostyard themes)
-- The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) draw the desktop app natively; [how its screens differ](#in-the-native-desktop-app)
+- No desktop window: [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md); the removed native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md), [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md), [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) and [plan 0009](../plans/0009-mygo-desktop.md) ([In the native desktop app](#in-the-native-desktop-app))

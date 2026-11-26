@@ -14,5 +14,3 @@
 /.flatpak-builder/
 /flatpak_app/
 /repo/
-/cmd/frostnotes-nsgo/.nsgo/
-/cmd/frostnotes-nsgo/dist/

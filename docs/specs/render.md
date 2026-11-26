@@ -189,6 +189,11 @@ It takes the same `Options` and limits as `HTML`, and rewrites only
 Obsidian's syntax, so everything else reaches the view as written. A
 native view shows raw HTML as text, so nothing is sanitized.
 
+No client in this repository calls it since the desktop clients were
+removed ([plan 0011](../plans/0011-nsgo-only-client.md), Phase 3;
+[ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)). notesd still
+answers it, as changes within protocol 1 are additive only.
+
 ```go
 func Markdown(note []byte, opts Options) string
 func MarkdownWithSourceLines(note []byte, opts Options) NativeMarkdown
@@ -212,7 +217,7 @@ edit this note. Frontmatter and stripped comments retain original line offsets;
 callout bodies retain their source mapping inside generated fences. Older
 servers may omit this optional field, disabling source actions.
 
-The native reading view uses this map for task clicks and block anchors. A task
+The native reading view used this map for task clicks and block anchors. A task
 click synchronizes any attached editor buffer, verifies that the rendered source
 is still current, and changes only the parsed task marker through the shared
 document's normal save path. Embedded tasks never edit the containing note.

@@ -368,7 +368,6 @@ var governedPaths = []string{
 	"internal/devgw/devgw.go",
 	"internal/devgw/blobs.go",
 	"internal/blobhttp/blobhttp.go",
-	"internal/desktop/system/open.go",
 	"internal/vault/path.go",
 	"internal/vault/guard.go",
 	"api/scope.go",
