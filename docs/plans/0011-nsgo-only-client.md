@@ -12,10 +12,10 @@ Phase 1 is built (#293). Phase 2 is built (#294) and not done: its "Done
 when" checks on a real desktop are the owner's and have not been run (a
 clean install set up with `notesctl` alone, notesd running again after a
 logout and a login, and an existing install keeping its vaults and pairing
-after the update). Phase 3 is built on PR_NUMBER (2026-11-26): both clients,
+after the update). Phase 3 is built on #296 (2026-11-26): both clients,
 their packages, targets, CI jobs and docs are gone, and `go.mod` names no
-MyGo, frostui or NSGo module; its `make ci` is recorded there. Phase 4 has
-not started.
+MyGo, frostui or NSGo module; its `make ci` passed (exit 0, recorded on
+#296). Phase 4 has not started.
 
 ## How the plan changed
 
