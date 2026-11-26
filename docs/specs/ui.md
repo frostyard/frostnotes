@@ -140,8 +140,8 @@ it every `em` above.
  ribbon 44   left sidebar 260          workspace (rest)                 right sidebar 300
 ```
 
-- **Window:** default 1200 × 780, minimum 640 × 400 (as
-  `cmd/frostnotes` makes it), no system title bar.
+- **Window:** the browser's page, or lodge's frame in it; below 600 wide
+  it is the [narrow layout](#narrow-windows).
 - **Panes:** the ribbon is 44 wide. The left sidebar defaults to 260
   wide and the right to 300, each between 200 and 600; the workspace
   takes the rest, at least 320. Sidebars, splits and the workspace are
@@ -363,7 +363,7 @@ refused base ("Not saved: notesd no longer has the version this text
 started from. Your text is kept." Compare), a deleted note ("This note
 was deleted." Restore, Close), a failed save ("Not saved: <reason>.
 Retrying." Retry now), a note that could not be read ("Cannot read this
-note: <reason>." Retry, in the native app).
+note: <reason>.").
 
 ### Editor and reading view
 
@@ -982,42 +982,13 @@ belongs to the field, a prompt or a menu.
 
 ## In the native desktop app
 
-The native app ([plan 0009](../plans/0009-mygo-desktop.md#the-window),
-[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))
-has this spec's commands, keys, panes, settings and notices. It draws them
-with frostui, which changes these:
-
-- The look is frostui's Frostyard (dark) or Frostyard light, not this
-  spec's tokens ([ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md),
-  [the native look](../design/app.md#the-native-look)): Appearance's Theme
-  Light or Dark picks one, System the one of the desktop's light or dark.
-  The desktop's high contrast and text size apply, its accent does not.
-  Text is Inter in frostui's styles, corners nearly square, and the
-  selected row of the vault list, the history and the panes is frostui's
-  (the selected fill and a 1px accent rule).
-- The title bar row is frostui's top bar, and tab strips sit under it, one
-  for each tab group. There is no ribbon.
-- [Connecting](#connecting) is frostui's connecting screen. Why notesd is not
-  running is behind its Details button.
-- The prompts are one palette with sources. Ctrl + K opens it, except in a
-  note's editor, where Ctrl + K is Insert Markdown link; Ctrl + Shift + P
-  opens it everywhere; Ctrl + P opens the commands and Ctrl + O the notes.
-- The status bar starts with the connection, "Local" or the hub's host.
-- Live preview draws headings in Inter, bold, at their hierarchy's multiple
-  of the editor's font size, and dims/strikes completed tasks off selected
-  lines; selection restores source styles. Code blocks' lines, fences
-  included, sit on frostui's code color, selected or not; the reading view
-  draws code blocks on it inside a hairline.
-  Math draws as vector paths ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md));
-  audio and video have playback controls in standalone embeds and attachment tabs. An image within a line draws under it.
-  In source mode, the
-  frontmatter's first line stays visible while the properties panel shows.
-- The status bar's editing mode opens a menu with Reading view, Live Preview
-  and Source mode; choosing an editing mode also sets its default.
-- Reading tasks toggle their original source marker with undo/redo; stale or
-  embedded task actions cannot write. Block links scroll to their rendered block
-  ([rendering contract](render.md#markdown-for-native-views)).
-- Spellcheck is absent from native Settings ([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md)); the web app retains its browser setting.
+There is none. The native desktop app
+([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
+[ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md))
+and the NSGo client were removed in
+[plan 0011](../plans/0011-nsgo-only-client.md)'s Phase 3: Frostnotes has
+no desktop window ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)).
+This spec binds the React app, in a browser and in lodge.
 
 ## Rules
 
@@ -1048,6 +1019,4 @@ with frostui, which changes these:
 - Rationale: [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md), [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md), [ADR-0021](../adr/0021-keep-the-workspace-and-app-preferences-on-each-device.md), [ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md), [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md), [ADR-0024](../adr/0024-the-app-opens-and-creates-vaults-and-a-window-switches-between-them.md) (the vault manager), [ADR-0026](../adr/0026-notesd-runs-as-a-lodge-app.md) (inside lodge), [ADR-0027](../adr/0027-a-narrow-window-takes-obsidians-phone-layout.md) (narrow windows), [ADR-0029](../adr/0029-inside-lodge-a-rooted-link-no-file-answers-opens-through-lodge.md) (rooted links inside lodge); frostmail's `docs/specs/ui.md` for the tokens and the chrome
 - Context: [design/app.md](../design/app.md), [design/hub.md](../design/hub.md#hub-settings-in-the-app) (the Hub settings); lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [plan 0005 — M3](../plans/0005-m3-desktop-app.md); the browser and narrow windows in [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the vault manager's join, in the app, is G1, and the window's reasons for a refused permission (Connecting; the Flatpak's refused folder in the vault manager) are G5, of [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md#phase-4--gaps-found-by-the-review)
-- Native live preview: [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)
-- The native look: [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) (frostui's Frostyard themes)
-- The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) draw the desktop app natively; [how its screens differ](#in-the-native-desktop-app)
+- No desktop window: [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md); the removed native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md), [ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md), [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) and [plan 0009](../plans/0009-mygo-desktop.md) ([In the native desktop app](#in-the-native-desktop-app))

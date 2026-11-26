@@ -1,8 +1,7 @@
-.PHONY: nsgo-check help build desktop-build desktop-run desktop-smoke desktop-bench desktop-evidence fmt gen gen-check lint lint-version-check svu-version-check test verify check ci race race-rest race-sim race-sim-checkptr vulncheck clean deb deb-check bump
+.PHONY: help build fmt gen gen-check lint lint-version-check svu-version-check test verify check ci race race-rest race-sim race-sim-checkptr vulncheck clean deb deb-check bump
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 SOURCE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo development)
-NSGO_VERSION ?= $(shell sed -n 's/^version: //p' cmd/frostnotes-nsgo/nsgo.yaml)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)
 
@@ -22,66 +21,6 @@ help: ## List targets
 
 build: ## Build notesd and notesctl into build/
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
-
-# Keep the established executable path for developers and smoke tests.
-ifeq ($(shell uname -s),Linux)
-desktop-build: ## Build the default Linux desktop executable
-	cd cmd/frostnotes-nsgo && go tool nsgo build -target linux_x64 -id org.frostyard.Frostnotes -version $(NSGO_VERSION) -channel none -installers=false -output ../../build/desktop
-	install -m755 build/desktop/FrostNotes-$(NSGO_VERSION)-linux_x64/FrostNotes build/frostnotes
-else
-desktop-build: desktop-mygo-build
-	cp build/frostnotes-mygo build/frostnotes
-endif
-
-.PHONY: desktop-mygo-build desktop-mygo-run
-desktop-mygo-build: ## Build the MyGo desktop fallback
-	CGO_ENABLED=0 go build -trimpath -tags mygo_noinspector -ldflags '$(LDFLAGS) -X github.com/egoist/mygo.production=1' -o build/frostnotes-mygo ./cmd/frostnotes
-
-desktop-mygo-run: desktop-mygo-build ## Run the MyGo desktop fallback
-	build/frostnotes-mygo
-
-nsgo-check: ## Exercise the NSGo preview against notesd and compile the web client
-	cd cmd/frostnotes-nsgo && go mod tidy -diff && go vet ./... && env -u DISPLAY -u WAYLAND_DISPLAY go test -count=1 -tags integration ./...
-	cd cmd/frostnotes-nsgo && GOOS=js GOARCH=wasm go build -o /dev/null .
-
-# The same suite in a real Linux window. Xvfb gives it a screen of one size on
-# every host and keeps its windows off the desktop. GDK_BACKEND=x11 is what
-# keeps them off: without it GTK tries Wayland first, and with WAYLAND_DISPLAY
-# unset it still finds a desktop's compositor at the default socket,
-# wayland-0. NSGo's test command has no -tags flag, so the integration tag
-# goes through GOFLAGS. GTK reads testdata/xdg's settings file last of the
-# system's: it stops the text caret's blinking. Pictures go to
-# cmd/frostnotes-nsgo/.nsgo/test/screenshots/linux, which git ignores.
-NSGO_LIVE = env -u WAYLAND_DISPLAY GDK_BACKEND=x11 XDG_SESSION_TYPE=x11 GOFLAGS=-tags=integration \
-	XDG_CONFIG_DIRS=/etc/xdg:$(CURDIR)/cmd/frostnotes-nsgo/testdata/xdg \
-	xvfb-run -a -s "-screen 0 1600x1200x24" go tool nsgo test -target linux
-.PHONY: nsgo-live nsgo-pictures
-nsgo-live: ## Run the NSGo client's suite in a real Linux window, under Xvfb
-	@command -v xvfb-run >/dev/null 2>&1 || { echo "make nsgo-live needs xvfb-run (the xvfb package)"; exit 1; }
-	cd cmd/frostnotes-nsgo && $(NSGO_LIVE) .
-
-nsgo-pictures: ## Take the kept pictures of the client's main views again (cmd/frostnotes-nsgo/comparison/linux)
-	@command -v xvfb-run >/dev/null 2>&1 || { echo "make nsgo-pictures needs xvfb-run (the xvfb package)"; exit 1; }
-	cd cmd/frostnotes-nsgo && $(NSGO_LIVE) -run '^TestPictures' -screenshots comparison/linux .
-
-desktop-run: desktop-build ## Run the native desktop app against the running notesd
-	build/frostnotes
-
-desktop-smoke: desktop-build ## Start the native app under Xvfb against a real notesd (needs xvfb-run)
-	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o build/ ./cmd/notesd ./cmd/notesctl
-	scripts/desktop-smoke.sh build
-
-desktop-bench: ## Time a keystroke in a 10,000-line note; fails over 16 ms (25 ms with CI=true, ADR-0043)
-	go test -bench BenchmarkTypingInALongNote -benchtime 100x ./internal/desktop/editor/
-
-# The NSGo client's typing gate: the same note and limits, in source mode and
-# live preview, headless on a real notesd (cmd/frostnotes-nsgo/bench_test.go).
-.PHONY: nsgo-bench
-nsgo-bench: ## Time a keystroke in a 10,000-line note in the NSGo client; fails over 16 ms (25 ms with CI=true, ADR-0043)
-	cd cmd/frostnotes-nsgo && env -u DISPLAY -u WAYLAND_DISPLAY go test -tags integration -count=1 -run '^$$' -bench '^BenchmarkTypingInALongNote$$' -benchtime 100x .
-
-desktop-evidence: ## Record the native app's evidence: a 10,000-note vault within a frame, a phone's edit within 2 s
-	go test -tags integration -count=1 -v -timeout 20m -run '^(TestALargeVaultStaysWithinAFrame|TestAnEditOnThePhoneReachesTheDesktop)$$' ./internal/desktop/window
 
 fmt: ## Format Go code
 	gofmt -w $(GO_FILES)
@@ -157,7 +96,7 @@ m1-evidence: ## Record M1's exit evidence 1-4 (FROSTNOTES_OBSIDIAN_LINKS, FROSTN
 # The gate triad (frostyard/core ADR-0043, ADR-0044). verify is credential-free
 # and leaves a clean checkout clean; check formats first; ci adds the race
 # gate (make race).
-verify: nsgo-check ## Tidy, generated files, vet, format, lint and unit tests
+verify: ## Tidy, generated files, vet, format, lint and unit tests
 	go mod tidy -diff
 	$(MAKE) --no-print-directory gen-check
 	go vet ./...
@@ -165,13 +104,10 @@ verify: nsgo-check ## Tidy, generated files, vet, format, lint and unit tests
 	test -z "$$(gofmt -l $(GO_FILES))"
 	$(MAKE) --no-print-directory lint
 	$(MAKE) --no-print-directory test
-	# frostui's tests against the MyGo fork in go.mod: this module ships that
-	# pair, and frostui's CI tests only released MyGo. Goes with the replace.
-	env -u DISPLAY -u WAYLAND_DISPLAY CGO_ENABLED=0 go test github.com/frostyard/frostui/...
 
 check: fmt verify ## Format, then verify (the developer gate)
 
-ci: verify ui-check desktop-build race ## verify plus the race gate and the app checks (nsl)
+ci: verify ui-check race ## verify plus the race gate and the app checks (nsl)
 
 # The race gate in 3 parts (ADR-0048). CI's Race detector job runs each part
 # on a runner of its own, and internal/workflowcheck fails when the parts
@@ -203,11 +139,11 @@ clean: ## Remove build output
 # The app (M0 Phase 4). Its toolchain runs in the nsl machine
 # (docs/adr/0009-development-environment-and-gates.md); CI, whose runner has
 # the toolchain, runs the same targets with IN_NSL='sh -c'.
-.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev screenshots web-build lodge-app lodge-package
+.PHONY: ui-check ui-test ui-vitest ui-fmt ui-dev web-build lodge-app lodge-package
 
 NSL_MACHINE ?= frostnotes
 IN_NSL := nsl run -m $(NSL_MACHINE) sh -lc
-# WebKitGTK without a display: Xvfb, so software rendering.
+# A display for m4-evidence's Firefox: Xvfb, so software rendering.
 XVFB := env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a -s "-screen 0 1280x800x24"
 
 ui-check: ## Lint (Biome), typecheck and test the app UI (nsl)
@@ -240,21 +176,6 @@ lodge-app: web-build ## Lay out build/lodge/apps/notes: app.json at this version
 	rm -rf build/lodge/apps/notes && mkdir -p build/lodge/apps/notes
 	cp -R build/web build/lodge/apps/notes/web
 	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > build/lodge/apps/notes/app.json
-
-# The NSGo client's web build, for a separate Lodge test install only:
-# nothing shipped holds it, and plan 0011's Phase 3 removes it with the
-# client (docs/plans/0011-nsgo-only-client.md).
-NSGO_LODGE := build/nsgo-lodge
-.PHONY: nsgo-lodge-app
-nsgo-lodge-app: ## Stage the NSGo client's web build in build/nsgo-lodge for a Lodge test install (not shipped)
-	cd cmd/frostnotes-nsgo && go tool nsgo build -target web -id org.frostyard.Frostnotes -version $(NSGO_VERSION) -channel none -installers=false -output ../../$(NSGO_LODGE)/release
-	$(IN_NSL) 'cd app && pnpm install --frozen-lockfile --silent && pnpm exec vite build --mode nsgo --outDir ../$(NSGO_LODGE)/apps/notes/web --emptyOutDir'
-	mv $(NSGO_LODGE)/apps/notes/web/nsgo.html $(NSGO_LODGE)/apps/notes/web/index.html
-	cp $(NSGO_LODGE)/release/FrostNotes-$(NSGO_VERSION)-web/nsgo.json $(NSGO_LODGE)/apps/notes/web/
-	cd $(NSGO_LODGE)/release/FrostNotes-$(NSGO_VERSION)-web && cp nsgo.*.js wasm_exec.*.js *.wasm *.txt ../../apps/notes/web/assets/
-	cp packaging/icons/icon.svg $(NSGO_LODGE)/apps/notes/web/icon.svg
-	printf '%s\n' '$(SOURCE_REVISION)' > $(NSGO_LODGE)/apps/notes/web/revision.txt
-	sed 's/"version": "dev"/"version": "$(VERSION)"/' packaging/lodge/app.json > $(NSGO_LODGE)/apps/notes/app.json
 
 # The /usr layout (frostyard/core ADR-0058): notesd, notesctl, the manifest,
 # the web build, the units and the sysusers.d entry, staged under
@@ -335,14 +256,10 @@ bump: ## Tag the next version with svu from a clean main equal to origin/main, t
 	echo "Tagged $$version; pushing it to origin..."; \
 	git push origin "refs/tags/$$version"
 
-screenshots: ## Retake the Flatpak metainfo's screenshots (docs/images) on the made-up vault in dev/screenshots, headless
-	FROSTNOTES_SCREENSHOTS=$(CURDIR)/docs/images go test -tags integration -count=1 -run '^TestMetainfoScreenshots$$' ./internal/desktop/window
-
 # M4's exit evidence 1 on loopback (docs/plans/0006-m4-notes-inside-lodge.md,
 # Phases 5 and 7): lodge's development build at LODGE_E2E_REF
 # (scripts/lodge-e2e.sh), notes' web build in it, and Firefox ESR through
-# geckodriver at a desktop size and at 390 x 844. Evidence 2's run against
-# the desktop app is make desktop-evidence's now.
+# geckodriver at a desktop size and at 390 x 844.
 # m4-evidence also runs Porter's evidence through
 # lodge (docs/plans/0007-folder-scopes-for-agents.md, Phase 4):
 # tokens of Porter's scope from lodgectl, an MCP client on lodge's listener
@@ -354,13 +271,6 @@ LODGE_E2E_REF := e76a17c57766bad3797b8d78708591d88c5e7777
 .PHONY: lodge-e2e m4-evidence porter-evidence
 lodge-e2e: ## Build lodge's development build at LODGE_E2E_REF into build/lodge-e2e (nsl)
 	$(IN_NSL) 'scripts/lodge-e2e.sh $(LODGE_E2E_REF) build/lodge-e2e'
-
-# The NSGo preview needs app-frame Wasm support introduced in Lodge #116.
-NSGO_LODGE_E2E_REF := 19aec317dee4ba1ecb9e2691a90fb981023bfaa6
-.PHONY: nsgo-lodge-evidence
-nsgo-lodge-evidence: nsgo-lodge-app ## Verify a browser draft across Lodge disconnect and reconnect (nsl)
-	$(IN_NSL) 'scripts/lodge-e2e.sh $(NSGO_LODGE_E2E_REF) $(NSGO_LODGE)/e2e'
-	$(IN_NSL) 'command -v geckodriver >/dev/null && M4_EVIDENCE_DIR=$$PWD/$(NSGO_LODGE)/evidence LODGE_E2E=$$PWD/$(NSGO_LODGE)/e2e NOTES_WEB=$$PWD/$(NSGO_LODGE)/apps/notes $(XVFB) go test -tags integration -count=1 -timeout 3m -v -run "^TestNSGoLodge" ./internal/webevidence'
 
 # M4_NOTES_WEB is the notes install tree the evidence runs, relative to the
 # checkout: lodge-app's by default, or the one a .deb installs, from

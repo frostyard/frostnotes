@@ -3,14 +3,10 @@ module github.com/frostyard/frostnotes
 go 1.27.4
 
 require (
-	github.com/d2lang/mathjax-go v0.1.0
-	github.com/egoist/mygo v0.10.0
 	github.com/frostyard/clix v0.5.0
-	github.com/frostyard/frostui v0.10.1
 	github.com/frostyard/lodge/kit v0.6.0
 	github.com/frostyard/std v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/gen2brain/gav1d v0.2.7
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/spf13/cobra v1.10.2
@@ -36,22 +32,13 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
-	github.com/ebitengine/purego v0.11.3 // indirect
-	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
-	github.com/icza/bitio v1.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jfreymuth/oggvorbis v1.0.5 // indirect
-	github.com/jfreymuth/vorbis v1.0.2 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.28 // indirect
-	github.com/mewkiz/flac v1.0.14 // indirect
-	github.com/mewkiz/pkg v0.0.0-20250417130911-3f050ff8c56d // indirect
-	github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/mango v0.2.0 // indirect
 	github.com/muesli/mango-cobra v1.3.0 // indirect
@@ -68,12 +55,10 @@ require (
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
+	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tphakala/go-aac v0.7.1 // indirect
-	github.com/tphakala/simd v1.11.0 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
@@ -81,12 +66,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-// MyGo v0.10.0 provides per-line styles, Markdown task actions, and anchors,
-// but not editor elements between lines or line-level strike-through. This
-// bounded fork ports only those desktop-editor changes onto v0.10.0 from
-// egoist/mygo#1662. Keep the replacement until the feature is released
-// upstream (docs/plans/0009-mygo-desktop.md). While it
-// stays, make verify also runs frostui's tests against it; the step and the
-// replace go together.
-replace github.com/egoist/mygo => github.com/bketelsen/mygo v0.8.4-0.20261118034332-0a40cf649641

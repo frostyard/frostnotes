@@ -104,8 +104,8 @@ in a 0600 file in that data directory
 notesd writes its panics, and a few of its coded errors (a database that does not migrate, a write that does not reach the
 disk, a failed merge, a lost watch event, a sync protocol fault), to the
 local systemd journal. They send nothing over a network. A record holds the
-app ID (`org.frostyard.Frostnotes`), its release version, the runtime (Go
-or Rust), the part (`daemon` or `gui`), the class (`panic` or `error`), the
+app ID (`org.frostyard.Frostnotes`), its release version, the runtime
+(Go), the part (`daemon`), the class (`panic` or `error`), the
 error's code or the panic's frames or place in the source, and a message
 that can name a note's path and stays on your machine. A development build
 records nothing. Only chairlift can send a record off the machine, and only

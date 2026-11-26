@@ -78,7 +78,7 @@ Building from source, the nsl machine for the app and the gates:
 - [Overview](design/overview.md) — notesd, its two roles, the clients, the planned layout
 - [Vault](design/vault.md) — scan, watch, parse, index, link resolution, writes, versions
 - [Sync](design/sync.md) — the hub's revision log, pairing, push and pull, blobs, merges, conflicts, retention, the simulation
-- [App](design/app.md) — the desktop and web UI: data, workspace, editor, saves and merges, live preview, reading view, keys, the browser
+- [App](design/app.md) — the web UI in lodge (data, workspace, editor, saves and merges, live preview, reading view, keys, the browser) and the Flatpak's notesd with no window
 - [Hub behind lodge](design/hub.md) — the hub as lodge's notes app: device routes, moving devices behind lodge, running as `frostnotes`
 - [Agent workflow](design/agent-workflow.md) — planner, executor and taskrun; a card's life; sizing
 

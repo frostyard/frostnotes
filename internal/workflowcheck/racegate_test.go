@@ -232,7 +232,7 @@ func TestRaceGateProblemsCatchALostPart(t *testing.T) {
 		file     *string
 		old, new string
 	}{
-		{"make ci without the race gate", &makefile, "ci: verify ui-check desktop-build race ", "ci: verify ui-check desktop-build "},
+		{"make ci without the race gate", &makefile, "ci: verify ui-check race ", "ci: verify ui-check "},
 		{"make race without a part", &makefile, "race: race-rest race-sim race-sim-checkptr", "race: race-rest race-sim"},
 		{"make race with a part the check does not know", &makefile, "race: race-rest race-sim race-sim-checkptr", "race: race-rest race-sim race-sim-checkptr race-more"},
 		{"the rest part without the race detector", &makefile, "go test -race -timeout 25m $$pkgs", "go test -timeout 25m $$pkgs"},

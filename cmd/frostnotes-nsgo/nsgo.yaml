@@ -1,9 +1,0 @@
-name: FrostNotes
-id: org.frostyard.Frostnotes.Preview
-version: 0.1.0
-icon:
-  png: ../../packaging/icons/icon.png
-dev:
-  target: native
-build:
-  targets: [linux_x64, web]

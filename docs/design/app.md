@@ -37,66 +37,20 @@ M3's design is built through its Phase 8 ([plan 0005](../plans/0005-m3-desktop-a
 ([plan 0006](../plans/0006-m4-notes-inside-lodge.md)), rewritten as each phase
 lands.
 
-**The desktop app is a native Go app on MyGo and frostui, and the React app
-is lodge's web app**
-([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
-[plan 0009](../plans/0009-mygo-desktop.md)). Both keep the behavior this
-document describes; where it names `features/`, `editor/` or `app/`, that is
-the web app's code.
-
-The native app's code is `cmd/frostnotes` and `internal/desktop/`
-([plan 0009](../plans/0009-mygo-desktop.md#packages)); how its screens differ
-is in [specs/ui.md](../specs/ui.md#in-the-native-desktop-app). Its plain
-logic imports neither MyGo nor frostui, so the NSGo client can use it too:
-`internal/desktop/markup` (the formatting commands, smart lists, the link or
-tag under the caret, frontmatter and properties, the attachment rules),
-`catalog` (a vault's files, the Files and Tags panes' trees, the quick
-switcher's match), `notes`, `livepreview` and `system`.
-
-## Shared NSGo editor preview
-
-[ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md) promotes this editor to the Linux and Lodge defaults. The Flatpak also includes MyGo for workflows such as revision history. [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md) removes this client and the MyGo client: Frostnotes has no desktop window, and Lodge serves the React app again ([plan 0011](../plans/0011-nsgo-only-client.md)). This section describes the client until it goes.
-
-The default Linux and Lodge app uses the versioned workspace shell, file explorer and notices of frostui’s `workspaceui` module (`github.com/frostyard/frostui/workspaceui`, v0.4.0). FrostNotes supplies vaults and note paths to these components. Its source editor binds to the existing Go document model, which owns the base hash, line endings, autosave, retries and conflict versions. The session routes remote edits to the open document on either platform. A refused base exposes the recovered draft for copying. [ADR-0046](../adr/0046-test-a-shared-nsgo-source-editor.md) · [Run the preview](../development.md#try-the-shared-nsgo-editor)
-
-In the NSGo preview, **Live preview** renders headings, tasks and wiki links in the note. Clicking a line reveals its original Markdown in place. The shared scanner supplies byte ranges, and edits apply to the same document as source mode. Clicking a task changes its marker. Clicking a wiki link resolves the target through notesd. Undo and redo operate on local edits within the current preview. A remote text change clears that history. See [the live-preview design decision](../adr/0039-live-preview-is-replacements-over-the-source.md).
-
-The vault's notes are a tree (`cmd/frostnotes-nsgo/tree.go`): NSGo's `ui.Tree`, in which a folder holds its folders, by name, then its notes, and opens and closes by its chevron or a double press. A row is the kit's `NavLabel`, with a folder's or a note's icon, on the kit's soft rows. A press of a note's row opens it, the open note's row is the chosen one, and a vault's folders start open. notesd lists notes and no folders, so a folder shows because a note is in it or under it. Until 2026-11-24 the notes were a sidebar with a section for each folder's path, which showed no folder inside another (frostyard/frostmail's plan 0016, Phase 5).
-
-The client draws the kit's Frostyard look: Frostyard in the dark appearance and Frostyard light in the light one, with its text in Inter, which the kit bundles. `root` calls `workspaceui.Apply` before it builds a view, and the window's root view is `workspaceui.Frame`. On a desktop Settings has an Appearance row, the kit's System, Light and Dark choice. A press shows the choice at once and keeps it in the client's storage under `appearance` (`light` or `dark`; no entry is the system's), and a start shows the kept choice (`appearance.go`). The Lodge build has no such row and keeps nothing: Lodge sets its appearance (`app/src/nsgo-lodge.ts`). The look is frostmail's [ADR-0062](https://github.com/frostyard/frostmail/blob/main/docs/adr/0062-give-the-nsgo-client-the-frostyard-look-from-the-shared-kit.md) and [plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md); the kept pictures are [below](#the-nsgo-clients-live-suite).
-
-The client keeps to the kit's standard for an app (frostui's `docs/specs/workspaceui.md`; frostmail's plan 0016, Phase 5), in these places:
-
-- **The toolbar** (`shell.go`). The window's toolbar holds the vault's name over the open note's path and state, New note, which is the window's one filled button, the editor's 2 modes as a segmented control of 2 icons named by their tooltips, the note's actions (Save, Rename or move note, Move to trash) and Search vault as icon buttons, the palette as a field, "Search or run a command" with its keys, as FrostMail's and PocketGo's toolbars have it, and a More menu with Restore deleted note and Refresh vaults and notes. The note's actions are dim with no note open. Where the pane under the toolbar is under 760 wide, or the window under 720, New note is an icon button and one menu holds every other action, the editor's mode and the palette with them. Until 2026-11-24 the note's path, state and actions were a row over the editor, each of its buttons filled.
-- **The palette** (`find.go`) is Quick open with the app's commands under the vault's notes: a note's title or path opens the note, and a command's name runs it. The commands are the toolbar's and its menu's actions, the editor's 2 modes, Settings on a desktop, and source mode's commands (`edit.go`): Search current file, Search & replace in current file, the formatting commands of `markup.Commands` (Toggle bold, italics, strikethrough, highlight, code and comment, Insert Markdown link, Toggle checkbox status, Delete paragraph, Remove heading and Set heading 1 to 6, Add internal link, embed and tag, Toggle blockquote, bullet list and numbered list, each with the MyGo client's title, which a test of `internal/desktop/commands` holds), Indent and Unindent list, Undo, Redo and Follow link under cursor, each with its keys. One with nothing to act on, as the trash with no note open or a formatting command while source mode is not shown or the note cannot be edited, is left out. A formatting command from the palette edits the note as its keys do and gives the keyboard back to the editor. The MyGo client's Set heading chooser is not there: its 7 commands are.
-- **The editor's pane** (`main.go`). What notesd has to say about the open note (overlapping edits, a refused save, a deletion, a failed load) is the kit's `Banner` over the note's text, in the tone of what happened, with Dismiss. A note still loading is NSGo's skeleton, and a pane with no note the kit's `EmptyState`. What goes wrong in the app itself is the kit's `Notice` over the window, in the danger tone.
-- **Source mode** (`source.go`) is NSGo's code editor (`nsgo/ui/editor`, v0.3.0) on the open note's document, at most 700 wide in the middle of the pane (Readable line length), with the MyGo client's defaults (`internal/desktop/prefs`; `TestSourceTakesTheMyGoDefaults` holds them equal, as the web build cannot import `prefs`): soft wrap, no line numbers, indentation guides, tabs of 4 and indenting with tabs, brackets and quotes paired as they are typed, and folds by headings, the frontmatter and indentation (`markup.Folds`). Their settings come in Phase 7 of [plan 0011](../plans/0011-nsgo-only-client.md). The typing reaches the document as the user's edits (`Document.Local`). Any other change of the document's text (a merge, another writer's change, a reload, a load after a failed one) never enters the editor as a new value, which NSGo's editor records as a step of its undo, with no way to keep an edit out of the history or to clear it: the editor starts again on the new text, with its carets, folds and first line in view mapped through the change. The user's undo history ends there, as live preview's does, so Ctrl+Z never takes back another writer's change ([ADR-0022](../adr/0022-the-editor-saves-as-you-type-and-applies-merges-as-remote-changes.md); [ADR-0049](../adr/0049-make-the-nsgo-client-the-only-client.md), decision 3; `TestUndoNeverTakesBackAnotherWritersChange`). Typing that reaches the editor before it starts again goes over the other change. A change of whether the note can be edited starts it again too.
-- **The inline title** (`title.go`) is the note's name over its text, in both modes, as a heading of the kit's (`workspaceui.Heading(1)`) with no field's frame. Enter, or leaving the field, renames the file in its folder through the client's move (`manage.go`), keeping its extension (`catalog.Renamed`); an empty name, an unchanged one, or one with `/`, `\` or `:` goes back. Where the vault's Automatically update internal links is on, the move updates the links to the note; elsewhere NSGo's alert asks, Update or Don't update, as the MyGo client asks, and closing it leaves the name as it was (`TestInlineTitleRenamesTheNote`).
-- **Completions in source mode** (`links.go`) are the editor's list, from the vault's catalog (`internal/desktop/catalog`, made when a vault is shown, its link format, attachment folder and wikilinks from `vault.settings`, kept up to date from notesd's events): after `[[` (or `![[`) the vault's files and the notes' aliases, ranked as the MyGo client ranks them, inserted in the vault's link format with `]]` when the link is not closed, and asked again as the query grows; after `[[note#` the note's headings and after `[[note#^` its block IDs, read from its open document or `note.read`; after a tag's `#` the vault's tags by how many notes have them (`markup.CompletionAt`; `TestCompletionsInSourceMode`). Enter or Tab takes the chosen item.
-- **Find and replace in the note** (`findbar.go`): mod+F (Search current file) or mod+H (Search & replace) in the editor shows a bar over source mode, with a selection on one line as its query: the find field, Match case, Match whole word and Use regular expression (NSGo's `ToggleButton`s), where the caret is among the matches (`2 of 4`, `No results`, `Not a regular expression`), Previous and Next match, Close, and with replace the replacement (`$1` and `${name}` with a regular expression), Replace and Replace all, which is 1 step of undo. The editor marks the matches (`Editor.Search`). Enter finds the next match and Shift+Enter the previous one; Escape closes the bar and gives the keyboard back to the editor (`TestFindAndReplaceInTheNote`).
-- **Source mode's keys** (`edit.go`) are bound once the editor has the keyboard, so they win over its own (`TestAppKeysAroundTheEditor`): mod+B, mod+I, mod+K (Insert Markdown link: inside the editor mod+K is Obsidian's and the MyGo client's link, not the palette, which mod+O opens from there), mod+L (Toggle checkbox status, over NSGo's Select line), mod+/ (Toggle comment), mod+D (Delete paragraph, over NSGo's Select next occurrence), Alt+Enter (Follow link under cursor), mod+F and mod+H (find in the note, over the notes' filter), and Enter and Backspace for smart lists. A command edits the note's text with `Ref.Edit` as 1 step of undo that reaches the document as typing does (`TestFormattingCommandsInSourceMode`).
-- **Smart lists and marks:** Enter continues a list item, a numbered item, a task or a quote, and on an empty item ends it; Backspace after an item's marker takes the marker away (`markup.ContinueMarkup`, `DeleteMarkupBackward`); with neither they run the editor's own Newline and DeleteBackward. A mark (`*`, `_`, `~`, `=`, `` ` ``) typed over a selection wraps it, as Obsidian's Auto-pair Markdown syntax does: the editor's typing is taken back and the wrap made in its place, 1 step of undo (`TestSmartListsAndMarksInSourceMode`). NSGo's editor rebinds its keys after an input method's composition, so until the editor next takes the keyboard Enter and Backspace there are its own.
-- **Following a link** in source mode: Alt+Enter at the caret, Ctrl+click, or F12. A note link opens its note (`note.resolve`) at its heading or block (`markup.SubpathLine`), a heading or block of the note itself is shown, a link to a note that is not there makes it where the vault puts it (under the link's own folders, else the vault's new note location: `catalog.LinkedNotePath`), and a tag opens Search vault on `tag:#tag`. Ctrl over a link underlines it. A link to a file that is not a note waits for plan 0011's Phase 5, a web link for Phase 8's allow-list, and opening a link in a new tab or to the right for Phase 3's tabs (`TestFollowingLinksInSourceMode`).
-- **Several selections** are NSGo's editor's: mod+Alt+Up and Down add a caret, Alt+click adds one, mod+Shift+L selects every match, and Escape leaves 1; a command and smart lists act at each (`TestSeveralCaretsInSourceMode`).
-- **Highlighting in source mode** is the app's highlighter for the lines in view, which NSGo runs off the UI goroutine: `markup.Highlight` reads Obsidian's Markdown as the MyGo client's overlay does (`internal/desktop/editor/syntax.go`), with what is open where a line starts (the frontmatter, a fence, indented code, a `$$` block, a `%%` comment) read from the lines before it. Its kinds take the colors of NSGo's palette in light and dark: headings `title`; wikilinks, embeds, Markdown links and web addresses and footnotes `built`; tags and a callout's type `keyword`; code and the frontmatter's values `string`; math `number`; the frontmatter's keys and highlights `attr`; strikethrough `deletion`; and comments, block IDs, the frontmatter's fences, quote and list marks, rules and the marks of emphasis `comment`. NSGo v0.3.0 names no bold or italic kind for an app's tokens, so emphasis and strong text keep the text's color. The palette is NSGo's, not the kit's: the kit has no colors for code.
-- **Dialogs** (`dialogs.go`). A form (New note, Rename or move note, Restore deleted note, and the vault forms) is NSGo's dialog on the kit's panel: Cancel, quiet and first, then the one filled button, and what went wrong as a `Banner` in the danger tone. Moving a note to the trash and removing a vault ask in NSGo's alert dialog, which names the note or the vault, with the action in the danger variant. The alert closes as its action starts, so a failure of the action shows over the window.
-- **Settings** (`vaults_native.go`) is NSGo's settings view, shown in place of the vault by the gear at the navigation's foot or mod+, and left by Done or a press of a vault's row. Its rows start the vault forms, show the shown vault's sync, and hold the device's choices. The tree and the editor are kept while it shows (`core.NewHolder`), so the open note and its undo history are there after it. Until 2026-11-24 this was a dialog, Manage vaults, of filled buttons. The Lodge build has no Settings.
-- **The navigation's foot** is the kit's `ConnectionItem`: a dot, green while notesd answers, and the connection's line.
-- **States.** The tree shows a skeleton until the vault's notes have been read, then its notes or the kit's `EmptyState`.
-- **Keys.** mod+K and mod+O are the palette (in source mode's editor mod+K inserts a link, and mod+O stays the palette), mod+F the notes' filter (in the editor, find in the note), mod+N New note, mod+Shift+F Search vault, mod+S Save, mod+, Settings. Source mode's own keys are above.
-- **No look written as a number** (`TestNoLiteralLooks`), but 1 the kit has no token for: a Markdown heading's size in live preview. A padding takes the kit's spacing. Source mode's readable width, 700, is a measure of the text, which the kit has no token for either; the test reads no width.
-
-- **The window** (`window.go`) is kept on the device, in the client's storage: its size, its place where the platform reports one, and the navigation's width. A start shows it as it was left. A size under 480 by 360 is not kept, nor a maximized window's, and the window does not go under that size. A browser's window is not kept. The notes tree's width is not kept: the kit's `FileExplorer` reports no change of it.
-- **The filter** over the notes tree (`tree.go`) leaves the notes whose title or path holds its words, inside their folders, all open. mod+F puts the keyboard in it from anywhere but source mode's editor, where it finds in the note.
-
-On Linux, Settings creates a folder, registers an existing folder, or joins a hub vault. Pairing shows the approval code issued by notesd and waits for the hub operator. Both desktop clients use the same pairing, retry and cancellation logic. Removing a registration leaves its files on disk. The desktop status shows the selected vault’s sync state. The Flatpak applies its background preference when the last frontend exits. Lodge displays the server’s registered vaults.
-
-The client's web build (`make nsgo-lodge-app`) starts the existing Lodge client handshake before mounting NSGo, follows the shell theme, and uses the same-origin notes API. Its config is revalidated separately from the immutable runtime assets. Lodge served it from 2026-11-23 until it served the React app again ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md), [In a browser](#in-a-browser)); now nothing shipped holds it, and it is built only for a separate Lodge test install. The loopback Lodge fixture exercises browser admission, offline editing, and conflict recovery over this route. [Run the Lodge evidence](../development.md#run-the-preview-inside-lodge)
+**Frostnotes has no desktop window**
+([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md),
+[plan 0011](../plans/0011-nsgo-only-client.md)). The app is the React app
+(`app/`), which lodge serves, and on a desktop the Flatpak holds notesd and
+`notesctl` only ([The Flatpak](#the-flatpak)): any editor of Markdown files,
+Obsidian among them, edits a vault's folder, and notesd syncs it. The native
+clients, on MyGo and on NSGo, were removed in plan 0011's Phase 3
+([below](#the-desktop-clients-removed)). Where this document names
+`features/`, `editor/` or `app/`, that is the web app's code.
 
 ## Overview
 
-The web app is a React UI, a thin client of notesd like `notesctl`, MCP and
-the native app. It holds no notes of its own: it lists a vault's files from
+The web app is a React UI, a thin client of notesd like `notesctl` and
+MCP. It holds no notes of its own: it lists a vault's files from
 notesd, edits a note's exact text in CodeMirror, saves it with its base, and
 shows what notesd renders. It runs inside lodge, and in a browser against the
 dev gateway ([In a browser](#in-a-browser)).
@@ -137,8 +91,7 @@ dev gateway ([In a browser](#in-a-browser)).
 Presentational components take data and callbacks as props, hold only
 transient state (hover, an open menu, a field being typed), and import
 nothing from `data/`, `rpc/`, `workspace/` or `editor/` except types.
-Containers in `app/` connect them. Rust stays small: `bridge.rs` moves
-lines, `protocol.rs` serves blobs, `main.rs` sets up the window.
+Containers in `app/` connect them.
 
 ## Data
 
@@ -373,14 +326,6 @@ after the last tab goes until what it holds is saved:
 
 ### Live preview
 
-Native inline and display math use bounded, cached SVG glyph paths from a
-pure-Go renderer ([ADR-0041](../adr/0041-render-native-math-as-vector-paths.md)).
-Invalid formulas retain their source; selected lines reveal it.
-
-The native Settings omit the inactive Spellcheck control
-([ADR-0040](../adr/0040-remove-the-inactive-native-spellcheck-setting.md));
-this does not change the web editor's spelling preference.
-
 Live preview is decoration over the source, never a transformation
 ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)).
 The framework (`editor/preview/`) owns:
@@ -438,15 +383,6 @@ renders what is on screen again a second after the vault changes, so an
 embedded note follows its edits. The framework keeps the typing budget
 with every provider on: providers are measured together in the exit
 evidence.
-
-The native app works out the same reveal rule in
-`internal/desktop/livepreview`
-([ADR-0039](../adr/0039-live-preview-is-replacements-over-the-source.md)),
-and `internal/desktop/editor/live.go` shows its pieces as MyGo's
-`Replacement`s and its blocks as MyGo's `Block`s; `reading.Blocks` draws
-callouts, tables, embeds and images as the reading view does, renders only
-those on screen, and renders them again a second after the vault changes. Its
-tabs of a note share one buffer, so they share one undo history.
 
 ### Properties
 
@@ -512,8 +448,7 @@ preview does. The CSP forbids inline script
 Per [ADR-0023](../adr/0023-the-app-shows-files-by-their-hash-and-uploads-them-through-notesd.md),
 the transport's `blobURL(hash, ext)` gives a file's URL:
 lodge's content URL in the web app, the dev gateway's `/blobs/…` in a
-browser, a `data:` URL from the mock; the native app reads the blob store by
-hash. Images, audio and video show inline in live preview, in the reading
+browser, a `data:` URL from the mock. Images, audio and video show inline in live preview, in the reading
 view and in a `file` tab. Rendered HTML is finished
 (`reading/finish.ts`'s `fill`) in a template, which loads nothing, before
 the page has it: with the Load remote images preference off, a remote
@@ -524,7 +459,6 @@ under the vault's Default location for new attachments and a name no
 file has (a nameless pasted image is `Pasted image YYYYMMDDHHmmss.png`),
 then inserts `![[name]]` (a markdown image without wikilinks) at the
 cursor, on a line of its own at a line's start (`editor/attach.ts`, M4).
-The native app keeps these rules in `internal/desktop/markup/attach.go`.
 
 The servers of a hash (`internal/blobhttp`;
 [specs/rpc-protocol.md](../specs/rpc-protocol.md#transports)) name the
@@ -612,81 +546,21 @@ content type by extension, from one table:
 
 ## Window
 
-- Undecorated. The title bar row holds the sidebar toggles, the
-  sidebars' pane tabs and the top row of tab strips; its empty space
-  drags the window, and a double click toggles maximize. The capability
-  file grants the window permissions the controls use and the app's own
-  commands.
-- The webview's own context menu is off (`system.ts`'s
+- The title bar row holds the sidebar toggles, the sidebars' pane tabs
+  and the top row of tab strips. The window's title is the page's: the
+  active note, the vault and Frostnotes (`system.ts`'s `windowTitle`).
+- The page's own context menu is off (`system.ts`'s
   `suppressNativeMenu`, from the first line of the page); the app draws
-  its own menus. The webview downloads nothing (`on_download`).
+  its own menus.
 - A view that fails while it draws shows why in its tab
   (`ViewBoundary`); the rest of the window works on.
-- Links to the web open in the system browser (`http`, `https`, `mailto`
-  only). In the native app, `internal/desktop/system/open.go` checks a
-  link's scheme and passes a `mailto` link through `SanitizeMailto`, its
-  copy of frostui's rule, which keeps only its addressees, subject and body
-  and drops its fragment; `cmd/frostnotes`' tests hold the copy to
-  frostui's results. It opens a vault file only when it is a regular,
-  non-executable file inside the vault folder, of a document or media type,
-  never a script, a `.desktop` entry or HTML; what passes goes through
-  frostui's allow-listed `Opener`. In a browser, a web link opens in a new
-  tab and files do not open.
-- View's Zoom in, Zoom out and Reset zoom step through a browser's zoom
-  levels with the webview's own zoom, kept as a preference.
-
-## The native look
-
-The native app draws frostui's Frostyard look
-([ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md);
-frostui's [ADR-0011](https://github.com/frostyard/frostui/blob/main/docs/adr/0011-draw-the-frostyard-brand-in-a-dark-and-a-light-theme.md)
-and [theme spec](https://github.com/frostyard/frostui/blob/main/docs/specs/frostyard-theme.md)),
-from frostui v0.5.0 on:
-
-- **The theme.** `applyAppearance` (`internal/desktop/window/settings.go`)
-  sets `frostui.FrostyardTheme(dark)` at the start of every frame, with the
-  desktop's preferences but not its accent, so every view and frostui's
-  `Adapt` see the same theme. The Theme setting's Light and Dark pick
-  Frostyard light or Frostyard; System takes the one of the desktop's light
-  or dark. High contrast and the desktop's text size apply; the accent is
-  the brand's. Zoom (Ctrl + = / - / 0) stays MyGo's zoom of the whole
-  window, which scales the kit's text with the rest.
-- **Text and corners.** The app's own text uses frostui's styles: the vault
-  manager's titles are `Title`, tab titles and the breadcrumb `Body`, the
-  history's details and note embeds' names `Muted`; the inline title and
-  search snippets take `Title`'s and `Muted`'s sizes through `TextSize`.
-  Corners are the theme's `Radius` (the brand tile, pane tabs),
-  `RadiusChip` (rows, tool buttons, callouts, code) or `RadiusCard` (note
-  embeds). The brand tile is the brand's gradient, as frostui's shell
-  draws it.
-- **Live preview** (`internal/desktop/editor/live.go`) sets heading lines
-  in Inter, bold, in the text color, at 2, 1.5, 1.25, 1.125, 1 and 1 times
-  the editor's text size (the Font size setting) for levels 1 to 6; the
-  rest of the editor stays monospaced. The scanner reports the lines of
-  every code block, fenced (with its fences) or indented, whether or not
-  the caret is in it (`livepreview.Result.Code`), and the editor puts them
-  on frostui's code color. A fence's header (its language and Copy) sits
-  on the editor's ground above them, since MyGo places a block within the
-  text's width and a line's background runs to the editor's edge. Source
-  mode keeps MyGo's colors and no backgrounds.
-- **The reading view** and live preview's rendered blocks draw code blocks
-  on the code color inside a hairline at a chip's corners
-  (`drawer.setLook`), callouts as frostui's banners (the tone's fill and
-  line, with the tone's bar), and note embeds square inside a hairline.
-- **Rows.** The vault list, the history and the panes' rows mark the
-  selected one with frostui's selected row (`uikit.SelectedRow`: the
-  selected fill, a 1px accent rule on the leading edge, the selected text);
-  pane tabs take the selected fill. Hovered rows, pane tabs and tool
-  buttons change their text to the hover text and keep their face.
-
-`TestTheWindowDrawsInTheFrostyardThemes` (`internal/desktop/window/look_test.go`)
-draws the window over a vault in both themes, as the desktop picks them and
-as the Theme setting overrides it, and checks the ground and chrome it
-draws, that its text is Inter, live preview's headings and code lines, the
-reading view's code blocks, and that a zoom keeps the theme.
-With `FROSTNOTES_SCREENS` set it keeps its pictures, as
-`TestEveryScreenDraws` does, for a review by eye against the Frostyard
-Desktop design system.
+- Web links (`http`, `https`, `mailto` only) open outside the app
+  (`openExternal`): inside lodge the shell opens them, a lodge URL in its
+  app and any other in a new tab; elsewhere a new tab with `noopener` and
+  `noreferrer`. A vault file a browser shows (an image, audio, video or a
+  PDF) opens in a new tab at its content URL; other files do not open.
+- View's Zoom in, Zoom out and Reset zoom set the page's CSS zoom, kept as
+  a preference.
 
 ## In a browser
 
@@ -719,8 +593,9 @@ Phase 1).
     rail, and `revision.txt`, the commit it was built from, which
     `flatpak.yml` checks in its Lodge archive.
   - The `.deb`'s check (`make deb-check`) requires `index.html`,
-    `icon.svg` and `revision.txt`, and fails on any member of the NSGo
-    web build (`nsgo.json`, a `.wasm` module, Go's `wasm_exec` loader).
+    `icon.svg` and `revision.txt`, and still fails on any member of the
+    removed NSGo web build (`nsgo.json`, a `.wasm` module, Go's `wasm_exec`
+    loader).
   - `index.html`'s viewport has `viewport-fit=cover`, so the safe-area
     insets the narrow layout uses are not zero on iOS.
   - There is no web manifest of notes' own: lodge installs once, for
@@ -865,9 +740,7 @@ reads the hub.
   and `/app/libexec/frostnotes-request-background` is the Background
   portal's helper. `flatpak run --command=notesctl org.frostyard.Frostnotes`
   is the CLI on a desktop (an alias makes it `notesctl`). The build makes no
-  desktop client: neither the MyGo client (`cmd/frostnotes`) nor the NSGo
-  client (`cmd/frostnotes-nsgo`), which stay in the repository until
-  plan 0011's Phase 3.
+  desktop client, and the repository has none since plan 0011's Phase 3.
 - **No desktop entry; a console application.** With no window, a desktop
   entry would open nothing, so the Flatpak installs none, and its AppStream
   component is a `console-application`: AppStream requires a
@@ -991,9 +864,7 @@ reads the hub.
   `flatpak override --user --reset org.frostyard.Frostnotes`, if it does.
   Check the Flatpak portal with `systemctl --user status
   flatpak-portal.service`." It then exits non-zero. `internal/packagecheck`
-  holds the launcher's sentence to `flatpakapp.PortalFailure`. The desktop
-  clients read the same files through `internal/desktop/system`, until
-  Phase 3 removes them.
+  holds the launcher's sentence to `flatpakapp.PortalFailure`.
 - **Updates.** `flatpak update` installs a new deployment and leaves the
   sandbox of a running notesd alone ([ADR-0032](../adr/0032-an-update-replaces-the-running-notesd.md)).
   So the launcher replaces a notesd of an older build, only forward:
@@ -1092,8 +963,8 @@ reads the hub.
   vault that was registered and then left outside the grants fails its
   scan, not `vault.add`; that case stays in `notesd.log`.
 - **The build** is offline: `make flatpak-sources` writes `go-sources.json`
-  from the root module's `go.mod` and `go.sum` (the NSGo client's module is
-  not built, so its modules are not in it), and the `Flatpak` workflow
+  from the root module's `go.mod` and `go.sum`, the repository's one Go
+  module, and the `Flatpak` workflow
   (`.github/workflows/flatpak.yml`) checks they are current, then builds and
   tests the manifest. Its test commands compile and import the Python
   helper, validate the metainfo (`appstreamcli validate`), check that
@@ -1125,12 +996,12 @@ reads the hub.
 
 ## Problem records
 
-The native app records its panics in the local systemd journal, with
-`github.com/frostyard/std/problems`, and sends nothing over a network
-([ADR-0036](../adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)):
-a record holds the app ID `org.frostyard.Frostnotes`, the version, component
-`gui`, and the panic's message and place. notesd's records are in
-[overview.md](overview.md#problem-records).
+The web app records no problems: a page in a browser has no journal of the
+machine it runs on. notesd's records are in
+[overview.md](overview.md#problem-records)
+([ADR-0036](../adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
+Until plan 0011's Phase 3 the native desktop app recorded its panics there
+too, as the part `gui`.
 
 ## Dev and test
 
@@ -1142,142 +1013,28 @@ a record holds the app ID `org.frostyard.Frostnotes`, the version, component
   where it can be; views run in happy-dom where a test needs one, and in
   jsdom (`// @vitest-environment jsdom`) where DOMPurify must sanitize:
   the sanitizer's tests and the reading, merge and history views'.
-- `make desktop-evidence` runs the native app's evidence: a generated
-  10,000-note vault within a frame, and an edit on the hub reaching the open
-  editor. `make desktop-smoke` starts the release build under Xvfb.
-- `make nsgo-check` runs the NSGo client's suite headless, and
-  `make nsgo-live` runs it in a real window
-  ([below](#the-nsgo-clients-live-suite)).
+- `make m4-evidence` drives the web build in Firefox inside lodge's
+  development build ([In a browser](#in-a-browser)).
 
-### The NSGo client's live suite
+## The desktop clients (removed)
 
-The NSGo client (`cmd/frostnotes-nsgo`,
-[ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md))
-has one suite, run two ways. It began as Frostnotes' part of Phase 0.5 of
-frostmail's
-[plan 0016](https://github.com/frostyard/frostmail/blob/main/docs/plans/0016-a-shared-look-for-the-nsgo-apps.md):
-live UI tests and pictures of the look, kept before the look changed. The
-pictures now show the kit's Frostyard look
-([above](#shared-nsgo-editor-preview)).
-
-- **The suite:** 30 tests of workflows and parts (`workspace_test.go`,
-  `vaults_test.go`, `window_test.go`, `source_test.go`, `editing_test.go`), the style test,
-  the typing gate's test and benchmark (`bench_test.go`) and 9 picture
-  tours (`pictures_test.go`), with the build tags `linux` and
-  `integration`. NSGo's `nsgotest` drives the client by label and text.
-  Each workflow starts a real notesd on temp data; the tours' vault is 7
-  made-up notes written in `pictures_test.go`, 1 of them in a folder
-  inside a folder. Some tests read no window: the shape `buildTree` gives
-  a list of notes, source mode's defaults and its highlighter's kinds.
-  Source mode's text is read from the editor's rows in view
-  (`sourceText`), as NSGo's editor keeps no value in its field, and a
-  test types a line break as Shift+Enter, which smart lists leave to the
-  editor. Headless, NSGo runs as a phone; the test of Ctrl+click starts
-  the client as a desktop (`nsgotest.Idiom`), as the editor takes a
-  press with Ctrl only there.
-- **Keys around source mode.** `TestAppKeysAroundTheEditor` holds what
-  an app's key binding gets of Enter, Backspace and mod+V in NSGo
-  v0.3.0, which smart lists and paste need. Of the bindings of a key the
-  newest runs, and the editor binds its keys as it takes the keyboard.
-  A binding made around the editor before that gets mod+V, which the
-  editor does not bind, but not Enter or Backspace, which the editor
-  runs. A binding made once the editor has the keyboard (in a `Show` on
-  its focus, after the editor) gets all 3 first, and the editor does
-  nothing with them: such a binding runs the editor's command itself
-  (`Ref.Run`) when it has nothing to do.
-- **The typing gate on NSGo,** `make nsgo-bench`
-  (`BenchmarkTypingInALongNote` in `bench_test.go`): a keystroke in the
-  MyGo gate's 10,000-line note, in source mode at the note's end and in
-  live preview on its first line, under the same limits, 16 ms and 25 ms
-  with `CI=true` ([ADR-0043](../adr/0043-the-typing-gate-is-looser-on-ci.md)).
-  A keystroke is 1 step of NSGo's test host typing 1 character, headless:
-  the key and the edit reach the field, the client does its work, and
-  the host runs what was posted and commits what changed to its model of
-  the window. It draws no pixels, so GTK's layout and painting are not
-  in it, and the editor's highlighting runs off the UI goroutine. The
-  benchmark then saves and reads the note on disk, which must hold every
-  keystroke. CI does not run it yet; `make desktop-bench` stays MyGo's
-  gate until MyGo goes.
-- **Headless,** `make nsgo-check`, a part of `make verify`: `go test -tags
-  integration` in `cmd/frostnotes-nsgo`. NSGo models the views, with
-  approximate text and no pixels: `app.Screenshot` only logs.
-- **In a real window,** `make nsgo-live`: `go tool nsgo test -target linux`
-  under `xvfb-run`, each test in a process of its own, in a GTK 4 window.
-  It needs the `xvfb` package and GTK 4. `TestMain` is `nsgotest.Main`.
-  The target has no `-tags` flag, so the Makefile passes the tag in
-  `GOFLAGS`. On a target the tests' working directory is under
-  `cmd/frostnotes-nsgo/.nsgo/`, so they find the repository with
-  `repoRoot`. Pictures go to
-  `cmd/frostnotes-nsgo/.nsgo/test/screenshots/linux`, which git ignores.
-  CI's Verify job runs the target after `make verify` and uploads the
-  pictures as `nsgo-live-pictures`.
-- **The window stays off the desktop** only with `GDK_BACKEND=x11`, which
-  the Makefile sets. GTK tries Wayland first. With `WAYLAND_DISPLAY` unset
-  it still connects to the default socket, `wayland-0`: on a desktop whose
-  compositor listens there, GDK under `xvfb-run` opened
-  `GdkWaylandDisplay wayland-0`, and with `GDK_BACKEND=x11` it opened
-  Xvfb's X11 display (2026-11-24).
-- **What a target does differently** from the headless run, in NSGo v0.3.0,
-  and what the tests do about it (seen under Xvfb on 2026-11-24):
-  - The app's clock. Headless, a wait of NSGo's moves the app's clock a
-    frame between checks. On a target a wait leaves the clock still, so a
-    timer of the app never comes due: vault search waits 250 ms before it
-    asks notesd, and the session dials again 1 s after its connection
-    drops. `waitTimers` moves the clock while it waits, in both runs.
-  - A line break typed. The Linux test host sends it as the Enter key.
-    Source mode's editor takes Enter as a line break, so its tests type
-    line breaks on a target too (`replaceSource`). An input method's
-    commit of text with line breaks would reach the editor's 1-line field,
-    and GTK made each line break a space there (2026-11-25).
-  - A paste. `App.Paste` reports a paste only headless, and on a target it
-    skips the test. `TestSwitchNoteDuringAutosave` leaves out its paste and
-    the undo after it on a target (`headlessStep`), and runs its other
-    steps there.
-
-  No test skips on a target.
-- **The kept pictures,** `cmd/frostnotes-nsgo/comparison/linux`: 25 PNGs,
-  1160 by 760 and, for a narrow window, 600 by 760. 20 are in Frostyard
-  light: no note selected, a note in source and in live preview, a line
-  under edit, the More menu, the 4 note dialogs, the palette with no
-  query, with a note's and with a command's, vault search, Settings and
-  the join form, a notesd
-  with no vault, and the narrow tree, note, menu and navigation. 5, named
-  `dark-`, are in Frostyard: a note in source and in live preview, the
-  dialog that moves a note, Settings and the narrow note.
-  `make nsgo-pictures` takes them again. A change of the look commits its
-  changed pictures. No test compares pixels.
-  - The look they show, read from the pictures of 2026-11-24. Light: the
-    navigation is `#e8f0f6`, the narrow window's ground `#f5f9fc`, the
-    accent `#0b6ea6`. Dark: `#081b2d`, `#06111d` and `#47b8ef`. The
-    content pane of a wide window is `#f4f9fc` in light and `#06121e` in
-    dark, 1 step from the ground's color. Until 2026-11-25 source mode was
-    a field of its own, `#ffffff` in light and `#061826` in dark; since
-    then NSGo's editor has no ground of its own and stands on the pane's,
-    with its active line `#eaeff3` in light and `#0f1a27` in dark, read
-    from that day's pictures.
-  - The text is the kit's bundled Inter. With the host's own Inter hidden
-    from fontconfig (a `FONTCONFIG_FILE` that rejects the family), a take
-    gave the same bytes for all 22 as a take without it; with it hidden
-    and no font registered, the text was Noto Sans (2026-11-24, on 1
-    host).
-  - The tours pin light or dark (`nsgotest.Environment`). Without it a
-    target takes the appearance from GTK's settings, which follow the
-    host.
-  - `testdata/xdg/gtk-4.0/settings.ini` stops the caret's blinking. With
-    a caret that blinked, 4 or 5 pictures differed between 2 takes, each
-    in 1 column of 18 or 20 pixels. Without the blinking, 3 takes on 1
-    host gave the same bytes for all 19 pictures of the look before
-    Frostyard, and 2 takes for all 22 of this one (2026-11-24).
-  - `dark-narrow-note.png` shows a compact window in the dark appearance.
-    With the kit at v0.1.0 the area around the editor was white under the
-    dark appearance's light text. The kit's compact shell paints its
-    ground since v0.2.0: the picture's ground is `#06111d`.
-- **The web target** is not run. The test files are Linux-only, and each
-  test starts a notesd with `os/exec`, which a browser cannot. The web
-  build's browser path is `make nsgo-lodge-evidence`
-  ([development.md](../development.md#run-the-preview-inside-lodge)); the
-  app Lodge serves is the React app, whose evidence is `make m4-evidence`
-  ([In a browser](#in-a-browser)).
+<a id="shared-nsgo-editor-preview"></a><a id="the-native-look"></a><a id="the-nsgo-clients-live-suite"></a>
+Until plan 0011's Phase 3 ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md))
+Frostnotes had 2 desktop clients: the native app on MyGo and frostui
+(`cmd/frostnotes` and `internal/desktop/`;
+[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
+[ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md),
+[plan 0009](../plans/0009-mygo-desktop.md)), and the NSGo client with its
+web build (`cmd/frostnotes-nsgo`;
+[ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md),
+[ADR-0049](../adr/0049-make-the-nsgo-client-the-only-client.md)). Both were
+removed with their typing gates
+([ADR-0043](../adr/0043-the-typing-gate-is-looser-on-ci.md)), their live
+suite and its kept pictures, and the NSGo preview's Flatpak
+(`packaging/nsgo`). Their design is in git's history of this document, and
+their decisions in the ADRs above. notesd still answers `note.renderMarkdown`
+([specs/render.md](../specs/render.md#markdown-for-native-views)), which
+only the native app called: changes within protocol 1 are additive only.
 
 ## Operational notes
 
@@ -1345,32 +1102,4 @@ pictures now show the kit's Frostyard look
 - Related: [overview.md](overview.md), [vault.md](vault.md) (writes, settings), [sync.md](sync.md) (conflicts), [hub.md](hub.md) (the hub behind lodge, its devices)
 - Contracts: [specs/ui.md](../specs/ui.md), [specs/render.md](../specs/render.md), [specs/rpc-api.md](../specs/rpc-api.md), [specs/markdown.md](../specs/markdown.md), [specs/lodge-app.md](../specs/lodge-app.md) (what notesd serves to lodge), lodge's [lodge-client](https://github.com/frostyard/lodge/blob/main/docs/specs/lodge-client.md)
 - Built in: [M0 app shell](../plans/0001-m0-foundations.md#phase-4--app-shell); [plan 0005 — M3](../plans/0005-m3-desktop-app.md); [plan 0006 — M4](../plans/0006-m4-notes-inside-lodge.md); the Flatpak's publication, its clean-install check, its updates (gaps G2 and G3) and the move from a host notesd (G4) in [plan 0008 — M6](../plans/0008-m6-the-standalone-desktop-app.md) ([roadmap](../plans/0002-roadmap.md))
-- The native app: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md) and [plan 0009](../plans/0009-mygo-desktop.md) (the desktop app on MyGo and frostui; the React app stays as lodge's web app); [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md) ([its look](#the-native-look), frostui's Frostyard themes)
-
-Native reading task clicks and `#^block` navigation use the original source-line
-map from [renderMarkdown](../specs/render.md#markdown-for-native-views), built in
-[plan 0009](../plans/0009-mygo-desktop.md) under
-[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
-Task edits reject stale renderings after synchronizing the attached buffer and
-use the shared document's save/merge path. Tasks in embedded notes remain
-read-only. Block IDs resolve to rendered paragraph/list positions, and repeated
-links scroll again.
-
-Native audio/video attachment tabs and standalone media embeds use MyGo's
-playback APIs. [Rendered media fences](../specs/render.md#markdown-for-native-views)
-contain only blob identifiers. Playback accepts a full SHA-256 and a supported
-media extension, resolves it inside the local blob store, and opens a decoder
-only on Play. Controls pause, seek and stop; unmount closes the player and file.
-Attachment tabs retain Open in default app for unavailable system codecs.
-The Flatpak grants the PulseAudio socket for sound output.
-This completes media playback in [plan 0009](../plans/0009-mygo-desktop.md), under
-[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
-
-Native live preview uses MyGo's per-line styles for heading sizes (in Inter,
-[the native look](#the-native-look)) and completed task strike-through. The
-bounded MyGo desktop fork preserves line-style strike-through so long tasks
-wrap across rows and retained embed source stays struck. Selecting a line
-restores its source font and marks; source mode clears all preview styles.
-This completes the line-style portion
-of [plan 0009, Phase 5](../plans/0009-mygo-desktop.md), under
-[ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md).
+- No desktop window: [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md) and [plan 0011](../plans/0011-nsgo-only-client.md); the removed clients: [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md), [ADR-0042](../adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md), [ADR-0047](../adr/0047-use-the-shared-nsgo-editor-on-linux-and-lodge.md), [plan 0009](../plans/0009-mygo-desktop.md) ([above](#the-desktop-clients-removed))

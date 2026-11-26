@@ -1,9 +1,11 @@
 # frostyard/frostnotes
 
 Frostnotes is a notes app in the spirit of Obsidian: plain markdown files
-with YAML frontmatter, a native desktop app (Go, MyGo, frostui), a web app
-(React, CodeMirror 6 live preview), built-in sync through a self-hosted hub,
-and an MCP server for agents. A Go daemon, `notesd`, owns every vault; the apps,
+with YAML frontmatter, a web app (React, CodeMirror 6 live preview) in
+lodge, built-in sync through a self-hosted hub, and an MCP server for
+agents. It has no desktop window: on a desktop any editor of Markdown
+files, Obsidian among them, edits a vault's folder, and the Flatpak's
+notesd syncs it. A Go daemon, `notesd`, owns every vault; the web app,
 `notesctl` and MCP are thin clients. Start at [docs/README.md](docs/README.md);
 the architecture entry point is [docs/design/overview.md](docs/design/overview.md).
 
@@ -43,24 +45,20 @@ of lodge's app contract is
   days of sync through lodge, to 2026-11-02, no lost edit was reported;
   the daily checks were not recorded.
 
-Next, [plan 0009](docs/plans/0009-mygo-desktop.md) moves the desktop
-app to a native Go app on MyGo and frostui, and keeps the React app as
-lodge's web app ([ADR-0038](docs/adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md),
-accepted on 2026-11-10). It is built on a draft pull request (2026-11-10):
-session, source mode, reading view, history and merges, the window on
-frostui's shell, the workspace and the panes. Phase 5's live preview draws
-marks, blocks and embeds; heading sizes and completed-task strike-through use MyGo's per-line styles
-([egoist/mygo#1651](https://github.com/egoist/mygo/issues/1651)). The draft
-pull request's last commit replaces the Tauri shell.
-
 [ADR-0050](docs/adr/0050-frostnotes-has-no-desktop-window.md) (the
 owner's decision of 2026-11-25) gives Frostnotes no desktop window:
 Obsidian edits a desktop's vault folder, the Flatpak's notesd syncs it
-with the hub, and Lodge serves the React app (`app/`) again. Both desktop
-clients, `cmd/frostnotes` (MyGo) and `cmd/frostnotes-nsgo` (NSGo), are
-being removed ([plan 0011](docs/plans/0011-nsgo-only-client.md)); no
-phase has started. It supersedes ADR-0049, which made the NSGo client the
-only client (#287 to #291).
+with the hub, and Lodge serves the React app (`app/`). It supersedes
+ADR-0049 (the NSGo client as the only client), ADR-0047 and ADR-0038's
+native desktop app ([plan 0009](docs/plans/0009-mygo-desktop.md), MyGo and
+frostui). Of [plan 0011](docs/plans/0011-nsgo-only-client.md), Phase 1
+(Lodge and the `.deb` ship the React app, #293) and Phase 2 (the Flatpak
+holds notesd, `notesctl`, the launcher and the Background helper, #294)
+are built; Phase 2's checks on a real desktop are the owner's and not run.
+Phase 3 is built: both desktop clients, `cmd/frostnotes` (MyGo) and
+`cmd/frostnotes-nsgo` (NSGo), are removed with `internal/desktop/`, their
+targets, CI jobs and docs, and `go.mod` names no MyGo, frostui or NSGo
+module. Phase 4 is the release.
 
 The roadmap is [plan 0002](docs/plans/0002-roadmap.md). Frostnotes copies
 its machinery from [frostyard/frostmail](https://github.com/frostyard/frostmail)
@@ -137,24 +135,6 @@ file a step names before writing its frostnotes counterpart.
   geckodriver in lodge's development build (`make m4-evidence`,
   `scripts/lodge-e2e.sh`), and plan 0007's Porter run through lodge's
   listener and agent socket (`make porter-evidence`).
-- `cmd/frostnotes`, `internal/desktop/`: the native desktop app (plan 0009).
-  `window` joins the rest under frostui's shell; `session` is the notesd
-  connection; `notes` documents, saves and merges (no MyGo import); `livepreview`
-  what live preview hides and draws (no MyGo import); `markup` what the
-  editor does to a note's text: the formatting commands, smart lists, the
-  link or tag under the caret, frontmatter and properties, the attachment
-  rules, and source mode's highlighting, folds, completions and table of
-  formatting commands for the NSGo client (no MyGo or frostui import); `editor` source mode and
-  live preview on MyGo's code editor; `reading`, `history` and `panes` their
-  views; `workspace`, `commands` and `prefs` plain data; `catalog` a vault's
-  files, the Files and Tags panes' trees, the quick switcher's match, the
-  editor's completions and where a linked or renamed note goes (no MyGo or
-  frostui import; the NSGo client uses it too); `system` the open rules and, from
-  `internal/flatpakapp`, paths, notesd's log and the background setting (no MyGo or frostui import; `open.go` carries
-  frostui's mailto rule, which `cmd/frostnotes`' tests hold it to); `uikit`
-  tab strips and splits (imports only std, MyGo, purego and
-  frostui); `desktoptest` the tests' UI loop and real notesd. `make
-  desktop-build`, `desktop-run`, `desktop-smoke` (Xvfb) and `desktop-evidence`.
 - `internal/flatpakapp`: what the Flatpak keeps beside notesd (its config
   and state directories, the end of `notesd.log`, the background setting
   and the Background portal's answer); `notesctl status` and `notesctl
@@ -169,8 +149,7 @@ file a step names before writing its frostnotes counterpart.
 - `internal/problem`: the codes notesd records in the local journal and the
   `Recorder` interface the packages get in their configs; `problemtest`
   holds a fake and a test journal socket. notesd's recorder
-  (`github.com/frostyard/std/problems`) is made in `cmd/notesd`, and the
-  desktop app's in `cmd/frostnotes`
+  (`github.com/frostyard/std/problems`) is made in `cmd/notesd`
   ([ADR-0036](docs/adr/0036-notesd-and-the-app-record-problems-in-the-journal.md)).
 - `internal/workflowcheck`, `internal/repocheck`: tests of repository rules
   (SHA-pinned actions; no test-name filter on a unit run; the race gate's
@@ -208,19 +187,14 @@ file a step names before writing its frostnotes counterpart.
 - `make check` formats, then runs `make verify`: tidy, `gen-check`, vet,
   gofmt, the pinned golangci-lint (`mise install`) and unit tests. Run it
   before claiming any Go change is complete. `make ui-check` (Biome, tsc,
-  Vitest) runs in the nsl machine; `make ci` is verify plus that,
-  `make desktop-build` and the race gate, `make race`. Never run pnpm or
+  Vitest) runs in the nsl machine; `make ci` is verify plus that and
+  the race gate, `make race`. Never run pnpm or
   node on the host. `make vault-it` (the `kill -9` harness) and
   `make obsidian-links` (Obsidian's link dump, local only) are the
   integration runs for changes to the scan, the write path or parsing.
   `make vulncheck` runs govulncheck (pinned in the Makefile; needs the
   network). It is not part of `check`, `verify` or `ci`; the CI job
   "Vulnerabilities (make vulncheck)" runs it.
-  `make desktop-bench` is the desktop app's typing gate: a keystroke in a
-  10,000-line note fails over 16 ms on a developer machine and over 25 ms
-  on CI, whose runner CPU varies about twofold
-  ([ADR-0043](docs/adr/0043-the-typing-gate-is-looser-on-ci.md)). Run it
-  after a change to the editor or live preview.
 
 - The race gate, `make race`, has 3 parts
   ([ADR-0048](docs/adr/0048-the-race-gate-runs-in-3-parts.md)):
@@ -234,16 +208,6 @@ file a step names before writing its frostnotes counterpart.
   which fails when the three differ.
 - Unit and race runs filter no test names (frostyard/core ADR-0038, [ADR-0035](docs/adr/0035-unit-runs-filter-no-test-names.md)): integration tests carry the `integration` build tag instead; `internal/repocheck` fails if a unit run in the Makefile or a workflow gets `-run` or `-skip`.
 - Fix a lint finding rather than loosening `.golangci.yml`.
-- `make nsgo-check`, a part of `make verify`, runs the NSGo client's suite
-  headless on a real notesd (`cmd/frostnotes-nsgo`, `-tags integration`);
-  `make nsgo-live` runs the same suite in a real GTK 4 window under Xvfb
-  (it needs `xvfb-run`). Run both after a change to the client or its
-  tests. A change of the client's look runs `make nsgo-pictures` and
-  commits the changed PNGs of `cmd/frostnotes-nsgo/comparison/linux`
-  ([design/app.md](docs/design/app.md#the-nsgo-clients-live-suite)).
-  `make nsgo-bench` is the typing gate on the NSGo client, with
-  `desktop-bench`'s note and limits, in source mode and live preview; run
-  it after a change to either. CI does not run it yet.
 
 ## Releases and dependencies
 
@@ -259,28 +223,14 @@ file a step names before writing its frostnotes counterpart.
 - **Go modules** (`go.mod`): `github.com/frostyard/clix` v0.5.0 (the CLI shell of
   `notesctl`), `github.com/frostyard/lodge/kit` v0.6.0 (the RPC and app runtime),
   `github.com/frostyard/std` v0.5.0 (`problems`, notesd's problem records;
-  also clix's), and for the native desktop app (plan 0009)
-  `github.com/frostyard/frostui` v0.10.1 (frostyard's desktop UI kit and its
-  Frostyard look, [ADR-0042](docs/adr/0042-the-desktop-app-takes-frostuis-frostyard-look.md)) over
-  `github.com/egoist/mygo` v0.10.0, replaced by the owner's fork
-  `github.com/bketelsen/mygo` (the v0.10.0 editor-blocks port from
-  egoist/mygo#1662, with line-style strike-through) until those changes are in
-  a release (plan 0009).
-  The NSGo client's own module (`cmd/frostnotes-nsgo/go.mod`) also requires
-  `github.com/frostyard/frostui/workspaceui` v0.5.1, the kit it shares with
-  FrostMail and PocketGo (a module of its own in frostui, tags
-  `workspaceui/vX.Y.Z`), and `github.com/nsgo-dev/nsgo` v0.3.0, which
-  frostyard does not own. The client draws the kit's Frostyard themes, in
-  its bundled Inter, and a desktop keeps its choice of appearance
-  ([design/app.md](docs/design/app.md#shared-nsgo-editor-preview)).
+  also clix's).
   Run `make flatpak-sources` after a bump: it rewrites
   `packaging/flatpak/go-sources.json`.
 - **App packages** (`app/package.json`): `@frostyard/lodge-client` as
   `github:frostyard/lodge#client/v0.3.2&path:client` and `@frostyard/lodge-ui` as
   `github:frostyard/lodge#ui/v0.7.0&path:ui`.
 - **Tool pins** (`mise.toml`): golangci-lint 2.15.0, svu 3.4.1, nfpm 2.48.0
-  (these are not frostyard modules). The only bketelsen module is the MyGo
-  fork above.
+  (these are not frostyard modules). No module here is bketelsen's.
 - **Who uses this repository:** lodge hosts `notesd --lodge` as its `notes` app
   (`packaging/lodge/app.json`); Porter calls lodge's `/mcp/notes` with a
   folder-scoped token, and lodge forwards it to `/mcp` on notesd's app socket

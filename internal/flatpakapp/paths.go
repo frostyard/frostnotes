@@ -1,8 +1,7 @@
 // Package flatpakapp is what the Flatpak org.frostyard.Frostnotes keeps
 // beside notesd: where its files live, the end of notesd's log, and the
 // setting for background activity (docs/design/app.md#the-flatpak).
-// notesctl reads and changes them; the desktop clients read them too
-// (internal/desktop/system). It imports no UI.
+// notesctl reads and changes them. It imports no UI.
 package flatpakapp
 
 import (

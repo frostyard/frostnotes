@@ -11,7 +11,11 @@ Contracts: [specs/rpc-protocol.md](../specs/rpc-protocol.md), [specs/rpc-api.md]
 **Status (2026-10-25):**
 - **M0 and M1 are done:** the headless vault, the index and MCP.
 - **M2 and M3 are done** (2026-10-25, after their 7-day trials): sync
-  through a hub, and the desktop app.
+  through a hub, and the desktop app. Frostnotes has had no desktop window
+  since plan 0011's Phase 3
+  ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)): a
+  desktop's editor, Obsidian among them, edits the vault folder, and the
+  Flatpak's notesd syncs it.
 - **M4 is built in part:** notesd as lodge's notes app, `/mcp` through
   lodge, and the web app.
 
@@ -21,18 +25,19 @@ each milestone lands ([roadmap](../plans/0002-roadmap.md)).
 ## Overview
 
 Frostnotes is a notes app in the spirit of Obsidian: plain markdown files
-with YAML frontmatter, a desktop app, a web app, built-in sync, and an MCP
-server for agents. A Go daemon, notesd, owns every vault; everything else is
-a thin client.
+with YAML frontmatter, a web app, built-in sync, and an MCP server for
+agents. On a desktop any editor of Markdown files edits the vault folder.
+A Go daemon, notesd, owns every vault; everything else is a thin client.
 
 ```
- desktop app (Go, MyGo, frostui)        notesctl           agent (stdio MCP)
- native views ── Client ────────┐       Client             notesctl mcp
-                                │         │                    │
-                                ▼         ▼                    ▼
+                       notesctl           agent (stdio MCP)
+                       Client             notesctl mcp
+                          │                    │
+                          ▼                    ▼
               $XDG_RUNTIME_DIR/frostnotes/notesd.sock   JSON-RPC 2.0, one message per line
                                 │
- notesd, device role ── rpcserver ── api.Router ── engine ─┬─ vault: scan, watch, parse, write
+ notesd, device role ── rpcserver ── api.Router ── engine ─┬─ vault: scan, watch, parse, write ◄── a desktop's editor
+                                                           │  (the folder's files)                 (Obsidian…)
                                                            ├─ index (SQLite, FTS5) and local versions
                                                            ├─ render (goldmark, sanitizer)
                                                            └─ sync client ──┐ WebSocket, device token
@@ -64,11 +69,11 @@ a thin client.
 - **The contract** is generated from `schema/rpc/*.yaml` by `tools/rpcgen`
   into Go and TypeScript, and each domain declares which callers may use it
   ([ADR-0008](../adr/0008-generate-the-rpc-contract-from-a-yaml-idl.md)).
-- **The UIs** are two thin clients of one API: a native Go app on MyGo and
-  frostui on the desktop
-  ([ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md)),
-  and a React app in lodge, behind a `Transport`: a WebSocket in the browser
-  and a mock in tests. The web app's editor is CodeMirror 6 with live preview
+- **The UI** is one thin client of the API, a React app in lodge, behind a
+  `Transport`: a WebSocket in the browser and a mock in tests. A desktop has
+  no window of Frostnotes'
+  ([ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)): its editor
+  writes the vault folder, and notesd's watcher takes the writes. The web app's editor is CodeMirror 6 with live preview
   ([ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md),
   [ADR-0011](../adr/0011-look-like-frostmails-sibling-with-obsidians-layout.md));
   it saves as the user types and takes merges as remote changes, and shows
@@ -94,7 +99,7 @@ core's [problem-report.md](https://github.com/frostyard/core/blob/main/docs/spec
 directory's lock; a development build's recorder is inert. It reaches the
 packages through their configs as `internal/problem.Recorder`, and
 `rpcserver` records a handler's panic before the JSON-RPC kit answers
-internal. The app shell records its own panics
+internal. The web app records none
 ([app.md](app.md#problem-records)).
 
 ### notesd as a lodge app
@@ -127,8 +132,8 @@ From M4, on lodge's machine, notesd is lodge's `notes` app
   the engine enforces, and who wrote what. lodge never parses notesd's
   JSON-RPC.
 - **The private socket stays `local`:** `notesctl`, run as `frostnotes`
-  on the hub, and the desktop app's bridge on a device. The desktop app
-  is not a lodge client; it works against its own notesd.
+  on the hub, and `notesctl` on a device, against the device's own
+  notesd.
 
 ### Application icon
 
@@ -164,10 +169,9 @@ dark backgrounds after editing. This artwork does not change the UI tokens.
 | `internal/lodgeapp` | the lodge app socket (M4): the peer check and `Lodge-*` headers through lodge's Go kit, `/health`, `/api`, `/content/blobs/`, `/mcp`, and `/device/` over `internal/hub` |
 | `internal/blobxfer`, `internal/secrets` | blobs over HTTP by hash; device tokens in the Secret Service |
 | `internal/blobhttp` | vault files by hash for browsers: the development gateway's `/blobs/` and the lodge socket's `/content/blobs/`, with their headers and limits |
-| `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes`; `lodge/stage.sh` stages them with the binaries under `usr/` ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs), [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)); `flatpak/` is the desktop app's Flatpak with its own notesd ([design/app.md](app.md#the-flatpak), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md)) |
+| `packaging/` | what notesd installs for lodge: `lodge/app.json`, the systemd socket and service, and `sysusers.d` for `frostnotes`; `lodge/stage.sh` stages them with the binaries under `usr/` ([specs/lodge-app.md](../specs/lodge-app.md#what-notesd-installs), [core ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)); `flatpak/` is the desktop's Flatpak, notesd and `notesctl` with no window ([design/app.md](app.md#the-flatpak), [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md), [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)) |
 | `internal/synctest` | sync's seeded simulation: a hub and devices on loopback, a token oracle, checks at each quiet point (`make sync-sim`) |
 | `internal/mcpserver` | MCP tools over notesd's API (the only package importing the MCP SDK) |
-| `cmd/frostnotes`, `internal/desktop/` | the native desktop app ([plan 0009](../plans/0009-mygo-desktop.md)) |
 | `app/` | lodge's web app: React + TypeScript; `app/src/rpc/gen/api.ts` is generated |
 | `tools/rpcgen`, `tools/taskrun`, `tools/vaultgen` | the contract generator, the task-card runner, generated test vaults |
 
