@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "scope": "docs/plans",
+  "correction": "When retiring a desktop UI gate, preserve checks for behavior that survives the window. Distinguish an installed Flatpak update from replacement of the running daemon, and distinguish the app background setting from the desktop portal permission and its last recorded response.",
+  "evidence": "Independent review of 0177405596adcc3c192f3f8ad0e365d872344263 found the surviving G3 replacement and the G2 refused-permission path were not checked. Plan 0008 now requires an observed build change without logout and separate granted and refused portal runs; these runs are not recorded as passed.",
+  "promoted_to": "docs/plans/0008-m6-the-standalone-desktop-app.md#replacement-checks"
+}
