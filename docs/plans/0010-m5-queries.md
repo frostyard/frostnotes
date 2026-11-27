@@ -7,18 +7,23 @@ subset of Obsidian Bases, which notesd compiles to SQL over its index. Its
 contract is [specs/bases.md](../specs/bases.md); where it fits is
 [design/vault.md — Queries](../design/vault.md#queries). M5's done-when for
 queries is that the user's Dataview dashboards are rebuilt as `.base`
-files and render. The graph half of M5 (the graph API and the renderer
-choice) is not in this plan.
+files and render in Lodge's React app. [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)
+removes the Frostnotes desktop window; Obsidian is a comparison tool,
+not another Frostnotes UI target. The graph half of M5 (the graph API
+and the renderer choice) is not in this plan.
 
 Work is split per
 [ADR-0010](../adr/0010-claude-plans-and-codex-runs-task-cards.md): the
 planner owns the compiler and its contract. No cards.
 
-Status (2026-11-17):
+Status (2026-11-26):
 - ADR-0037 was accepted on 2026-11-16.
 - Phase 1 is done: frostnotes#245 merged on 2026-11-16.
-- Phase 2 is built on a pull request: `query_notes`, with check 7's
-  tests.
+- Phase 2 is built: [#247](https://github.com/frostyard/frostnotes/pull/247)
+  merged on 2026-11-17 with MCP handler and Lodge socket tests. A run
+  through Lodge's `/mcp/notes` route is not recorded here.
+- Phases 3 and 4 are open; no React rendering or dashboard acceptance
+  evidence is recorded.
 
 ## Phase 1 — `note.query` and `notesctl query` (1 PR)
 
@@ -41,36 +46,53 @@ Status (2026-11-17):
 
 ## Phase 2 — `query_notes` for agents
 
-- The MCP read tool `query_notes` over `note.query`, as ADR-0037 shapes
-  it, in [specs/mcp.md](../specs/mcp.md): the read tool list grows from 5
-  to 6.
-- A view with a notice is a tool error that names the view (check 7).
-- **Done when:** an agent with a read scope gets a base's rows through
-  lodge's `/mcp/notes`, pinned to its scope's vault, and the tool error
-  for a kanban view and for `groupOrder` (check 7).
+- `query_notes` is a read tool over `note.query`. Use the
+  [MCP query contract](../specs/mcp.md#queries) and the
+  [Lodge MCP route](../specs/mcp.md#through-lodge).
+- **Done when:** record an MCP run through a scratch Lodge's `/mcp/notes`
+  using a read-only token pinned to a generated vault. Both `path` and
+  `filters` calls return the expected rows, properties and count. A
+  matching fixture in a second vault does not appear in the results.
+  The kanban and `groupOrder` views each return a tool error naming the
+  view and the notice, with no `files` payload (check 7). The run must
+  use Lodge's route, not call notesd's socket directly.
 
-## Phase 3 — Base views in the apps
+## Phase 3 — Base views in Lodge's React app
 
-- `![[File.base]]`, `![[File.base#View]]` and `base` code blocks render as
-  table and card views in reading view and live preview, in the desktop
-  app and the web app; they run the query again on the vault's `note.*`
-  events ([design/app.md](../design/app.md)).
-- Values render as text through the existing sanitizer, never script
-  (check 8). Frostnotes never rewrites a `.base` file (check 9).
-- **Done when:** a `.base` file and an embedded view show the fixture
-  vault's rows in both apps.
+- Use `note.query` from the [Bases spec](../specs/bases.md#notequery) in
+  React at `/app/notes/`. Follow the [reading view](../design/app.md#reading-view)
+  and [CodeMirror live preview](../design/app.md#live-preview) designs.
+- **Done when:** `make ui-check` passes and a browser run through a
+  scratch Lodge records the following against a generated fixture:
+  1. Opening a `.base` file shows its default view. `![[File.base]]`,
+     `![[File.base#View]]` and a `base` fenced block show the expected
+     view in reading view and live preview. Exercise both table and
+     cards, and compare the displayed rows and ordering with the
+     fixture's expected results.
+  2. An edit to a matching note changes a result row after a `note.*`
+     event, without reloading the page. An unsupported view shows its
+     notice rather than an empty result.
+  3. HTML-like values display as text, with no script execution
+     (check 8). The `.base` file's bytes are unchanged after opening,
+     rendering and refreshing its views (check 9).
 
-## Phase 4 — The user's dashboards
+## Phase 4 — The user's dashboards in Lodge
 
-- Inventory the user's Dataview dashboards and map each to a base in the
-  subset, or name its gap, with made-up names in every fixture (check 1).
-- Open the fixture vault in Obsidian, record its rows, and compare them
-  with Frostnotes' rows (check 3). Each `choice` in
-  [specs/bases.md](../specs/bases.md) that Obsidian answers otherwise
-  changes with its code and fixtures.
-- **Done when:** M5's query done-when holds: the user's dashboards are
-  rebuilt as `.base` files and render, or the user accepts the named
-  gaps.
+- Inventory the user's Dataview dashboards and map each to a `.base`
+  file in the supported subset or name its gap (check 1). Use made-up
+  names and data in every committed fixture; keep the real vault and
+  its inventory out of the repository.
+- Open the generated fixtures in Obsidian and record its rows for
+  comparison with Frostnotes (check 3). If Obsidian differs on a
+  `choice` in the [Bases spec](../specs/bases.md), update the spec, code
+  and fixtures together.
+- **Done when:** the private inventory has an outcome for every dashboard.
+  For each rebuilt dashboard, record the `.base` view opened in Lodge's
+  React app, its expected and observed rows, and any discrepancy. Record
+  the Obsidian version and the fixture comparison, including the outcome
+  of each `choice`. Every dashboard either renders its expected results
+  in Lodge or has a named gap with explicit user acceptance. Keep only
+  generated evidence and a redacted outcome summary in the repository.
 
 ## ADR-0037's checks
 
@@ -82,7 +104,7 @@ Status (2026-11-17):
 | 4. Fuzz: no base text in SQL text | 1 | built |
 | 5. Refusals, ignored keys, unshown columns, notices | 1 | built |
 | 6. Benchmark | 1 | built; budget below |
-| 7. `query_notes` under a read scope, notices as tool errors | 2 | built: `internal/mcpserver`'s query tests, and through lodge's `/mcp` |
+| 7. `query_notes` under a read scope, notices as tool errors | 2 | built: handler and Lodge socket tests in `internal/mcpserver`; Lodge `/mcp/notes` run not recorded |
 | 8. Rendering through the sanitizer | 3 | open |
 | 9. No rewrite of a `.base` file | 3 | open (Phase 1 only reads) |
 | 10. Operators on missing, unconvertible and attachment values | 1 | built |
@@ -106,9 +128,10 @@ gate; run it after a change to the compiler or the store's query.
 - Implements: [specs/bases.md](../specs/bases.md),
   [design/vault.md — Queries](../design/vault.md#queries),
   [specs/rpc-api.md](../specs/rpc-api.md),
-  [specs/mcp.md](../specs/mcp.md#queries); later
-  [design/app.md](../design/app.md)
-- Decisions: [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md),
+  [specs/mcp.md](../specs/mcp.md#queries),
+  [design/app.md — In a browser](../design/app.md#in-a-browser)
+- Decisions: [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md),
+  [ADR-0037](../adr/0037-queries-are-obsidian-bases-compiled-to-sql.md),
   [ADR-0012](../adr/0012-agents-reach-notes-through-mcp.md),
   [ADR-0007](../adr/0007-edit-in-codemirror-6-with-live-preview.md)
 - Roadmap: [plan 0002 — M5](0002-roadmap.md)

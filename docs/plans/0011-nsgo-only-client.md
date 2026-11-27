@@ -57,6 +57,11 @@ and [specs/lodge-app.md](../specs/lodge-app.md).
 
 ## Phase 2 — The Flatpak carries notesd (M)
 
+[Plan 0008's disposition of #225](0008-m6-the-standalone-desktop-app.md#disposition-of-the-desktop-gates)
+details the headless checks that replace the old windowed gate. Record
+that evidence with this phase; the legacy desktop runs are not evidence
+for the headless package.
+
 Amends [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md);
 implements [design/app.md, The Flatpak](../design/app.md#the-flatpak).
 

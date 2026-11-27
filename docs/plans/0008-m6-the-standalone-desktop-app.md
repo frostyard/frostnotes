@@ -1,20 +1,13 @@
 # Plan: M6, the standalone desktop app
 
-This plan finishes the desktop side of [M6](0002-roadmap.md): the Flatpak
-`org.frostyard.Frostnotes`
-([ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
-[design/app.md](../design/app.md#the-flatpak)) installs from the Frostyard
-remote and works on its own. It follows the suite's product rule (Brian,
-2026-10-27): each suite app works alone as a Flatpak by default, with its
-UI, daemon and helpers inside, and needs no separate frostyard daemon,
-lodge, Tailscale, sysext or other suite app. Sync with a hub in lodge is a
-supported mode that the user chooses; data never moves without the user's
-choice. Notes is the suite's reference app for this rule: step 2 of the
-suite's standalone Flatpaks program, which Odrade coordinates. The
-packaging decision is core's
-[ADR-0058](https://github.com/frostyard/core/blob/main/docs/adr/0058-ship-suite-desktop-apps-as-flatpaks-and-services-as-sysexts.md)
-and its [Plan 0010](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md),
-Phase 5. The hub's packages (the `.deb` and sysext for lodge) are not in
+[M6](0002-roadmap.md) originally shipped a standalone Frostnotes window in
+`org.frostyard.Frostnotes`. [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md)
+amends [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md):
+[#296](https://github.com/frostyard/frostnotes/pull/296) removed the window.
+The [Flatpak](../design/app.md#the-flatpak) now carries notesd and
+`notesctl` only. A local editor writes the vault's files; if the user
+opts into sync, the hub makes those notes available to the React app in
+[Lodge](../design/app.md#in-a-browser). The hub's packages are outside
 this plan.
 
 Notes offers **sync**, not a remote connection: each device keeps its
@@ -23,7 +16,36 @@ vault's files and its own index, and the hub reconciles them
 [design/sync.md](../design/sync.md)). A device that leaves a hub keeps its
 files (`notesctl sync leave`).
 
-Status (2026-11-01):
+**Status (2026-11-26):** Phases 1–4 below are the historical desktop
+plan, not current release instructions. The old clean-install gate was
+not completed. Its remaining requirements are retired or replaced as
+listed below; no replacement checks are recorded here. The headless
+Flatpak checks belong to [plan 0011, Phase 2](0011-nsgo-only-client.md#phase-2--the-flatpak-carries-notesd-m).
+
+## Disposition of the desktop gates
+
+This accounts for each gate in [#225](https://github.com/frostyard/frostnotes/issues/225).
+The replacement checks follow the [headless Flatpak](../design/app.md#the-flatpak),
+[Lodge browser app](../design/app.md#in-a-browser) and
+[sync pairing and sessions](../design/sync.md#pairing-and-sessions) designs.
+
+| Gate in #225 | Disposition | Evidence |
+| --- | --- | --- |
+| Phase 3 item 2: public-remote install | **Replace** with a clean public-remote install of the headless Flatpak. Install `org.frostyard.Frostnotes` from `frostyard` and compare `flatpak info` with the expected version and commit. The app-grid entry, icon and window launch are retired. | Runs 1 and 2 used `frostyard-staged`; they did not verify a public-remote install. No headless public-remote run is recorded. |
+| Phase 3 item 6: HTTPS hub and Lodge web app | **Replace** the window workflow with a generated vault registered and joined via `notesctl` to the HTTPS Lodge device endpoint (`/device/notes`). Edit a file locally and see the edit in Lodge's React app (`/app/notes/`); edit it in React and see the edit in the local file. Each direction must take at most 8 s from the local write or confirmed web save. Repeat without an open browser tab: confirm the local edit reaches the hub within 8 s, then reopen React and see it. For the reverse check, close the tab after React confirms the save and verify the edit on disk within 8 s. There is no Frostnotes desktop window to close. | Run 1 covered plain HTTP on loopback without Lodge. No HTTPS/Lodge run is recorded. |
+| G1: join, pair and leave in the app, with no terminal | **Retire** the app-only condition. For the headless check, use `notesctl hub join` and approve pairing on the hub; confirm `notesctl status` shows the joined vault. After the bidirectional check, run `notesctl sync leave` and confirm the local files and hub copy remain and a subsequent local edit does not reach the hub. | #111 built the UI flow; the real-desktop UI check did not run. No headless replacement run is recorded here. |
+| G2: background setting in both states, tied to closing the window | **Replace** with a login check using `notesctl background on` and `notesctl background off` on a desktop with the Background portal. With permission granted, log out and back in for each state: on starts notesd without opening a browser, off does not. Record the permission state and `notesd.log`; off does not stop a daemon already running. | No legacy two-state run or headless replacement run is recorded here. |
+| G3: a new window replaces the old notesd without logout | **Retire** the window-triggered check; no rerun. Plan 0011 Phase 2 separately checks that an existing install keeps its vaults and pairing after the headless update. | Run 3 passed G3 on `v0.3.0` → `v0.3.1` on 2026-11-01. That is not headless update evidence. |
+
+**Done when (replacement checks):** record the install source, version,
+commit, desktop and portal versions, and observed results for each
+replacement row alongside plan 0011's Phase 2 evidence. A staged install
+cannot stand in for the public remote, and a loopback HTTP run cannot
+stand in for HTTPS through Lodge. These are evidence criteria, not
+instructions to publish a release.
+
+### Historical status (2026-11-01)
+
 - **Phase 1 is done:** the review below.
 - **Phase 2 is built** in PR #103. `v0.2.0` was tagged and published
   on 2026-10-27, and the package is public. The remote's entry
@@ -46,6 +68,8 @@ Status (2026-11-01):
 
 ## Phase 1 — Review against the standalone contract (done 2026-10-27)
 
+The [Flatpak design](../design/app.md#the-flatpak) now describes the
+headless package; this review predates that change.
 The merged Flatpak (PRs #97 and #98; ADR-0031, with its record of a
 real Snow install on 2026-10-26), reviewed against the program's list:
 
@@ -99,6 +123,12 @@ after core ADR-0058's publication rules.
   passes.
 
 ## Phase 3 — The clean-install check (the release gate)
+
+**Historical only:** the original release gate is superseded by the
+[dispositions above](#disposition-of-the-desktop-gates). The original
+procedure and its evidence follow for reference. See the current
+[Flatpak](../design/app.md#the-flatpak) and
+[sync](../design/sync.md#pairing-and-sessions) designs for their replacements.
 
 The program's release gate for Notes. Run it after the first tagged
 publish, and again before a release that changes the launcher, the
@@ -431,6 +461,11 @@ active).
 
 ## Phase 4 — Gaps found by the review
 
+These are the original gaps, not an active desktop backlog. See the
+[dispositions above](#disposition-of-the-desktop-gates) for G1–G3. G4's
+[migration guidance](../design/app.md#operational-notes) still applies to
+notesd; G5's window messages are no longer a UI gate.
+
 Each gap is its own change, with an ADR where it is a decision. None
 blocks Phase 2.
 
@@ -548,17 +583,16 @@ blocks Phase 2.
 
 ## Open questions
 
-- **Must G1 and G2 come before the first tagged publish?** The Flatpak
-  works alone without them; sync then needs the terminal, and background
-  activity is the desktop's switch. Brian decides, by Phase 2's first
-  tag.
+- None for the removed window. The outstanding headless checks are
+  tracked in plan 0011, Phase 2.
 
 ## References
 
 - Implements: [design/app.md](../design/app.md#the-flatpak),
-  [design/sync.md](../design/sync.md#pairing-and-sessions),
-  [specs/ui.md](../specs/ui.md#vault-manager)
-- Rationale: [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
+  [design/app.md — In a browser](../design/app.md#in-a-browser),
+  [design/sync.md](../design/sync.md#pairing-and-sessions)
+- Rationale: [ADR-0050](../adr/0050-frostnotes-has-no-desktop-window.md),
+  [ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
   [ADR-0033](../adr/0033-a-setting-keeps-notesd-running-without-a-window.md),
   [ADR-0004](../adr/0004-a-notes-daemon-with-thin-clients.md),
   [ADR-0005](../adr/0005-sync-through-a-hub-with-revisions-and-three-way-merges.md),
@@ -567,4 +601,4 @@ blocks Phase 2.
   [Plan 0010](https://github.com/frostyard/core/blob/main/docs/plans/0010-suite-packaging.md);
   the remote: [frostyard/flatpak-index](https://github.com/frostyard/flatpak-index)
 - Roadmap: [plan 0002 — M6](0002-roadmap.md)
-- Followed by: [plan 0009](0009-mygo-desktop.md) (the Flatpak's app becomes a native Go app, [ADR-0038](../adr/0038-draw-the-desktop-app-natively-with-mygo-and-frostui.md))
+- Superseded for the desktop window by [plan 0011](0011-nsgo-only-client.md).
