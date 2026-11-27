@@ -31,15 +31,90 @@ The replacement checks follow the [headless Flatpak](../design/app.md#the-flatpa
 
 | Gate in #225 | Disposition | Evidence |
 | --- | --- | --- |
-| Phase 3 item 2: public-remote install | **Replace** with a clean public-remote install of the headless Flatpak. Install `org.frostyard.Frostnotes` from `frostyard` and compare `flatpak info` with the expected version and commit. The app-grid entry, icon and window launch are retired. | Runs 1 and 2 used `frostyard-staged`; they did not verify a public-remote install. No headless public-remote run is recorded. |
-| Phase 3 item 6: HTTPS hub and Lodge web app | **Replace** the window workflow with a generated vault registered and joined via `notesctl` to the HTTPS Lodge device endpoint (`/device/notes`). Edit a file locally and see the edit in Lodge's React app (`/app/notes/`); edit it in React and see the edit in the local file. Each direction must take at most 8 s from the local write or confirmed web save. Repeat without an open browser tab: confirm the local edit reaches the hub within 8 s, then reopen React and see it. For the reverse check, close the tab after React confirms the save and verify the edit on disk within 8 s. There is no Frostnotes desktop window to close. | Run 1 covered plain HTTP on loopback without Lodge. No HTTPS/Lodge run is recorded. |
-| G1: join, pair and leave in the app, with no terminal | **Retire** the app-only condition. For the headless check, use `notesctl hub join` and approve pairing on the hub; confirm `notesctl status` shows the joined vault. After the bidirectional check, run `notesctl sync leave` and confirm the local files and hub copy remain and a subsequent local edit does not reach the hub. | #111 built the UI flow; the real-desktop UI check did not run. No headless replacement run is recorded here. |
-| G2: background setting in both states, tied to closing the window | **Replace** with a login check using `notesctl background on` and `notesctl background off` on a desktop with the Background portal. With permission granted, log out and back in for each state: on starts notesd without opening a browser, off does not. Record the permission state and `notesd.log`; off does not stop a daemon already running. | No legacy two-state run or headless replacement run is recorded here. |
-| G3: a new window replaces the old notesd without logout | **Retire** the window-triggered check; no rerun. Plan 0011 Phase 2 separately checks that an existing install keeps its vaults and pairing after the headless update. | Run 3 passed G3 on `v0.3.0` → `v0.3.1` on 2026-11-01. That is not headless update evidence. |
+| Phase 3 item 2: public-remote install | **Replace** with the clean headless install below. Retire the app-grid entry, icon and window launch. | Runs 1 and 2 used `frostyard-staged`; no headless public-remote run is recorded. |
+| Phase 3 item 6: HTTPS hub and Lodge web app | **Replace** with the HTTPS sync check below, between a local editor and Lodge's React app. | Run 1 covered plain HTTP on loopback without Lodge. No HTTPS/Lodge run is recorded. |
+| G1: join, pair and leave in the app, with no terminal | **Retire** the app-only condition; use the headless join and leave checks below, including the first-join keyring prompt. | #111 built the UI flow; the real-desktop UI check did not run. No headless replacement run is recorded here. |
+| G2: background setting in both states, tied to closing the window | **Replace** with the login and permission-refusal checks below. There is no window to close. | No legacy two-state run or headless replacement run is recorded here. |
+| G3: a new window replaces the old notesd without logout | **Replace** the window trigger with an explicit Flatpak launch after an update. | Run 3 passed window-triggered G3 on `v0.3.0` → `v0.3.1` on 2026-11-01. No headless update run is recorded here. |
+
+### Replacement checks
+
+Use fresh disposable GNOME desktop VMs on **Snow and Debian** for the
+clean-install check. Before installing, record that the test user has no
+Frostnotes Flatpak, host `notesd` or `notesctl`, running notesd, Frostnotes
+app data directory, or Frostnotes autostart entry. Do not configure a hub
+or join the tailnet until the local setup works. In the commands below,
+`notesctl` means `flatpak run --command=notesctl org.frostyard.Frostnotes`.
+
+1. **Item 2 — Public remote.** Add the public remote with
+   `flatpak remote-add --if-not-exists --user frostyard https://frostyard.github.io/flatpak-index/frostyard.flatpakrepo`,
+   then run `flatpak install --user frostyard org.frostyard.Frostnotes`.
+   Confirm `flatpak info org.frostyard.Frostnotes` reports the expected
+   version and Flatpak commit. Start the package with `flatpak run
+   org.frostyard.Frostnotes`; register a generated local vault with
+   `notesctl` and confirm the daemon and vault are visible in `notesctl
+   status` without a hub.
+2. **Item 6 and G1 — Join, sync and leave.** Join the generated vault
+   with `notesctl hub join` against Lodge's HTTPS device endpoint
+   (`/device/notes`), approve pairing on the hub, and confirm the vault
+   is joined in `notesctl status`. Exercise first join in a disposable
+   session with Secret Service running but no default keyring. Record
+   whether it offers to create the default keyring; accept the prompt
+   and verify that pairing and sync work without enabling a plaintext
+   token fallback ([ADR-0031](../adr/0031-the-desktop-app-ships-as-a-flatpak-with-its-own-notesd.md),
+   [ADR-0045](../adr/0045-the-flatpak-keeps-no-device-token-in-a-plain-file.md)).
+   Edit a file locally and see the change in Lodge React (`/app/notes/`);
+   edit it in React and see the change on disk. Each direction must take
+   at most 8 s from the local write or confirmed web save. With the React
+   tab closed, confirm a local edit reaches the hub within 8 s, then
+   reopen React and see it. After a confirmed React save, close the tab
+   and confirm the change reaches disk within 8 s. After the sync and
+   update checks, run `notesctl sync leave`; confirm the local files and
+   hub copy remain and a subsequent local edit does not reach the hub.
+3. **G2 — Background setting and portal refusal.**
+   - **Granted, on:** run `notesctl background on`, log out and back in,
+     and confirm notesd answers without a manual launch.
+   - **Granted, off:** run `notesctl background off`, log out and back
+     in, and confirm notesd does not run. Record whether the portal
+     removed the autostart entry. If the entry still runs, `notesd.log` must
+     say `background activity is off` and notesd must not start. If the
+     entry was removed, no such line is expected at login; invoke
+     `flatpak run org.frostyard.Frostnotes --background` to verify that
+     a leftover entry would log the message and start no notesd. Turning
+     off the setting does not stop a daemon already running.
+   - **Refused, on:** with the app's setting on, set the desktop's
+     permission to no with `flatpak permission-set background background
+     org.frostyard.Frostnotes no`. Log out and back in before running the
+     launcher again. Record whether autostart runs, whether notesd ever
+     answers, and whether the desktop stops it; record timing and logs
+     rather than assuming the old GNOME timing. Run the ordinary
+     launcher to request permission again and record whether a manually
+     started daemon also gets stopped. `notesctl status` and `notesctl
+     background` report the last recorded portal answer, not a live
+     permission lookup. Once the helper records a refusal, both must
+     name the fix: `flatpak permission-set background background
+     org.frostyard.Frostnotes yes`, then rerun the launcher. If no
+     refusal is recorded, retain the actual output and mark the refusal
+     diagnostic unverified. With notesd stopped, also confirm status
+     says it does not answer and points to the launcher.
+4. **G3 — Update and replace the running daemon.** With background
+   permission restored, start on the older headless package with notesd
+   running and a paired vault. Record
+   `notesctl hello --build`, which reports the running Flatpak app
+   commit. Run `flatpak update org.frostyard.Frostnotes`, record the new
+   installed commit from `flatpak info --show-commit org.frostyard.Frostnotes`,
+   and confirm `hello --build` still reports the old commit. Updating
+   does not itself replace a running daemon: it can stay on the old
+   build until the ordinary launcher runs or the next login starts
+   the latest deployment, if autostart is enabled and allowed. Without
+   logging out, run `flatpak run org.frostyard.Frostnotes` and require
+   `notesctl hello --build` to match the new installed commit. Confirm
+   the existing vaults and pairing survive and sync resumes without
+   pairing again.
 
 **Done when (replacement checks):** record the install source, version,
-commit, desktop and portal versions, and observed results for each
-replacement row alongside plan 0011's Phase 2 evidence. A staged install
+Flatpak commit, GNOME, xdg-desktop-portal and Flatpak versions, and
+observed results alongside plan 0011's Phase 2 evidence. A staged install
 cannot stand in for the public remote, and a loopback HTTP run cannot
 stand in for HTTPS through Lodge. These are evidence criteria, not
 instructions to publish a release.
