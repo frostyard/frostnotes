@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -863,11 +864,34 @@ func TestMatchGlob(t *testing.T) {
 }
 
 // dependabotUpdate is 1 entry of the updates list of
-// .github/dependabot.yml.
+// .github/dependabot.yml. An entry names 1 directory, or several in
+// directories.
 type dependabotUpdate struct {
-	Ecosystem string             `yaml:"package-ecosystem"`
-	Directory string             `yaml:"directory"`
-	Ignore    []dependabotIgnore `yaml:"ignore"`
+	Ecosystem   string                     `yaml:"package-ecosystem"`
+	Directory   string                     `yaml:"directory"`
+	Directories []string                   `yaml:"directories"`
+	Schedule    map[string]any             `yaml:"schedule"`
+	Ignore      []dependabotIgnore         `yaml:"ignore"`
+	Groups      map[string]dependabotGroup `yaml:"groups"`
+}
+
+// dependabotGroup is 1 group of an entry's groups.
+type dependabotGroup struct {
+	Patterns  []string `yaml:"patterns"`
+	GroupBy   any      `yaml:"group-by"`
+	AppliesTo any      `yaml:"applies-to"`
+}
+
+// dirs returns the entry's directories, normalized.
+func (u dependabotUpdate) dirs() []string {
+	var out []string
+	if u.Directory != "" {
+		out = append(out, normalizeDir(u.Directory))
+	}
+	for _, d := range u.Directories {
+		out = append(out, normalizeDir(d))
+	}
+	return out
 }
 
 // dependabotIgnore is 1 entry of an update's ignore list; an ignore with
@@ -909,9 +933,58 @@ func normalizeDir(dir string) string {
 	return strings.TrimSuffix(dir, "/")
 }
 
+// dependabotEntryGaps lists what in cfg breaks row B13 of frostyard/core
+// docs/specs/repository-baseline.md (ADR-0075 and ADR-0089): a
+// package-ecosystem in 2 or more entries, an entry with both directory and
+// directories or with neither, a schedule other than exactly
+// interval: monthly, and an entry without exactly 1 group whose patterns is
+// ["*"] and which has no group-by and no applies-to. Security updates then
+// stay ungrouped, and each ecosystem opens at most 1 version-update PR a
+// month for all its directories.
+func dependabotEntryGaps(cfg dependabotFile) []string {
+	var gaps []string
+	entries := make(map[string]int, len(cfg.Updates))
+	for i, u := range cfg.Updates {
+		name := fmt.Sprintf("entry %d (%s)", i+1, u.Ecosystem)
+		if u.Ecosystem == "" {
+			gaps = append(gaps, name+": no package-ecosystem")
+		}
+		entries[u.Ecosystem]++
+		if entries[u.Ecosystem] == 2 {
+			gaps = append(gaps, fmt.Sprintf("package-ecosystem %s in 2 or more entries, want 1 with its directories in directories", u.Ecosystem))
+		}
+		switch {
+		case u.Directory != "" && len(u.Directories) > 0:
+			gaps = append(gaps, name+": sets both directory and directories")
+		case u.Directory == "" && len(u.Directories) == 0:
+			gaps = append(gaps, name+": no directory or directories")
+		}
+		if len(u.Schedule) != 1 || u.Schedule["interval"] != "monthly" {
+			gaps = append(gaps, fmt.Sprintf("%s: schedule %v, want only interval: monthly", name, u.Schedule))
+		}
+		if len(u.Groups) != 1 {
+			gaps = append(gaps, fmt.Sprintf("%s: %d groups, want exactly 1 with patterns [\"*\"]", name, len(u.Groups)))
+		}
+		for _, g := range slices.Sorted(maps.Keys(u.Groups)) {
+			group := u.Groups[g]
+			if !slices.Equal(group.Patterns, []string{"*"}) {
+				gaps = append(gaps, fmt.Sprintf("%s: group %s has patterns %q, want [\"*\"]", name, g, group.Patterns))
+			}
+			if group.GroupBy != nil {
+				gaps = append(gaps, fmt.Sprintf("%s: group %s has group-by", name, g))
+			}
+			if group.AppliesTo != nil {
+				gaps = append(gaps, fmt.Sprintf("%s: group %s has applies-to", name, g))
+			}
+		}
+	}
+	return gaps
+}
+
 // TestDependabotCoversManifests guards row B13 of frostyard/core
-// docs/specs/repository-baseline.md: .github/dependabot.yml has 1 entry for
-// each manifest of the repository, and the github-actions entry at "/".
+// docs/specs/repository-baseline.md: .github/dependabot.yml covers each
+// manifest of the repository, in an entry's directory or directories, has
+// the github-actions entry at "/", and has no gap of dependabotEntryGaps.
 func TestDependabotCoversManifests(t *testing.T) {
 	cfg := readDependabot(t)
 	if cfg.Version != 2 {
@@ -920,14 +993,18 @@ func TestDependabotCoversManifests(t *testing.T) {
 	covered := make(map[[2]string]bool, len(cfg.Updates))
 	actions := false
 	for _, u := range cfg.Updates {
-		dir := normalizeDir(u.Directory)
-		covered[[2]string{u.Ecosystem, dir}] = true
-		if u.Ecosystem == "github-actions" && dir == "/" {
-			actions = true
+		for _, dir := range u.dirs() {
+			covered[[2]string{u.Ecosystem, dir}] = true
+			if u.Ecosystem == "github-actions" && dir == "/" {
+				actions = true
+			}
 		}
 	}
 	if !actions {
 		t.Error("no github-actions entry with directory /")
+	}
+	for _, gap := range dependabotEntryGaps(cfg) {
+		t.Error(gap)
 	}
 
 	manifests := 0
@@ -950,6 +1027,73 @@ func TestDependabotCoversManifests(t *testing.T) {
 		t.Fatal("no dependency manifest found")
 	}
 	t.Logf("%d manifests, %d Dependabot entries", manifests, len(cfg.Updates))
+}
+
+// TestDependabotEntryGaps makes dependabotEntryGaps find each gap on
+// purpose, and pass the shape that row B13 wants.
+func TestDependabotEntryGaps(t *testing.T) {
+	const good = `
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directories: [/, /kit]
+    schedule:
+      interval: monthly
+    groups:
+      go:
+        patterns:
+          - "*"
+`
+	for _, tc := range []struct {
+		name, updates, want string
+	}{
+		{"good", good, ""},
+		{"no entries", " []", ""},
+		{"2 entries of 1 ecosystem", good + `
+  - package-ecosystem: gomod
+    directory: /kit
+    schedule:
+      interval: monthly
+    groups:
+      kit-go:
+        patterns: ["*"]
+`, "package-ecosystem gomod in 2 or more entries"},
+		{"weekly", strings.Replace(good, "interval: monthly", "interval: weekly", 1), "want only interval: monthly"},
+		{"monthly with a day", strings.Replace(good, "interval: monthly", "interval: monthly\n      day: monday", 1), "want only interval: monthly"},
+		{"monthly with a time", strings.Replace(good, "interval: monthly", "interval: monthly\n      time: \"05:00\"", 1), "want only interval: monthly"},
+		{"no schedule", strings.Replace(good, "    schedule:\n      interval: monthly\n", "", 1), "want only interval: monthly"},
+		{"no groups", strings.Replace(good, "    groups:\n      actions:\n        patterns: [\"*\"]\n", "", 1), "0 groups, want exactly 1"},
+		{"2 groups", strings.Replace(good, "      actions:\n", "      other:\n        patterns: [\"*\"]\n      actions:\n", 1), "2 groups, want exactly 1"},
+		{"narrow patterns", strings.Replace(good, `patterns: ["*"]`, `patterns: ["golang.org/*"]`, 1), `want ["*"]`},
+		{"2 patterns", strings.Replace(good, `patterns: ["*"]`, `patterns: ["*", "x"]`, 1), `want ["*"]`},
+		{"group-by", strings.Replace(good, `patterns: ["*"]`, "patterns: [\"*\"]\n        group-by: dependency-name", 1), "has group-by"},
+		{"applies-to", strings.Replace(good, `patterns: ["*"]`, "patterns: [\"*\"]\n        applies-to: security-updates", 1), "has applies-to"},
+		{"directory and directories", strings.Replace(good, "directory: /\n", "directory: /\n    directories: [/kit]\n", 1), "sets both directory and directories"},
+		{"no directory", strings.Replace(good, "    directory: /\n", "", 1), "no directory or directories"},
+		{"no ecosystem", strings.Replace(good, "package-ecosystem: github-actions", "open-pull-requests-limit: 5", 1), "no package-ecosystem"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg dependabotFile
+			if err := yaml.Unmarshal([]byte("version: 2\nupdates:"+tc.updates), &cfg); err != nil {
+				t.Fatal(err)
+			}
+			gaps := dependabotEntryGaps(cfg)
+			if tc.want == "" {
+				if len(gaps) != 0 {
+					t.Errorf("gaps %q, want none", gaps)
+				}
+				return
+			}
+			if !slices.ContainsFunc(gaps, func(g string) bool { return strings.Contains(g, tc.want) }) {
+				t.Errorf("gaps %q, want one with %q", gaps, tc.want)
+			}
+		})
+	}
 }
 
 // readDependabot reads and parses .github/dependabot.yml.

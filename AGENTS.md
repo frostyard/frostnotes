@@ -311,8 +311,12 @@ The repository follows core's baseline (frostyard/core ADR-0071, its spec
   sanitizer joins the list in the PR that adds it, at a level by the
   grading rule (`L1` for the risk categories, `L2` for governance); a glob
   that matches no file fails.
-- `.github/dependabot.yml` (B13): 1 entry for each manifest (`go.mod`,
-  `app/package.json`). A new manifest gets an entry.
+- `.github/dependabot.yml` (B13, core ADR-0089): exactly 1 entry for each
+  ecosystem: `github-actions` at `/`, `gomod` at `/`, and `npm` at `/app`.
+  Each schedule has only `interval: monthly`. A new manifest joins its
+  ecosystem's entry in `directories`. A new ecosystem gets an entry.
+  Each entry has 1 group with `patterns: ["*"]`, no `group-by`, and no
+  `applies-to`.
 
 `.github/pull_request_template.md` (B7) holds the risk tier. Vulnerabilities
 are reported privately ([SECURITY.md](SECURITY.md), B14). No `CODEOWNERS`

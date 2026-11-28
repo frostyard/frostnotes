@@ -1,5 +1,9 @@
-# Dependabot (frostyard/core ADR-0071, baseline row B13): 1 entry for each
-# ecosystem with a manifest here. internal/workflowcheck checks the list.
+# Dependabot (frostyard/core ADR-0071, ADR-0075 and ADR-0089, baseline row
+# B13): exactly 1 entry for each ecosystem with a manifest here. If an
+# ecosystem has more than 1 directory, list them in directories. Each
+# entry has a monthly schedule and 1 catch-all group. Each ecosystem then
+# opens at most 1 version-update PR a month. Security updates stay
+# ungrouped and immediate (no applies-to). internal/workflowcheck checks it.
 #
 # A gomod update also changes the Flatpak's offline sources: its PR fails the
 # Flatpak workflow's sources check until `make flatpak-sources` is run on its
@@ -11,7 +15,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: ci
       include: scope
@@ -22,7 +26,7 @@ updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: build
       include: scope
@@ -33,7 +37,7 @@ updates:
   - package-ecosystem: npm
     directory: /app
     schedule:
-      interval: weekly
+      interval: monthly
     commit-message:
       prefix: build
       include: scope
